@@ -2145,14 +2145,14 @@
    LIVE CHAT — @ Badge, persisten via database
 ═══════════════════════════════════════ */
         (function () {
-            var URL_MSGS = '/chat/messages', URL_SEND = '/chat/send', URL_DEL = '/chat/',
+            var URL_MSGS = '/chat/messages', URL_MENTION_COUNT = '/chat/mentions/unread', URL_SEND = '/chat/send', URL_DEL = '/chat/',
                 URL_READ = '/chat/read', URL_READS = '/chat/', URL_USERS = '/chat/users',
                 CSRF = (document.querySelector('meta[name="csrf-token"]') || {}).content || '',
                 MY_ID = {{ auth()->id() }}, MAX_LEN = 500,
                 EMOJIS = ['\u{1F604}', '\u{1F60A}', '\u{1F44D}', '\u{1F525}', '\u2764\uFE0F', '\u{1F389}', '\u{1F602}', '\u{1F914}', '\u{1F60E}', '\u{1F4AF}', '\u{1F64F}', '\u2705'],
                 UCLS = ['#6366f1', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#3b82f6', '#ef4444', '#14b8a6', '#f97316', '#84cc16', '#06b6d4', '#a855f7'];
 
-            var chatOpen = false, chatMaxId = 0, chatTimer = null, replyToId = null, replyUser = null, unread = 0, sending = false;
+            var chatOpen = false, chatMaxId = 0, chatTimer = null, mentionTimer = null, mentionRequestPending = false, replyToId = null, replyUser = null, unread = 0, sending = false;
             var mentionUnread = 0;
             var draftMentions = [];
             var mentionState = { active: false, start: 0, query: '' };
@@ -2197,6 +2197,19 @@
                     if (c > 0) { cpHeadMention.textContent = '@' + c; cpHeadMention.style.display = 'inline' }
                     else { cpHeadMention.style.display = 'none' }
                 }
+            }
+
+            function refreshMentionSummary() {
+                if (chatOpen || mentionRequestPending) return;
+                mentionRequestPending = true;
+                fetch(URL_MENTION_COUNT, { headers: { 'Accept': 'application/json' } })
+                    .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json() })
+                    .then(function (data) {
+                        mentionUnread = Math.max(0, parseInt(data.count, 10) || 0);
+                        updateMentionBadges();
+                    })
+                    .catch(function () { })
+                    .finally(function () { mentionRequestPending = false });
             }
 
             function scrollToNextMention() {
@@ -2398,7 +2411,7 @@
                         }
                         chatMaxId = data.max_id || chatMaxId; if (wasB || initial) sBB();
                         var idsToRead = []; for (var k = 0; k < msgs.length; k++) { if (String(msgs[k].user_id) !== String(MY_ID)) idsToRead.push(msgs[k].id) }
-                        if (idsToRead.length) markRead(idsToRead);
+                        if (idsToRead.length && chatOpen) markRead(idsToRead);
                     })
                     .catch(function () { });
             }
@@ -2432,14 +2445,20 @@
                     if (hadMention) { setTimeout(scrollToNextMention, 400) }
                     setTimeout(function () { if (inp) inp.focus() }, 280);
                 } else {
-                    stopPoll(); if (typeof cPP === 'function') cPP(); if (activeReadPopup) { activeReadPopup.classList.remove('open'); activeReadPopup = null }
+                    stopPoll(); refreshMentionSummary(); if (typeof cPP === 'function') cPP(); if (activeReadPopup) { activeReadPopup.classList.remove('open'); activeReadPopup = null }
                 }
             }
             window._chatOpen = false; window._chatToggle = doToggle;
 
             function startPoll() { if (chatTimer) return; chatTimer = setInterval(function () { loadMessages(false) }, 4000) }
             function stopPoll() { if (chatTimer) { clearInterval(chatTimer); chatTimer = null } }
-            document.addEventListener('visibilitychange', function () { if (document.hidden) stopPoll(); else if (chatOpen) startPoll() });
+            function startMentionPoll() { if (mentionTimer) return; refreshMentionSummary(); mentionTimer = setInterval(refreshMentionSummary, 4000) }
+            function stopMentionPoll() { if (mentionTimer) { clearInterval(mentionTimer); mentionTimer = null } }
+            document.addEventListener('visibilitychange', function () {
+                if (document.hidden) { stopPoll(); stopMentionPoll() }
+                else { startMentionPoll(); if (chatOpen) startPoll() }
+            });
+            if (!document.hidden) startMentionPoll();
 
             if (trigger) trigger.addEventListener('click', function (e) {
                 e.stopPropagation();

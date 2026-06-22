@@ -3,14 +3,16 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 
 class ChatController extends Controller
 {
     private const MAX_MESSAGES = 200;
+
     private const MAX_MSG_LENGTH = 500;
+
     private const RATE_LIMIT_MIN = 20;
 
     private function colors(): array
@@ -21,8 +23,9 @@ class ChatController extends Controller
     private function initials(string $name): string
     {
         $p = explode(' ', trim($name));
+
         return count($p) >= 2
-            ? strtoupper(mb_substr($p[0], 0, 1) . mb_substr($p[1], 0, 1))
+            ? strtoupper(mb_substr($p[0], 0, 1).mb_substr($p[1], 0, 1))
             : strtoupper(mb_substr($name, 0, 2));
     }
 
@@ -35,7 +38,7 @@ class ChatController extends Controller
         $myId = Auth::id();
 
         $rows = DB::table('chat_messages')
-            ->when($since, fn($q) => $q->where('id', '>', $since))
+            ->when($since, fn ($q) => $q->where('id', '>', $since))
             ->orderBy('id', 'desc')
             ->limit(40)
             ->get()
@@ -71,8 +74,9 @@ class ChatController extends Controller
             $row->mentions_parsed = [];
             if ($row->mentions) {
                 $decoded = json_decode($row->mentions, true);
-                if (is_array($decoded))
+                if (is_array($decoded)) {
                     $row->mentions_parsed = $decoded;
+                }
             }
         }
 
@@ -95,17 +99,60 @@ class ChatController extends Controller
             ->map(function ($u) {
                 $colors = $this->colors();
                 $p = explode(' ', trim($u->name));
+
                 return [
                     'id' => $u->id,
                     'name' => $u->name,
                     'department' => $u->department ?? '',
                     'initials' => count($p) >= 2
-                        ? strtoupper(mb_substr($p[0], 0, 1) . mb_substr($p[1], 0, 1))
+                        ? strtoupper(mb_substr($p[0], 0, 1).mb_substr($p[1], 0, 1))
                         : strtoupper(mb_substr($u->name, 0, 2)),
                     'color' => $colors[$u->id % count($colors)],
                 ];
             });
+
         return response()->json($users);
+    }
+
+    /**
+     * Jumlah mention yang belum dibaca untuk badge ikon chat.
+     */
+    public function unreadMentions()
+    {
+        $userId = Auth::id();
+
+        $messages = DB::table('chat_messages')
+            ->where('user_id', '!=', $userId)
+            ->whereNotNull('mentions')
+            ->whereNotExists(function ($query) use ($userId) {
+                $query->selectRaw('1')
+                    ->from('chat_reads')
+                    ->whereColumn('chat_reads.message_id', 'chat_messages.id')
+                    ->where('chat_reads.user_id', $userId);
+            })
+            ->orderByDesc('id')
+            ->limit(self::MAX_MESSAGES)
+            ->get(['id', 'mentions']);
+
+        $count = $messages->filter(function ($message) use ($userId) {
+            $mentions = json_decode($message->mentions, true);
+
+            if (! is_array($mentions)) {
+                return false;
+            }
+
+            foreach ($mentions as $mention) {
+                $mentionedId = $mention['id'] ?? null;
+
+                if ($mentionedId === 'all' || (string) $mentionedId === (string) $userId) {
+                    return true;
+                }
+            }
+
+            return false;
+        })->count();
+
+        return response()->json(['count' => $count]);
     }
 
     /**
@@ -114,7 +161,7 @@ class ChatController extends Controller
     public function send(Request $request)
     {
         $request->validate([
-            'message' => 'required|string|max:' . self::MAX_MSG_LENGTH,
+            'message' => 'required|string|max:'.self::MAX_MSG_LENGTH,
             'reply_to' => 'nullable|integer',
             'mentions' => 'nullable|array',
             'mentions.*.id' => 'required',
@@ -123,7 +170,7 @@ class ChatController extends Controller
 
         $user = Auth::user();
 
-        $key = 'chat_rate:' . $user->id . ':' . date('YmdHi');
+        $key = 'chat_rate:'.$user->id.':'.date('YmdHi');
         $count = (int) Cache::get($key, 0);
         if ($count >= self::RATE_LIMIT_MIN) {
             return response()->json(['error' => 'Terlalu banyak pesan.'], 429);
@@ -182,11 +229,12 @@ class ChatController extends Controller
     public function destroy(int $id)
     {
         $msg = DB::table('chat_messages')->find($id);
-        if (!$msg || $msg->user_id !== Auth::id()) {
+        if (! $msg || $msg->user_id !== Auth::id()) {
             return response()->json(['error' => 'Tidak bisa menghapus'], 403);
         }
         DB::table('chat_messages')->delete($id);
         DB::table('chat_reads')->where('message_id', $id)->delete();
+
         return response()->json(['deleted' => $id]);
     }
 
@@ -210,7 +258,7 @@ class ChatController extends Controller
                 ->where('user_id', $userId)
                 ->exists();
 
-            if (!$exists) {
+            if (! $exists) {
                 DB::table('chat_reads')->insert([
                     'message_id' => $msgId,
                     'user_id' => $userId,
@@ -229,7 +277,7 @@ class ChatController extends Controller
     public function getReads(int $id)
     {
         $msg = DB::table('chat_messages')->find($id);
-        if (!$msg) {
+        if (! $msg) {
             return response()->json(['error' => 'Pesan tidak ditemukan'], 404);
         }
 

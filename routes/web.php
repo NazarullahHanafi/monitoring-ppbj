@@ -68,6 +68,9 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/messages', [App\Http\Controllers\ChatController::class, 'messages'])
             ->name('messages')
             ->middleware(\App\Http\Middleware\DisableLoggingForPolling::class); // ← TAMBAHKAN INI
+        Route::get('/mentions/unread', [App\Http\Controllers\ChatController::class, 'unreadMentions'])
+            ->name('mentions.unread')
+            ->middleware(\App\Http\Middleware\DisableLoggingForPolling::class);
         Route::post('/send', [App\Http\Controllers\ChatController::class, 'send'])->name('send');
         Route::delete('/{id}', [App\Http\Controllers\ChatController::class, 'destroy'])->name('destroy');
     });

@@ -17,6 +17,7 @@ class DisableLoggingForPolling
             'sp/poll',
             'sp/presence/start',
             'sp/presence/stop',
+            'chat/mentions/unread',
             'chatbot/notifications/count',
             'chatbot/greeting',
             'approval/pr-receipts/pending-count',
