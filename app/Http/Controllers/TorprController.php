@@ -1,0 +1,1450 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\Torpr;
+use App\Models\PrReceiptApproval;
+use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Database\QueryException;
+use Symfony\Component\HttpFoundation\StreamedResponse;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use App\Services\NotificationService;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
+use App\Models\User;
+use App\Models\MasterPortofolio;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
+use PhpOffice\PhpSpreadsheet\Style\Fill;
+use PhpOffice\PhpSpreadsheet\Style\Border;
+use PhpOffice\PhpSpreadsheet\Style\Alignment;
+
+class TorprController extends Controller
+{
+
+    public function index(Request $request)
+    {
+        $query = DB::table('torprs')
+            ->select([
+                'torprs.id',
+                'torprs.created_by_user_id',
+                'torprs.nomor_pr',
+                'torprs.tujuan_pengadaan',
+                'torprs.portofolio',
+                'torprs.jumlah_pr',
+                'torprs.tanggal_pr',
+                'torprs.received_at',
+                'torprs.received_by_umum_user_id',
+                'torprs.sign_token_kabid',
+                'torprs.sign_token_kacab',
+                'torprs.tgl_ttd_kabid_pr',
+                'torprs.tgl_ttd_kacab_pr',
+                'torprs.signed_by_kabid_name',
+                'torprs.signed_by_kacab_name',
+                'pra.id as approval_id',
+                'pra.status as approval_status',
+                'pra.rejected_reason',
+                'pra.approved_by_user_id',
+                'u1.name as approved_by_name',
+                'u2.name as received_by_name',
+            ])
+            ->leftJoin(DB::raw('(
+            SELECT pra1.* 
+            FROM pr_receipt_approvals pra1
+            INNER JOIN (
+                SELECT torpr_id, MAX(id) as max_id
+                FROM pr_receipt_approvals
+                GROUP BY torpr_id
+            ) pra2 ON pra1.torpr_id = pra2.torpr_id AND pra1.id = pra2.max_id
+        ) as pra'), 'pra.torpr_id', '=', 'torprs.id')
+            ->leftJoin('users as u1', 'pra.approved_by_user_id', '=', 'u1.id')
+            ->leftJoin('users as u2', 'torprs.received_by_umum_user_id', '=', 'u2.id');
+
+        // ✅ SEARCH
+        if ($search = trim($request->get('q'))) {
+            $query->where(function ($q) use ($search) {
+                // UBAH 'like', $search . '%' MENJADI 'like', '%' . $search . '%'
+                // Agar bisa mencari angka di tengah atau belakang (contoh: mencari '001' di 'PR/2026/001')
+                $q->where('torprs.nomor_pr', 'like', '%' . $search . '%')
+                    ->orWhere('torprs.tujuan_pengadaan', 'like', '%' . $search . '%')
+                    ->orWhere('torprs.portofolio', 'like', '%' . $search . '%');
+            });
+        }
+
+        // ✅ STATUS FILTER
+        if ($status = $request->get('receipt_status')) {
+            $query->where('pra.status', $status);
+        }
+
+        // ✅ FILTER PORTOFOLIO MULTIPLE
+        // Bisa pilih 1, 2, 3, atau banyak portofolio sekaligus dari Select2 multiple.
+        $selectedPortofolios = array_values(array_filter(array_map(
+            fn($value) => trim((string) $value),
+            (array) $request->input('portofolio', [])
+        )));
+
+        if (!empty($selectedPortofolios)) {
+            $query->whereIn('torprs.portofolio', $selectedPortofolios);
+        }
+
+        if ($request->get('data_owner') === 'me') {
+            $query->where('torprs.created_by_user_id', auth()->id());
+        }
+
+        if ($signStatus = $request->get('sign_status')) {
+            if ($signStatus === 'unsigned_kabid') {
+                $query->whereNull('torprs.tgl_ttd_kabid_pr');
+            } elseif ($signStatus === 'unsigned_kacab') {
+                $query->whereNull('torprs.tgl_ttd_kacab_pr');
+            } elseif ($signStatus === 'signed_all') {
+                $query->whereNotNull('torprs.tgl_ttd_kabid_pr')
+                    ->whereNotNull('torprs.tgl_ttd_kacab_pr');
+            }
+        }
+
+        if ($request->filled('incomplete_data')) {
+            $query->where(function ($q) {
+                $q->whereNull('torprs.tujuan_pengadaan')
+                    ->orWhereRaw("TRIM(COALESCE(torprs.tujuan_pengadaan, '')) = ''")
+                    ->orWhereNull('torprs.portofolio')
+                    ->orWhereRaw("TRIM(COALESCE(torprs.portofolio, '')) = ''")
+                    ->orWhereNull('torprs.nomor_pr')
+                    ->orWhereRaw("TRIM(COALESCE(torprs.nomor_pr, '')) = ''")
+                    ->orWhereNull('torprs.tanggal_pr')
+                    ->orWhereNull('torprs.jumlah_pr')
+                    ->orWhere('torprs.jumlah_pr', '<=', 0)
+                    ->orWhereNull('torprs.tgl_ttd_kabid_pr')
+                    ->orWhereNull('torprs.tgl_ttd_kacab_pr');
+            });
+        }
+
+        // ✅ ADVANCED DATE FILTER
+        $dateFilter = $request->get('date_filter');
+
+        if ($dateFilter) {
+            switch ($dateFilter) {
+                case 'today':
+                    $query->whereDate('torprs.tanggal_pr', Carbon::today());
+                    break;
+
+                case 'yesterday':
+                    $query->whereDate('torprs.tanggal_pr', Carbon::yesterday());
+                    break;
+
+                case 'last7days':
+                    $query->whereBetween('torprs.tanggal_pr', [
+                        Carbon::now()->subDays(7)->startOfDay(),
+                        Carbon::now()->endOfDay()
+                    ]);
+                    break;
+
+                case 'last30days':
+                    $query->whereBetween('torprs.tanggal_pr', [
+                        Carbon::now()->subDays(30)->startOfDay(),
+                        Carbon::now()->endOfDay()
+                    ]);
+                    break;
+
+                case 'this_month':
+                    $query->whereYear('torprs.tanggal_pr', Carbon::now()->year)
+                        ->whereMonth('torprs.tanggal_pr', Carbon::now()->month);
+                    break;
+
+                case 'last_month':
+                    $lastMonth = Carbon::now()->subMonth();
+                    $query->whereYear('torprs.tanggal_pr', $lastMonth->year)
+                        ->whereMonth('torprs.tanggal_pr', $lastMonth->month);
+                    break;
+
+                case 'this_year':
+                    $query->whereYear('torprs.tanggal_pr', Carbon::now()->year);
+                    break;
+
+                case 'custom':
+                    $dateFrom = $request->get('date_from');
+                    $dateTo = $request->get('date_to');
+
+                    if ($dateFrom && $dateTo) {
+                        $query->whereBetween('torprs.tanggal_pr', [
+                            Carbon::parse($dateFrom)->startOfDay(),
+                            Carbon::parse($dateTo)->endOfDay()
+                        ]);
+                    } elseif ($dateFrom) {
+                        $query->whereDate('torprs.tanggal_pr', '>=', Carbon::parse($dateFrom));
+                    } elseif ($dateTo) {
+                        $query->whereDate('torprs.tanggal_pr', '<=', Carbon::parse($dateTo));
+                    }
+                    break;
+            }
+        }
+
+        $perPage = (int) $request->get('per_page', 10);
+        $perPage = in_array($perPage, [10, 25, 50, 100]) ? $perPage : 25;
+
+        $query->orderBy('torprs.id', 'desc');
+
+        $rows = $query->paginate($perPage)->withQueryString();
+        $isHeavy = $rows->count() > 40;
+
+        // ✅ Ambil master portofolio yang sama dengan PPBJ
+        $portofolios = Cache::remember('master_portofolios', 3600, function () {
+            return MasterPortofolio::orderBy('nama')->pluck('nama')->toArray();
+        });
+
+        return view('torpr.index', compact('rows', 'isHeavy', 'portofolios'));
+    }
+
+    public function resubmitRejectedPr(Request $request, $id)
+    {
+        $request->validate([
+            'requested_name' => ['required', 'string', 'min:2', 'max:120'],
+            'resubmit_notes' => ['required', 'string', 'min:10', 'max:500'], // Catatan perbaikan
+        ]);
+
+        // ✅ Get TORPR dengan latest approval
+        $torpr = Torpr::with('latestReceiptApproval')->findOrFail($id);
+
+        $latest = $torpr->latestReceiptApproval;
+
+        // ✅ VALIDASI: Hanya bisa resubmit jika status REJECTED
+        if (!$latest || $latest->status !== 'REJECTED') {
+            return response()->json([
+                'message' => 'PR ini tidak dalam status REJECTED. Hanya PR yang ditolak yang bisa diajukan ulang.'
+            ], 422);
+        }
+
+        if (!$this->canRequestUmum()) {
+            return response()->json([
+                'message' => 'Akses ditolak. Hanya Superadmin Operasional yang dapat mengajukan PR ke Umum.'
+            ], 403);
+        }
+
+        // ✅ VALIDASI: Semua data wajib lengkap sebelum bisa diajukan ulang ke Umum
+        $missing = $this->missingReceiptFields($torpr);
+
+        if (!empty($missing)) {
+            return response()->json([
+                'message' => 'Data belum lengkap: ' . implode(', ', $missing),
+            ], 422);
+        }
+
+        try {
+            // ✅ CREATE approval baru dengan status PENDING
+            $newApproval = PrReceiptApproval::create([
+                'torpr_id' => $torpr->id,
+                'requested_by_user_id' => auth()->id(),
+                'requested_name' => $request->requested_name,
+                'requested_at' => now(),
+                'status' => 'PENDING',
+                'resubmit_notes' => $request->resubmit_notes, // Catatan perbaikan
+                'previous_rejection_id' => $latest->id, // Link ke rejection sebelumnya
+            ]);
+
+            $this->logActivity($torpr, 'resubmitted', "PR Diajukan ulang dengan catatan: {$request->resubmit_notes}");
+
+            // ✅ INVALIDATE CACHE
+            Cache::forget("torpr_json_{$id}");
+
+            return response()->json([
+                'ok' => true,
+                'message' => 'PR berhasil diajukan ulang untuk review. Super Admin telah mendapat notifikasi.',
+                'approval_id' => $newApproval->id,
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Failed to resubmit PR', [
+                'pr_id' => $id,
+                'error' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'message' => 'Gagal mengajukan ulang PR. Silakan coba lagi.'
+            ], 500);
+        }
+    }
+
+    public function receiptStatusBulk(Request $request)
+    {
+        $ids = explode(',', $request->get('ids', ''));
+        $ids = array_filter(array_map('intval', $ids));
+
+        if (empty($ids) || count($ids) > 100) {
+            return response()->json([]);
+        }
+
+        $data = DB::table('torprs as t')
+            ->select([
+                't.id',
+                't.nomor_pr',
+                't.received_at',
+                'pra.status',
+                'pra.rejected_reason',
+                'u1.name as approved_by',
+                'u2.name as rejected_by',
+            ])
+            ->leftJoin('pr_receipt_approvals as pra', function ($join) {
+                $join->on('pra.torpr_id', '=', 't.id')
+                    ->whereRaw('pra.id = (SELECT id FROM pr_receipt_approvals WHERE torpr_id = t.id ORDER BY id DESC LIMIT 1)');
+            })
+            ->leftJoin('users as u1', 'pra.approved_by_user_id', '=', 'u1.id')
+            ->leftJoin('users as u2', 'pra.rejected_by_user_id', '=', 'u2.id')
+            ->whereIn('t.id', $ids)
+            ->get()
+            ->keyBy('id');
+
+        return response()->json($data);
+    }
+
+    public function store(Request $request)
+    {
+        $data = $this->validateTorpr($request, null);
+        $data = $this->normalizeDateTimes($data);
+
+        // ✅ FIX: Set created_by_user_id dari user yang login
+        $data['created_by_user_id'] = auth()->id(); // <-- INI YANG KURANG!
+
+        // Generate QR tokens
+        $data['sign_token_kacab'] = \Illuminate\Support\Str::random(32);
+        $data['sign_token_kabid'] = \Illuminate\Support\Str::random(32);
+        $data['sign_token_kacab_expires_at'] = now()->addDays(7);
+        $data['sign_token_kabid_expires_at'] = now()->addDays(7);
+
+        $torpr = Torpr::create($data);
+
+        $this->logActivity($torpr, 'created', "PR Baru Dibuat: {$torpr->nomor_pr}");
+
+        return response()->json(['ok' => true, 'id' => $torpr->id]);
+    }
+
+    public function showQuickSign($token, $type)
+    {
+        // Validate type
+        if (!in_array($type, ['kacab', 'kabid'])) {
+            abort(404, 'Invalid signature type');
+        }
+
+        if ($type === 'kacab') {
+            // 1. Cek apakah sudah login
+            if (!auth()->check()) {
+                // Simpan intended URL agar bisa kembali setelah login
+                return redirect()->guest(route('login'))->with('error', 'Silakan login sebagai Superadmin Operasional untuk menandatangani sebagai Kacab.');
+            }
+
+            // 2. Cek apakah role dan department sesuai
+            $user = auth()->user();
+            if (!($user->role === 'superadmin' && $user->department === 'operasional')) {
+                abort(403, 'Akses Ditolak. Hanya Superadmin Operasional yang dapat menandatangani sebagai Kacab.');
+            }
+        }
+
+        // Find PR by token
+        $column = 'sign_token_' . $type;
+        $torpr = Torpr::where($column, $token)->first();
+
+        if (!$torpr) {
+            return view('pr.invalid-token', ['type' => $type]);
+        }
+
+        if ($this->signTokenExpired($torpr, $type)) {
+            return view('pr.invalid-token', ['type' => $type]);
+        }
+
+        // Check if already signed
+        $ttdColumn = 'tgl_ttd_' . $type . '_pr';
+        if ($torpr->{$ttdColumn}) {
+            return view('pr.already-signed', [
+                'torpr' => $torpr,
+                'type' => $type,
+                'signedAt' => $torpr->{$ttdColumn},
+                'signedBy' => $torpr->{'signed_by_' . $type . '_name'}
+            ]);
+        }
+
+        // Show confirmation page
+        return view('pr.quick-sign', [
+            'torpr' => $torpr,
+            'type' => $type,
+            'token' => $token
+        ]);
+    }
+
+    public function processQuickSign(Request $request, $token, $type)
+    {
+        if ($type === 'kacab') {
+            if (!auth()->check()) {
+                return response()->json(['ok' => false, 'message' => 'Sesi habis. Silakan login kembali.'], 401);
+            }
+
+            $user = auth()->user();
+            if (!($user->role === 'superadmin' && $user->department === 'operasional')) {
+                return response()->json(['ok' => false, 'message' => 'Akses ditolak. Hanya Superadmin Operasional yang boleh TTD Kacab.'], 403);
+            }
+        }
+
+        $request->validate([
+            'signer_name' => ['required', 'string', 'min:3', 'max:100']
+        ]);
+
+        if (!in_array($type, ['kacab', 'kabid'])) {
+            return response()->json(['ok' => false, 'message' => 'Invalid type'], 400);
+        }
+
+        $column = 'sign_token_' . $type;
+        $torpr = Torpr::where($column, $token)->first();
+
+        if (!$torpr) {
+            return response()->json(['ok' => false, 'message' => 'Token tidak valid'], 404);
+        }
+
+        if ($this->signTokenExpired($torpr, $type)) {
+            return response()->json(['ok' => false, 'message' => 'Token sudah kedaluwarsa. Silakan buat QR baru.'], 410);
+        }
+
+        $ttdColumn = 'tgl_ttd_' . $type . '_pr';
+        $nameColumn = 'signed_by_' . $type . '_name';
+
+        if ($torpr->{$ttdColumn}) {
+            return response()->json([
+                'ok' => false,
+                'message' => 'PR sudah ditandatangani sebelumnya oleh ' . $torpr->{$nameColumn}
+            ], 422);
+        }
+
+        // ✅ ALWAYS SAVE TTD (ini yang penting!)
+        $torpr->update([
+            $ttdColumn => now(),
+            $nameColumn => $request->signer_name,
+            $column => null,
+            $column . '_expires_at' => null,
+        ]);
+
+        Cache::forget("torpr_json_{$torpr->id}");
+
+        \App\Models\ActivityLog::create([
+            'user_id' => auth()->id(),
+            'model_type' => Torpr::class,
+            'model_id' => $torpr->id,
+            'action' => "signed_{$type}",
+            'description' => "Ditandatangani via QR oleh {$request->signer_name}",
+        ]);
+
+        \Log::info('QR Sign completed', [
+            'pr_id' => $torpr->id,
+            'pr_no' => $torpr->nomor_pr,
+            'type' => $type,
+            'signer' => $request->signer_name
+        ]);
+
+        return response()->json([
+            'ok' => true,
+            'message' => 'Tanda tangan berhasil dicatat!',
+            'timestamp' => now()->format('d M Y H:i:s'),
+            'signer' => $request->signer_name
+        ]);
+    }
+
+    public function regenerateSignToken($id, $type)
+    {
+        $user = auth()->user();
+        if (!$user || $user->role !== 'superadmin' || $user->department !== 'operasional') {
+            return response()->json(['ok' => false, 'message' => 'Akses ditolak.'], 403);
+        }
+
+        if (!in_array($type, ['kacab', 'kabid'])) {
+            return response()->json(['ok' => false, 'message' => 'Invalid type'], 400);
+        }
+
+        $torpr = Torpr::findOrFail($id);
+
+        // Check permission (only if not signed yet)
+        $ttdColumn = 'tgl_ttd_' . $type . '_pr';
+        if ($torpr->{$ttdColumn}) {
+            return response()->json([
+                'ok' => false,
+                'message' => 'Tidak bisa regenerate token untuk PR yang sudah ditandatangani'
+            ], 422);
+        }
+
+        $column = 'sign_token_' . $type;
+        $newToken = \Illuminate\Support\Str::random(32);
+
+        $torpr->update([
+            $column => $newToken,
+            $column . '_expires_at' => now()->addDays(7),
+        ]);
+
+        return response()->json([
+            'ok' => true,
+            'message' => 'Token berhasil di-generate ulang',
+            'new_token' => $newToken
+        ]);
+    }
+
+    public function quickSignQr(string $token, string $type)
+    {
+        abort_unless(in_array($type, ['kacab', 'kabid'], true), 404);
+
+        $column = 'sign_token_' . $type;
+        $torpr = Torpr::where($column, $token)->firstOrFail();
+        abort_if($this->signTokenExpired($torpr, $type), 410, 'Token tanda tangan sudah kedaluwarsa.');
+
+        $svg = \SimpleSoftwareIO\QrCode\Facades\QrCode::format('svg')
+            ->size(200)
+            ->margin(1)
+            ->generate(route('pr.quick-sign', ['token' => $token, 'type' => $type]));
+
+        return response($svg, 200, [
+            'Content-Type' => 'image/svg+xml',
+            'Cache-Control' => 'private, no-store, max-age=0',
+            'X-Content-Type-Options' => 'nosniff',
+        ]);
+    }
+
+    private function signTokenExpired(Torpr $torpr, string $type): bool
+    {
+        $expiresAt = $torpr->{'sign_token_' . $type . '_expires_at'};
+
+        return !$expiresAt || $expiresAt->isPast();
+    }
+
+    public function update(Request $request, $id)
+    {
+        $torpr = Torpr::with('latestReceiptApproval')->findOrFail($id);
+        $this->ensureCanManageTorpr($torpr);
+        $latest = $torpr->latestReceiptApproval;
+
+        // 1. Cek Lock Status
+        $lockedStatuses = ['PENDING', 'APPROVED', 'REJECTED'];
+        $currentStatus = $latest?->status;
+        if (in_array($currentStatus, $lockedStatuses, true)) {
+            return response()->json([
+                'message' => 'Data sudah terkunci karena status receipt: ' . $currentStatus
+            ], 422);
+        }
+
+        // 2. Validasi & Normalisasi Data
+        $data = $this->validateTorpr($request, $torpr->id);
+        $data = $this->normalizeDateTimes($data);
+
+        // Cek Hak Akses Kacab
+        $isSuperadminOps = (auth()->user()->role === 'superadmin' && auth()->user()->department === 'operasional');
+
+        // ==========================================
+        // LOGIKA TTD KABID (Berlaku untuk semua user)
+        // ==========================================
+        if (!empty($data['tgl_ttd_kabid_pr'])) {
+            $oldKabid = $torpr->tgl_ttd_kabid_pr
+                ? Carbon::parse($torpr->tgl_ttd_kabid_pr)->format('Y-m-d H:i:s')
+                : null;
+            $newKabid = $data['tgl_ttd_kabid_pr'];
+
+            if ($oldKabid !== $newKabid) {
+                // Tanggal berubah → catat nama user yang mengubah
+                $data['signed_by_kabid_name'] = auth()->user()->name;
+            } else {
+                // Tidak berubah → pertahankan nama lama
+                $data['signed_by_kabid_name'] = $torpr->signed_by_kabid_name;
+            }
+        } else {
+            // Tanggal dikosongkan → hapus nama juga
+            $data['signed_by_kabid_name'] = null;
+        }
+
+        // ==========================================
+        // LOGIKA TTD KACAB (Hanya Superadmin Ops)
+        // ==========================================
+
+        // Proteksi: Jika BUKAN Superadmin Ops, paksa pakai data lama
+        if (!$isSuperadminOps) {
+            $data['tgl_ttd_kacab_pr'] = $torpr->tgl_ttd_kacab_pr;
+            $data['signed_by_kacab_name'] = $torpr->signed_by_kacab_name;
+        } else {
+            if (!empty($data['tgl_ttd_kacab_pr'])) {
+                $oldKacab = $torpr->tgl_ttd_kacab_pr
+                    ? Carbon::parse($torpr->tgl_ttd_kacab_pr)->format('Y-m-d H:i:s')
+                    : null;
+                $newKacab = $data['tgl_ttd_kacab_pr'];
+
+                if ($oldKacab !== $newKacab) {
+                    // Tanggal berubah → catat nama user yang mengubah
+                    $data['signed_by_kacab_name'] = auth()->user()->name;
+                } else {
+                    // Tidak berubah → pertahankan nama lama
+                    $data['signed_by_kacab_name'] = $torpr->signed_by_kacab_name;
+                }
+            } else {
+                // Tanggal dikosongkan → hapus nama juga
+                $data['signed_by_kacab_name'] = null;
+            }
+        }
+
+        // ==========================================
+        // LOGGING PERUBAHAN
+        // ==========================================
+        $changes = [];
+        $original = $torpr->getOriginal();
+
+        foreach ($data as $key => $value) {
+            if (array_key_exists($key, $original)) {
+                $oldVal = $original[$key];
+                $newVal = $value;
+
+                if ($oldVal != $newVal) {
+                    $changes[$key] = [
+                        'old' => $oldVal,
+                        'new' => $newVal
+                    ];
+                }
+            }
+        }
+
+        // Eksekusi Update
+        $torpr->update($data);
+
+        // Simpan Log
+        if (!empty($changes)) {
+            $this->logActivity($torpr, 'updated', "Data PR diperbarui", $changes);
+        }
+
+        Cache::forget("torpr_json_{$id}");
+
+        return response()->json(['ok' => true, 'message' => 'Data berhasil diupdate']);
+    }
+
+    public function showJson($id)
+    {
+        $torpr = Torpr::select(['id', 'created_by_user_id'])->findOrFail($id);
+        $this->ensureCanManageTorpr($torpr);
+
+        $cacheKey = "torpr_json_{$id}";
+
+        $data = Cache::remember($cacheKey, 300, function () use ($id) {
+            $torpr = Torpr::select([
+                'id',
+                'tujuan_pengadaan',
+                'portofolio',
+                'nomor_pr',
+                'tanggal_pr',
+                'jumlah_pr',
+                'tgl_ttd_kabid_pr',
+                'tgl_ttd_kacab_pr'
+            ])->findOrFail($id);
+
+            return [
+                'id' => $torpr->id,
+                'tujuan_pengadaan' => $torpr->tujuan_pengadaan,
+                'portofolio' => $torpr->portofolio,
+                'nomor_pr' => $torpr->nomor_pr,
+                'tanggal_pr' => $this->fmtDateTimeLocal($torpr->tanggal_pr),
+                'jumlah_pr' => $torpr->jumlah_pr,
+                'tgl_ttd_kabid_pr' => $this->fmtDateTimeLocal($torpr->tgl_ttd_kabid_pr),
+                'tgl_ttd_kacab_pr' => $this->fmtDateTimeLocal($torpr->tgl_ttd_kacab_pr),
+            ];
+        });
+
+        return response()->json($data, 200, [], JSON_UNESCAPED_UNICODE);
+    }
+
+    public function requestReceipt(Request $request, $id, NotificationService $notificationService)
+    {
+        $request->validate([
+            'requested_name' => ['required', 'string', 'min:2', 'max:120'],
+        ]);
+
+        if (!$this->canRequestUmum()) {
+            return response()->json([
+                'message' => 'Akses ditolak. Hanya Superadmin Operasional yang dapat request PR ke Umum.'
+            ], 403);
+        }
+
+        $torpr = Torpr::select([
+            'id',
+            'tujuan_pengadaan',
+            'portofolio',
+            'nomor_pr',
+            'tanggal_pr',
+            'jumlah_pr',
+            'tgl_ttd_kabid_pr',
+            'tgl_ttd_kacab_pr'
+        ])->findOrFail($id);
+
+        $hasPending = PrReceiptApproval::where('torpr_id', $torpr->id)
+            ->where('status', 'PENDING')
+            ->exists();
+
+        if ($hasPending) {
+            return response()->json(['message' => 'Sudah ada request PENDING untuk PR ini.'], 422);
+        }
+
+        // ✅ VALIDASI: Semua data wajib lengkap sebelum bisa request ke Umum
+        $missing = $this->missingReceiptFields($torpr);
+
+        if (!empty($missing)) {
+            return response()->json([
+                'message' => 'Data belum lengkap: ' . implode(', ', $missing),
+            ], 422);
+        }
+
+        PrReceiptApproval::create([
+            'torpr_id' => $torpr->id,
+            'requested_by_user_id' => auth()->id(),
+            'requested_name' => $request->requested_name,
+            'requested_at' => now(),
+            'status' => 'PENDING',
+        ]);
+
+        $this->logActivity($torpr, 'requested', "Request Receipt diajukan oleh {$request->requested_name}");
+
+        try {
+            $prData = [
+                'pr_no' => $torpr->nomor_pr ?? 'PR-' . $torpr->id,
+                'description' => $torpr->tujuan_pengadaan ?? 'Purchase Request',
+                'department' => 'Operasional',
+                'submitted_by' => $request->requested_name,
+                'submitted_at' => now()->format('d M Y H:i'),
+            ];
+
+            $adminUsers = User::where('department', 'umum')
+                ->select(['id', 'name', 'email', 'telegram_id'])
+                ->get()
+                ->toArray();
+
+            // Gunakan $notificationService dari argument method
+            $notificationResults = $notificationService->notifyNewPrSubmission(
+                $prData,
+                $adminUsers
+            );
+
+            // ✅ REDUCE LOG: Hanya log jika penting (info berubah jadi debug)
+            Log::debug('PR approval requested', [
+                'pr_id' => $id,
+                'pr_no' => $prData['pr_no']
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Failed to send PR notifications', [
+                'pr_id' => $id,
+                'error' => $e->getMessage()
+            ]);
+        }
+
+        Cache::forget("torpr_json_{$id}");
+
+        return response()->json([
+            'ok' => true,
+            'message' => 'PR berhasil diajukan untuk approval. Super Admin telah mendapat notifikasi.',
+            'notification_sent' => [
+                'telegram' => $notificationResults['telegram_sent'] ?? 0,
+                'chatbot' => $notificationResults['cache_stored'] ?? false
+            ]
+        ]);
+    }
+
+    public function receiptStatus($id)
+    {
+        $torpr = Torpr::with(['latestReceiptApproval.approvedBy', 'latestReceiptApproval.rejectedBy', 'receivedByUmum'])->findOrFail($id);
+        $latest = $torpr->latestReceiptApproval;
+
+        return response()->json([
+            'torpr_id' => $torpr->id,
+            'nomor_pr' => $torpr->nomor_pr,
+            'status' => $latest?->status ?? null,
+            'requested_name' => $latest?->requested_name,
+            'approved_by' => $torpr->receivedByUmum?->name,
+            'received_at' => $torpr->received_at ? Carbon::parse($torpr->received_at)->toDateTimeString() : null,
+            'rejected_reason' => $latest?->rejected_reason,
+            'rejected_by' => $latest?->rejectedBy?->name,
+        ]);
+    }
+
+
+    private function canRequestUmum(): bool
+    {
+        $user = auth()->user();
+
+        return $user
+            && $user->role === 'superadmin'
+            && $user->department === 'operasional';
+    }
+
+    private function ensureCanManageTorpr(Torpr $torpr): void
+    {
+        $user = auth()->user();
+        $isSuperadminOps = $user
+            && $user->role === 'superadmin'
+            && $user->department === 'operasional';
+
+        abort_unless(
+            $isSuperadminOps || (int) $torpr->created_by_user_id === (int) $user?->id,
+            403,
+            'Anda hanya dapat mengubah data PR yang Anda buat.'
+        );
+    }
+
+    private function requiredReceiptFields(): array
+    {
+        return [
+            'tujuan_pengadaan' => 'Tujuan Pengadaan',
+            'portofolio' => 'Portofolio',
+            'nomor_pr' => 'Nomor PR',
+            'tanggal_pr' => 'Tanggal PR',
+            'jumlah_pr' => 'Harga PR',
+            'tgl_ttd_kabid_pr' => 'Tanggal Ttd Kabid PR',
+            'tgl_ttd_kacab_pr' => 'Tanggal Ttd Kacab PR',
+        ];
+    }
+
+    private function missingReceiptFields($torpr): array
+    {
+        $missing = [];
+
+        foreach ($this->requiredReceiptFields() as $field => $label) {
+            $value = $torpr->{$field} ?? null;
+
+            if ($field === 'jumlah_pr') {
+                if ($value === null || $value === '' || (float) $value <= 0) {
+                    $missing[] = $label;
+                }
+
+                continue;
+            }
+
+            if ($value === null || (is_string($value) && trim($value) === '')) {
+                $missing[] = $label;
+            }
+        }
+
+        return $missing;
+    }
+
+    private function validateTorpr(Request $request, $ignoreId = null): array
+    {
+        return $request->validate([
+            'tujuan_pengadaan' => ['required', 'string', 'max:255'],
+            'portofolio' => ['nullable', 'string', 'max:255'],
+            'nomor_pr' => [
+                'nullable',
+                'string',
+                'max:255',
+                Rule::unique('torprs', 'nomor_pr')->ignore($ignoreId),
+            ],
+            'tanggal_pr' => ['nullable', 'date_format:Y-m-d\TH:i'],
+            'jumlah_pr' => ['nullable', 'numeric'],
+            'tgl_ttd_kabid_pr' => ['nullable', 'date_format:Y-m-d\TH:i'],
+            'tgl_ttd_kacab_pr' => ['nullable', 'date_format:Y-m-d\TH:i'],
+        ], [
+            'tujuan_pengadaan.required' => 'Tujuan Pengadaan wajib diisi.',
+            'nomor_pr.unique' => 'Nomor PR sudah terdaftar.',
+            'date_format' => 'Format tanggal tidak valid.',
+        ]);
+    }
+
+    private function normalizeDateTimes(array $data): array
+    {
+        $fields = ['tanggal_pr', 'tgl_ttd_kabid_pr', 'tgl_ttd_kacab_pr'];
+
+        foreach ($fields as $f) {
+            if (!array_key_exists($f, $data))
+                continue;
+
+            $v = $data[$f];
+
+            if ($v === null || (is_string($v) && trim($v) === '')) {
+                $data[$f] = null;
+                continue;
+            }
+
+            $dt = Carbon::createFromFormat('Y-m-d\TH:i', $v);
+            $data[$f] = $dt->format('Y-m-d H:i:s');
+        }
+
+        return $data;
+    }
+
+    private function fmtDateTimeLocal($v): ?string
+    {
+        if (!$v)
+            return null;
+        return Carbon::parse($v)->format('Y-m-d\TH:i');
+    }
+
+    // ✅ FIXED: Template dengan column yang benar
+    public function downloadTemplate()
+    {
+        $spreadsheet = new Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+
+        $spreadsheet->getProperties()
+            ->setCreator('TORPR System')
+            ->setTitle('Template Import TORPR')
+            ->setDescription('Template Excel untuk import data TORPR secara massal');
+
+        // ✅ HEADER YANG BENAR (7 kolom)
+        $headers = [
+            'A1' => 'Tujuan Pengadaan',
+            'B1' => 'Portofolio',
+            'C1' => 'Nomor PR',
+            'D1' => 'Tanggal PR',
+            'E1' => 'Jumlah PR',
+            'F1' => 'Ttd Kabid PR',
+            'G1' => 'Ttd Kacab PR',
+        ];
+
+        foreach ($headers as $cell => $value) {
+            $sheet->setCellValue($cell, $value);
+        }
+
+        // Header Styling
+        $headerStyle = [
+            'font' => [
+                'bold' => true,
+                'color' => ['rgb' => 'FFFFFF'],
+                'size' => 11,
+            ],
+            'fill' => [
+                'fillType' => Fill::FILL_SOLID,
+                'startColor' => ['rgb' => '10B981'],
+            ],
+            'borders' => [
+                'allBorders' => [
+                    'borderStyle' => Border::BORDER_THIN,
+                    'color' => ['rgb' => '000000'],
+                ],
+            ],
+            'alignment' => [
+                'horizontal' => Alignment::HORIZONTAL_CENTER,
+                'vertical' => Alignment::VERTICAL_CENTER,
+            ],
+        ];
+
+        // ✅ FIX: Apply style ke A1:G1 (bukan A1:K1)
+        $sheet->getStyle('A1:G1')->applyFromArray($headerStyle);
+        $sheet->getRowDimension(1)->setRowHeight(25);
+
+        // ✅ CONTOH DATA (7 kolom)
+        $exampleData = [
+            'Pengadaan Alat Tulis Kantor',
+            'Administrasi dan Umum',
+            'PR-OPS-001/2026',
+            '2026-02-02 10:00:00',
+            '5000000',
+            '2026-02-02 13:00:00',
+            '2026-02-02 15:00:00',
+        ];
+
+        $sheet->fromArray($exampleData, null, 'A2');
+
+        $exampleStyle = [
+            'fill' => [
+                'fillType' => Fill::FILL_SOLID,
+                'startColor' => ['rgb' => 'E7E6E6'],
+            ],
+            'font' => [
+                'italic' => true,
+                'color' => ['rgb' => '666666'],
+            ],
+        ];
+
+        // ✅ FIX: Apply style ke A2:G2 (bukan A2:K2)
+        $sheet->getStyle('A2:G2')->applyFromArray($exampleStyle);
+
+        // ✅ COLUMN WIDTHS (7 kolom)
+        $columnWidths = [
+            'A' => 35,
+            'B' => 28,
+            'C' => 20,
+            'D' => 20,
+            'E' => 15,
+            'F' => 20,
+            'G' => 20,
+        ];
+
+        foreach ($columnWidths as $col => $width) {
+            $sheet->getColumnDimension($col)->setWidth($width);
+        }
+
+        // INSTRUCTIONS SHEET
+        $instructionSheet = $spreadsheet->createSheet();
+        $instructionSheet->setTitle('Petunjuk');
+
+        $instructions = [
+            ['PETUNJUK PENGGUNAAN TEMPLATE IMPORT TORPR'],
+            [''],
+            ['1. KOLOM WAJIB:'],
+            ['   - Tujuan Pengadaan: WAJIB diisi'],
+            ['   - Nomor PR: WAJIB diisi dan harus UNIK'],
+            [''],
+            ['2. FORMAT DATA:'],
+            ['   - Format Tanggal/Waktu: YYYY-MM-DD HH:MM:SS atau YYYY-MM-DD'],
+            ['   - Portofolio: isi sesuai Master Portofolio PPBJ'],
+            ['   - Format Angka: Tanpa titik/koma (contoh: 5000000)'],
+            ['   - Jangan mengubah nama kolom/header!'],
+            [''],
+            ['3. CARA MENGGUNAKAN:'],
+            ['   a. Hapus baris contoh (baris 2) sebelum mengisi data Anda'],
+            ['   b. Isi data mulai dari baris 3 ke bawah'],
+            ['   c. Simpan file dengan format Excel (.xlsx)'],
+            ['   d. Upload file ke sistem'],
+            [''],
+            ['4. CATATAN PENTING:'],
+            ['   - Kolom yang kosong boleh dikosongkan (kecuali yang wajib)'],
+            ['   - Maksimal ukuran file: 10MB'],
+            ['   - Pastikan tidak ada data duplikat Nomor PR'],
+            [''],
+            ['Jika masih ada masalah, hubungi administrator sistem.'],
+        ];
+
+        $instructionSheet->fromArray($instructions, null, 'A1');
+        $instructionSheet->getColumnDimension('A')->setWidth(70);
+
+        $instructionSheet->getStyle('A1')->applyFromArray([
+            'font' => ['bold' => true, 'size' => 14, 'color' => ['rgb' => '10B981']],
+        ]);
+
+        $spreadsheet->setActiveSheetIndex(0);
+
+        $filename = 'Template_Import_TORPR_' . now()->format('Ymd') . '.xlsx';
+        $tempFile = tempnam(sys_get_temp_dir(), 'excel_');
+        $writer = new Xlsx($spreadsheet);
+        $writer->save($tempFile);
+
+        return response()->download($tempFile, $filename, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        ])->deleteFileAfterSend(true);
+    }
+
+    // ✅ FIXED: Preview import dengan validasi yang benar
+    public function previewImport(Request $request)
+    {
+        \Log::info('TORPR Preview import started');
+
+        $request->validate([
+            'file' => ['required', 'file', 'mimes:xlsx,xls,csv,txt', 'max:10240'],
+        ]);
+
+        try {
+            $file = $request->file('file');
+            $extension = strtolower($file->getClientOriginalExtension());
+
+            $data = [];
+            $warnings = [];
+
+            if (in_array($extension, ['xlsx', 'xls'])) {
+                $spreadsheet = \PhpOffice\PhpSpreadsheet\IOFactory::load($file->getRealPath());
+                $worksheet = $spreadsheet->getActiveSheet();
+                $rows = $worksheet->toArray(null, true, true, true);
+
+                $header = array_map('trim', array_values($rows[1]));
+                unset($rows[1]);
+
+            } else {
+                $handle = fopen($file->getRealPath(), 'r');
+                $bom = fread($handle, 3);
+                if ($bom !== chr(0xEF) . chr(0xBB) . chr(0xBF)) {
+                    rewind($handle);
+                }
+
+                $header = fgetcsv($handle);
+                $header = array_map('trim', $header);
+
+                $rows = [];
+                $rowNum = 1;
+                while (($line = fgetcsv($handle)) !== false) {
+                    $rowNum++;
+                    $rows[$rowNum] = $line;
+                }
+                fclose($handle);
+            }
+
+            // ✅ FIX: Expected headers yang benar (7 kolom)
+            $expectedHeaders = [
+                'Tujuan Pengadaan',
+                'Portofolio',
+                'Nomor PR',
+                'Tanggal PR',
+                'Jumlah PR',
+                'Ttd Kabid PR',
+                'Ttd Kacab PR',
+            ];
+
+            $headerMismatch = false;
+            if (count($header) !== count($expectedHeaders)) {
+                $headerMismatch = true;
+            } else {
+                foreach ($header as $index => $col) {
+                    if (strtolower(trim($col)) !== strtolower($expectedHeaders[$index])) {
+                        $headerMismatch = true;
+                        break;
+                    }
+                }
+            }
+
+            if ($headerMismatch) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Format template tidak sesuai. Silakan download template yang benar.'
+                ], 422);
+            }
+
+            $nomorPrInFile = [];
+
+            foreach ($rows as $rowIndex => $line) {
+                if ($rowIndex == 1)
+                    continue;
+
+                if (!isset($line[0])) {
+                    $line = array_values($line);
+                }
+
+                $line = array_map(function ($v) {
+                    return is_string($v) ? trim($v) : $v;
+                }, $line);
+
+                if (empty(array_filter($line, fn($v) => !empty($v)))) {
+                    continue;
+                }
+
+                // Skip example row
+                if (isset($line[0]) && $line[0] === 'Pengadaan Alat Tulis Kantor') {
+                    $warnings[] = "Baris $rowIndex: Baris contoh dilewati";
+                    continue;
+                }
+
+                // ✅ FIX: Map ke 7 kolom yang benar
+                $rowData = [
+                    'row_number' => $rowIndex,
+                    'tujuan_pengadaan' => $line[0] ?? '',
+                    'portofolio' => $line[1] ?? '',
+                    'nomor_pr' => $line[2] ?? '',
+                    'tanggal_pr' => $line[3] ?? '',
+                    'jumlah_pr' => $line[4] ?? '',
+                    'tgl_ttd_kabid_pr' => $line[5] ?? '',
+                    'tgl_ttd_kacab_pr' => $line[6] ?? '',
+                    'status' => 'valid',
+                    'errors' => [],
+                ];
+
+                // Validasi Tujuan Pengadaan (WAJIB)
+                if (empty($rowData['tujuan_pengadaan'])) {
+                    $rowData['status'] = 'error';
+                    $rowData['errors'][] = 'Tujuan Pengadaan wajib diisi';
+                }
+
+                // Validasi Nomor PR (WAJIB & UNIK)
+                if (empty($rowData['nomor_pr'])) {
+                    $rowData['status'] = 'error';
+                    $rowData['errors'][] = 'Nomor PR wajib diisi';
+                } else {
+                    if (in_array($rowData['nomor_pr'], $nomorPrInFile)) {
+                        $rowData['status'] = 'error';
+                        $rowData['errors'][] = 'Nomor PR duplikat dalam file';
+                    } else {
+                        $nomorPrInFile[] = $rowData['nomor_pr'];
+
+                        if (Torpr::where('nomor_pr', $rowData['nomor_pr'])->exists()) {
+                            $rowData['status'] = 'error';
+                            $rowData['errors'][] = 'Nomor PR sudah terdaftar di database';
+                        }
+                    }
+                }
+
+                // ✅ FIX: Validasi date fields yang benar (3 field)
+                $dateFields = [
+                    'tanggal_pr',
+                    'tgl_ttd_kabid_pr',
+                    'tgl_ttd_kacab_pr'
+                ];
+
+                foreach ($dateFields as $field) {
+                    if (!empty($rowData[$field])) {
+                        $date = $this->parseDateTime($rowData[$field]);
+                        if (!$date) {
+                            $rowData['status'] = 'error';
+                            $fieldLabel = ucwords(str_replace('_', ' ', $field));
+                            $rowData['errors'][] = "$fieldLabel format tidak valid";
+                        }
+                    }
+                }
+
+                // Validasi numeric
+                if (!empty($rowData['jumlah_pr'])) {
+                    $cleaned = str_replace([',', '.', ' ', 'Rp'], '', $rowData['jumlah_pr']);
+                    if (!is_numeric($cleaned)) {
+                        $rowData['status'] = 'error';
+                        $rowData['errors'][] = "Jumlah PR harus berupa angka";
+                    }
+                }
+
+                if (!empty($rowData['tgl_ttd_kacab_pr'])) {
+                    $isSuperadminOps = (auth()->user()->role === 'superadmin' && auth()->user()->department === 'operasional');
+
+                    if (!$isSuperadminOps) {
+                        $rowData['errors'][] = "⚠️ TTD Kacab: Hanya Superadmin Operasional yang boleh mengisi kolom ini via Import. Data akan diabaikan.";
+                        // Kita tidak set status 'error' agar proses tetap jalan, tapi data akan di-ignore nanti.
+                        // Atau jika ingin memblok total, uncomment baris bawah:
+                        // $rowData['status'] = 'error'; 
+                    }
+                }
+
+                $data[] = $rowData;
+            }
+
+            if (empty($data)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'File tidak mengandung data valid'
+                ], 422);
+            }
+
+            $validCount = count(array_filter($data, fn($d) => $d['status'] === 'valid'));
+            $errorCount = count(array_filter($data, fn($d) => $d['status'] === 'error'));
+
+            return response()->json([
+                'success' => true,
+                'data' => $data,
+                'summary' => [
+                    'total' => count($data),
+                    'valid' => $validCount,
+                    'error' => $errorCount,
+                ],
+                'warnings' => $warnings,
+            ]);
+
+        } catch (\Exception $e) {
+            \Log::error('TORPR Import error: ' . $e->getMessage());
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal memproses file. Pastikan format file sesuai template.'
+            ], 500);
+        }
+    }
+
+    public function processImport(Request $request)
+    {
+        $request->validate([
+            'data' => ['required', 'array'],
+        ]);
+
+        $imported = 0;
+        $failed = 0;
+        $errors = [];
+
+        // ✅ 1. Cek otorisasi Kacab sekali di luar loop
+        $isSuperadminOps = (auth()->user()->role === 'superadmin' && auth()->user()->department === 'operasional');
+
+        foreach ($request->data as $item) {
+            try {
+                if (isset($item['status']) && $item['status'] === 'error') {
+                    $failed++;
+                    continue;
+                }
+
+                if (Torpr::where('nomor_pr', $item['nomor_pr'])->exists()) {
+                    $failed++;
+                    $errors[] = "Baris {$item['row_number']}: Nomor PR {$item['nomor_pr']} sudah terdaftar";
+                    continue;
+                }
+
+                // ✅ 2. FILTER KEAMANAN TTD KACAB
+                $tglTtdKacab = $this->parseDateTime($item['tgl_ttd_kacab_pr'] ?? null);
+                $signedByKacab = null;
+
+                // Jika ada tanggal TTD Kacab, cek apakah boleh
+                if ($tglTtdKacab) {
+                    if ($isSuperadminOps) {
+                        // Jika Superadmin Ops, boleh isi dan otomatis isi nama dia
+                        $signedByKacab = auth()->user()->name;
+                    } else {
+                        // Jika bukan, abaikan (reset jadi null) dan catat warning
+                        $tglTtdKacab = null;
+                        $errors[] = "Baris {$item['row_number']}: TTD Kacab diabaikan (Hanya Superadmin Operasional yang berhak).";
+                    }
+                }
+
+                // ✅ 3. SIAPKAN DATA TERMASUK QR TOKEN
+                $data = [
+                    'tujuan_pengadaan' => $item['tujuan_pengadaan'] ?? null,
+                    'portofolio' => $item['portofolio'] ?? null,
+                    'nomor_pr' => $item['nomor_pr'] ?? null,
+                    'tanggal_pr' => $this->parseDateTime($item['tanggal_pr'] ?? null),
+                    'jumlah_pr' => !empty($item['jumlah_pr']) ? (float) str_replace(',', '', $item['jumlah_pr']) : null,
+                    'tgl_ttd_kabid_pr' => $this->parseDateTime($item['tgl_ttd_kabid_pr'] ?? null),
+
+                    // Data yang sudah di-filter
+                    'tgl_ttd_kacab_pr' => $tglTtdKacab,
+                    'signed_by_kacab_name' => $signedByKacab,
+
+                    'created_by_user_id' => auth()->id(),
+
+                    // ✅ FIX: GENERATE QR TOKEN (Supaya tombol QR muncul)
+                    'sign_token_kabid' => \Illuminate\Support\Str::random(32),
+                    'sign_token_kacab' => \Illuminate\Support\Str::random(32),
+                ];
+
+                Torpr::create($data);
+                $imported++;
+
+            } catch (\Exception $e) {
+                $failed++;
+                $errors[] = "Baris {$item['row_number']}: " . $e->getMessage();
+                \Log::error("TORPR Import error on row {$item['row_number']}: " . $e->getMessage());
+            }
+        }
+
+        return response()->json([
+            'success' => true,
+            'imported' => $imported,
+            'failed' => $failed,
+            'errors' => $errors,
+        ]);
+    }
+
+    private function parseDateTime($value)
+    {
+        if (empty($value)) {
+            return null;
+        }
+
+        $value = trim($value);
+
+        // Handle Excel date serial number
+        if (is_numeric($value) && $value > 25569) {
+            try {
+                $date = \PhpOffice\PhpSpreadsheet\Shared\Date::excelToDateTimeObject($value);
+                return $date->format('Y-m-d H:i:s');
+            } catch (\Exception $e) {
+                // Continue
+            }
+        }
+
+        $formats = [
+            'Y-m-d H:i:s',
+            'Y-m-d H:i',
+            'Y-m-d',
+            'd/m/Y H:i:s',
+            'd/m/Y H:i',
+            'd/m/Y',
+            'd-m-Y H:i:s',
+            'd-m-Y',
+        ];
+
+        foreach ($formats as $format) {
+            try {
+                $date = \DateTime::createFromFormat($format, $value);
+                if ($date && $date->format($format) === $value) {
+                    return $date->format('Y-m-d H:i:s');
+                }
+            } catch (\Exception $e) {
+                continue;
+            }
+        }
+
+        try {
+            $carbonDate = Carbon::parse($value);
+            return $carbonDate->format('Y-m-d H:i:s');
+        } catch (\Exception $e) {
+            return null;
+        }
+    }
+
+    public function exportFull(Request $request)
+    {
+        $filename = 'TORPR_Export_Full_' . now()->format('Ymd_His') . '.csv';
+
+        return response()->streamDownload(function () use ($request) {
+            $out = fopen('php://output', 'w');
+
+            // Tambahkan BOM (Byte Order Mark) agar Excel bisa baca UTF-8 dengan benar
+            fprintf($out, chr(0xEF) . chr(0xBB) . chr(0xBF));
+
+            // ✅ FIXED: Header tanpa kolom 'ID'
+            fputcsv($out, [
+                'Tujuan Pengadaan',
+                'Portofolio',
+                'Nomor PR',
+                'Tanggal PR',
+                'Jumlah PR',
+                'Ttd Kabid PR',
+                'Ttd Kacab PR',
+                'Receipt Status',
+                'Dibuat Oleh',
+                'Created At',
+            ]);
+
+            $query = Torpr::with(['createdBy', 'latestReceiptApproval']);
+
+            if ($request->filled('q')) {
+                $keyword = trim($request->q);
+                $query->where(function ($q) use ($keyword) {
+                    // ✅ PERBAIKAN SEBELUMNYA: Pencarian menggunakan '%' . $keyword . '%' (contains)
+                    $q->where('tujuan_pengadaan', 'like', "%{$keyword}%")
+                        ->orWhere('portofolio', 'like', "%{$keyword}%")
+                        ->orWhere('nomor_pr', 'like', "%{$keyword}%");
+                });
+            }
+
+            // ✅ FILTER PORTOFOLIO MULTIPLE SAAT EXPORT
+            // Menyesuaikan export dengan filter aktif di halaman TORPR.
+            $selectedPortofolios = array_values(array_filter(array_map(
+                fn($value) => trim((string) $value),
+                (array) $request->input('portofolio', [])
+            )));
+
+            if (!empty($selectedPortofolios)) {
+                $query->whereIn('portofolio', $selectedPortofolios);
+            }
+
+            $query->orderByDesc('created_at')->chunk(500, function ($rows) use ($out) {
+                foreach ($rows as $r) {
+                    $receiptStatus = $r->latestReceiptApproval?->status ?? ($r->received_at ? 'APPROVED' : '-');
+
+                    // ✅ FIXED: Data tanpa $r->id
+                    fputcsv($out, \App\Support\Csv::row([
+                        $r->tujuan_pengadaan,
+                        $r->portofolio,
+                        $r->nomor_pr,
+                        $r->tanggal_pr ? Carbon::parse($r->tanggal_pr)->format('Y-m-d H:i:s') : '',
+                        $r->jumlah_pr,
+                        $r->tgl_ttd_kabid_pr ? Carbon::parse($r->tgl_ttd_kabid_pr)->format('Y-m-d H:i:s') : '',
+                        $r->tgl_ttd_kacab_pr ? Carbon::parse($r->tgl_ttd_kacab_pr)->format('Y-m-d H:i:s') : '',
+                        $receiptStatus,
+                        $r->createdBy?->name ?? '-',
+                        $r->created_at ? Carbon::parse($r->created_at)->format('Y-m-d H:i:s') : '',
+                    ]));
+                }
+            });
+
+            fclose($out);
+        }, $filename, [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+            'Cache-Control' => 'no-store, no-cache',
+        ]);
+    }
+
+    private function logActivity($model, $action, $description, $changes = null)
+    {
+        \App\Models\ActivityLog::create([
+            'user_id' => auth()->id(),
+            'model_type' => get_class($model),
+            'model_id' => $model->id,
+            'action' => $action,
+            'description' => $description,
+            'changes' => $changes,
+        ]);
+    }
+
+    public function getLogs($id)
+    {
+        $logs = \App\Models\ActivityLog::with('user:id,name')
+            ->where('model_type', Torpr::class)
+            ->where('model_id', $id)
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        return response()->json($logs);
+    }
+}
