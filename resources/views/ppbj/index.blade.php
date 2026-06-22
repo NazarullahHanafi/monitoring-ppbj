@@ -482,15 +482,15 @@
                             </td>
 
                             <td class="px-4 py-3 text-center">
-                                <div class="inline-flex flex-col items-center gap-1.5">
+                                <div class="inline-flex flex-col items-center gap-1">
                                     <button type="button" onclick="openDetail({{ $row->id }})"
                                         class="inline-flex items-center justify-center rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 transition">
                                         Info
                                     </button>
                                     <button type="button" data-archive-status data-ppbj-id="{{ $row->id }}"
                                         onclick="openArchiveDetail({{ $row->id }})"
-                                        class="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-1 text-[10px] font-semibold text-slate-600 ring-1 ring-slate-200 transition hover:bg-slate-200 dark:bg-gray-700 dark:text-gray-200 dark:ring-gray-600">
-                                        <span class="h-1.5 w-1.5 rounded-full bg-slate-400"></span>
+                                        class="inline-flex items-center gap-0.5 rounded-md bg-slate-100 px-1.5 py-0.5 text-[9px] font-semibold leading-none text-slate-600 ring-1 ring-slate-200 transition hover:bg-slate-200 dark:bg-gray-700 dark:text-gray-200 dark:ring-gray-600">
+                                        <span class="h-1 w-1 rounded-full bg-slate-400"></span>
                                         Cek Arsip
                                     </button>
                                 </div>
@@ -1656,10 +1656,10 @@
                     documents.classList.add('hidden');
                 }
                 if (rowBadge) {
-                    rowBadge.className = `inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-semibold ring-1 transition ${ui.row}`;
+                    rowBadge.className = `inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-[9px] font-semibold leading-none ring-1 transition ${ui.row}`;
                     rowBadge.replaceChildren();
                     const dot = document.createElement('span');
-                    dot.className = `h-1.5 w-1.5 rounded-full ${ui.dot}`;
+                    dot.className = `h-1 w-1 rounded-full ${ui.dot}`;
                     rowBadge.append(dot, document.createTextNode(ui.label));
                 }
             }
