@@ -40,7 +40,7 @@ h1,h2,h3,h4 { font-family: 'Syne', sans-serif; }
 }
 .about-hero-bg {
     position: absolute; inset: 0; z-index: 0;
-    background-image: url('{{ asset("images/download.jpg") }}');
+    background-image: url('{{ asset("images/hero-building.jpg") }}');
     background-size: cover; background-position: center 30%;
 }
 .about-hero-bg::after {

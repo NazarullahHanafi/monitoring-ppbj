@@ -441,6 +441,17 @@
         </div>
 
         <div class="login-container">
+            <div class="logo-section">
+                <div class="logo-wrapper">
+                    <img src="{{ asset('images/logo1.png') }}" alt="Logo Sucofindo">
+                </div>
+                <div class="logo-wrapper">
+                    <img src="{{ asset('images/logo3.png') }}" alt="Logo BUMN">
+                </div>
+                <div class="logo-wrapper">
+                    <img src="{{ asset('images/logo4.png') }}" alt="Logo Sucofindo">
+                </div>
+            </div>
 
             <div class="login-title">
                 <h2>Welcome Back</h2>
