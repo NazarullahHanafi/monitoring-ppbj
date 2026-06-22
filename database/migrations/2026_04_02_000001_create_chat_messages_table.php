@@ -8,6 +8,16 @@ use Illuminate\Support\Facades\Schema;
 return new class extends Migration {
     public function up(): void
     {
+        if (Schema::hasTable('chat_messages')) {
+            if (! Schema::hasColumn('chat_messages', 'mentions')) {
+                Schema::table('chat_messages', function (Blueprint $table) {
+                    $table->json('mentions')->nullable()->after('reply_user');
+                });
+            }
+
+            return;
+        }
+
         Schema::create('chat_messages', function (Blueprint $table) {
             $table->id();
             $table->unsignedBigInteger('user_id');

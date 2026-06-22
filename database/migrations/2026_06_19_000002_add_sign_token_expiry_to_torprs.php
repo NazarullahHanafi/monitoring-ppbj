@@ -9,10 +9,23 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::table('torprs', function (Blueprint $table) {
-            $table->timestamp('sign_token_kabid_expires_at')->nullable();
-            $table->timestamp('sign_token_kacab_expires_at')->nullable();
-        });
+        if (! Schema::hasTable('torprs')) {
+            return;
+        }
+
+        $needsKabidExpiry = ! Schema::hasColumn('torprs', 'sign_token_kabid_expires_at');
+        $needsKacabExpiry = ! Schema::hasColumn('torprs', 'sign_token_kacab_expires_at');
+
+        if ($needsKabidExpiry || $needsKacabExpiry) {
+            Schema::table('torprs', function (Blueprint $table) use ($needsKabidExpiry, $needsKacabExpiry) {
+                if ($needsKabidExpiry) {
+                    $table->timestamp('sign_token_kabid_expires_at')->nullable();
+                }
+                if ($needsKacabExpiry) {
+                    $table->timestamp('sign_token_kacab_expires_at')->nullable();
+                }
+            });
+        }
 
         $expiresAt = now()->addDays(7);
         DB::table('torprs')->whereNotNull('sign_token_kabid')
@@ -23,11 +36,17 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::table('torprs', function (Blueprint $table) {
-            $table->dropColumn([
-                'sign_token_kabid_expires_at',
-                'sign_token_kacab_expires_at',
-            ]);
-        });
+        if (! Schema::hasTable('torprs')) {
+            return;
+        }
+
+        $columns = array_values(array_filter([
+            Schema::hasColumn('torprs', 'sign_token_kabid_expires_at') ? 'sign_token_kabid_expires_at' : null,
+            Schema::hasColumn('torprs', 'sign_token_kacab_expires_at') ? 'sign_token_kacab_expires_at' : null,
+        ]));
+
+        if ($columns !== []) {
+            Schema::table('torprs', fn(Blueprint $table) => $table->dropColumn($columns));
+        }
     }
 };
