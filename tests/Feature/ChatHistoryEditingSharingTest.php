@@ -164,6 +164,10 @@ class ChatHistoryEditingSharingTest extends TestCase
             ->get('/account')
             ->assertOk()
             ->assertSee('id="ctxEdit"', false)
+            ->assertSee('id="cpFullscreenBtn"', false)
+            ->assertSee('id="cpMinimizeBtn"', false)
+            ->assertSee('chat-panel.fullscreen', false)
+            ->assertSee('chat-panel.minimized', false)
             ->assertSee('Muat pesan lebih lama')
             ->assertSee('shareRecordToChat', false);
     }

@@ -918,6 +918,69 @@
             }
         }
 
+        .chat-panel.fullscreen {
+            inset: 0;
+            width: 100vw;
+            max-width: none;
+            height: 100dvh;
+            max-height: none;
+            border: 0;
+            border-radius: 0;
+            z-index: 160;
+            transform-origin: center
+        }
+
+        .chat-panel.fullscreen .cp-messages .msg-wrap,
+        .chat-panel.fullscreen .cp-history-control {
+            width: min(920px, 100%);
+            margin-left: auto;
+            margin-right: auto
+        }
+
+        .chat-panel.fullscreen .cp-messages {
+            padding-left: max(16px, calc((100vw - 960px) / 2));
+            padding-right: max(16px, calc((100vw - 960px) / 2))
+        }
+
+        .chat-panel.fullscreen .cp-input-wrap,
+        .chat-panel.fullscreen .cp-reply-bar,
+        .chat-panel.fullscreen .cp-typing {
+            width: min(920px, 100%);
+            margin-left: auto;
+            margin-right: auto
+        }
+
+        .chat-panel.minimized {
+            inset: auto 12px 12px auto;
+            width: min(310px, calc(100vw - 24px));
+            max-width: none;
+            height: 56px;
+            max-height: 56px;
+            border-radius: 16px;
+            transform-origin: bottom right
+        }
+
+        .chat-panel.minimized > :not(.cp-head) {
+            display: none !important
+        }
+
+        .chat-panel.minimized .cp-head {
+            min-height: 56px;
+            padding: 9px 10px 9px 14px;
+            cursor: pointer
+        }
+
+        .chat-panel.minimized #cpSearchBtn,
+        .chat-panel.minimized #cpNotifyBtn,
+        .chat-panel.minimized #cpFullscreenBtn,
+        .chat-panel.minimized #cpHeadMention {
+            display: none !important
+        }
+
+        body.chat-fullscreen-open {
+            overflow: hidden
+        }
+
         .cp-head {
             display: flex;
             align-items: center;
@@ -2441,6 +2504,12 @@
             <button type="button" class="cp-head-action" id="cpNotifyBtn" title="Aktifkan notifikasi dan suara" aria-label="Notifikasi chat">
                 <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.4-1.4A2 2 0 0 1 18 14.2V11a6 6 0 1 0-12 0v3.2c0 .53-.21 1.04-.59 1.41L4 17h5m6 0a3 3 0 0 1-6 0"/></svg>
             </button>
+            <button type="button" class="cp-head-action" id="cpFullscreenBtn" title="Layar penuh" aria-label="Buka chat layar penuh">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 3H3v5m13-5h5v5M8 21H3v-5m18 0v5h-5"/></svg>
+            </button>
+            <button type="button" class="cp-head-action" id="cpMinimizeBtn" title="Minimize" aria-label="Minimize chat">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14"/></svg>
+            </button>
             <span class="cp-head-mention" id="cpHeadMention" title="Lihat pesan yang menandai">@</span>
             <button type="button" class="cp-close" id="btnCloseChat" title="Tutup">✕</button>
         </div>
@@ -2498,7 +2567,7 @@
             var b2 = document.getElementById('btnOpenMobile'); if (b2) b2.addEventListener('click', oSM);
             var b3 = document.getElementById('btnCloseMobile'); if (b3) b3.addEventListener('click', cSM);
             var b4 = document.getElementById('overlayCloseMobile'); if (b4) b4.addEventListener('click', cSM);
-            document.addEventListener('keydown', function (e) { if (e.key === 'Escape') { cSM(); cPP(); if (window._chatOpen) window._chatToggle(); hideCtx() } });
+            document.addEventListener('keydown', function (e) { if (e.key === 'Escape') { cSM(); cPP(); if (window._chatOpen) { if (window._chatHandleEscape) window._chatHandleEscape(); else window._chatToggle() } hideCtx() } });
         })();
 
         /* ═══ THEME ═══ */
@@ -2550,7 +2619,7 @@
                 REACTION_EMOJIS = ['\u{1F44D}', '\u2764\uFE0F', '\u{1F602}', '\u{1F62E}', '\u{1F622}', '\u{1F64F}'],
                 UCLS = ['#6366f1', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#3b82f6', '#ef4444', '#14b8a6', '#f97316', '#84cc16', '#06b6d4', '#a855f7'];
 
-            var chatOpen = false, chatMaxId = 0, chatTimer = null, reactionTimer = null, mentionTimer = null, mentionRequestPending = false, replyToId = null, replyUser = null, unread = 0, sending = false;
+            var chatOpen = false, chatFullscreen = false, chatMinimized = false, chatMaxId = 0, chatTimer = null, reactionTimer = null, mentionTimer = null, mentionRequestPending = false, replyToId = null, replyUser = null, unread = 0, sending = false;
             var mentionUnread = 0;
             var draftMentions = [];
             var mentionState = { active: false, start: 0, query: '' };
@@ -2585,9 +2654,11 @@
                 searchBtn = document.getElementById('cpSearchBtn'), searchPanel = document.getElementById('cpSearchPanel'),
                 searchInput = document.getElementById('cpSearchInput'), searchClose = document.getElementById('cpSearchClose'),
                 searchStatus = document.getElementById('cpSearchStatus'), searchResults = document.getElementById('cpSearchResults'),
-                notifyBtn = document.getElementById('cpNotifyBtn');
+                notifyBtn = document.getElementById('cpNotifyBtn'), fullscreenBtn = document.getElementById('cpFullscreenBtn'),
+                minimizeBtn = document.getElementById('cpMinimizeBtn'), chatHead = panel ? panel.querySelector('.cp-head') : null;
 
             function eH(s) { return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;') }
+            function isChatReadable() { return chatOpen && !chatMinimized && !document.hidden }
             function isNB() { if (!messagesEl) return true; return messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight < 80 }
             function sBB() { if (messagesEl) messagesEl.scrollTop = messagesEl.scrollHeight }
             function sE(show) {
@@ -2625,7 +2696,7 @@
             }
 
             function refreshMentionSummary() {
-                if ((chatOpen && !document.hidden) || mentionRequestPending) return;
+                if (isChatReadable() || mentionRequestPending) return;
                 mentionRequestPending = true;
                 fetch(URL_MENTION_COUNT, { headers: { 'Accept': 'application/json' } })
                     .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json() })
@@ -2711,7 +2782,7 @@
                 var fallback = function () {
                     try {
                         var notification = new Notification(title, options);
-                        notification.onclick = function () { window.focus(); notification.close(); if (!chatOpen) doToggle() };
+                        notification.onclick = function () { window.focus(); notification.close(); if (!chatOpen) doToggle(); else if (chatMinimized) restoreChat() };
                         setTimeout(function () { notification.close() }, 7000);
                     } catch (e) { }
                 };
@@ -2734,7 +2805,7 @@
                 if (!summaryInitialized) { summaryInitialized = true; lastSummaryMessageId = messageId; return }
                 if (messageId <= lastSummaryMessageId) return;
                 lastSummaryMessageId = messageId;
-                if (String(message.user_id) === String(MY_ID) || (chatOpen && !document.hidden)) return;
+                if (String(message.user_id) === String(MY_ID) || isChatReadable()) return;
                 playChatSound(false);
                 showBrowserNotification(message);
             }
@@ -2796,7 +2867,7 @@
             updateNotifyButton();
             registerNotificationWorker();
             document.addEventListener('pointerdown', unlockChatAudio, { once: true });
-            if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', function (event) { if (event.data && event.data.type === 'OPEN_TEAM_CHAT' && !chatOpen) doToggle() });
+            if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', function (event) { if (event.data && event.data.type === 'OPEN_TEAM_CHAT') { if (!chatOpen) doToggle(); else if (chatMinimized) restoreChat() } });
 
             function getAllUsers() {
                 if (allUsersLoaded) return Promise.resolve(allUsersLoaded);
@@ -3056,7 +3127,7 @@
                             var nc = 0; for (var j = 0; j < msgs.length; j++) {
                                 if (!messagesEl.querySelector('[data-msg-id="' + msgs[j].id + '"]')) {
                                     appendMsg(msgs[j]); nc++;
-                                    if (!chatOpen) {
+                                    if (!isChatReadable()) {
                                         unread++;
                                         /* ✅ Mention baru saat chat tertutup — cek i_read dari database */
                                         if (String(msgs[j].user_id) !== String(MY_ID) && amMentioned(msgs[j].mentions_parsed) && !msgs[j].i_read) {
@@ -3065,11 +3136,11 @@
                                     }
                                 }
                             }
-                            if (nc > 0 && !chatOpen) { uB(); updateMentionBadges() }
+                            if (nc > 0 && !isChatReadable()) { uB(); updateMentionBadges() }
                         }
                         chatMaxId = data.max_id || chatMaxId; if (wasB || initial) sBB();
                         var idsToRead = []; for (var k = 0; k < msgs.length; k++) { if (String(msgs[k].user_id) !== String(MY_ID)) idsToRead.push(msgs[k].id) }
-                        if (idsToRead.length && chatOpen) markRead(idsToRead);
+                        if (idsToRead.length && isChatReadable()) markRead(idsToRead);
                     })
                     .catch(function () { });
             }
@@ -3131,6 +3202,7 @@
                             .then(function (response) { return response.json().then(function (body) { if (!response.ok) throw new Error(body.error || 'Gagal membagikan data'); return body }) })
                             .then(function (body) {
                                 if (chatOpen) {
+                                    if (chatMinimized) restoreChat();
                                     sE(false); if (!messagesEl.querySelector('.msg-wrap[data-msg-id="' + body.message.id + '"]')) appendMsg(body.message);
                                     chatMaxId = Math.max(chatMaxId, body.message.id); sBB();
                                 } else doToggle();
@@ -3146,21 +3218,81 @@
                     .then(function (r) { setTimeout(function () { swalActive = false }, 100); if (!r.isConfirmed) return; fetch(URL_DEL + id, { method: 'DELETE', headers: { 'X-CSRF-TOKEN': CSRF, 'Accept': 'application/json' } }).then(function (r) { if (!r.ok) throw 0; var el = messagesEl.querySelector('[data-msg-id="' + id + '"]'); if (el) { el.style.animation = 'msgRemove .3s ease forwards'; setTimeout(function () { el.remove(); if (!messagesEl.querySelector('[data-msg-id]')) sE(true) }, 300) } }).catch(function () { toast('Gagal menghapus', 'error') }) });
             }
 
-            function doToggle() {
-                var hadMention = mentionUnread > 0 && chatOpen;
-                chatOpen = !chatOpen;
-                if (panel) panel.classList.toggle('open', chatOpen);
-                if (trigger) trigger.classList.toggle('active', chatOpen);
-                if (chatOpen) {
-                    unread = 0; uB(); loadMessages(true); startPoll(); startReactionPoll();
-                    if (hadMention) { setTimeout(scrollToNextMention, 400) }
-                    setTimeout(function () { if (inp) inp.focus() }, 280);
-                } else {
-                    stopPoll(); stopReactionPoll(); toggleSearch(false); refreshMentionSummary(); if (typeof cPP === 'function') cPP(); if (activeReadPopup) { activeReadPopup.classList.remove('open'); activeReadPopup = null }
+            function renderPanelModeButtons() {
+                if (fullscreenBtn) {
+                    fullscreenBtn.classList.toggle('active', chatFullscreen);
+                    fullscreenBtn.title = chatFullscreen ? 'Keluar dari layar penuh' : 'Layar penuh';
+                    fullscreenBtn.setAttribute('aria-label', fullscreenBtn.title);
+                    fullscreenBtn.innerHTML = chatFullscreen
+                        ? '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 4v5H4m16 0h-5V4M4 15h5v5m6 0v-5h5"/></svg>'
+                        : '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 3H3v5m13-5h5v5M8 21H3v-5m18 0v5h-5"/></svg>';
                 }
-                window._chatOpen = chatOpen;
+                if (minimizeBtn) {
+                    minimizeBtn.title = chatMinimized ? 'Buka kembali chat' : 'Minimize';
+                    minimizeBtn.setAttribute('aria-label', minimizeBtn.title);
+                    minimizeBtn.innerHTML = chatMinimized
+                        ? '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 18h14V6H5v12Z"/></svg>'
+                        : '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14"/></svg>';
+                }
+            }
+
+            function setChatFullscreen(enabled) {
+                chatFullscreen = !!enabled; chatMinimized = false;
+                if (panel) { panel.classList.toggle('fullscreen', chatFullscreen); panel.classList.remove('minimized') }
+                document.body.classList.toggle('chat-fullscreen-open', chatFullscreen);
+                renderPanelModeButtons();
+                setTimeout(function () { if (messagesEl) sBB(); if (inp) inp.focus() }, 80);
+            }
+
+            function toggleChatFullscreen() {
+                if (!chatOpen) { doToggle(); setTimeout(function () { setChatFullscreen(true) }, 30); return }
+                if (chatMinimized) restoreChat();
+                setChatFullscreen(!chatFullscreen);
+            }
+
+            function minimizeChat() {
+                if (!chatOpen || chatMinimized) return;
+                chatMinimized = true; chatFullscreen = false;
+                if (panel) { panel.classList.add('minimized'); panel.classList.remove('fullscreen') }
+                document.body.classList.remove('chat-fullscreen-open'); toggleSearch(false);
+                if (inp) inp.blur(); renderPanelModeButtons(); refreshMentionSummary();
+            }
+
+            function restoreChat() {
+                if (!chatOpen) { doToggle(); return }
+                var hadMention = mentionUnread > 0;
+                chatMinimized = false;
+                if (panel) panel.classList.remove('minimized');
+                unread = 0; uB(); renderPanelModeButtons(); loadMessages(true); startPoll(); startReactionPoll();
+                if (hadMention) setTimeout(scrollToNextMention, 400);
+                setTimeout(function () { if (inp) inp.focus() }, 180);
+            }
+
+            function closeChat() {
+                if (!chatOpen) return;
+                chatOpen = false; chatFullscreen = false; chatMinimized = false;
+                if (panel) panel.classList.remove('open', 'fullscreen', 'minimized');
+                if (trigger) trigger.classList.remove('active');
+                document.body.classList.remove('chat-fullscreen-open');
+                stopPoll(); stopReactionPoll(); toggleSearch(false); refreshMentionSummary();
+                if (typeof cPP === 'function') cPP();
+                if (activeReadPopup) { activeReadPopup.classList.remove('open'); activeReadPopup = null }
+                renderPanelModeButtons(); window._chatOpen = false;
+            }
+
+            function doToggle() {
+                if (chatOpen) { closeChat(); return }
+                var hadMention = mentionUnread > 0;
+                chatOpen = true; chatFullscreen = false; chatMinimized = false;
+                if (panel) { panel.classList.add('open'); panel.classList.remove('fullscreen', 'minimized') }
+                if (trigger) trigger.classList.add('active');
+                unread = 0; uB(); renderPanelModeButtons(); loadMessages(true); startPoll(); startReactionPoll();
+                if (hadMention) setTimeout(scrollToNextMention, 400);
+                setTimeout(function () { if (inp) inp.focus() }, 280);
+                window._chatOpen = true;
             }
             window._chatOpen = false; window._chatToggle = doToggle;
+            window._chatHandleEscape = function () { if (chatFullscreen) setChatFullscreen(false); else closeChat() };
 
             function startPoll() { if (chatTimer) return; chatTimer = setInterval(function () { loadMessages(false) }, 4000) }
             function stopPoll() { if (chatTimer) { clearInterval(chatTimer); chatTimer = null } }
@@ -3176,6 +3308,7 @@
 
             if (trigger) trigger.addEventListener('click', function (e) {
                 e.stopPropagation();
+                if (chatMinimized) { restoreChat(); return }
                 if (mentionUnread > 0) {
                     if (!chatOpen) { doToggle() }
                     else { scrollToNextMention() }
@@ -3201,13 +3334,16 @@
                 toggleSearch(false); wrap.scrollIntoView({ behavior: 'smooth', block: 'center' }); var bubble = wrap.querySelector('.msg-bubble'); if (bubble) bubble.style.animation = 'mentionFlash .6s ease';
             });
             if (notifyBtn) notifyBtn.addEventListener('click', function (e) { e.stopPropagation(); toggleNotifications() });
+            if (fullscreenBtn) fullscreenBtn.addEventListener('click', function (e) { e.stopPropagation(); toggleChatFullscreen() });
+            if (minimizeBtn) minimizeBtn.addEventListener('click', function (e) { e.stopPropagation(); if (chatMinimized) restoreChat(); else minimizeChat() });
+            if (chatHead) chatHead.addEventListener('click', function (e) { if (chatMinimized && !e.target.closest('button')) { e.stopPropagation(); restoreChat() } });
 
-            var ccb = document.getElementById('btnCloseChat'); if (ccb) ccb.addEventListener('click', function (e) { e.stopPropagation(); doToggle() });
+            var ccb = document.getElementById('btnCloseChat'); if (ccb) ccb.addEventListener('click', function (e) { e.stopPropagation(); closeChat() });
             if (sendBtn) sendBtn.addEventListener('click', function (e) { e.preventDefault(); e.stopPropagation(); doSend() });
 
             document.addEventListener('click', function (e) {
                 if (swalActive) return;
-                if (chatOpen && panel && !panel.contains(e.target) && trigger && !trigger.contains(e.target) && !ctxMenu.contains(e.target)) { doToggle() }
+                if (chatOpen && !chatMinimized && panel && !panel.contains(e.target) && trigger && !trigger.contains(e.target) && !ctxMenu.contains(e.target)) { closeChat() }
             });
         })();
 
