@@ -2,6 +2,10 @@
 
 use Illuminate\Support\Str;
 
+$redisHost = (string) env('REDIS_HOST', '127.0.0.1');
+$redisUsesUnixSocket = str_starts_with($redisHost, '/') || str_starts_with($redisHost, 'unix://');
+$redisSocketPath = str_starts_with($redisHost, 'unix://') ? substr($redisHost, 7) : $redisHost;
+
 return [
 
     /*
@@ -153,30 +157,45 @@ return [
         ],
 
         'default' => [
-            'url' => env('REDIS_URL'),
-            'host' => env('REDIS_HOST', '127.0.0.1'),
-            'username' => env('REDIS_USERNAME'),
-            'password' => env('REDIS_PASSWORD'),
-            'port' => env('REDIS_PORT', '6379'),
-            'database' => env('REDIS_DB', '0'),  // ✅ Database 0 untuk default
+            ...($redisUsesUnixSocket ? [
+                'scheme' => 'unix',
+                'path' => $redisSocketPath,
+            ] : [
+                'url' => env('REDIS_URL'),
+                'host' => $redisHost,
+                'username' => env('REDIS_USERNAME'),
+                'password' => env('REDIS_PASSWORD'),
+                'port' => env('REDIS_PORT', '6379'),
+            ]),
+            'database' => env('REDIS_DB', '0'),
         ],
 
         'cache' => [
-            'url' => env('REDIS_URL'),
-            'host' => env('REDIS_HOST', '127.0.0.1'),
-            'username' => env('REDIS_USERNAME'),
-            'password' => env('REDIS_PASSWORD'),
-            'port' => env('REDIS_PORT', '6379'),
-            'database' => env('REDIS_CACHE_DB', '1'),  // ✅ Database 1 untuk cache
+            ...($redisUsesUnixSocket ? [
+                'scheme' => 'unix',
+                'path' => $redisSocketPath,
+            ] : [
+                'url' => env('REDIS_URL'),
+                'host' => $redisHost,
+                'username' => env('REDIS_USERNAME'),
+                'password' => env('REDIS_PASSWORD'),
+                'port' => env('REDIS_PORT', '6379'),
+            ]),
+            'database' => env('REDIS_CACHE_DB', '1'),
         ],
 
         'session' => [
-            'url' => env('REDIS_URL'),
-            'host' => env('REDIS_HOST', '127.0.0.1'),
-            'username' => env('REDIS_USERNAME'),
-            'password' => env('REDIS_PASSWORD'),
-            'port' => env('REDIS_PORT', '6379'),
-            'database' => env('REDIS_SESSION_DB', '2'),  // ✅ Database 2 untuk session
+            ...($redisUsesUnixSocket ? [
+                'scheme' => 'unix',
+                'path' => $redisSocketPath,
+            ] : [
+                'url' => env('REDIS_URL'),
+                'host' => $redisHost,
+                'username' => env('REDIS_USERNAME'),
+                'password' => env('REDIS_PASSWORD'),
+                'port' => env('REDIS_PORT', '6379'),
+            ]),
+            'database' => env('REDIS_SESSION_DB', '2'),
         ],
 
     ],
