@@ -1,25 +1,25 @@
 <?php
 
-use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\AccountController;
+use App\Http\Controllers\ChatController;
+use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\LandingController;
+use App\Http\Controllers\MasterDataController;
+use App\Http\Controllers\OperasionalDashboardController;
 use App\Http\Controllers\PpbjController;
+use App\Http\Controllers\PresenceController;
+use App\Http\Controllers\PrReceiptApprovalController;
+use App\Http\Controllers\SatuanController;
+use App\Http\Controllers\SpController;
+use App\Http\Controllers\SpMasterOptionController;
+use App\Http\Controllers\SpphController;
 use App\Http\Controllers\TorprController;
 use App\Http\Controllers\TrackingPrController;
-use App\Http\Controllers\PrReceiptApprovalController;
-use App\Providers\AppServiceProvider;
-use App\Http\Controllers\AccountController;
-use App\Http\Controllers\MasterDataController;
 use App\Http\Controllers\UserController;
-use App\Http\Controllers\DashboardController;
-use App\Http\Controllers\OperasionalDashboardController;
-use App\Http\Controllers\SpController;
-use App\Http\Controllers\SpphController;
-use App\Http\Controllers\PresenceController;
-use App\Http\Controllers\ChatController;
 use App\Http\Controllers\VendorController;
-use App\Http\Controllers\SatuanController;
-use App\Http\Controllers\SpMasterOptionController;
+use App\Providers\AppServiceProvider;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Route;
 
 Route::get('/pr/sign/{token}/{type}', [TorprController::class, 'showQuickSign'])
     ->name('pr.quick-sign')
@@ -71,6 +71,11 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/mentions/unread', [App\Http\Controllers\ChatController::class, 'unreadMentions'])
             ->name('mentions.unread')
             ->middleware(\App\Http\Middleware\DisableLoggingForPolling::class);
+        Route::get('/search', [App\Http\Controllers\ChatController::class, 'search'])->name('search');
+        Route::get('/reactions', [App\Http\Controllers\ChatController::class, 'reactions'])
+            ->name('reactions')
+            ->middleware(\App\Http\Middleware\DisableLoggingForPolling::class);
+        Route::post('/{id}/reaction', [App\Http\Controllers\ChatController::class, 'react'])->name('react');
         Route::post('/send', [App\Http\Controllers\ChatController::class, 'send'])->name('send');
         Route::delete('/{id}', [App\Http\Controllers\ChatController::class, 'destroy'])->name('destroy');
     });
@@ -184,22 +189,22 @@ Route::middleware(['auth'])->group(function () {
             // ── Onboarding Tutorial ──
             Route::get('/onboarding-status', function () {
                 $id = auth()->id();
-                $seenKey = 'spph_onboarding_' . $id;
-                $viewsKey = 'spph_onboarding_views_' . $id;
-                $finishedKey = 'spph_onboarding_finished_' . $id;
+                $seenKey = 'spph_onboarding_'.$id;
+                $viewsKey = 'spph_onboarding_views_'.$id;
+                $finishedKey = 'spph_onboarding_finished_'.$id;
 
                 return response()->json([
                     'seen' => Cache::has($seenKey),
                     'finished' => Cache::has($finishedKey),
-                    'left' => (int) Cache::get($viewsKey, 0)
+                    'left' => (int) Cache::get($viewsKey, 0),
                 ]);
             })->name('onboarding.status');
 
             Route::post('/onboarding-seen', function () {
                 $id = auth()->id();
-                $seenKey = 'spph_onboarding_' . $id;
-                $viewsKey = 'spph_onboarding_views_' . $id;
-                $finishedKey = 'spph_onboarding_finished_' . $id;
+                $seenKey = 'spph_onboarding_'.$id;
+                $viewsKey = 'spph_onboarding_views_'.$id;
+                $finishedKey = 'spph_onboarding_finished_'.$id;
 
                 // Jangan override jika sudah finished
                 if (Cache::has($finishedKey)) {
@@ -209,7 +214,7 @@ Route::middleware(['auth'])->group(function () {
                 Cache::forever($seenKey, true);
 
                 // Set views HANYA jika belum ada (supaya tidak reset)
-                if (!Cache::has($viewsKey)) {
+                if (! Cache::has($viewsKey)) {
                     Cache::forever($viewsKey, 3);
                 }
 
@@ -218,8 +223,8 @@ Route::middleware(['auth'])->group(function () {
 
             Route::post('/onboarding-view', function () {
                 $id = auth()->id();
-                $viewsKey = 'spph_onboarding_views_' . $id;
-                $finishedKey = 'spph_onboarding_finished_' . $id;
+                $viewsKey = 'spph_onboarding_views_'.$id;
+                $finishedKey = 'spph_onboarding_finished_'.$id;
 
                 $current = (int) Cache::get($viewsKey, 0);
                 $next = $current - 1;
@@ -229,10 +234,12 @@ Route::middleware(['auth'])->group(function () {
                     Cache::forget($viewsKey);
                     // Set flag FINISHED secara permanen
                     Cache::forever($finishedKey, true);
+
                     return response()->json(['status' => 'finished']);
                 }
 
                 Cache::forever($viewsKey, $next);
+
                 return response()->json(['status' => 'ok', 'left' => $next]);
             })->name('onboarding.view');
         });
@@ -267,22 +274,22 @@ Route::middleware(['auth'])->group(function () {
 
             Route::get('/onboarding-status', function () {
                 $id = auth()->id();
-                $seenKey = 'sp_onboarding_' . $id;
-                $viewsKey = 'sp_onboarding_views_' . $id;
-                $finishedKey = 'sp_onboarding_finished_' . $id;
+                $seenKey = 'sp_onboarding_'.$id;
+                $viewsKey = 'sp_onboarding_views_'.$id;
+                $finishedKey = 'sp_onboarding_finished_'.$id;
 
                 return response()->json([
                     'seen' => Cache::has($seenKey),
                     'finished' => Cache::has($finishedKey),
-                    'left' => (int) Cache::get($viewsKey, 0)
+                    'left' => (int) Cache::get($viewsKey, 0),
                 ]);
             })->name('onboarding.status');
 
             Route::post('/onboarding-seen', function () {
                 $id = auth()->id();
-                $seenKey = 'sp_onboarding_' . $id;
-                $viewsKey = 'sp_onboarding_views_' . $id;
-                $finishedKey = 'sp_onboarding_finished_' . $id;
+                $seenKey = 'sp_onboarding_'.$id;
+                $viewsKey = 'sp_onboarding_views_'.$id;
+                $finishedKey = 'sp_onboarding_finished_'.$id;
 
                 if (Cache::has($finishedKey)) {
                     return response()->json(['status' => 'finished']);
@@ -290,7 +297,7 @@ Route::middleware(['auth'])->group(function () {
 
                 Cache::forever($seenKey, true);
 
-                if (!Cache::has($viewsKey)) {
+                if (! Cache::has($viewsKey)) {
                     Cache::forever($viewsKey, 3);
                 }
 
@@ -299,8 +306,8 @@ Route::middleware(['auth'])->group(function () {
 
             Route::post('/onboarding-view', function () {
                 $id = auth()->id();
-                $viewsKey = 'sp_onboarding_views_' . $id;
-                $finishedKey = 'sp_onboarding_finished_' . $id;
+                $viewsKey = 'sp_onboarding_views_'.$id;
+                $finishedKey = 'sp_onboarding_finished_'.$id;
 
                 $current = (int) Cache::get($viewsKey, 0);
                 $next = $current - 1;
@@ -308,10 +315,12 @@ Route::middleware(['auth'])->group(function () {
                 if ($next <= 0) {
                     Cache::forget($viewsKey);
                     Cache::forever($finishedKey, true);
+
                     return response()->json(['status' => 'finished']);
                 }
 
                 Cache::forever($viewsKey, $next);
+
                 return response()->json(['status' => 'ok', 'left' => $next]);
             })->name('onboarding.view');
 
@@ -409,7 +418,6 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/greeting', [App\Http\Controllers\WebChatbotController::class, 'getGreeting'])
             ->name('chatbot.greeting');
 
-
         Route::post('/feedback', [App\Http\Controllers\FeedbackController::class, 'store'])
             ->name('chatbot.feedback');
 
@@ -417,7 +425,6 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/notifications/count', [App\Http\Controllers\WebChatbotController::class, 'getNotificationCount'])
             ->middleware(\App\Http\Middleware\DisableLoggingForPolling::class)
             ->name('chatbot.notifications.count');
-
 
         Route::post('/notifications/sync', [App\Http\Controllers\WebChatbotController::class, 'syncNotifications'])
             ->middleware('dept:umum')
@@ -430,8 +437,7 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/artisan/list', [App\Http\Controllers\ArtisanCommandController::class, 'listCommands'])
             ->name('chatbot.artisan.list');
 
-
     });
 });
 
-require __DIR__ . '/auth.php';
+require __DIR__.'/auth.php';

@@ -18,6 +18,7 @@ class DisableLoggingForPolling
             'sp/presence/start',
             'sp/presence/stop',
             'chat/mentions/unread',
+            'chat/reactions',
             'chatbot/notifications/count',
             'chatbot/greeting',
             'approval/pr-receipts/pending-count',
@@ -26,10 +27,10 @@ class DisableLoggingForPolling
             'api/ping',
         ];
 
-        $path = '/' . ltrim($request->path(), '/');
+        $path = '/'.ltrim($request->path(), '/');
 
         foreach ($skipPaths as $skipPath) {
-            if (str_starts_with($path, '/' . $skipPath)) {
+            if (str_starts_with($path, '/'.$skipPath)) {
                 // Matikan query log DB
                 DB::connection()->disableQueryLog();
 

@@ -928,6 +928,43 @@
             color: #fff
         }
 
+        .cp-head-info {
+            flex: 1;
+            min-width: 0
+        }
+
+        .cp-head-action {
+            width: 30px;
+            height: 30px;
+            border: none;
+            border-radius: 8px;
+            background: rgba(255, 255, 255, .15);
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            opacity: .8;
+            transition: all .15s;
+            flex-shrink: 0
+        }
+
+        .cp-head-action:hover,
+        .cp-head-action.active {
+            opacity: 1;
+            background: rgba(255, 255, 255, .28)
+        }
+
+        .cp-head-action.notify-active {
+            color: #d1fae5;
+            box-shadow: inset 0 0 0 1px rgba(209, 250, 229, .5)
+        }
+
+        .cp-head-action svg {
+            width: 16px;
+            height: 16px
+        }
+
         .cp-title {
             font-size: .85rem;
             font-weight: 700;
@@ -960,6 +997,122 @@
         .cp-close:hover {
             opacity: 1;
             background: rgba(255, 255, 255, .25)
+        }
+
+        .cp-search-panel {
+            display: none;
+            padding: 10px 12px;
+            background: #f8fafc;
+            border-bottom: 1px solid #e5e7eb;
+            flex-shrink: 0
+        }
+
+        .dark .cp-search-panel {
+            background: #172033;
+            border-color: rgba(255, 255, 255, .08)
+        }
+
+        .cp-search-panel.open {
+            display: block
+        }
+
+        .cp-search-row {
+            display: flex;
+            gap: 7px;
+            align-items: center
+        }
+
+        .cp-search-input {
+            flex: 1;
+            min-width: 0;
+            border: 1px solid #d1d5db;
+            border-radius: 10px;
+            padding: 8px 10px;
+            font-size: .76rem;
+            color: #111827;
+            background: #fff;
+            outline: none
+        }
+
+        .cp-search-input:focus {
+            border-color: #818cf8;
+            box-shadow: 0 0 0 2px rgba(99, 102, 241, .12)
+        }
+
+        .dark .cp-search-input {
+            background: #273449;
+            color: #f1f5f9;
+            border-color: #475569
+        }
+
+        .cp-search-cancel {
+            border: none;
+            background: transparent;
+            color: #6366f1;
+            font-size: .7rem;
+            font-weight: 700;
+            cursor: pointer;
+            padding: 6px 2px
+        }
+
+        .cp-search-status {
+            font-size: .65rem;
+            color: #9ca3af;
+            padding-top: 7px
+        }
+
+        .cp-search-results {
+            max-height: 190px;
+            overflow-y: auto;
+            margin-top: 4px
+        }
+
+        .cp-search-result {
+            width: 100%;
+            border: none;
+            background: transparent;
+            text-align: left;
+            padding: 8px 6px;
+            border-radius: 9px;
+            cursor: pointer;
+            display: block
+        }
+
+        .cp-search-result:hover {
+            background: rgba(99, 102, 241, .08)
+        }
+
+        .dark .cp-search-result:hover {
+            background: rgba(129, 140, 248, .12)
+        }
+
+        .cp-search-result-head {
+            display: flex;
+            justify-content: space-between;
+            gap: 8px;
+            font-size: .64rem;
+            color: #9ca3af
+        }
+
+        .cp-search-result-name {
+            color: #6366f1;
+            font-weight: 700
+        }
+
+        .dark .cp-search-result-name {
+            color: #a5b4fc
+        }
+
+        .cp-search-result-text {
+            margin-top: 3px;
+            font-size: .72rem;
+            line-height: 1.35;
+            color: #374151;
+            word-break: break-word
+        }
+
+        .dark .cp-search-result-text {
+            color: #e2e8f0
         }
 
         .cp-messages {
@@ -1132,6 +1285,75 @@
             position: relative
         }
 
+        .msg-react-add {
+            border: none;
+            background: transparent;
+            color: #9ca3af;
+            font-size: .7rem;
+            cursor: pointer;
+            opacity: 0;
+            padding: 1px 3px;
+            border-radius: 5px;
+            transition: all .15s
+        }
+
+        .msg-wrap:hover .msg-react-add,
+        .msg-react-add:focus {
+            opacity: 1
+        }
+
+        .msg-react-add:hover {
+            color: #6366f1;
+            background: rgba(99, 102, 241, .1)
+        }
+
+        .msg-reactions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+            margin-top: 2px;
+            min-height: 0
+        }
+
+        .msg-wrap.mine .msg-reactions {
+            justify-content: flex-end
+        }
+
+        .msg-reaction {
+            border: 1px solid #e5e7eb;
+            background: #fff;
+            border-radius: 999px;
+            padding: 2px 7px;
+            font-size: .68rem;
+            line-height: 1.25;
+            cursor: pointer;
+            color: #6b7280;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, .04)
+        }
+
+        .dark .msg-reaction {
+            background: #273449;
+            border-color: #475569;
+            color: #cbd5e1
+        }
+
+        .msg-reaction.mine {
+            border-color: #818cf8;
+            background: #eef2ff;
+            color: #4f46e5
+        }
+
+        .dark .msg-reaction.mine {
+            background: rgba(99, 102, 241, .22);
+            color: #c7d2fe
+        }
+
+        @media(max-width:640px) {
+            .msg-react-add {
+                opacity: .8
+            }
+        }
+
         .msg-time {
             font-size: .6rem;
             color: #9ca3af
@@ -1262,6 +1484,34 @@
             min-width: 160px;
             display: none;
             animation: ctxIn .15s ease
+        }
+
+        .ctx-reactions {
+            display: flex;
+            gap: 3px;
+            padding: 4px 5px 7px;
+            border-bottom: 1px solid #f3f4f6;
+            margin-bottom: 3px
+        }
+
+        .dark .ctx-reactions {
+            border-color: rgba(255, 255, 255, .08)
+        }
+
+        .ctx-reaction-btn {
+            width: 30px;
+            height: 30px;
+            border: none;
+            border-radius: 8px;
+            background: transparent;
+            cursor: pointer;
+            font-size: 17px;
+            transition: transform .12s, background .12s
+        }
+
+        .ctx-reaction-btn:hover {
+            transform: scale(1.18);
+            background: rgba(99, 102, 241, .1)
         }
 
         .dark .ctx-menu {
@@ -2041,6 +2291,7 @@
 
     {{-- CONTEXT MENU --}}
     <div class="ctx-menu" id="ctxMenu">
+        <div class="ctx-reactions" id="ctxReactions"></div>
         <div class="ctx-item" id="ctxReply"><span class="ctx-icon">↩️</span>Balas</div>
         <div class="ctx-item" id="ctxMention"><span class="ctx-icon">🏷️</span>Tag @Nama</div>
         <div class="ctx-item danger" id="ctxDelete"><span class="ctx-icon">🗑️</span>Hapus Pesan</div>
@@ -2049,12 +2300,26 @@
     {{-- CHAT PANEL --}}
     <div class="chat-panel" id="chatPanel">
         <div class="cp-head">
-            <div>
+            <div class="cp-head-info">
                 <div class="cp-title">💬 Chat Tim</div>
                 <div class="cp-sub" id="cpOnlineCount">Memuat...</div>
             </div>
+            <button type="button" class="cp-head-action" id="cpSearchBtn" title="Cari pesan" aria-label="Cari pesan">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m21 21-4.35-4.35m1.35-5.65a7 7 0 1 1-14 0 7 7 0 0 1 14 0Z"/></svg>
+            </button>
+            <button type="button" class="cp-head-action" id="cpNotifyBtn" title="Aktifkan notifikasi dan suara" aria-label="Notifikasi chat">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.4-1.4A2 2 0 0 1 18 14.2V11a6 6 0 1 0-12 0v3.2c0 .53-.21 1.04-.59 1.41L4 17h5m6 0a3 3 0 0 1-6 0"/></svg>
+            </button>
             <span class="cp-head-mention" id="cpHeadMention" title="Lihat pesan yang menandai">@</span>
             <button type="button" class="cp-close" id="btnCloseChat" title="Tutup">✕</button>
+        </div>
+        <div class="cp-search-panel" id="cpSearchPanel">
+            <div class="cp-search-row">
+                <input type="search" class="cp-search-input" id="cpSearchInput" maxlength="100" placeholder="Cari isi pesan atau nama..." autocomplete="off">
+                <button type="button" class="cp-search-cancel" id="cpSearchClose">Tutup</button>
+            </div>
+            <div class="cp-search-status" id="cpSearchStatus">Ketik minimal 2 karakter.</div>
+            <div class="cp-search-results" id="cpSearchResults"></div>
         </div>
         <div class="cp-messages custom-scrollbar" id="cpMessages">
             <div class="cp-empty" id="cpEmpty">
@@ -2146,13 +2411,15 @@
 ═══════════════════════════════════════ */
         (function () {
             var URL_MSGS = '/chat/messages', URL_MENTION_COUNT = '/chat/mentions/unread', URL_SEND = '/chat/send', URL_DEL = '/chat/',
-                URL_READ = '/chat/read', URL_READS = '/chat/', URL_USERS = '/chat/users',
+                URL_READ = '/chat/read', URL_READS = '/chat/', URL_USERS = '/chat/users', URL_SEARCH = '/chat/search',
+                URL_REACTIONS = '/chat/reactions', URL_REACT = '/chat/',
                 CSRF = (document.querySelector('meta[name="csrf-token"]') || {}).content || '',
                 MY_ID = {{ auth()->id() }}, MAX_LEN = 500,
                 EMOJIS = ['\u{1F604}', '\u{1F60A}', '\u{1F44D}', '\u{1F525}', '\u2764\uFE0F', '\u{1F389}', '\u{1F602}', '\u{1F914}', '\u{1F60E}', '\u{1F4AF}', '\u{1F64F}', '\u2705'],
+                REACTION_EMOJIS = ['\u{1F44D}', '\u2764\uFE0F', '\u{1F602}', '\u{1F62E}', '\u{1F622}', '\u{1F64F}'],
                 UCLS = ['#6366f1', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#3b82f6', '#ef4444', '#14b8a6', '#f97316', '#84cc16', '#06b6d4', '#a855f7'];
 
-            var chatOpen = false, chatMaxId = 0, chatTimer = null, mentionTimer = null, mentionRequestPending = false, replyToId = null, replyUser = null, unread = 0, sending = false;
+            var chatOpen = false, chatMaxId = 0, chatTimer = null, reactionTimer = null, mentionTimer = null, mentionRequestPending = false, replyToId = null, replyUser = null, unread = 0, sending = false;
             var mentionUnread = 0;
             var draftMentions = [];
             var mentionState = { active: false, start: 0, query: '' };
@@ -2160,6 +2427,10 @@
             var ctxMsgData = null;
             var allUsersLoaded = null;
             var swalActive = false;
+            var searchTimer = null, searchSequence = 0;
+            var notifyEnabled = localStorage.getItem('chat_notify_' + MY_ID) === '1';
+            var soundEnabled = localStorage.getItem('chat_sound_' + MY_ID) === '1';
+            var summaryInitialized = false, lastSummaryMessageId = 0, audioContext = null;
 
             /* ✅ Set pesan mention yang sudah dilihat (dari database i_read) */
             var seenMentionIds = {};
@@ -2178,7 +2449,11 @@
                 messagesEl = document.getElementById('cpMessages'), emptyEl = document.getElementById('cpEmpty'), inp = document.getElementById('cpInput'),
                 sendBtn = document.getElementById('cpSendBtn'), charEl = document.getElementById('cpChar'), emojiRow = document.getElementById('cpEmojiRow'),
                 mentionDd = document.getElementById('mentionDd'), mentionDdList = document.getElementById('mentionDdList'),
-                ctxMenu = document.getElementById('ctxMenu');
+                ctxMenu = document.getElementById('ctxMenu'), ctxReactions = document.getElementById('ctxReactions'),
+                searchBtn = document.getElementById('cpSearchBtn'), searchPanel = document.getElementById('cpSearchPanel'),
+                searchInput = document.getElementById('cpSearchInput'), searchClose = document.getElementById('cpSearchClose'),
+                searchStatus = document.getElementById('cpSearchStatus'), searchResults = document.getElementById('cpSearchResults'),
+                notifyBtn = document.getElementById('cpNotifyBtn');
 
             function eH(s) { return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;') }
             function isNB() { if (!messagesEl) return true; return messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight < 80 }
@@ -2200,13 +2475,16 @@
             }
 
             function refreshMentionSummary() {
-                if (chatOpen || mentionRequestPending) return;
+                if ((chatOpen && !document.hidden) || mentionRequestPending) return;
                 mentionRequestPending = true;
                 fetch(URL_MENTION_COUNT, { headers: { 'Accept': 'application/json' } })
                     .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json() })
                     .then(function (data) {
                         mentionUnread = Math.max(0, parseInt(data.count, 10) || 0);
+                        unread = Math.max(0, parseInt(data.unread_count, 10) || 0);
+                        uB();
                         updateMentionBadges();
+                        handleSummaryNotification(data.latest_message || null);
                     })
                     .catch(function () { })
                     .finally(function () { mentionRequestPending = false });
@@ -2230,6 +2508,127 @@
 
             function toast(msg, type) { var dk = document.documentElement.classList.contains('dark'); if (typeof Swal !== 'undefined') Swal.fire({ toast: true, position: 'top-end', icon: type || 'info', title: msg, showConfirmButton: false, timer: 2500, timerProgressBar: true, background: dk ? '#1f2937' : '#fff', color: dk ? '#f3f4f6' : '#111827' }); else alert(msg) }
             function setSL(on) { if (!sendBtn) return; requestAnimationFrame(function () { if (on) { var sv = sendBtn.querySelector('svg'); if (sv) { var sp = document.createElement('span'); sp.className = 'send-spinner'; sv.replaceWith(sp) } } else { var sp2 = sendBtn.querySelector('.send-spinner'); if (sp2) { var ns = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); ns.setAttribute('fill', 'none'); ns.setAttribute('stroke', 'currentColor'); ns.setAttribute('viewBox', '0 0 24 24'); ns.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>'; sp2.replaceWith(ns) } } }) }
+
+            function updateNotifyButton() {
+                if (!notifyBtn) return;
+                var active = notifyEnabled || soundEnabled;
+                notifyBtn.classList.toggle('notify-active', active);
+                notifyBtn.classList.toggle('active', active);
+                notifyBtn.title = active ? 'Notifikasi dan suara aktif' : 'Aktifkan notifikasi dan suara';
+            }
+
+            function saveNotificationPreferences() {
+                localStorage.setItem('chat_notify_' + MY_ID, notifyEnabled ? '1' : '0');
+                localStorage.setItem('chat_sound_' + MY_ID, soundEnabled ? '1' : '0');
+                updateNotifyButton();
+            }
+
+            function playChatSound(force) {
+                if (!force && !soundEnabled) return;
+                try {
+                    var AudioCtx = window.AudioContext || window.webkitAudioContext;
+                    if (!AudioCtx) return;
+                    if (!audioContext) audioContext = new AudioCtx();
+                    if (audioContext.state === 'suspended') audioContext.resume();
+                    var oscillator = audioContext.createOscillator(), gain = audioContext.createGain(), now = audioContext.currentTime;
+                    oscillator.type = 'sine'; oscillator.frequency.setValueAtTime(720, now); oscillator.frequency.exponentialRampToValueAtTime(920, now + .12);
+                    gain.gain.setValueAtTime(.0001, now); gain.gain.exponentialRampToValueAtTime(.12, now + .015); gain.gain.exponentialRampToValueAtTime(.0001, now + .18);
+                    oscillator.connect(gain); gain.connect(audioContext.destination); oscillator.start(now); oscillator.stop(now + .2);
+                } catch (e) { }
+            }
+
+            function unlockChatAudio() {
+                if (!soundEnabled) return;
+                try {
+                    var AudioCtx = window.AudioContext || window.webkitAudioContext;
+                    if (!AudioCtx) return;
+                    if (!audioContext) audioContext = new AudioCtx();
+                    if (audioContext.state === 'suspended') audioContext.resume();
+                } catch (e) { }
+            }
+
+            function showBrowserNotification(message) {
+                if (!notifyEnabled || !('Notification' in window) || Notification.permission !== 'granted') return;
+                try {
+                    var notification = new Notification(message.user_name || 'Chat Tim', {
+                        body: (message.message || 'Pesan baru').substring(0, 140),
+                        tag: 'team-chat-' + message.id,
+                        icon: '/images/logo4.png'
+                    });
+                    notification.onclick = function () { window.focus(); notification.close(); if (!chatOpen) doToggle() };
+                    setTimeout(function () { notification.close() }, 7000);
+                } catch (e) { }
+            }
+
+            function handleSummaryNotification(message) {
+                if (!message || !message.id) return;
+                var messageId = parseInt(message.id, 10) || 0;
+                if (!summaryInitialized) { summaryInitialized = true; lastSummaryMessageId = messageId; return }
+                if (messageId <= lastSummaryMessageId) return;
+                lastSummaryMessageId = messageId;
+                if (String(message.user_id) === String(MY_ID) || (chatOpen && !document.hidden)) return;
+                playChatSound(false);
+                showBrowserNotification(message);
+            }
+
+            function toggleNotifications() {
+                if (notifyEnabled || soundEnabled) {
+                    notifyEnabled = false; soundEnabled = false; saveNotificationPreferences();
+                    toast('Notifikasi chat dimatikan', 'info'); return;
+                }
+                soundEnabled = true; playChatSound(true);
+                if (!('Notification' in window)) {
+                    notifyEnabled = false; saveNotificationPreferences();
+                    toast('Suara aktif. Browser ini tidak mendukung notifikasi.', 'info'); return;
+                }
+                if (Notification.permission === 'granted') {
+                    notifyEnabled = true; saveNotificationPreferences(); toast('Notifikasi dan suara aktif', 'success'); return;
+                }
+                if (Notification.permission === 'denied') {
+                    notifyEnabled = false; saveNotificationPreferences();
+                    toast('Izin browser diblokir; suara tetap aktif.', 'warning'); return;
+                }
+                Notification.requestPermission().then(function (permission) {
+                    notifyEnabled = permission === 'granted'; saveNotificationPreferences();
+                    toast(notifyEnabled ? 'Notifikasi dan suara aktif' : 'Izin ditolak; suara tetap aktif.', notifyEnabled ? 'success' : 'warning');
+                });
+            }
+
+            function toggleSearch(show) {
+                if (!searchPanel) return;
+                searchPanel.classList.toggle('open', show);
+                if (searchBtn) searchBtn.classList.toggle('active', show);
+                if (show) { setTimeout(function () { if (searchInput) searchInput.focus() }, 50) }
+                else { clearTimeout(searchTimer); searchSequence++; if (searchInput) searchInput.value = ''; if (searchResults) searchResults.innerHTML = ''; if (searchStatus) searchStatus.textContent = 'Ketik minimal 2 karakter.' }
+            }
+
+            function renderSearchResults(messages, query) {
+                if (!searchResults || !searchStatus) return;
+                searchResults.innerHTML = '';
+                if (!messages.length) { searchStatus.textContent = 'Tidak ada pesan yang cocok.'; return }
+                searchStatus.textContent = messages.length + ' hasil untuk “' + query + '”';
+                for (var i = 0; i < messages.length; i++) {
+                    var message = messages[i], item = document.createElement('button'), time = '';
+                    try { time = new Date(message.created_at).toLocaleString('id-ID', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) } catch (e) { }
+                    item.type = 'button'; item.className = 'cp-search-result'; item.setAttribute('data-search-id', message.id);
+                    item.innerHTML = '<span class="cp-search-result-head"><span class="cp-search-result-name">' + eH(message.user_name || 'Pengguna') + '</span><span>' + eH(time) + '</span></span><span class="cp-search-result-text">' + eH(message.message || '') + '</span>';
+                    searchResults.appendChild(item);
+                }
+            }
+
+            function runSearch(query) {
+                query = (query || '').trim();
+                if (!searchStatus || !searchResults) return;
+                if (query.length < 2) { searchStatus.textContent = 'Ketik minimal 2 karakter.'; searchResults.innerHTML = ''; return }
+                var sequence = ++searchSequence; searchStatus.textContent = 'Mencari...'; searchResults.innerHTML = '';
+                fetch(URL_SEARCH + '?q=' + encodeURIComponent(query), { headers: { 'Accept': 'application/json' } })
+                    .then(function (response) { if (!response.ok) throw new Error(response.status); return response.json() })
+                    .then(function (data) { if (sequence !== searchSequence) return; renderSearchResults(data.messages || [], query) })
+                    .catch(function () { if (sequence === searchSequence) searchStatus.textContent = 'Pencarian gagal. Coba lagi.' });
+            }
+
+            updateNotifyButton();
+            document.addEventListener('pointerdown', unlockChatAudio, { once: true });
 
             function getAllUsers() {
                 if (allUsersLoaded) return Promise.resolve(allUsersLoaded);
@@ -2295,7 +2694,52 @@
                 inp.addEventListener('keydown', function (e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); e.stopPropagation(); doSend() } if (e.key === 'Escape' && mentionState.active) { e.preventDefault(); closeMentionDd() } });
             }
 
-            function showCtx(x, y, data) { ctxMsgData = data; ctxMenu.style.display = 'block'; var r = ctxMenu.getBoundingClientRect(); if (x + r.width > window.innerWidth - 8) x = window.innerWidth - r.width - 8; if (y + r.height > window.innerHeight - 8) y -= r.height + 8; if (x < 8) x = 8; if (y < 8) y = 8; ctxMenu.style.left = x + 'px'; ctxMenu.style.top = y + 'px'; var cm = document.getElementById('ctxMention'); if (cm) cm.style.display = data.isMe ? 'none' : 'flex' }
+            function renderReactionsForMessage(messageId, reactions) {
+                if (!messagesEl) return;
+                var wrap = messagesEl.querySelector('.msg-wrap[data-msg-id="' + messageId + '"]'); if (!wrap) return;
+                var container = wrap.querySelector('.msg-reactions'); if (!container) return;
+                container.innerHTML = '';
+                for (var i = 0; i < (reactions || []).length; i++) {
+                    var reaction = reactions[i], button = document.createElement('button');
+                    button.type = 'button'; button.className = 'msg-reaction' + (reaction.mine ? ' mine' : '');
+                    button.setAttribute('data-reaction-id', messageId); button.setAttribute('data-reaction-emoji', reaction.emoji || '');
+                    button.title = (reaction.users || []).join(', '); button.textContent = (reaction.emoji || '') + ' ' + (parseInt(reaction.count, 10) || 0);
+                    container.appendChild(button);
+                }
+            }
+
+            function doReact(messageId, emoji) {
+                if (!messageId || !emoji) return;
+                fetch(URL_REACT + messageId + '/reaction', { method: 'POST', headers: { 'X-CSRF-TOKEN': CSRF, 'Accept': 'application/json', 'Content-Type': 'application/json' }, body: JSON.stringify({ emoji: emoji }) })
+                    .then(function (response) { if (!response.ok) throw new Error(response.status); return response.json() })
+                    .then(function (data) { renderReactionsForMessage(messageId, data.reactions || []) })
+                    .catch(function () { toast('Gagal memberi reaksi', 'error') });
+            }
+
+            function refreshVisibleReactions() {
+                if (!chatOpen || !messagesEl) return;
+                var nodes = messagesEl.querySelectorAll('.msg-wrap[data-msg-id]'), ids = [];
+                for (var i = 0; i < nodes.length && i < 40; i++) ids.push(nodes[i].getAttribute('data-msg-id'));
+                if (!ids.length) return;
+                fetch(URL_REACTIONS + '?message_ids=' + encodeURIComponent(ids.join(',')), { headers: { 'Accept': 'application/json' } })
+                    .then(function (response) { if (!response.ok) throw new Error(response.status); return response.json() })
+                    .then(function (data) { var map = data.reactions || {}; for (var j = 0; j < ids.length; j++) renderReactionsForMessage(ids[j], map[ids[j]] || []) })
+                    .catch(function () { });
+            }
+
+            function messageDataFromWrap(wrap) {
+                if (!wrap) return null;
+                var avatar = wrap.querySelector('.msg-av'), bubble = wrap.querySelector('.msg-bubble');
+                return { id: parseInt(wrap.getAttribute('data-msg-id')), isMe: wrap.classList.contains('mine'), preview: bubble ? bubble.textContent.substring(0, 60) : '', name: avatar ? avatar.title : '', uid: wrap.getAttribute('data-uid') || '' };
+            }
+
+            if (ctxReactions) {
+                for (var ri = 0; ri < REACTION_EMOJIS.length; ri++) {
+                    (function (emoji) { var button = document.createElement('button'); button.type = 'button'; button.className = 'ctx-reaction-btn'; button.textContent = emoji; button.title = 'Beri reaksi ' + emoji; button.addEventListener('click', function (e) { e.stopPropagation(); if (!ctxMsgData) return; var id = ctxMsgData.id; hideCtx(); doReact(id, emoji) }); ctxReactions.appendChild(button) })(REACTION_EMOJIS[ri]);
+                }
+            }
+
+            function showCtx(x, y, data) { ctxMsgData = data; ctxMenu.style.display = 'block'; var r = ctxMenu.getBoundingClientRect(); if (x + r.width > window.innerWidth - 8) x = window.innerWidth - r.width - 8; if (y + r.height > window.innerHeight - 8) y -= r.height + 8; if (x < 8) x = 8; if (y < 8) y = 8; ctxMenu.style.left = x + 'px'; ctxMenu.style.top = y + 'px'; var cm = document.getElementById('ctxMention'); if (cm) cm.style.display = data.isMe ? 'none' : 'flex'; var cd = document.getElementById('ctxDelete'); if (cd) cd.style.display = data.isMe ? 'flex' : 'none' }
             function hideCtx() { ctxMenu.style.display = 'none'; ctxMsgData = null }
             document.addEventListener('click', function (e) { if (ctxMenu.style.display === 'block' && !ctxMenu.contains(e.target)) hideCtx() });
             document.getElementById('ctxReply').addEventListener('click', function (e) { e.stopPropagation(); if (!ctxMsgData) return; doStartReply(ctxMsgData.id, ctxMsgData.preview, ctxMsgData.name); hideCtx() });
@@ -2304,13 +2748,15 @@
 
             var lpTimer = null;
             if (messagesEl) {
-                messagesEl.addEventListener('contextmenu', function (e) { var b = e.target.closest('.msg-wrap'); if (!b) return; e.preventDefault(); var av = b.querySelector('.msg-av'), bu = b.querySelector('.msg-bubble'); showCtx(e.clientX, e.clientY, { id: parseInt(b.getAttribute('data-msg-id')), isMe: b.classList.contains('mine'), preview: bu ? bu.textContent.substring(0, 60) : '', name: av ? av.title : '', uid: b.getAttribute('data-uid') || '' }) });
-                messagesEl.addEventListener('touchstart', function (e) { var b = e.target.closest('.msg-wrap'); if (!b) return; var av = b.querySelector('.msg-av'), bu = b.querySelector('.msg-bubble'); lpTimer = setTimeout(function () { var t = e.touches[0]; showCtx(t.clientX, t.clientY, { id: parseInt(b.getAttribute('data-msg-id')), isMe: b.classList.contains('mine'), preview: bu ? bu.textContent.substring(0, 60) : '', name: av ? av.title : '', uid: b.getAttribute('data-uid') || '' }); if (navigator.vibrate) navigator.vibrate(30) }, 500) }, { passive: true });
+                messagesEl.addEventListener('contextmenu', function (e) { var b = e.target.closest('.msg-wrap'); if (!b) return; e.preventDefault(); showCtx(e.clientX, e.clientY, messageDataFromWrap(b)) });
+                messagesEl.addEventListener('touchstart', function (e) { var b = e.target.closest('.msg-wrap'); if (!b) return; var t = e.touches[0], tx = t.clientX, ty = t.clientY; lpTimer = setTimeout(function () { showCtx(tx, ty, messageDataFromWrap(b)); if (navigator.vibrate) navigator.vibrate(30) }, 500) }, { passive: true });
                 messagesEl.addEventListener('touchend', function () { clearTimeout(lpTimer) }, { passive: true });
                 messagesEl.addEventListener('touchmove', function () { clearTimeout(lpTimer) }, { passive: true });
                 messagesEl.addEventListener('click', function (e) {
                     var db = e.target.closest('.msg-del'); if (db) { e.stopPropagation(); doDelete(parseInt(db.getAttribute('data-del-id'))); return }
                     var ck = e.target.closest('.msg-checks'); if (ck) { e.stopPropagation(); toggleReadPopup(ck, parseInt(ck.getAttribute('data-check-id'))); return }
+                    var reaction = e.target.closest('.msg-reaction'); if (reaction) { e.stopPropagation(); doReact(parseInt(reaction.getAttribute('data-reaction-id')), reaction.getAttribute('data-reaction-emoji')); return }
+                    var addReaction = e.target.closest('.msg-react-add'); if (addReaction) { e.stopPropagation(); var aw = addReaction.closest('.msg-wrap'), ar = addReaction.getBoundingClientRect(); showCtx(ar.left, ar.bottom + 6, messageDataFromWrap(aw)); return }
                     var bu = e.target.closest('.msg-bubble'); if (bu) { var wr = bu.closest('.msg-wrap'); if (wr && !wr.classList.contains('mine')) { doStartReply(parseInt(bu.getAttribute('data-msg-id')), bu.getAttribute('data-preview') || '', bu.getAttribute('data-name') || '') } }
                 });
             }
@@ -2353,13 +2799,14 @@
                 if (m.reply_to) { var rp = document.createElement('div'); rp.className = 'msg-reply'; rp.innerHTML = '<span class="msg-reply-author">' + eH(m.reply_user || 'Seseorang') + '</span><br>' + eH(m.reply_preview || ''); bd.appendChild(rp) }
                 var bb = document.createElement('div'); bb.className = 'msg-bubble'; bb.innerHTML = renderMentionText(m.message, m.mentions_parsed); bb.setAttribute('data-msg-id', m.id); bb.setAttribute('data-preview', (m.message || '').substring(0, 60)); bb.setAttribute('data-name', m.user_name || ''); bd.appendChild(bb);
                 var mt = document.createElement('div'); mt.className = 'msg-meta'; var ts = document.createElement('span'); ts.className = 'msg-time'; ts.textContent = time; mt.appendChild(ts);
+                var reactAdd = document.createElement('button'); reactAdd.type = 'button'; reactAdd.className = 'msg-react-add'; reactAdd.title = 'Beri reaksi'; reactAdd.textContent = '\u263A'; mt.appendChild(reactAdd);
                 if (isMe) {
                     var rc = parseInt(m.read_count) || 0;
                     if (rc > 0) { var ck = document.createElement('span'); ck.className = 'msg-checks msg-checks-read'; ck.textContent = '\u2713\u2713'; ck.setAttribute('data-check-id', m.id); mt.appendChild(ck) }
                     else { var ck2 = document.createElement('span'); ck2.className = 'msg-checks'; ck2.textContent = '\u2713'; mt.appendChild(ck2) }
                     var dl = document.createElement('button'); dl.type = 'button'; dl.className = 'msg-del'; dl.title = 'Hapus'; dl.textContent = '\u2715'; dl.setAttribute('data-del-id', m.id); mt.appendChild(dl);
                 }
-                bd.appendChild(mt); wr.appendChild(av); wr.appendChild(bd); messagesEl.appendChild(wr);
+                bd.appendChild(mt); var reactions = document.createElement('div'); reactions.className = 'msg-reactions'; bd.appendChild(reactions); wr.appendChild(av); wr.appendChild(bd); messagesEl.appendChild(wr); renderReactionsForMessage(m.id, m.reactions || []);
             }
 
             function doStartReply(id, preview, userName) { replyToId = id; replyUser = userName; var bar = document.getElementById('cpReplyBar'), txt = document.getElementById('cpReplyText'); if (txt) txt.innerHTML = 'Balas <strong>' + eH(userName.split(' ')[0]) + '</strong>: ' + eH(preview) + (preview.length >= 60 ? '\u2026' : ''); if (bar) bar.classList.add('visible'); if (inp) inp.focus() }
@@ -2441,22 +2888,25 @@
                 if (panel) panel.classList.toggle('open', chatOpen);
                 if (trigger) trigger.classList.toggle('active', chatOpen);
                 if (chatOpen) {
-                    unread = 0; uB(); loadMessages(true); startPoll();
+                    unread = 0; uB(); loadMessages(true); startPoll(); startReactionPoll();
                     if (hadMention) { setTimeout(scrollToNextMention, 400) }
                     setTimeout(function () { if (inp) inp.focus() }, 280);
                 } else {
-                    stopPoll(); refreshMentionSummary(); if (typeof cPP === 'function') cPP(); if (activeReadPopup) { activeReadPopup.classList.remove('open'); activeReadPopup = null }
+                    stopPoll(); stopReactionPoll(); toggleSearch(false); refreshMentionSummary(); if (typeof cPP === 'function') cPP(); if (activeReadPopup) { activeReadPopup.classList.remove('open'); activeReadPopup = null }
                 }
+                window._chatOpen = chatOpen;
             }
             window._chatOpen = false; window._chatToggle = doToggle;
 
             function startPoll() { if (chatTimer) return; chatTimer = setInterval(function () { loadMessages(false) }, 4000) }
             function stopPoll() { if (chatTimer) { clearInterval(chatTimer); chatTimer = null } }
+            function startReactionPoll() { if (reactionTimer) return; refreshVisibleReactions(); reactionTimer = setInterval(refreshVisibleReactions, 6000) }
+            function stopReactionPoll() { if (reactionTimer) { clearInterval(reactionTimer); reactionTimer = null } }
             function startMentionPoll() { if (mentionTimer) return; refreshMentionSummary(); mentionTimer = setInterval(refreshMentionSummary, 4000) }
             function stopMentionPoll() { if (mentionTimer) { clearInterval(mentionTimer); mentionTimer = null } }
             document.addEventListener('visibilitychange', function () {
-                if (document.hidden) { stopPoll(); stopMentionPoll() }
-                else { startMentionPoll(); if (chatOpen) startPoll() }
+                if (document.hidden) { stopPoll(); stopReactionPoll(); if (!notifyEnabled && !soundEnabled) stopMentionPoll() }
+                else { startMentionPoll(); if (chatOpen) { startPoll(); startReactionPoll() } }
             });
             if (!document.hidden) startMentionPoll();
 
@@ -2476,6 +2926,17 @@
                     scrollToNextMention();
                 });
             }
+
+            if (searchBtn) searchBtn.addEventListener('click', function (e) { e.stopPropagation(); toggleSearch(!searchPanel.classList.contains('open')) });
+            if (searchClose) searchClose.addEventListener('click', function (e) { e.stopPropagation(); toggleSearch(false) });
+            if (searchInput) searchInput.addEventListener('input', function () { var query = this.value; clearTimeout(searchTimer); searchTimer = setTimeout(function () { runSearch(query) }, 320) });
+            if (searchResults) searchResults.addEventListener('click', function (e) {
+                var item = e.target.closest('.cp-search-result'); if (!item) return; e.stopPropagation();
+                var id = item.getAttribute('data-search-id'), wrap = messagesEl ? messagesEl.querySelector('.msg-wrap[data-msg-id="' + id + '"]') : null;
+                if (!wrap) { toast('Pesan lama ditampilkan di hasil pencarian.', 'info'); return }
+                toggleSearch(false); wrap.scrollIntoView({ behavior: 'smooth', block: 'center' }); var bubble = wrap.querySelector('.msg-bubble'); if (bubble) bubble.style.animation = 'mentionFlash .6s ease';
+            });
+            if (notifyBtn) notifyBtn.addEventListener('click', function (e) { e.stopPropagation(); toggleNotifications() });
 
             var ccb = document.getElementById('btnCloseChat'); if (ccb) ccb.addEventListener('click', function (e) { e.stopPropagation(); doToggle() });
             if (sendBtn) sendBtn.addEventListener('click', function (e) { e.preventDefault(); e.stopPropagation(); doSend() });

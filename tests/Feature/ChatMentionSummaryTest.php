@@ -25,7 +25,11 @@ class ChatMentionSummaryTest extends TestCase
         $this->actingAs($target)
             ->getJson('/chat/mentions/unread')
             ->assertOk()
-            ->assertJson(['count' => 2]);
+            ->assertJson([
+                'count' => 2,
+                'unread_count' => 3,
+            ])
+            ->assertJsonPath('latest_message.user_id', $sender->id);
     }
 
     public function test_read_mentions_are_removed_from_badge_count(): void
@@ -46,7 +50,11 @@ class ChatMentionSummaryTest extends TestCase
 
         $this->getJson('/chat/mentions/unread')
             ->assertOk()
-            ->assertJson(['count' => 0]);
+            ->assertJson([
+                'count' => 0,
+                'unread_count' => 0,
+                'latest_message' => null,
+            ]);
     }
 
     public function test_mention_summary_requires_authentication(): void
