@@ -111,6 +111,7 @@ Route::middleware(['auth'])->group(function () {
         Route::post('/ppbj/import/process', [PpbjController::class, 'processImport'])->name('ppbj.import.process');
 
         Route::get('/ppbj', [PpbjController::class, 'index'])->name('ppbj.index');
+        Route::get('/ppbj/{id}/archive', [PpbjController::class, 'archiveStatus'])->name('ppbj.archive');
         Route::post('/ppbj', [PpbjController::class, 'store'])->name('ppbj.store');
         Route::put('/ppbj/{id}', [PpbjController::class, 'update'])->name('ppbj.update');
         Route::put('/ppbj/{id}/cancel', [PpbjController::class, 'cancel'])->name('ppbj.cancel');
@@ -349,8 +350,6 @@ Route::middleware(['auth'])->group(function () {
 
         Route::get('/torpr/{id}/json', [TorprController::class, 'showJson'])
             ->name('torpr.json');
-        Route::get('/torpr/{id}/archive', [TorprController::class, 'archiveStatus'])
-            ->name('torpr.archive');
 
         Route::post('/torpr/{id}/resubmit', [TorprController::class, 'resubmitRejectedPr'])->name('torpr.resubmit');
 

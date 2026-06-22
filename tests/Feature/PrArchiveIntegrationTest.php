@@ -26,12 +26,13 @@ class PrArchiveIntegrationTest extends TestCase
         config(['services.pr_archive.base_url' => null]);
         Http::preventStrayRequests();
 
-        [$user, $prId] = $this->operationalUserAndPr('PR-ARSIP-001');
+        [$user, $ppbjId] = $this->generalUserAndPpbj('PR-ARSIP-001');
 
         $this->actingAs($user)
-            ->getJson("/torpr/{$prId}/archive")
+            ->getJson("/ppbj/{$ppbjId}/archive")
             ->assertOk()
             ->assertJson([
+                'ppbj_no' => 'PR-ARSIP-001',
                 'nomor_pr' => 'PR-ARSIP-001',
                 'configured' => false,
                 'state' => 'unconfigured',
@@ -68,10 +69,10 @@ class PrArchiveIntegrationTest extends TestCase
             ]),
         ]);
 
-        [$user, $prId] = $this->operationalUserAndPr('PR/2026/001');
+        [$user, $ppbjId] = $this->generalUserAndPpbj('PR/2026/001');
 
         $this->actingAs($user)
-            ->getJson("/torpr/{$prId}/archive")
+            ->getJson("/ppbj/{$ppbjId}/archive")
             ->assertOk()
             ->assertJson([
                 'state' => 'available',
@@ -102,10 +103,9 @@ class PrArchiveIntegrationTest extends TestCase
             'services.pr_archive.pr_path' => '/api/pr/{nomor_pr}/documents',
         ]);
 
-        [$user, $emptyPrId] = $this->operationalUserAndPr('PR-EMPTY');
-        $failedPrId = DB::table('torprs')->insertGetId([
-            'nomor_pr' => 'PR-FAILED',
-            'created_by_user_id' => $user->id,
+        [$user, $emptyPpbjId] = $this->generalUserAndPpbj('PR-EMPTY');
+        $failedPpbjId = DB::table('ppbj')->insertGetId([
+            'ppbj_no' => 'PR-FAILED',
             'created_at' => now(),
             'updated_at' => now(),
         ]);
@@ -117,40 +117,56 @@ class PrArchiveIntegrationTest extends TestCase
         });
 
         $this->actingAs($user)
-            ->getJson("/torpr/{$emptyPrId}/archive")
+            ->getJson("/ppbj/{$emptyPpbjId}/archive")
             ->assertOk()
             ->assertJson(['state' => 'empty', 'has_archive' => false]);
 
         $this->actingAs($user)
-            ->getJson("/torpr/{$failedPrId}/archive")
+            ->getJson("/ppbj/{$failedPpbjId}/archive")
             ->assertOk()
             ->assertJson(['state' => 'unavailable', 'has_archive' => false]);
     }
 
-    public function test_pr_page_contains_archive_status_interface(): void
+    public function test_archive_endpoint_is_only_available_to_umum_department(): void
     {
-        $view = file_get_contents(resource_path('views/torpr/index.blade.php'));
-
-        $this->assertStringContainsString('data-archive-status', $view);
-        $this->assertStringContainsString('id="infoArchiveCard"', $view);
-        $this->assertStringContainsString('/torpr/${id}/archive', $view);
-        $this->assertStringContainsString('Buka PDF', $view);
-    }
-
-    private function operationalUserAndPr(string $prNumber): array
-    {
-        $user = User::factory()->create([
+        config(['services.pr_archive.base_url' => null]);
+        [, $ppbjId] = $this->generalUserAndPpbj('PR-UMUM-ONLY');
+        $operationalUser = User::factory()->create([
             'department' => 'operasional',
             'role' => 'user',
         ]);
 
-        $prId = DB::table('torprs')->insertGetId([
-            'nomor_pr' => $prNumber,
-            'created_by_user_id' => $user->id,
+        $this->actingAs($operationalUser)
+            ->getJson("/ppbj/{$ppbjId}/archive")
+            ->assertForbidden();
+    }
+
+    public function test_pr_page_contains_archive_status_interface(): void
+    {
+        $ppbjView = file_get_contents(resource_path('views/ppbj/index.blade.php'));
+        $torprView = file_get_contents(resource_path('views/torpr/index.blade.php'));
+
+        $this->assertStringContainsString('data-archive-status', $ppbjView);
+        $this->assertStringContainsString('id="detailArchiveCard"', $ppbjView);
+        $this->assertStringContainsString('/ppbj/${id}/archive', $ppbjView);
+        $this->assertStringContainsString('Buka PDF', $ppbjView);
+        $this->assertStringNotContainsString('data-archive-status', $torprView);
+        $this->assertStringNotContainsString('/torpr/${id}/archive', $torprView);
+    }
+
+    private function generalUserAndPpbj(string $prNumber): array
+    {
+        $user = User::factory()->create([
+            'department' => 'umum',
+            'role' => 'user',
+        ]);
+
+        $ppbjId = DB::table('ppbj')->insertGetId([
+            'ppbj_no' => $prNumber,
             'created_at' => now(),
             'updated_at' => now(),
         ]);
 
-        return [$user, $prId];
+        return [$user, $ppbjId];
     }
 }

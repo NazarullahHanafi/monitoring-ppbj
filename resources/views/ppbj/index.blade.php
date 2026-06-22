@@ -482,10 +482,18 @@
                             </td>
 
                             <td class="px-4 py-3 text-center">
-                                <button type="button" onclick="openDetail({{ $row->id }})"
-                                    class="inline-flex items-center justify-center rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 transition">
-                                    Info
-                                </button>
+                                <div class="inline-flex flex-col items-center gap-1.5">
+                                    <button type="button" onclick="openDetail({{ $row->id }})"
+                                        class="inline-flex items-center justify-center rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 transition">
+                                        Info
+                                    </button>
+                                    <button type="button" data-archive-status data-ppbj-id="{{ $row->id }}"
+                                        onclick="openArchiveDetail({{ $row->id }})"
+                                        class="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-1 text-[10px] font-semibold text-slate-600 ring-1 ring-slate-200 transition hover:bg-slate-200 dark:bg-gray-700 dark:text-gray-200 dark:ring-gray-600">
+                                        <span class="h-1.5 w-1.5 rounded-full bg-slate-400"></span>
+                                        Cek Arsip
+                                    </button>
+                                </div>
                             </td>
 
                             <td class="px-4 py-3 text-center">
@@ -566,6 +574,39 @@
 
             <div id="detailContent"
                 class="hidden grid grid-cols-1 md:grid-cols-2 gap-3 text-sm max-h-[65vh] overflow-y-auto pr-2">
+            </div>
+
+            <div id="detailArchiveCard"
+                class="hidden mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-gray-700 dark:bg-gray-900/60">
+                <div class="flex flex-wrap items-start justify-between gap-3">
+                    <div class="flex items-start gap-3">
+                        <span class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-700 text-white">
+                            <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path>
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M9 13h6m-6 4h6m-1-14v5h5"></path>
+                            </svg>
+                        </span>
+                        <div>
+                            <div class="flex flex-wrap items-center gap-2">
+                                <p class="text-sm font-bold text-gray-800 dark:text-white">Arsip &amp; Laporan PR</p>
+                                <span id="detailArchiveBadge"
+                                    class="inline-flex rounded-full bg-slate-200 px-2.5 py-1 text-[10px] font-bold text-slate-600 dark:bg-gray-700 dark:text-gray-200">
+                                    Memeriksa
+                                </span>
+                            </div>
+                            <p id="detailArchiveMessage" class="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+                                Menghubungi sistem arsip...
+                            </p>
+                        </div>
+                    </div>
+                    <button id="detailArchiveRefresh" type="button" onclick="refreshCurrentPpbjArchive()"
+                        class="hidden rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-100 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700">
+                        Periksa ulang
+                    </button>
+                </div>
+                <div id="detailArchiveDocuments" class="mt-3 hidden space-y-2"></div>
             </div>
         </div>
     </div>
@@ -1292,6 +1333,7 @@
             const detailHint = document.getElementById('detailHint');
             const cancelledBanner = document.getElementById('cancelledBanner');
             const cancelReasonText = document.getElementById('cancelReasonText');
+            const detailArchiveCard = document.getElementById('detailArchiveCard');
 
             const formTitle = document.getElementById('formTitle');
             const ppbjIdInput = document.getElementById('ppbj_id');
@@ -1562,6 +1604,136 @@
             // =========================
             let lastDetailId = null;
 
+            const archiveStateUi = {
+                loading: {
+                    label: 'Memeriksa',
+                    badge: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300',
+                    row: 'bg-blue-50 text-blue-600 ring-blue-200 dark:bg-blue-900/20 dark:text-blue-300 dark:ring-blue-800',
+                    dot: 'bg-blue-500 animate-pulse'
+                },
+                available: {
+                    label: 'Arsip tersedia',
+                    badge: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300',
+                    row: 'bg-emerald-50 text-emerald-700 ring-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-300 dark:ring-emerald-800',
+                    dot: 'bg-emerald-500'
+                },
+                empty: {
+                    label: 'Belum ada arsip',
+                    badge: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300',
+                    row: 'bg-amber-50 text-amber-700 ring-amber-200 dark:bg-amber-900/20 dark:text-amber-300 dark:ring-amber-800',
+                    dot: 'bg-amber-500'
+                },
+                unconfigured: {
+                    label: 'Belum terhubung',
+                    badge: 'bg-slate-200 text-slate-600 dark:bg-gray-700 dark:text-gray-200',
+                    row: 'bg-slate-100 text-slate-500 ring-slate-200 dark:bg-gray-700 dark:text-gray-200 dark:ring-gray-600',
+                    dot: 'bg-slate-400'
+                },
+                unavailable: {
+                    label: 'Tidak dapat diperiksa',
+                    badge: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300',
+                    row: 'bg-red-50 text-red-700 ring-red-200 dark:bg-red-900/20 dark:text-red-300 dark:ring-red-800',
+                    dot: 'bg-red-500'
+                }
+            };
+
+            function setArchiveState(state, message, ppbjId) {
+                const ui = archiveStateUi[state] || archiveStateUi.unavailable;
+                const badge = document.getElementById('detailArchiveBadge');
+                const messageEl = document.getElementById('detailArchiveMessage');
+                const refresh = document.getElementById('detailArchiveRefresh');
+                const documents = document.getElementById('detailArchiveDocuments');
+                const rowBadge = document.querySelector(`[data-archive-status][data-ppbj-id="${ppbjId}"]`);
+
+                if (badge) {
+                    badge.className = `inline-flex rounded-full px-2.5 py-1 text-[10px] font-bold ${ui.badge}`;
+                    badge.textContent = ui.label;
+                }
+                if (messageEl) messageEl.textContent = message || ui.label;
+                if (refresh) refresh.classList.toggle('hidden', state === 'loading' || state === 'unconfigured');
+                if (documents) {
+                    documents.replaceChildren();
+                    documents.classList.add('hidden');
+                }
+                if (rowBadge) {
+                    rowBadge.className = `inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-semibold ring-1 transition ${ui.row}`;
+                    rowBadge.replaceChildren();
+                    const dot = document.createElement('span');
+                    dot.className = `h-1.5 w-1.5 rounded-full ${ui.dot}`;
+                    rowBadge.append(dot, document.createTextNode(ui.label));
+                }
+            }
+
+            function formatArchiveDate(value) {
+                if (!value) return null;
+                const date = new Date(String(value).replace(' ', 'T'));
+                if (Number.isNaN(date.getTime())) return String(value);
+
+                return date.toLocaleString('id-ID', {
+                    day: '2-digit',
+                    month: 'short',
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+            }
+
+            function renderArchiveDocuments(documents) {
+                const list = document.getElementById('detailArchiveDocuments');
+                if (!list || !Array.isArray(documents) || !documents.length) return;
+
+                documents.forEach((documentItem) => {
+                    const item = document.createElement('div');
+                    item.className = 'flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-3 dark:border-gray-700 dark:bg-gray-800';
+
+                    const info = document.createElement('div');
+                    info.className = 'min-w-0 flex-1';
+                    const name = document.createElement('p');
+                    name.className = 'truncate text-sm font-semibold text-gray-800 dark:text-white';
+                    name.textContent = documentItem.name || 'Dokumen arsip';
+                    const meta = document.createElement('p');
+                    meta.className = 'mt-1 text-[11px] text-gray-500 dark:text-gray-400';
+                    meta.textContent = [documentItem.type, documentItem.size, formatArchiveDate(documentItem.date)]
+                        .filter(Boolean).join(' • ') || 'Dokumen';
+                    info.append(name, meta);
+                    item.append(info);
+
+                    if (documentItem.download_url) {
+                        const link = document.createElement('a');
+                        link.href = documentItem.download_url;
+                        link.target = '_blank';
+                        link.rel = 'noopener noreferrer';
+                        link.className = 'inline-flex shrink-0 items-center rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-blue-700';
+                        link.textContent = 'Buka PDF';
+                        item.append(link);
+                    }
+
+                    list.append(item);
+                });
+
+                list.classList.remove('hidden');
+            }
+
+            async function loadPpbjArchive(id, fresh = false) {
+                setArchiveState('loading', 'Menghubungi sistem arsip menggunakan nomor PPBJ/PR...', id);
+
+                try {
+                    const response = await fetch(`/ppbj/${id}/archive${fresh ? '?refresh=1' : ''}`, {
+                        headers: {
+                            'Accept': 'application/json',
+                            'X-Requested-With': 'XMLHttpRequest'
+                        }
+                    });
+                    if (!response.ok) throw new Error('Status arsip gagal diperiksa.');
+
+                    const archive = await response.json();
+                    setArchiveState(archive.state, archive.message, id);
+                    renderArchiveDocuments(archive.documents || []);
+                } catch (error) {
+                    setArchiveState('unavailable', error.message || 'Sistem arsip sedang tidak dapat dihubungi.', id);
+                }
+            }
+
             window.openDetail = function (id) {
                 const d = window.ppbjData?.[id];
                 if (!d) return;
@@ -1571,6 +1743,7 @@
 
                 cancelledBanner.classList.add('hidden');
                 detailContent.classList.add('hidden');
+                detailArchiveCard?.classList.add('hidden');
 
                 if (isCancelled) {
                     detailHint.textContent = 'Status: CANCELLED';
@@ -1585,6 +1758,17 @@
 
                 detailModal.classList.remove('hidden');
                 detailModal.classList.add('flex');
+            };
+
+            window.openArchiveDetail = function (id) {
+                window.openDetail(id);
+                detailArchiveCard?.classList.remove('hidden');
+                loadPpbjArchive(id);
+                setTimeout(() => detailArchiveCard?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 100);
+            };
+
+            window.refreshCurrentPpbjArchive = function () {
+                if (lastDetailId) loadPpbjArchive(lastDetailId, true);
             };
 
             function renderDetail(d) {

@@ -20,6 +20,7 @@ use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Style\Border;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
+use App\Services\PrArchiveService;
 
 class PpbjController extends Controller
 {
@@ -262,6 +263,21 @@ class PpbjController extends Controller
             'penyediaEksternals',
             'searchContext'   // ← TAMBAHAN
         ));
+    }
+
+    public function archiveStatus(Request $request, $id, PrArchiveService $archiveService)
+    {
+        $ppbj = Ppbj::select(['id', 'ppbj_no'])->findOrFail($id);
+        $archive = $archiveService->findByPrNumber(
+            $ppbj->ppbj_no,
+            $request->boolean('refresh')
+        );
+
+        return response()->json(array_merge([
+            'ppbj_id' => $ppbj->id,
+            'ppbj_no' => $ppbj->ppbj_no,
+            'nomor_pr' => $ppbj->ppbj_no,
+        ], $archive), 200, [], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     }
 
     // =====================
