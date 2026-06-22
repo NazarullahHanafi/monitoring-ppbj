@@ -1947,6 +1947,13 @@
                                 </td>
                                 <td class="px-3 py-3">
                                     <div class="flex items-center justify-center gap-1.5">
+                                        <button type="button" onclick="shareRecordToChat('sp', {{ $s->id }})"
+                                            class="p-1.5 rounded-lg text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors"
+                                            title="Bagikan SP ke Chat Tim" aria-label="Bagikan SP ke Chat Tim">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h8m-8 4h5m8-2a8 8 0 01-8 8 8.5 8.5 0 01-3.8-.9L3 21l1.9-5.1A8 8 0 1119 17.2" />
+                                            </svg>
+                                        </button>
                                         <a href="{{ route('sp.cetak', $s) }}" target="_blank"
                                             class="p-1.5 rounded-lg text-sky-600 hover:bg-sky-50 dark:hover:bg-sky-900/30 transition-colors"
                                             title="Cetak SP"><svg class="w-4 h-4" fill="none" stroke="currentColor"
@@ -3276,7 +3283,7 @@
                                                         <td class="px-3 py-3 text-gray-700 dark:text-gray-200 font-medium text-xs">${escapedHtml(row.nama_vendor)}</td>
                                                         <td class="px-3 py-3 text-gray-600 dark:text-gray-300 text-xs max-w-xs truncate">${escapedHtml(row.deskripsi_pengadaan)}</td>
                                                         <td class="px-3 py-3"><span class="inline-block bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 text-xs font-semibold px-2 py-0.5 rounded-full">${escapedHtml(row.pic)}</span></td>
-                                                        <td class="px-3 py-3 text-center text-gray-400 text-xs">—</td>`;
+                                                        <td class="px-3 py-3 text-center"><button type="button" onclick="shareRecordToChat('sp', ${Number(row.id)})" class="px-2 py-1 rounded-lg text-indigo-600 bg-indigo-50 dark:bg-indigo-900/30 text-xs font-semibold" title="Bagikan SP ke Chat Tim">💬</button></td>`;
                         tbody.insertBefore(tr, tbody.firstChild);
                         Swal.fire({ toast: true, position: 'top-end', icon: 'info', title: `📝 SP baru: ${row.nomor_sp}`, showConfirmButton: false, timer: 3000, timerProgressBar: true, background: document.documentElement.classList.contains('dark') ? '#1f2937' : '#fff', color: document.documentElement.classList.contains('dark') ? '#f3f4f6' : '#111827' });
                     });

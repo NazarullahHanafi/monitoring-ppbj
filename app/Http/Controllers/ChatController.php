@@ -2,6 +2,10 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Sp;
+use App\Models\Spph;
+use App\Models\Torpr;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
@@ -11,13 +15,17 @@ use Illuminate\Validation\Rule;
 
 class ChatController extends Controller
 {
-    private const MAX_MESSAGES = 200;
+    private const PAGE_SIZE = 40;
+
+    private const UNREAD_SCAN_LIMIT = 500;
 
     private const MAX_MSG_LENGTH = 500;
 
     private const RATE_LIMIT_MIN = 20;
 
     private const SEARCH_LIMIT = 30;
+
+    private const EDIT_WINDOW_MINUTES = 15;
 
     private const REACTION_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
 
@@ -41,18 +49,29 @@ class ChatController extends Controller
     public function messages(Request $request)
     {
         $since = (int) $request->get('since', 0);
+        $before = (int) $request->get('before', 0);
         $myId = Auth::id();
 
         $rows = DB::table('chat_messages')
-            ->when($since, fn ($query) => $query->where('id', '>', $since))
+            ->when($before > 0, fn ($query) => $query->where('id', '<', $before))
+            ->when($before === 0 && $since > 0, fn ($query) => $query->where('id', '>', $since))
             ->orderByDesc('id')
-            ->limit(40)
-            ->get()
+            ->limit(self::PAGE_SIZE + 1)
+            ->get();
+
+        $hasMore = $rows->count() > self::PAGE_SIZE;
+        $rows = $rows
+            ->take(self::PAGE_SIZE)
             ->reverse()
             ->values();
 
         if ($rows->isEmpty()) {
-            return response()->json(['messages' => [], 'max_id' => $since]);
+            return response()->json([
+                'messages' => [],
+                'max_id' => $since,
+                'oldest_id' => $before,
+                'has_more' => false,
+            ]);
         }
 
         $this->enrichMessages($rows, $myId);
@@ -60,6 +79,8 @@ class ChatController extends Controller
         return response()->json([
             'messages' => $rows,
             'max_id' => $rows->max('id') ?? $since,
+            'oldest_id' => $rows->min('id'),
+            'has_more' => $hasMore,
         ]);
     }
 
@@ -104,7 +125,7 @@ class ChatController extends Controller
                     ->where('chat_reads.user_id', $userId);
             })
             ->orderByDesc('id')
-            ->limit(self::MAX_MESSAGES)
+            ->limit(self::UNREAD_SCAN_LIMIT)
             ->get(['id', 'user_id', 'user_name', 'message', 'mentions', 'created_at']);
 
         $mentionCount = $messages->filter(function ($message) use ($userId) {
@@ -175,8 +196,20 @@ class ChatController extends Controller
             ->values()
             ->all();
 
+        $messageUpdates = DB::table('chat_messages')
+            ->whereIn('id', $ids)
+            ->whereNotNull('edited_at')
+            ->get(['id', 'message', 'mentions', 'edited_at'])
+            ->map(function ($message) {
+                $message->mentions_parsed = $this->parseMentions($message->mentions);
+                unset($message->mentions);
+
+                return $message;
+            });
+
         return response()->json([
             'reactions' => $this->reactionMap($ids, Auth::id()),
+            'message_updates' => $messageUpdates,
         ]);
     }
 
@@ -219,6 +252,106 @@ class ChatController extends Controller
             'status' => $status,
             'reactions' => $this->reactionMap([$id], $userId)[$id] ?? [],
         ]);
+    }
+
+    /**
+     * Edit pesan sendiri maksimal 15 menit setelah dikirim.
+     */
+    public function update(Request $request, int $id)
+    {
+        $validated = $request->validate([
+            'message' => 'required|string|max:'.self::MAX_MSG_LENGTH,
+        ]);
+
+        $message = DB::table('chat_messages')->find($id);
+
+        if (! $message) {
+            return response()->json(['error' => 'Pesan tidak ditemukan'], 404);
+        }
+
+        if ((int) $message->user_id !== (int) Auth::id()) {
+            return response()->json(['error' => 'Pesan hanya dapat diedit oleh pengirim'], 403);
+        }
+
+        if (Carbon::parse($message->created_at)->addMinutes(self::EDIT_WINDOW_MINUTES)->isPast()) {
+            return response()->json(['error' => 'Batas waktu edit 15 menit sudah berakhir'], 403);
+        }
+
+        $text = trim($validated['message']);
+        $mentions = collect($this->parseMentions($message->mentions))
+            ->filter(function (array $mention) use ($text) {
+                $name = (string) ($mention['name'] ?? '');
+
+                return $name !== '' && mb_stripos($text, '@'.$name) !== false;
+            })
+            ->values()
+            ->all();
+
+        DB::table('chat_messages')->where('id', $id)->update([
+            'message' => $text,
+            'mentions' => $mentions === [] ? null : json_encode($mentions),
+            'edited_at' => now(),
+        ]);
+
+        $messages = collect([DB::table('chat_messages')->find($id)]);
+        $this->enrichMessages($messages, Auth::id());
+
+        return response()->json(['message' => $messages->first()]);
+    }
+
+    /**
+     * Bagikan snapshot data PR, SPPH, atau SP ke Chat Tim.
+     */
+    public function share(Request $request)
+    {
+        $validated = $request->validate([
+            'type' => ['required', 'string', Rule::in(['pr', 'spph', 'sp'])],
+            'id' => 'required|integer|min:1',
+        ]);
+
+        $user = Auth::user();
+        $allowedDepartment = $validated['type'] === 'pr' ? 'operasional' : 'umum';
+
+        if ($user->department !== $allowedDepartment) {
+            return response()->json(['error' => 'Anda tidak memiliki akses ke data ini'], 403);
+        }
+
+        $rateKey = 'chat_share_rate:'.$user->id.':'.date('YmdHi');
+        $rateCount = (int) Cache::get($rateKey, 0);
+
+        if ($rateCount >= 10) {
+            return response()->json(['error' => 'Terlalu banyak membagikan data.'], 429);
+        }
+
+        Cache::put($rateKey, $rateCount + 1, 60);
+
+        $snapshot = $this->sharedRecordSnapshot($validated['type'], (int) $validated['id']);
+
+        if (! $snapshot) {
+            return response()->json(['error' => 'Data tidak ditemukan'], 404);
+        }
+
+        $colors = $this->colors();
+        $id = DB::table('chat_messages')->insertGetId([
+            'user_id' => $user->id,
+            'user_name' => $user->name,
+            'user_initials' => $this->initials($user->name),
+            'user_color' => $colors[$user->id % count($colors)],
+            'message' => 'Membagikan '.$snapshot['label'].' '.$snapshot['number'],
+            'reply_to' => null,
+            'reply_preview' => null,
+            'reply_user' => null,
+            'mentions' => null,
+            'share_type' => $validated['type'],
+            'share_id' => $validated['id'],
+            'share_data' => json_encode($snapshot, JSON_UNESCAPED_UNICODE),
+            'created_at' => now(),
+        ]);
+
+        $messages = collect([DB::table('chat_messages')->find($id)]);
+        $this->enrichMessages($messages, $user->id);
+
+        return response()->json(['message' => $messages->first()], 201);
     }
 
     /**
@@ -283,18 +416,6 @@ class ChatController extends Controller
             'mentions' => $mentionsJson,
             'created_at' => now(),
         ]);
-
-        $total = DB::table('chat_messages')->count();
-
-        if ($total > self::MAX_MESSAGES) {
-            $oldestIds = DB::table('chat_messages')
-                ->orderBy('id')
-                ->limit($total - self::MAX_MESSAGES)
-                ->pluck('id');
-            DB::table('chat_reactions')->whereIn('message_id', $oldestIds)->delete();
-            DB::table('chat_reads')->whereIn('message_id', $oldestIds)->delete();
-            DB::table('chat_messages')->whereIn('id', $oldestIds)->delete();
-        }
 
         $messages = collect([DB::table('chat_messages')->find($id)]);
         $this->enrichMessages($messages, $user->id);
@@ -405,6 +526,9 @@ class ChatController extends Controller
             $row->i_read = isset($myReads[$row->id]);
             $row->mentions_parsed = $this->parseMentions($row->mentions ?? null);
             $row->reactions = $reactions[$row->id] ?? [];
+            $row->share_data_parsed = $this->parseShareData($row->share_data ?? null);
+            $row->can_edit = (int) $row->user_id === $myId
+                && Carbon::parse($row->created_at)->addMinutes(self::EDIT_WINDOW_MINUTES)->isFuture();
         }
     }
 
@@ -417,6 +541,64 @@ class ChatController extends Controller
         $decoded = json_decode($mentions, true);
 
         return is_array($decoded) ? $decoded : [];
+    }
+
+    private function parseShareData(?string $shareData): ?array
+    {
+        if (! $shareData) {
+            return null;
+        }
+
+        $decoded = json_decode($shareData, true);
+
+        return is_array($decoded) ? $decoded : null;
+    }
+
+    private function sharedRecordSnapshot(string $type, int $id): ?array
+    {
+        if ($type === 'pr') {
+            $record = Torpr::find($id);
+
+            return $record ? [
+                'label' => 'PR',
+                'number' => $record->nomor_pr ?: 'Tanpa nomor',
+                'title' => $record->tujuan_pengadaan ?: 'Pengadaan',
+                'fields' => [
+                    ['label' => 'Portofolio', 'value' => $record->portofolio ?: '-'],
+                    ['label' => 'Nilai', 'value' => $record->jumlah_pr ? 'Rp '.number_format((float) $record->jumlah_pr, 0, ',', '.') : '-'],
+                    ['label' => 'Tanggal', 'value' => $record->tanggal_pr?->format('d/m/Y') ?: '-'],
+                ],
+            ] : null;
+        }
+
+        if ($type === 'spph') {
+            $record = Spph::find($id);
+
+            return $record ? [
+                'label' => 'SPPH',
+                'number' => $record->nomor_spph,
+                'title' => $record->deskripsi_pengadaan,
+                'fields' => [
+                    ['label' => 'Nomor PR', 'value' => $record->nomor_pr ?: '-'],
+                    ['label' => 'Vendor', 'value' => $record->nama_vendor],
+                    ['label' => 'PIC', 'value' => $record->pic],
+                ],
+            ] : null;
+        }
+
+        $record = Sp::find($id);
+
+        return $record ? [
+            'label' => 'SP',
+            'number' => $record->nomor_sp,
+            'title' => $record->deskripsi_pengadaan,
+            'fields' => [
+                ['label' => 'Nomor PR', 'value' => $record->nomor_pr ?: '-'],
+                ['label' => 'Vendor', 'value' => $record->nama_vendor],
+                ['label' => 'Nilai', 'value' => $record->nilai_sp ? 'Rp '.number_format((float) $record->nilai_sp, 0, ',', '.') : '-'],
+                ['label' => 'PIC', 'value' => $record->pic],
+            ],
+        ] : null;
     }
 
     private function reactionMap(array $messageIds, int $myId): array

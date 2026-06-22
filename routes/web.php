@@ -75,8 +75,10 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/reactions', [App\Http\Controllers\ChatController::class, 'reactions'])
             ->name('reactions')
             ->middleware(\App\Http\Middleware\DisableLoggingForPolling::class);
+        Route::post('/share', [App\Http\Controllers\ChatController::class, 'share'])->name('share');
         Route::post('/{id}/reaction', [App\Http\Controllers\ChatController::class, 'react'])->name('react');
         Route::post('/send', [App\Http\Controllers\ChatController::class, 'send'])->name('send');
+        Route::patch('/{id}', [App\Http\Controllers\ChatController::class, 'update'])->name('update');
         Route::delete('/{id}', [App\Http\Controllers\ChatController::class, 'destroy'])->name('destroy');
     });
 

@@ -1,0 +1,186 @@
+<?php
+
+namespace Tests\Feature;
+
+use App\Models\User;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
+use Tests\TestCase;
+
+class ChatHistoryEditingSharingTest extends TestCase
+{
+    use RefreshDatabase;
+
+    public function test_messages_are_paginated_and_older_history_can_be_loaded(): void
+    {
+        $user = User::factory()->create();
+
+        for ($number = 1; $number <= 65; $number++) {
+            $this->insertMessage($user, 'Pesan '.$number, now()->addSeconds($number));
+        }
+
+        $latest = $this->actingAs($user)->getJson('/chat/messages')
+            ->assertOk()
+            ->assertJsonCount(40, 'messages')
+            ->assertJsonPath('has_more', true)
+            ->json();
+
+        $this->assertSame('Pesan 26', $latest['messages'][0]['message']);
+        $this->assertSame('Pesan 65', $latest['messages'][39]['message']);
+
+        $older = $this->getJson('/chat/messages?before='.$latest['oldest_id'])
+            ->assertOk()
+            ->assertJsonCount(25, 'messages')
+            ->assertJsonPath('has_more', false)
+            ->json();
+
+        $this->assertSame('Pesan 1', $older['messages'][0]['message']);
+        $this->assertSame('Pesan 25', $older['messages'][24]['message']);
+    }
+
+    public function test_sending_new_messages_does_not_delete_old_history(): void
+    {
+        $user = User::factory()->create();
+
+        for ($number = 1; $number <= 200; $number++) {
+            $this->insertMessage($user, 'Arsip '.$number);
+        }
+
+        $this->actingAs($user)
+            ->postJson('/chat/send', ['message' => 'Pesan ke-201'])
+            ->assertCreated();
+
+        $this->assertSame(201, DB::table('chat_messages')->count());
+    }
+
+    public function test_sender_can_edit_a_recent_message(): void
+    {
+        $sender = User::factory()->create();
+        $messageId = $this->insertMessage($sender, 'Pesan awal');
+
+        $this->actingAs($sender)
+            ->patchJson('/chat/'.$messageId, ['message' => 'Pesan yang diperbarui'])
+            ->assertOk()
+            ->assertJsonPath('message.message', 'Pesan yang diperbarui')
+            ->assertJsonPath('message.can_edit', true)
+            ->assertJsonPath('message.edited_at', fn ($value) => is_string($value) && $value !== '');
+
+        $this->assertDatabaseHas('chat_messages', [
+            'id' => $messageId,
+            'message' => 'Pesan yang diperbarui',
+        ]);
+    }
+
+    public function test_other_users_and_expired_messages_cannot_be_edited(): void
+    {
+        $sender = User::factory()->create();
+        $other = User::factory()->create();
+        $recentId = $this->insertMessage($sender, 'Milik pengirim');
+        $expiredId = $this->insertMessage($sender, 'Sudah lama', now()->subMinutes(16));
+
+        $this->actingAs($other)
+            ->patchJson('/chat/'.$recentId, ['message' => 'Diubah orang lain'])
+            ->assertForbidden();
+
+        $this->actingAs($sender)
+            ->patchJson('/chat/'.$expiredId, ['message' => 'Terlambat diubah'])
+            ->assertForbidden();
+    }
+
+    public function test_authorized_departments_can_share_pr_spph_and_sp_snapshots(): void
+    {
+        $operasional = User::factory()->create(['department' => 'operasional']);
+        $umum = User::factory()->create(['department' => 'umum']);
+        $prId = DB::table('torprs')->insertGetId([
+            'tujuan_pengadaan' => 'Pengadaan alat inspeksi',
+            'portofolio' => 'Peralatan',
+            'nomor_pr' => 'PR-001',
+            'tanggal_pr' => '2026-06-22',
+            'jumlah_pr' => 15000000,
+            'created_by_user_id' => $operasional->id,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $spphId = DB::table('spphs')->insertGetId([
+            'nomor_spph' => 'SPPH-001',
+            'sequence_number' => 1,
+            'tanggal' => '2026-06-22',
+            'nomor_pr' => 'PR-SPPH-001',
+            'nama_vendor' => 'Vendor Satu',
+            'deskripsi_pengadaan' => 'Permintaan harga alat inspeksi',
+            'pic' => 'Nazar',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $spId = DB::table('sps')->insertGetId([
+            'nomor_sp' => 'SP-001',
+            'sequence_number' => 1,
+            'tanggal_sp' => '2026-06-22',
+            'nilai_sp' => 14500000,
+            'nomor_pr' => 'PR-SP-001',
+            'nilai_pr' => 15000000,
+            'nama_vendor' => 'Vendor Satu',
+            'deskripsi_pengadaan' => 'Pesanan alat inspeksi',
+            'pic' => 'Nazar',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->actingAs($operasional)
+            ->postJson('/chat/share', ['type' => 'pr', 'id' => $prId])
+            ->assertCreated()
+            ->assertJsonPath('message.share_data_parsed.label', 'PR')
+            ->assertJsonPath('message.share_data_parsed.number', 'PR-001');
+
+        $this->actingAs($umum)
+            ->postJson('/chat/share', ['type' => 'spph', 'id' => $spphId])
+            ->assertCreated()
+            ->assertJsonPath('message.share_data_parsed.label', 'SPPH');
+
+        $this->postJson('/chat/share', ['type' => 'sp', 'id' => $spId])
+            ->assertCreated()
+            ->assertJsonPath('message.share_data_parsed.label', 'SP')
+            ->assertJsonPath('message.share_data_parsed.fields.2.value', 'Rp 14.500.000');
+
+        $this->assertDatabaseHas('chat_messages', ['share_type' => 'pr', 'share_id' => $prId]);
+        $this->assertDatabaseHas('chat_messages', ['share_type' => 'spph', 'share_id' => $spphId]);
+        $this->assertDatabaseHas('chat_messages', ['share_type' => 'sp', 'share_id' => $spId]);
+    }
+
+    public function test_users_cannot_share_records_outside_their_department(): void
+    {
+        $umum = User::factory()->create(['department' => 'umum']);
+
+        $this->actingAs($umum)
+            ->postJson('/chat/share', ['type' => 'pr', 'id' => 1])
+            ->assertForbidden();
+    }
+
+    public function test_layout_exposes_history_edit_and_share_controls(): void
+    {
+        $user = User::factory()->create();
+
+        $this->actingAs($user)
+            ->get('/account')
+            ->assertOk()
+            ->assertSee('id="ctxEdit"', false)
+            ->assertSee('Muat pesan lebih lama')
+            ->assertSee('shareRecordToChat', false);
+    }
+
+    private function insertMessage(User $sender, string $message, $createdAt = null): int
+    {
+        return DB::table('chat_messages')->insertGetId([
+            'user_id' => $sender->id,
+            'user_name' => $sender->name,
+            'user_initials' => 'TS',
+            'user_color' => '#6366f1',
+            'message' => $message,
+            'reply_to' => null,
+            'reply_preview' => null,
+            'reply_user' => null,
+            'mentions' => null,
+            'created_at' => $createdAt ?? now(),
+        ]);
+    }
+}

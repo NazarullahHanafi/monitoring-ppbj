@@ -823,6 +823,12 @@
                                         </svg>
                                         Log
                                     </button>
+                                    <button type="button" onclick="shareRecordToChat('pr', {{ $r->id }})"
+                                        class="inline-flex items-center gap-1 px-2 py-1 rounded bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 text-xs font-medium transition-all"
+                                        title="Bagikan ringkasan PR ke Chat Tim">
+                                        <span aria-hidden="true">💬</span>
+                                        Bagikan
+                                    </button>
                                     @if(!$locked && (auth()->user()->role === 'superadmin' || (int) $r->created_by_user_id === (int) auth()->id()))
                                         <div class="inline-flex gap-2">
                                             <button type="button" onclick="openEditForm({{ $r->id }})"

@@ -1277,12 +1277,108 @@
             filter: brightness(.97)
         }
 
+        .msg-share-card {
+            width: min(270px, 72vw);
+            margin-bottom: 5px;
+            padding: 10px 11px;
+            border: 1px solid rgba(99, 102, 241, .2);
+            border-radius: 14px;
+            background: linear-gradient(145deg, #fff, #f5f7ff);
+            box-shadow: 0 4px 14px rgba(79, 70, 229, .08)
+        }
+
+        .dark .msg-share-card {
+            background: linear-gradient(145deg, #1e293b, #25324a);
+            border-color: rgba(165, 180, 252, .2)
+        }
+
+        .msg-wrap.mine .msg-share-card {
+            border-color: rgba(139, 92, 246, .28)
+        }
+
+        .msg-share-head {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            margin-bottom: 6px
+        }
+
+        .msg-share-label {
+            padding: 2px 7px;
+            border-radius: 999px;
+            background: #4f46e5;
+            color: #fff;
+            font-size: .58rem;
+            font-weight: 800;
+            letter-spacing: .05em
+        }
+
+        .msg-share-number {
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            color: #4338ca;
+            font-size: .7rem;
+            font-weight: 750
+        }
+
+        .dark .msg-share-number {
+            color: #c7d2fe
+        }
+
+        .msg-share-title {
+            color: #111827;
+            font-size: .76rem;
+            font-weight: 700;
+            line-height: 1.35;
+            margin-bottom: 8px
+        }
+
+        .dark .msg-share-title {
+            color: #f8fafc
+        }
+
+        .msg-share-fields {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 6px 10px
+        }
+
+        .msg-share-field-label {
+            display: block;
+            color: #9ca3af;
+            font-size: .56rem;
+            text-transform: uppercase;
+            letter-spacing: .03em
+        }
+
+        .msg-share-field-value {
+            display: block;
+            overflow: hidden;
+            color: #4b5563;
+            font-size: .66rem;
+            font-weight: 600;
+            text-overflow: ellipsis;
+            white-space: nowrap
+        }
+
+        .dark .msg-share-field-value {
+            color: #cbd5e1
+        }
+
         .msg-meta {
             display: flex;
             align-items: center;
             gap: 6px;
             padding: 0 4px;
             position: relative
+        }
+
+        .msg-edited {
+            color: #9ca3af;
+            font-size: .56rem;
+            font-style: italic
         }
 
         .msg-react-add {
@@ -2011,6 +2107,40 @@
             line-height: 1.6
         }
 
+        .cp-history-control {
+            display: flex;
+            justify-content: center;
+            padding: 5px 0 10px
+        }
+
+        .cp-load-older {
+            border: 1px solid rgba(99, 102, 241, .2);
+            border-radius: 999px;
+            background: rgba(99, 102, 241, .08);
+            color: #4f46e5;
+            cursor: pointer;
+            font-size: .68rem;
+            font-weight: 700;
+            padding: 6px 12px;
+            transition: all .15s
+        }
+
+        .cp-load-older:hover {
+            background: rgba(99, 102, 241, .14);
+            transform: translateY(-1px)
+        }
+
+        .cp-load-older:disabled {
+            cursor: wait;
+            opacity: .65;
+            transform: none
+        }
+
+        .dark .cp-load-older {
+            border-color: rgba(165, 180, 252, .22);
+            color: #c7d2fe
+        }
+
         .cp-typing {
             padding: 4px 12px;
             font-size: .65rem;
@@ -2293,6 +2423,7 @@
     <div class="ctx-menu" id="ctxMenu">
         <div class="ctx-reactions" id="ctxReactions"></div>
         <div class="ctx-item" id="ctxReply"><span class="ctx-icon">↩️</span>Balas</div>
+        <div class="ctx-item" id="ctxEdit"><span class="ctx-icon">✏️</span>Edit Pesan</div>
         <div class="ctx-item" id="ctxMention"><span class="ctx-icon">🏷️</span>Tag @Nama</div>
         <div class="ctx-item danger" id="ctxDelete"><span class="ctx-icon">🗑️</span>Hapus Pesan</div>
     </div>
@@ -2412,7 +2543,7 @@
         (function () {
             var URL_MSGS = '/chat/messages', URL_MENTION_COUNT = '/chat/mentions/unread', URL_SEND = '/chat/send', URL_DEL = '/chat/',
                 URL_READ = '/chat/read', URL_READS = '/chat/', URL_USERS = '/chat/users', URL_SEARCH = '/chat/search',
-                URL_REACTIONS = '/chat/reactions', URL_REACT = '/chat/',
+                URL_REACTIONS = '/chat/reactions', URL_REACT = '/chat/', URL_SHARE = '/chat/share',
                 CSRF = (document.querySelector('meta[name="csrf-token"]') || {}).content || '',
                 MY_ID = {{ auth()->id() }}, MAX_LEN = 500,
                 EMOJIS = ['\u{1F604}', '\u{1F60A}', '\u{1F44D}', '\u{1F525}', '\u2764\uFE0F', '\u{1F389}', '\u{1F602}', '\u{1F914}', '\u{1F60E}', '\u{1F4AF}', '\u{1F64F}', '\u2705'],
@@ -2428,6 +2559,7 @@
             var allUsersLoaded = null;
             var swalActive = false;
             var searchTimer = null, searchSequence = 0;
+            var historyHasMore = false, historyLoading = false;
             var notifyEnabled = localStorage.getItem('chat_notify_' + MY_ID) === '1';
             var soundEnabled = localStorage.getItem('chat_sound_' + MY_ID) === '1';
             var summaryInitialized = false, lastSummaryMessageId = 0, audioContext = null, notificationWorkerPromise = null;
@@ -2458,7 +2590,25 @@
             function eH(s) { return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;') }
             function isNB() { if (!messagesEl) return true; return messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight < 80 }
             function sBB() { if (messagesEl) messagesEl.scrollTop = messagesEl.scrollHeight }
-            function sE(show) { if (emptyEl) emptyEl.style.display = show ? 'flex' : 'none' }
+            function sE(show) {
+                if (!messagesEl) return;
+                var current = messagesEl.querySelector('.cp-empty');
+                if (!show) { if (current) current.remove(); return }
+                if (!current) {
+                    current = document.createElement('div'); current.className = 'cp-empty'; current.id = 'cpEmpty';
+                    current.innerHTML = '<div class="cp-empty-icon">\u{1F4AC}</div><div class="cp-empty-text">Belum ada pesan.<br>Mulai percakapan sekarang!</div>';
+                    messagesEl.appendChild(current);
+                }
+            }
+            function renderHistoryControl() {
+                if (!messagesEl) return;
+                var old = messagesEl.querySelector('.cp-history-control'); if (old) old.remove();
+                if (!historyHasMore) return;
+                var holder = document.createElement('div'); holder.className = 'cp-history-control';
+                var button = document.createElement('button'); button.type = 'button'; button.className = 'cp-load-older';
+                button.disabled = historyLoading; button.textContent = historyLoading ? 'Memuat riwayat...' : 'Muat pesan lebih lama';
+                holder.appendChild(button); messagesEl.insertBefore(holder, messagesEl.firstChild);
+            }
             function rSB() { if (!sendBtn || !inp) return; sendBtn.disabled = sending || !inp.value.trim() || inp.value.length > MAX_LEN }
             function uB() { if (!badge) return; badge.textContent = unread > 9 ? '9+' : unread; if (unread > 0) badge.classList.add('visible'); else badge.classList.remove('visible') }
 
@@ -2741,14 +2891,17 @@
                 if (!ids.length) return;
                 fetch(URL_REACTIONS + '?message_ids=' + encodeURIComponent(ids.join(',')), { headers: { 'Accept': 'application/json' } })
                     .then(function (response) { if (!response.ok) throw new Error(response.status); return response.json() })
-                    .then(function (data) { var map = data.reactions || {}; for (var j = 0; j < ids.length; j++) renderReactionsForMessage(ids[j], map[ids[j]] || []) })
+                    .then(function (data) {
+                        var map = data.reactions || {}; for (var j = 0; j < ids.length; j++) renderReactionsForMessage(ids[j], map[ids[j]] || []);
+                        var updates = data.message_updates || []; for (var k = 0; k < updates.length; k++) applyMessageUpdate(updates[k]);
+                    })
                     .catch(function () { });
             }
 
             function messageDataFromWrap(wrap) {
                 if (!wrap) return null;
                 var avatar = wrap.querySelector('.msg-av'), bubble = wrap.querySelector('.msg-bubble');
-                return { id: parseInt(wrap.getAttribute('data-msg-id')), isMe: wrap.classList.contains('mine'), preview: bubble ? bubble.textContent.substring(0, 60) : '', name: avatar ? avatar.title : '', uid: wrap.getAttribute('data-uid') || '' };
+                return { id: parseInt(wrap.getAttribute('data-msg-id')), isMe: wrap.classList.contains('mine'), canEdit: wrap.getAttribute('data-can-edit') === '1', preview: bubble ? bubble.textContent.substring(0, 60) : '', fullMessage: bubble ? (bubble.getAttribute('data-full-message') || bubble.textContent) : '', name: avatar ? avatar.title : '', uid: wrap.getAttribute('data-uid') || '' };
             }
 
             if (ctxReactions) {
@@ -2757,10 +2910,11 @@
                 }
             }
 
-            function showCtx(x, y, data) { ctxMsgData = data; ctxMenu.style.display = 'block'; var r = ctxMenu.getBoundingClientRect(); if (x + r.width > window.innerWidth - 8) x = window.innerWidth - r.width - 8; if (y + r.height > window.innerHeight - 8) y -= r.height + 8; if (x < 8) x = 8; if (y < 8) y = 8; ctxMenu.style.left = x + 'px'; ctxMenu.style.top = y + 'px'; var cm = document.getElementById('ctxMention'); if (cm) cm.style.display = data.isMe ? 'none' : 'flex'; var cd = document.getElementById('ctxDelete'); if (cd) cd.style.display = data.isMe ? 'flex' : 'none' }
+            function showCtx(x, y, data) { ctxMsgData = data; ctxMenu.style.display = 'block'; var r = ctxMenu.getBoundingClientRect(); if (x + r.width > window.innerWidth - 8) x = window.innerWidth - r.width - 8; if (y + r.height > window.innerHeight - 8) y -= r.height + 8; if (x < 8) x = 8; if (y < 8) y = 8; ctxMenu.style.left = x + 'px'; ctxMenu.style.top = y + 'px'; var cm = document.getElementById('ctxMention'); if (cm) cm.style.display = data.isMe ? 'none' : 'flex'; var ce = document.getElementById('ctxEdit'); if (ce) ce.style.display = data.isMe && data.canEdit ? 'flex' : 'none'; var cd = document.getElementById('ctxDelete'); if (cd) cd.style.display = data.isMe ? 'flex' : 'none' }
             function hideCtx() { ctxMenu.style.display = 'none'; ctxMsgData = null }
             document.addEventListener('click', function (e) { if (ctxMenu.style.display === 'block' && !ctxMenu.contains(e.target)) hideCtx() });
             document.getElementById('ctxReply').addEventListener('click', function (e) { e.stopPropagation(); if (!ctxMsgData) return; doStartReply(ctxMsgData.id, ctxMsgData.preview, ctxMsgData.name); hideCtx() });
+            document.getElementById('ctxEdit').addEventListener('click', function (e) { e.stopPropagation(); if (!ctxMsgData) return; var data = ctxMsgData; hideCtx(); doEdit(data) });
             document.getElementById('ctxMention').addEventListener('click', function (e) { e.stopPropagation(); if (!ctxMsgData) return; getAllUsers().then(function () { insertMention(ctxMsgData.uid, ctxMsgData.name) }); hideCtx() });
             document.getElementById('ctxDelete').addEventListener('click', function (e) { e.stopPropagation(); if (!ctxMsgData) return; var id = ctxMsgData.id; hideCtx(); doDelete(id) });
 
@@ -2771,6 +2925,7 @@
                 messagesEl.addEventListener('touchend', function () { clearTimeout(lpTimer) }, { passive: true });
                 messagesEl.addEventListener('touchmove', function () { clearTimeout(lpTimer) }, { passive: true });
                 messagesEl.addEventListener('click', function (e) {
+                    var older = e.target.closest('.cp-load-older'); if (older) { e.stopPropagation(); loadOlderMessages(); return }
                     var db = e.target.closest('.msg-del'); if (db) { e.stopPropagation(); doDelete(parseInt(db.getAttribute('data-del-id'))); return }
                     var ck = e.target.closest('.msg-checks'); if (ck) { e.stopPropagation(); toggleReadPopup(ck, parseInt(ck.getAttribute('data-check-id'))); return }
                     var reaction = e.target.closest('.msg-reaction'); if (reaction) { e.stopPropagation(); doReact(parseInt(reaction.getAttribute('data-reaction-id')), reaction.getAttribute('data-reaction-emoji')); return }
@@ -2806,17 +2961,50 @@
             function renderMentionText(text, mp) { var html = eH(text); if (!mp || !mp.length) return html; var hasAll = false; for (var i = 0; i < mp.length; i++) { if (mp[i].id === 'all') { hasAll = true; continue } var name = mp[i].name || ''; if (name) { var esc = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); html = html.replace(new RegExp('@' + esc, 'g'), '<span class="mention-hl">@' + eH(name) + '</span>') } } if (hasAll) html = html.replace(/@(Semua|semua)/gi, '<span class="mention-all-hl">@$1</span>'); return html }
             function amMentioned(mp) { if (!mp || !mp.length) return false; for (var i = 0; i < mp.length; i++) { if (mp[i].id === 'all') return true; if (String(mp[i].id) === String(MY_ID)) return true } return false }
 
-            function appendMsg(m) {
+            function createShareCard(data) {
+                if (!data || !data.label) return null;
+                var card = document.createElement('div'); card.className = 'msg-share-card';
+                var head = document.createElement('div'); head.className = 'msg-share-head';
+                var label = document.createElement('span'); label.className = 'msg-share-label'; label.textContent = data.label;
+                var number = document.createElement('span'); number.className = 'msg-share-number'; number.textContent = data.number || '-'; number.title = data.number || '-';
+                head.appendChild(label); head.appendChild(number); card.appendChild(head);
+                var title = document.createElement('div'); title.className = 'msg-share-title'; title.textContent = data.title || 'Data pengadaan'; card.appendChild(title);
+                var fields = document.createElement('div'); fields.className = 'msg-share-fields';
+                for (var i = 0; i < (data.fields || []).length; i++) {
+                    var field = data.fields[i], item = document.createElement('div');
+                    var fieldLabel = document.createElement('span'); fieldLabel.className = 'msg-share-field-label'; fieldLabel.textContent = field.label || '';
+                    var fieldValue = document.createElement('span'); fieldValue.className = 'msg-share-field-value'; fieldValue.textContent = field.value || '-'; fieldValue.title = field.value || '-';
+                    item.appendChild(fieldLabel); item.appendChild(fieldValue); fields.appendChild(item);
+                }
+                card.appendChild(fields); return card;
+            }
+
+            function applyMessageUpdate(message) {
+                if (!messagesEl || !message) return;
+                var wrap = messagesEl.querySelector('.msg-wrap[data-msg-id="' + message.id + '"]'); if (!wrap) return;
+                var bubble = wrap.querySelector('.msg-bubble'); if (bubble) {
+                    bubble.innerHTML = renderMentionText(message.message || '', message.mentions_parsed || []);
+                    bubble.setAttribute('data-preview', (message.message || '').substring(0, 60));
+                    bubble.setAttribute('data-full-message', message.message || '');
+                }
+                var meta = wrap.querySelector('.msg-meta'), edited = wrap.querySelector('.msg-edited');
+                if (message.edited_at && meta && !edited) { edited = document.createElement('span'); edited.className = 'msg-edited'; edited.textContent = 'diedit'; meta.insertBefore(edited, meta.firstChild ? meta.firstChild.nextSibling : null) }
+                if (Object.prototype.hasOwnProperty.call(message, 'can_edit')) wrap.setAttribute('data-can-edit', message.can_edit ? '1' : '0');
+            }
+
+            function appendMsg(m, prepend) {
                 if (!messagesEl) return; var isMe = String(m.user_id) === String(MY_ID), time = ''; try { time = new Date(m.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) } catch (e) { }
                 var wr = document.createElement('div'); wr.className = 'msg-wrap' + (isMe ? ' mine' : '');
                 if (amMentioned(m.mentions_parsed) && !isMe) wr.classList.add('mentioned-me');
-                wr.setAttribute('data-msg-id', m.id); wr.setAttribute('data-uid', m.user_id || '');
+                wr.setAttribute('data-msg-id', m.id); wr.setAttribute('data-uid', m.user_id || ''); wr.setAttribute('data-can-edit', m.can_edit ? '1' : '0');
                 var av = document.createElement('div'); av.className = 'msg-av'; av.style.background = m.user_color || '#6366f1'; av.title = m.user_name || ''; av.textContent = m.user_initials || '??';
                 var bd = document.createElement('div'); bd.className = 'msg-body';
                 if (!isMe) { var sn = document.createElement('div'); sn.className = 'msg-sender'; sn.textContent = m.user_name || ''; bd.appendChild(sn) }
                 if (m.reply_to) { var rp = document.createElement('div'); rp.className = 'msg-reply'; rp.innerHTML = '<span class="msg-reply-author">' + eH(m.reply_user || 'Seseorang') + '</span><br>' + eH(m.reply_preview || ''); bd.appendChild(rp) }
-                var bb = document.createElement('div'); bb.className = 'msg-bubble'; bb.innerHTML = renderMentionText(m.message, m.mentions_parsed); bb.setAttribute('data-msg-id', m.id); bb.setAttribute('data-preview', (m.message || '').substring(0, 60)); bb.setAttribute('data-name', m.user_name || ''); bd.appendChild(bb);
+                var shareCard = createShareCard(m.share_data_parsed); if (shareCard) bd.appendChild(shareCard);
+                var bb = document.createElement('div'); bb.className = 'msg-bubble'; bb.innerHTML = renderMentionText(m.message, m.mentions_parsed); bb.setAttribute('data-msg-id', m.id); bb.setAttribute('data-preview', (m.message || '').substring(0, 60)); bb.setAttribute('data-full-message', m.message || ''); bb.setAttribute('data-name', m.user_name || ''); bd.appendChild(bb);
                 var mt = document.createElement('div'); mt.className = 'msg-meta'; var ts = document.createElement('span'); ts.className = 'msg-time'; ts.textContent = time; mt.appendChild(ts);
+                if (m.edited_at) { var edited = document.createElement('span'); edited.className = 'msg-edited'; edited.textContent = 'diedit'; mt.appendChild(edited) }
                 var reactAdd = document.createElement('button'); reactAdd.type = 'button'; reactAdd.className = 'msg-react-add'; reactAdd.title = 'Beri reaksi'; reactAdd.textContent = '\u263A'; mt.appendChild(reactAdd);
                 if (isMe) {
                     var rc = parseInt(m.read_count) || 0;
@@ -2824,7 +3012,9 @@
                     else { var ck2 = document.createElement('span'); ck2.className = 'msg-checks'; ck2.textContent = '\u2713'; mt.appendChild(ck2) }
                     var dl = document.createElement('button'); dl.type = 'button'; dl.className = 'msg-del'; dl.title = 'Hapus'; dl.textContent = '\u2715'; dl.setAttribute('data-del-id', m.id); mt.appendChild(dl);
                 }
-                bd.appendChild(mt); var reactions = document.createElement('div'); reactions.className = 'msg-reactions'; bd.appendChild(reactions); wr.appendChild(av); wr.appendChild(bd); messagesEl.appendChild(wr); renderReactionsForMessage(m.id, m.reactions || []);
+                bd.appendChild(mt); var reactions = document.createElement('div'); reactions.className = 'msg-reactions'; bd.appendChild(reactions); wr.appendChild(av); wr.appendChild(bd);
+                if (prepend) { var firstMessage = messagesEl.querySelector('.msg-wrap'); messagesEl.insertBefore(wr, firstMessage || null) } else messagesEl.appendChild(wr);
+                renderReactionsForMessage(m.id, m.reactions || []);
             }
 
             function doStartReply(id, preview, userName) { replyToId = id; replyUser = userName; var bar = document.getElementById('cpReplyBar'), txt = document.getElementById('cpReplyText'); if (txt) txt.innerHTML = 'Balas <strong>' + eH(userName.split(' ')[0]) + '</strong>: ' + eH(preview) + (preview.length >= 60 ? '\u2026' : ''); if (bar) bar.classList.add('visible'); if (inp) inp.focus() }
@@ -2837,10 +3027,13 @@
                 fetch(URL_MSGS + '?since=' + since, { headers: { 'Accept': 'application/json' } })
                     .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json() })
                     .then(function (data) {
-                        var msgs = data.messages; if (!msgs || !msgs.length) { if (initial) sE(true); return }
+                        var msgs = data.messages;
+                        if (initial) { historyHasMore = !!data.has_more; historyLoading = false }
+                        if (!msgs || !msgs.length) { if (initial) { messagesEl.innerHTML = ''; sE(true); renderHistoryControl() } return }
                         sE(false); var wasB = isNB();
                         if (initial) {
                             messagesEl.innerHTML = '';
+                            renderHistoryControl();
                             for (var i = 0; i < msgs.length; i++) appendMsg(msgs[i]);
 
                             /* ✅ FIX: Gunakan i_read dari database, bukan localStorage */
@@ -2881,6 +3074,27 @@
                     .catch(function () { });
             }
 
+            function loadOlderMessages() {
+                if (!messagesEl || historyLoading || !historyHasMore) return;
+                var first = messagesEl.querySelector('.msg-wrap[data-msg-id]'); if (!first) return;
+                historyLoading = true; renderHistoryControl();
+                var before = first.getAttribute('data-msg-id'), previousHeight = messagesEl.scrollHeight, previousTop = messagesEl.scrollTop;
+                fetch(URL_MSGS + '?before=' + encodeURIComponent(before), { headers: { 'Accept': 'application/json' } })
+                    .then(function (response) { if (!response.ok) throw new Error(response.status); return response.json() })
+                    .then(function (data) {
+                        var older = data.messages || [];
+                        for (var i = older.length - 1; i >= 0; i--) {
+                            if (!messagesEl.querySelector('.msg-wrap[data-msg-id="' + older[i].id + '"]')) appendMsg(older[i], true);
+                        }
+                        historyHasMore = !!data.has_more;
+                        requestAnimationFrame(function () { messagesEl.scrollTop = previousTop + (messagesEl.scrollHeight - previousHeight) });
+                        var ids = []; for (var j = 0; j < older.length; j++) if (String(older[j].user_id) !== String(MY_ID)) ids.push(older[j].id);
+                        if (ids.length) markRead(ids);
+                    })
+                    .catch(function () { toast('Riwayat pesan gagal dimuat', 'error') })
+                    .finally(function () { historyLoading = false; renderHistoryControl() });
+            }
+
             function markRead(ids) { fetch(URL_READ, { method: 'POST', headers: { 'X-CSRF-TOKEN': CSRF, 'Content-Type': 'application/json', 'Accept': 'application/json' }, body: JSON.stringify({ message_ids: ids }) }).catch(function () { }) }
 
             function doSend() {
@@ -2893,6 +3107,38 @@
                     .catch(function (err) { if (err.message === '429') return; toast('Gagal mengirim', 'error') })
                     .finally(function () { sending = false; setSL(false); rSB() });
             }
+
+            function doEdit(data) {
+                if (!data || !data.canEdit) { toast('Batas edit pesan sudah berakhir', 'warning'); return }
+                swalActive = true;
+                Swal.fire({ title: 'Edit pesan', input: 'textarea', inputValue: data.fullMessage || '', inputAttributes: { maxlength: '500', 'aria-label': 'Isi pesan' }, showCancelButton: true, confirmButtonText: 'Simpan', cancelButtonText: 'Batal', confirmButtonColor: '#6366f1', inputValidator: function (value) { value = (value || '').trim(); if (!value) return 'Pesan tidak boleh kosong'; if (value.length > MAX_LEN) return 'Maksimal 500 karakter' }, background: document.documentElement.classList.contains('dark') ? '#1f2937' : '#fff', color: document.documentElement.classList.contains('dark') ? '#f3f4f6' : '#111827' })
+                    .then(function (result) {
+                        setTimeout(function () { swalActive = false }, 100); if (!result.isConfirmed) return;
+                        fetch(URL_DEL + data.id, { method: 'PATCH', headers: { 'X-CSRF-TOKEN': CSRF, 'Accept': 'application/json', 'Content-Type': 'application/json' }, body: JSON.stringify({ message: (result.value || '').trim() }) })
+                            .then(function (response) { return response.json().then(function (body) { if (!response.ok) throw new Error(body.error || 'Gagal mengedit pesan'); return body }) })
+                            .then(function (body) { applyMessageUpdate(body.message); toast('Pesan diperbarui', 'success') })
+                            .catch(function (error) { toast(error.message || 'Gagal mengedit pesan', 'error') });
+                    });
+            }
+
+            window.shareRecordToChat = function (type, id) {
+                var labels = { pr: 'PR', spph: 'SPPH', sp: 'SP' }, label = labels[type] || 'data';
+                swalActive = true;
+                Swal.fire({ title: 'Bagikan ' + label + ' ke Chat Tim?', text: 'Data akan dikirim sebagai kartu ringkas agar mudah dibaca.', icon: 'question', showCancelButton: true, confirmButtonText: 'Bagikan', cancelButtonText: 'Batal', confirmButtonColor: '#6366f1', background: document.documentElement.classList.contains('dark') ? '#1f2937' : '#fff', color: document.documentElement.classList.contains('dark') ? '#f3f4f6' : '#111827' })
+                    .then(function (result) {
+                        setTimeout(function () { swalActive = false }, 100); if (!result.isConfirmed) return;
+                        fetch(URL_SHARE, { method: 'POST', headers: { 'X-CSRF-TOKEN': CSRF, 'Accept': 'application/json', 'Content-Type': 'application/json' }, body: JSON.stringify({ type: type, id: id }) })
+                            .then(function (response) { return response.json().then(function (body) { if (!response.ok) throw new Error(body.error || 'Gagal membagikan data'); return body }) })
+                            .then(function (body) {
+                                if (chatOpen) {
+                                    sE(false); if (!messagesEl.querySelector('.msg-wrap[data-msg-id="' + body.message.id + '"]')) appendMsg(body.message);
+                                    chatMaxId = Math.max(chatMaxId, body.message.id); sBB();
+                                } else doToggle();
+                                toast(label + ' dibagikan ke Chat Tim', 'success');
+                            })
+                            .catch(function (error) { toast(error.message || 'Gagal membagikan data', 'error') });
+                    });
+            };
 
             function doDelete(id) {
                 swalActive = true;
