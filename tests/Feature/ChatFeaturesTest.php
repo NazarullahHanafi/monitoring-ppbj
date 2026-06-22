@@ -105,6 +105,8 @@ class ChatFeaturesTest extends TestCase
             ->assertSee('id="cpNotifyBtn"', false)
             ->assertSee('id="ctxReactions"', false)
             ->assertSee('id="cpSearchPanel"', false);
+
+        $this->assertFileExists(public_path('chat-notifications-sw.js'));
     }
 
     private function insertMessage(User $sender, string $message): int

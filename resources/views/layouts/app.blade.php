@@ -2430,7 +2430,7 @@
             var searchTimer = null, searchSequence = 0;
             var notifyEnabled = localStorage.getItem('chat_notify_' + MY_ID) === '1';
             var soundEnabled = localStorage.getItem('chat_sound_' + MY_ID) === '1';
-            var summaryInitialized = false, lastSummaryMessageId = 0, audioContext = null;
+            var summaryInitialized = false, lastSummaryMessageId = 0, audioContext = null, notificationWorkerPromise = null;
 
             /* ✅ Set pesan mention yang sudah dilihat (dari database i_read) */
             var seenMentionIds = {};
@@ -2514,13 +2514,20 @@
                 var active = notifyEnabled || soundEnabled;
                 notifyBtn.classList.toggle('notify-active', active);
                 notifyBtn.classList.toggle('active', active);
-                notifyBtn.title = active ? 'Notifikasi dan suara aktif' : 'Aktifkan notifikasi dan suara';
+                notifyBtn.title = notifyEnabled ? 'Tes notifikasi dan suara' : 'Aktifkan notifikasi dan suara';
             }
 
             function saveNotificationPreferences() {
                 localStorage.setItem('chat_notify_' + MY_ID, notifyEnabled ? '1' : '0');
                 localStorage.setItem('chat_sound_' + MY_ID, soundEnabled ? '1' : '0');
                 updateNotifyButton();
+            }
+
+            function registerNotificationWorker() {
+                if (!window.isSecureContext || !('serviceWorker' in navigator)) return;
+                notificationWorkerPromise = navigator.serviceWorker.register('/chat-notifications-sw.js')
+                    .then(function (registration) { return registration })
+                    .catch(function () { return null });
             }
 
             function playChatSound(force) {
@@ -2549,15 +2556,26 @@
 
             function showBrowserNotification(message) {
                 if (!notifyEnabled || !('Notification' in window) || Notification.permission !== 'granted') return;
-                try {
-                    var notification = new Notification(message.user_name || 'Chat Tim', {
-                        body: (message.message || 'Pesan baru').substring(0, 140),
-                        tag: 'team-chat-' + message.id,
-                        icon: '/images/logo4.png'
+                var title = message.user_name || 'Chat Tim';
+                var options = { body: (message.message || 'Pesan baru').substring(0, 140), tag: 'team-chat-' + message.id, icon: '/images/logo4.png', badge: '/images/logo4.png', data: { url: window.location.href } };
+                var fallback = function () {
+                    try {
+                        var notification = new Notification(title, options);
+                        notification.onclick = function () { window.focus(); notification.close(); if (!chatOpen) doToggle() };
+                        setTimeout(function () { notification.close() }, 7000);
+                    } catch (e) { }
+                };
+                if (notificationWorkerPromise) {
+                    notificationWorkerPromise.then(function (registration) {
+                        if (registration && registration.showNotification) registration.showNotification(title, options).catch(fallback);
+                        else fallback();
                     });
-                    notification.onclick = function () { window.focus(); notification.close(); if (!chatOpen) doToggle() };
-                    setTimeout(function () { notification.close() }, 7000);
-                } catch (e) { }
+                } else fallback();
+            }
+
+            function showNotificationTest() {
+                playChatSound(true);
+                showBrowserNotification({ id: 'test-' + Date.now(), user_name: 'Chat Tim', message: 'Notifikasi dan suara berhasil diaktifkan.' });
             }
 
             function handleSummaryNotification(message) {
@@ -2572,17 +2590,14 @@
             }
 
             function toggleNotifications() {
-                if (notifyEnabled || soundEnabled) {
-                    notifyEnabled = false; soundEnabled = false; saveNotificationPreferences();
-                    toast('Notifikasi chat dimatikan', 'info'); return;
-                }
+                if (notifyEnabled) { showNotificationTest(); toast('Notifikasi tes dikirim', 'success'); return }
                 soundEnabled = true; playChatSound(true);
                 if (!('Notification' in window)) {
                     notifyEnabled = false; saveNotificationPreferences();
                     toast('Suara aktif. Browser ini tidak mendukung notifikasi.', 'info'); return;
                 }
                 if (Notification.permission === 'granted') {
-                    notifyEnabled = true; saveNotificationPreferences(); toast('Notifikasi dan suara aktif', 'success'); return;
+                    notifyEnabled = true; saveNotificationPreferences(); showNotificationTest(); toast('Notifikasi tes dikirim', 'success'); return;
                 }
                 if (Notification.permission === 'denied') {
                     notifyEnabled = false; saveNotificationPreferences();
@@ -2590,7 +2605,8 @@
                 }
                 Notification.requestPermission().then(function (permission) {
                     notifyEnabled = permission === 'granted'; saveNotificationPreferences();
-                    toast(notifyEnabled ? 'Notifikasi dan suara aktif' : 'Izin ditolak; suara tetap aktif.', notifyEnabled ? 'success' : 'warning');
+                    if (notifyEnabled) showNotificationTest();
+                    toast(notifyEnabled ? 'Notifikasi tes dikirim' : 'Izin ditolak; suara tetap aktif.', notifyEnabled ? 'success' : 'warning');
                 });
             }
 
@@ -2628,7 +2644,9 @@
             }
 
             updateNotifyButton();
+            registerNotificationWorker();
             document.addEventListener('pointerdown', unlockChatAudio, { once: true });
+            if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', function (event) { if (event.data && event.data.type === 'OPEN_TEAM_CHAT' && !chatOpen) doToggle() });
 
             function getAllUsers() {
                 if (allUsersLoaded) return Promise.resolve(allUsersLoaded);
