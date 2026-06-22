@@ -349,6 +349,8 @@ Route::middleware(['auth'])->group(function () {
 
         Route::get('/torpr/{id}/json', [TorprController::class, 'showJson'])
             ->name('torpr.json');
+        Route::get('/torpr/{id}/archive', [TorprController::class, 'archiveStatus'])
+            ->name('torpr.archive');
 
         Route::post('/torpr/{id}/resubmit', [TorprController::class, 'resubmitRejectedPr'])->name('torpr.resubmit');
 

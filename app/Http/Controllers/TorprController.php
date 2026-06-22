@@ -13,6 +13,7 @@ use Illuminate\Database\QueryException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use App\Services\NotificationService;
+use App\Services\PrArchiveService;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use App\Models\User;
@@ -646,6 +647,20 @@ class TorprController extends Controller
         });
 
         return response()->json($data, 200, [], JSON_UNESCAPED_UNICODE);
+    }
+
+    public function archiveStatus(Request $request, $id, PrArchiveService $archiveService)
+    {
+        $torpr = Torpr::select(['id', 'nomor_pr'])->findOrFail($id);
+        $archive = $archiveService->findByPrNumber(
+            $torpr->nomor_pr,
+            $request->boolean('refresh')
+        );
+
+        return response()->json(array_merge([
+            'pr_id' => $torpr->id,
+            'nomor_pr' => $torpr->nomor_pr,
+        ], $archive), 200, [], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     }
 
     public function requestReceipt(Request $request, $id, NotificationService $notificationService)
