@@ -160,7 +160,7 @@ class PrArchiveIntegrationTest extends TestCase
         $this->assertStringContainsString('data-archive-status', $ppbjView);
         $this->assertStringContainsString('id="detailArchiveCard"', $ppbjView);
         $this->assertStringContainsString('/ppbj/${id}/archive', $ppbjView);
-        $this->assertStringContainsString('Buka PDF', $ppbjView);
+        $this->assertStringContainsString('Lihat PDF', $ppbjView);
         $this->assertStringContainsString('Lokasi fisik:', $ppbjView);
         $this->assertStringNotContainsString('data-archive-status', $torprView);
         $this->assertStringNotContainsString('/torpr/${id}/archive', $torprView);
