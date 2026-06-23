@@ -1653,7 +1653,8 @@
                             <div class="search-input-wrap">
                                 <span class="search-ic"><i class="fas fa-search"></i></span>
                                 <input type="text" id="qInput" name="q" value="{{ $keyword }}"
-                                    placeholder="Masukkan Nomor PR (contoh: 0021/26)" class="search-input" autofocus>
+                                    placeholder="Masukkan Nomor PR atau PPBJ (contoh: PKB/PR-25/CON/0825)"
+                                    class="search-input" autofocus>
                                 <div id="suggestBox" class="hidden">
                                     <div id="suggestList"></div>
                                     <div id="suggestHint" class="suggest-hint">Ketik minimal 2 karakter...</div>
@@ -1666,8 +1667,8 @@
                     </form>
                     <div class="chips-row">
                         <span class="chip-label">Contoh:</span>
-                        <button type="button" onclick="searchPr('0021/26')" class="chip chip-c">0021/26</button>
-                        <button type="button" onclick="searchPr('PR-2024-001')" class="chip chip-v">PR-2024-001</button>
+                        <button type="button" onclick="searchPr('PKB/PR')" class="chip chip-c">PKB/PR</button>
+                        <button type="button" onclick="searchPr('CON')" class="chip chip-v">CON</button>
                         <button type="button" onclick="toggleModal()" class="btn-info">
                             <span class="info-ping"></span>
                             <i class="fas fa-lightbulb"></i> Info Progress
@@ -1678,21 +1679,243 @@
         </section>
 
         {{-- ═══ NOT FOUND ═══ --}}
-        @if($keyword && !$row)
+        @if($keyword && !$row && !$ppbj)
             <section class="result-section">
                 <div class="wrap">
-                    <div class="not-found sr">
-                        <div class="nf-ic"><i class="fas fa-search"></i></div>
-                        <h3>PR Tidak Ditemukan</h3>
-                        <p>PR dengan nomor <strong style="color:var(--text)">{{ $keyword }}</strong> tidak ditemukan dalam
-                            sistem.<br>Pastikan nomor PR sudah benar atau hubungi admin.</p>
+                    @if($likeResults && count($likeResults) > 1)
+                        <div class="not-found sr" style="max-width:760px;text-align:left">
+                            <div style="display:flex;gap:16px;align-items:flex-start;margin-bottom:18px">
+                                <div class="nf-ic" style="width:52px;height:52px;font-size:1.1rem"><i class="fas fa-list"></i></div>
+                                <div>
+                                    <h3 style="margin-bottom:6px">{{ count($likeResults) }} Hasil Ditemukan</h3>
+                                    <p>Nomor <strong style="color:var(--text)">{{ $keyword }}</strong> cocok dengan beberapa data.
+                                        Pilih salah satu nomor PR/PPBJ di bawah ini.</p>
+                                </div>
+                            </div>
+                            <div style="display:grid;gap:10px">
+                                @foreach($likeResults as $item)
+                                    <a href="{{ route('landing.track', ['q' => $item['nomor']]) }}"
+                                        style="display:flex;align-items:center;justify-content:space-between;gap:14px;padding:14px 16px;border:1px solid var(--border);border-radius:14px;background:rgba(255,255,255,.035);text-decoration:none;color:var(--text)">
+                                        <span style="min-width:0">
+                                            <span
+                                                style="display:inline-flex;margin-right:9px;padding:3px 8px;border-radius:999px;font-size:.66rem;font-weight:800;letter-spacing:.08em;background:{{ $item['type'] === 'pr' ? 'rgba(34,211,238,.16)' : 'rgba(139,92,246,.18)' }};color:{{ $item['type'] === 'pr' ? 'var(--cyan)' : 'var(--violet)' }}">
+                                                {{ $item['type_label'] }}
+                                            </span>
+                                            <strong>{{ $item['nomor'] }}</strong>
+                                            <small style="display:block;color:var(--muted);margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+                                                {{ Str::limit($item['tujuan'], 74) }}
+                                            </small>
+                                        </span>
+                                        <i class="fas fa-arrow-right" style="color:var(--cyan)"></i>
+                                    </a>
+                                @endforeach
+                            </div>
+                        </div>
+                    @else
+                        <div class="not-found sr">
+                            <div class="nf-ic"><i class="fas fa-search"></i></div>
+                            <h3>Data Tidak Ditemukan</h3>
+                            <p>Nomor <strong style="color:var(--text)">{{ $keyword }}</strong> tidak ditemukan dalam
+                                data PR maupun PPBJ.<br>Pastikan nomor sudah benar atau pilih dari saran pencarian.</p>
+                        </div>
+                    @endif
+                </div>
+            </section>
+        @endif
+
+        {{-- ═══ PPBJ RESULT ═══ --}}
+        @if($ppbj && $sourceType === 'ppbj')
+            @php
+                $fmtDate = function ($date, $format = 'd M Y') {
+                    if (!$date) return '-';
+                    try {
+                        if ($date instanceof \Carbon\Carbon) return $date->format($format);
+                        return \Carbon\Carbon::parse($date)->format($format);
+                    } catch (\Exception $e) {
+                        return '-';
+                    }
+                };
+
+                $progress = (int) ($ppbj->progres ?? 0);
+                $events = [];
+
+                $events[] = [
+                    'time' => $fmtDate($ppbj->tgl_ppbj ?: $ppbj->created_at, 'd M Y H:i'),
+                    'title' => 'PPBJ Dibuat',
+                    'desc' => 'PPBJ dibuat oleh: <strong>' . e($ppbj->createdBy?->name ?? 'Bagian Umum') . '</strong>'
+                        . ($ppbj->tgl_terima_pr ? '<br><strong>PR diterima:</strong> ' . $fmtDate($ppbj->tgl_terima_pr) : '')
+                        . ($ppbj->tgl_diserahkan ? '<br><strong>Diserahkan:</strong> ' . $fmtDate($ppbj->tgl_diserahkan) : ''),
+                    'icon' => 'fa-clipboard-check',
+                    'type' => 'done',
+                ];
+
+                if ($ppbj->uraian) {
+                    $events[] = [
+                        'time' => '-',
+                        'title' => 'Uraian Kebutuhan',
+                        'desc' => nl2br(e($ppbj->uraian)),
+                        'icon' => 'fa-align-left',
+                        'type' => 'done',
+                    ];
+                }
+
+                $steps = [
+                    ['SPPH / RFQ', $ppbj->spph_rfq_1, $ppbj->tgl_spph, 'fa-envelope-open-text'],
+                    ['SPH', $ppbj->sph, $ppbj->tgl_sph, 'fa-file-invoice'],
+                    ['Awarding SP', $ppbj->awarding_sp, $ppbj->tgl_awarding_sp, 'fa-award'],
+                    ['SP / SPK', $ppbj->tgl_spk ? 'SP/SPK terbit' : null, $ppbj->tgl_spk, 'fa-file-signature'],
+                    ['BPG / Selesai', $ppbj->bpg_no, $ppbj->tgl_bpg, 'fa-check-double'],
+                ];
+
+                foreach ($steps as $idx => $step) {
+                    [$title, $value, $date, $icon] = $step;
+                    if (!$value) continue;
+
+                    $desc = '<strong>Nomor/Data:</strong> ' . e($value);
+                    if ($idx === 3 && $ppbj->nilai_sp_spk) {
+                        $desc .= '<br><strong>Nilai SP/SPK:</strong> Rp ' . number_format($ppbj->nilai_sp_spk, 0, ',', '.');
+                    }
+                    if ($idx === 4 && $ppbj->nilai_bpg) {
+                        $desc .= '<br><strong>Nilai BPG:</strong> Rp ' . number_format($ppbj->nilai_bpg, 0, ',', '.');
+                    }
+
+                    $events[] = [
+                        'time' => $fmtDate($date),
+                        'title' => $title,
+                        'desc' => $desc,
+                        'icon' => $icon,
+                        'type' => 'done',
+                    ];
+                }
+
+                if (($ppbj->status ?? 'ACTIVE') === 'CANCELLED') {
+                    $events[] = [
+                        'time' => $fmtDate($ppbj->updated_at, 'd M Y H:i'),
+                        'title' => 'PPBJ Dibatalkan',
+                        'desc' => '<strong>Alasan:</strong> ' . e($ppbj->cancel_reason ?? 'Tidak ada alasan'),
+                        'icon' => 'fa-times-circle',
+                        'type' => 'reject',
+                    ];
+                } elseif ($progress < 100) {
+                    $events[] = [
+                        'time' => '-',
+                        'title' => 'Masih Berproses',
+                        'desc' => '<strong>Progress:</strong> ' . $progress . '%'
+                            . ($ppbj->sisa_target_sla !== null ? '<br><strong>Sisa target:</strong> ' . ($ppbj->sisa_target_sla >= 0 ? $ppbj->sisa_target_sla . ' hari' : 'Terlambat ' . abs($ppbj->sisa_target_sla) . ' hari') : ''),
+                        'icon' => 'fa-spinner',
+                        'type' => ($ppbj->sisa_target_sla ?? 0) < 0 ? 'reject' : 'wait',
+                    ];
+                }
+            @endphp
+
+            <section class="result-section">
+                <div class="wrap">
+                    <div class="pr-card sr">
+                        <div class="pr-top">
+                            <div>
+                                <div class="pr-num-label">Nomor PPBJ / PR</div>
+                                <div class="pr-num">{{ $ppbj->ppbj_no }}</div>
+                            </div>
+                            <div class="pr-badge">
+                                <span class="pr-badge-dot"></span> {{ $ppbj->status_sla ?? $ppbj->status ?? 'ACTIVE' }}
+                            </div>
+                        </div>
+
+                        @if($ppbj->linked_pr)
+                            <div style="margin:-8px 0 18px;color:var(--muted);font-size:.86rem">
+                                Terhubung dengan data PR:
+                                <strong style="color:var(--cyan)">{{ $ppbj->linked_pr->nomor_pr }}</strong>
+                            </div>
+                        @endif
+
+                        <div style="margin-bottom:20px">
+                            <div style="display:flex;justify-content:space-between;gap:16px;margin-bottom:8px">
+                                <span style="font-size:.78rem;color:var(--muted);font-weight:700;letter-spacing:.08em;text-transform:uppercase">Progress PPBJ</span>
+                                <strong style="color:var(--cyan)">{{ $progress }}%</strong>
+                            </div>
+                            <div style="height:10px;border-radius:999px;background:rgba(255,255,255,.08);overflow:hidden">
+                                <div style="width:{{ min(100, max(0, $progress)) }}%;height:100%;border-radius:999px;background:linear-gradient(130deg,var(--cyan),var(--violet))"></div>
+                            </div>
+                        </div>
+
+                        <div class="pr-grid">
+                            <div class="pr-field">
+                                <div class="pr-field-label">Uraian</div>
+                                <div class="pr-field-val">{{ $ppbj->uraian ? Str::limit($ppbj->uraian, 110) : '-' }}</div>
+                            </div>
+                            <div class="pr-field">
+                                <div class="pr-field-label">Buyer</div>
+                                <div class="pr-field-val">{{ $ppbj->buyer ?? 'UMUM' }}</div>
+                            </div>
+                            <div class="pr-field">
+                                <div class="pr-field-label">Metode</div>
+                                <div class="pr-field-val">{{ $ppbj->metode_pengadaan ?? '-' }}</div>
+                            </div>
+                            <div class="pr-field">
+                                <div class="pr-field-label">Penyedia</div>
+                                <div class="pr-field-val">{{ $ppbj->penyedia_eksternal ?? '-' }}</div>
+                            </div>
+                            <div class="pr-field">
+                                <div class="pr-field-label">Total Sebelum PPN</div>
+                                <div class="pr-field-val" style="color:var(--cyan)">Rp
+                                    {{ number_format($ppbj->total_sebelum_ppn ?? 0, 0, ',', '.') }}</div>
+                            </div>
+                            <div class="pr-field">
+                                <div class="pr-field-label">Status</div>
+                                <div class="pr-field-val">{{ $ppbj->status ?? 'ACTIVE' }}</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="tl-card sr d1">
+                        <div class="tl-header">
+                            <div class="tl-header-ic"><i class="fas fa-history"></i></div>
+                            <h3>Timeline PPBJ</h3>
+                        </div>
+
+                        @foreach($events as $i => $event)
+                            @php
+                                $dotClass = match ($event['type']) { 'wait' => 'td-wait', 'reject' => 'td-reject', default => 'td-done'};
+                                $statClass = match ($event['type']) { 'wait' => 'ts-wait', 'reject' => 'ts-rej', default => 'ts-done'};
+                                $statText = match ($event['type']) { 'wait' => '<i class="fas fa-hourglass-half"></i> Dalam Proses', 'reject' => '<i class="fas fa-times"></i> Bermasalah', default => '<i class="fas fa-check"></i> Selesai'};
+                            @endphp
+                            <div class="tl-item" style="transition-delay:{{ $i * 0.09 }}s">
+                                <div class="tl-time">
+                                    <div class="tl-time-val">{{ $event['time'] }}</div>
+                                </div>
+                                <div class="tl-spine">
+                                    <div class="tl-dot {{ $dotClass }}">
+                                        <i class="fas {{ $event['icon'] }}"></i>
+                                    </div>
+                                    @if(!$loop->last)
+                                        <div class="tl-line"></div>
+                                    @endif
+                                </div>
+                                <div class="tl-body">
+                                    <div class="tl-body-inner">
+                                        <div class="tl-title">{{ $event['title'] }}</div>
+                                        <div class="tl-desc">{!! $event['desc'] !!}</div>
+                                        <span class="tl-status {{ $statClass }}">{!! $statText !!}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        @endforeach
+                    </div>
+
+                    <div class="action-row sr d2">
+                        <a href="{{ route('landing.track') }}" class="btn-sec btn-back">
+                            <i class="fas fa-arrow-left"></i> Cari Nomor Lain
+                        </a>
+                        <button onclick="window.print()" class="btn-sec btn-print">
+                            <i class="fas fa-print"></i> Print Timeline
+                        </button>
                     </div>
                 </div>
             </section>
         @endif
 
         {{-- ═══ RESULT ═══ --}}
-        @if($row)
+        @if($row && $sourceType === 'pr')
             @php
                 $events = [];
 
@@ -2078,12 +2301,14 @@
                 items.forEach(function (it, idx) {
                     var r = document.createElement('button');
                     r.type = 'button'; r.className = 'suggest-row' + (idx === ai ? ' active' : '');
-                    r.innerHTML = '<div class="suggest-pr">' + esc(it.nomor_pr) + '</div><div class="suggest-sub">' + esc(it.tujuan || '-') + '</div>';
+                    var nomor = it.nomor || it.nomor_pr || it.label || '';
+                    var label = it.source_label || it.type_label || 'PR';
+                    r.innerHTML = '<div class="suggest-pr"><span style="display:inline-flex;margin-right:8px;padding:2px 7px;border-radius:999px;font-size:.62rem;font-weight:800;background:rgba(34,211,238,.12);color:var(--cyan)">' + esc(label) + '</span>' + esc(nomor) + '</div><div class="suggest-sub">' + esc(it.tujuan || '-') + '</div>';
                     r.addEventListener('click', function () { sel(idx); });
                     list.appendChild(r);
                 });
             }
-            function sel(idx) { var it = items[idx]; if (!it) return; input.value = it.nomor_pr; close(); input.closest('form').submit(); }
+            function sel(idx) { var it = items[idx]; if (!it) return; input.value = it.nomor || it.nomor_pr || it.label || ''; close(); input.closest('form').submit(); }
             async function fetchS(q) {
                 try { var r = await fetch("{{ route('landing.track.suggest') }}" + "?q=" + encodeURIComponent(q), { headers: { 'Accept': 'application/json' } }); if (!r.ok) return []; var j = await r.json().catch(function () { return {}; }); return Array.isArray(j.items) ? j.items : []; } catch (e) { return []; }
             }
@@ -2092,7 +2317,7 @@
                 if (t) clearTimeout(t);
                 if (q.length < 2) { items = []; hint.textContent = 'Ketik minimal 2 karakter...'; render(); close(); return; }
                 hint.textContent = 'Mencari...'; open();
-                t = setTimeout(async function () { items = await fetchS(q); hint.textContent = items.length ? 'Pilih salah satu nomor PR.' : 'Tidak ada hasil.'; ai = -1; render(); open(); }, 300);
+                t = setTimeout(async function () { items = await fetchS(q); hint.textContent = items.length ? 'Pilih salah satu nomor PR/PPBJ.' : 'Tidak ada hasil.'; ai = -1; render(); open(); }, 300);
             });
             input.addEventListener('keydown', function (e) {
                 if (box.classList.contains('hidden')) return;

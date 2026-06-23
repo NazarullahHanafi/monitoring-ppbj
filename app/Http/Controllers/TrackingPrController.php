@@ -16,6 +16,16 @@ class TrackingPrController extends Controller
 
     public function index(Request $request)
     {
+        return view('tracking.index', $this->resolveTrackingData($request));
+    }
+
+    public function landing(Request $request)
+    {
+        return view('landing.track', $this->resolveTrackingData($request));
+    }
+
+    private function resolveTrackingData(Request $request): array
+    {
         $keyword = trim($request->get('q', ''));
         $row = null;
         $ppbj = null;
@@ -53,7 +63,7 @@ class TrackingPrController extends Controller
             }
         }
 
-        return view('tracking.index', compact('row', 'ppbj', 'keyword', 'sourceType', 'likeResults'));
+        return compact('row', 'ppbj', 'keyword', 'sourceType', 'likeResults');
     }
 
     private function parseDate($date): ?Carbon

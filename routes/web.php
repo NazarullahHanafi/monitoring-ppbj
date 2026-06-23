@@ -39,9 +39,9 @@ Route::get('/about', [LandingController::class, 'about'])->name('landing.about')
 Route::get('/services', [LandingController::class, 'services'])->name('landing.services');
 Route::get('/contact', [LandingController::class, 'contact'])->name('landing.contact');
 
-// Track PR (Public - No Login Required)
-Route::get('/track', [LandingController::class, 'trackPr'])->name('landing.track');
-Route::get('/track/suggest', [LandingController::class, 'suggestPr'])->name('landing.track.suggest');
+// Track PR/PPBJ (Public - No Login Required)
+Route::get('/track', [TrackingPrController::class, 'landing'])->name('landing.track');
+Route::get('/track/suggest', [TrackingPrController::class, 'suggest'])->name('landing.track.suggest');
 
 // Dashboard redirect sesuai dept
 Route::get('/home', function () {
