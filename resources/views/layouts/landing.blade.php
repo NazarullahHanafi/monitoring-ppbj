@@ -106,9 +106,10 @@
         width:36px; height:36px; border-radius:10px;
         background: linear-gradient(135deg,var(--cyan),var(--violet));
         display:flex; align-items:center; justify-content:center;
-        font-size:.85rem; color:#fff; flex-shrink:0;
+        padding:5px; overflow:hidden; flex-shrink:0;
         transition: transform .2s;
     }
+    .nav-logo-img { width:100%; height:100%; object-fit:contain; display:block; }
     .nav-logo:hover .nav-logo-ic { transform: scale(1.1) rotate(-5deg); }
     .nav-logo-name {
         font-family:'Montserrat',sans-serif; font-weight:700; font-size:1rem;
@@ -228,8 +229,9 @@
     .footer-logo-ic {
         width:36px; height:36px; border-radius:10px;
         background:linear-gradient(135deg,var(--cyan),var(--violet));
-        display:flex; align-items:center; justify-content:center; font-size:.85rem; color:#fff;
+        display:flex; align-items:center; justify-content:center; padding:5px; overflow:hidden;
     }
+    .footer-logo-img { width:100%; height:100%; object-fit:contain; display:block; }
     .footer-logo-name { font-family:'Montserrat',sans-serif; font-weight:700; font-size:1rem; color:#e2e8f0; }
     .footer-desc { font-size:.83rem; color:#94a3b8; line-height:1.7; max-width:240px; }
     .footer-col h4 {
@@ -271,7 +273,9 @@
 <nav class="nav-bar">
     <div class="nav-inner">
         <a href="{{ route('landing.index') }}" class="nav-logo">
-            <div class="nav-logo-ic"><i class="fas fa-box"></i></div>
+            <div class="nav-logo-ic">
+                <img src="{{ asset('images/logo4.png') }}" alt="Logo SIMON PR" class="nav-logo-img">
+            </div>
             <span class="nav-logo-name">SIMON PR</span>
         </a>
 
@@ -360,7 +364,9 @@
         <div class="footer-grid">
             <div>
                 <div class="footer-logo">
-                    <div class="footer-logo-ic"><i class="fas fa-box"></i></div>
+                    <div class="footer-logo-ic">
+                        <img src="{{ asset('images/logo4.png') }}" alt="Logo SIMON PR" class="footer-logo-img">
+                    </div>
                     <span class="footer-logo-name">SIMON PR</span>
                 </div>
                 <p class="footer-desc">Platform manajemen pengadaan barang dan jasa PT Cabang Pekanbaru yang efisien dan terintegrasi.</p>
