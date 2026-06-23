@@ -4,7 +4,7 @@
 
 @push('styles')
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
 
 <style>
 :root { --r: 16px; --green: #34d399; --amber: #fbbf24; }
@@ -12,14 +12,14 @@
 html { background: var(--bg) !important; }
 body {
     background: var(--bg) !important; color: var(--text);
-    font-family: 'DM Sans', sans-serif;
+    font-family: 'Montserrat', sans-serif;
     overflow-x: hidden; -webkit-font-smoothing: antialiased;
 }
 /* Kill any layout wrapper backgrounds */
 main, #main, .main-content, [role="main"],
 .layout-content, .page-content, .container-fluid,
 
-h1,h2,h3,h4 { font-family: 'Syne', sans-serif; }
+h1,h2,h3,h4 { font-family: 'Montserrat', sans-serif; }
 
 .dot-bg {
     position: fixed; inset: 0; z-index: 0; pointer-events: none;
@@ -137,7 +137,7 @@ h1,h2,h3,h4 { font-family: 'Syne', sans-serif; }
 .st { padding:36px 20px; text-align:center; border-right:1px solid var(--border); transition:background .2s; }
 .st:last-child{border-right:none;}
 .st:hover{background:var(--surface);}
-.st-n { font-family:'Syne',sans-serif; font-size:clamp(2rem,3vw,2.8rem); font-weight:800; line-height:1; margin-bottom:8px; }
+.st-n { font-family:'Montserrat',sans-serif; font-size:clamp(2rem,3vw,2.8rem); font-weight:800; line-height:1; margin-bottom:8px; }
 .cn{color:var(--cyan);}.cv{color:var(--violet);}.cg{color:var(--green);}.cp{color:#f472b6;}
 .st p { color:var(--muted); font-size:.8rem; }
 

@@ -9,7 +9,7 @@
     {{-- NO Tailwind CDN — all styling is custom CSS --}}
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
 
     {{-- Set theme BEFORE paint — prevents flash --}}
     <script>
@@ -58,7 +58,7 @@
     body {
         background: var(--bg);
         color: var(--text);
-        font-family: 'DM Sans', sans-serif;
+        font-family: 'Montserrat', sans-serif;
         overflow-x: hidden;
         -webkit-font-smoothing: antialiased;
         transition: background .35s ease, color .35s ease;
@@ -111,7 +111,7 @@
     }
     .nav-logo:hover .nav-logo-ic { transform: scale(1.1) rotate(-5deg); }
     .nav-logo-name {
-        font-family:'Syne',sans-serif; font-weight:700; font-size:1rem;
+        font-family:'Montserrat',sans-serif; font-weight:700; font-size:1rem;
         background: linear-gradient(130deg,var(--cyan),var(--violet));
         -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text;
         white-space:nowrap;
@@ -230,10 +230,10 @@
         background:linear-gradient(135deg,var(--cyan),var(--violet));
         display:flex; align-items:center; justify-content:center; font-size:.85rem; color:#fff;
     }
-    .footer-logo-name { font-family:'Syne',sans-serif; font-weight:700; font-size:1rem; color:#e2e8f0; }
+    .footer-logo-name { font-family:'Montserrat',sans-serif; font-weight:700; font-size:1rem; color:#e2e8f0; }
     .footer-desc { font-size:.83rem; color:#94a3b8; line-height:1.7; max-width:240px; }
     .footer-col h4 {
-        font-family:'Syne',sans-serif; font-size:.78rem; font-weight:700;
+        font-family:'Montserrat',sans-serif; font-size:.78rem; font-weight:700;
         letter-spacing:.1em; text-transform:uppercase; color:#e2e8f0; margin-bottom:16px;
     }
     .footer-col ul { list-style:none; }

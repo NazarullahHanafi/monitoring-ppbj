@@ -4,7 +4,7 @@
 
 @push('styles')
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
 
 <style>
 :root { --r: 16px; --green: #34d399; --amber: #fbbf24; }
@@ -12,14 +12,14 @@
 html { background: var(--bg) !important; }
 body {
     background: var(--bg) !important; color: var(--text);
-    font-family: 'DM Sans', sans-serif;
+    font-family: 'Montserrat', sans-serif;
     overflow-x: hidden; -webkit-font-smoothing: antialiased;
 }
 /* Kill any layout wrapper backgrounds */
 main, #main, .main-content, [role="main"],
 .layout-content, .page-content, .container-fluid,
 
-h1,h2,h3,h4 { font-family: 'Syne', sans-serif; }
+h1,h2,h3,h4 { font-family: 'Montserrat', sans-serif; }
 
 .dot-bg {
     position: fixed; inset: 0; z-index: 0; pointer-events: none;
@@ -145,7 +145,7 @@ h1,h2,h3,h4 { font-family: 'Syne', sans-serif; }
 .flow-dot {
     width:48px; height:48px; border-radius:50%; margin:0 auto 16px;
     display:flex; align-items:center; justify-content:center;
-    font-family:'Syne',sans-serif; font-size:.85rem; font-weight:800;
+    font-family:'Montserrat',sans-serif; font-size:.85rem; font-weight:800;
     border:2px solid; position:relative; background:var(--bg);
     transition: background .25s, color .25s;
 }

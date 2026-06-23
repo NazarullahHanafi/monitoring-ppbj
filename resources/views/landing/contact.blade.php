@@ -4,7 +4,7 @@
 
 @push('styles')
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
 
 <style>
 :root { --r: 16px; --green: #34d399; --amber: #fbbf24; }
@@ -12,14 +12,14 @@
 html { background: var(--bg) !important; }
 body {
     background: var(--bg) !important; color: var(--text);
-    font-family: 'DM Sans', sans-serif;
+    font-family: 'Montserrat', sans-serif;
     overflow-x: hidden; -webkit-font-smoothing: antialiased;
 }
 /* Kill any layout wrapper backgrounds */
 main, #main, .main-content, [role="main"],
 .layout-content, .page-content, .container-fluid,
 
-h1,h2,h3,h4 { font-family: 'Syne', sans-serif; }
+h1,h2,h3,h4 { font-family: 'Montserrat', sans-serif; }
 
 .dot-bg {
     position: fixed; inset: 0; z-index: 0; pointer-events: none;
@@ -111,7 +111,7 @@ h1,h2,h3,h4 { font-family: 'Syne', sans-serif; }
 .form-input {
     width: 100%; padding: 12px 16px;
     background: rgba(255,255,255,.04); border: 1px solid var(--border);
-    border-radius: 10px; color: var(--text); font-family: 'DM Sans', sans-serif;
+    border-radius: 10px; color: var(--text); font-family: 'Montserrat', sans-serif;
     font-size: .93rem; outline: none;
     transition: border-color .2s, background .2s;
 }
@@ -124,7 +124,7 @@ textarea.form-input { resize: vertical; min-height: 110px; }
 .btn-submit {
     width: 100%; padding: 14px;
     background: linear-gradient(130deg, var(--cyan), var(--violet));
-    color: #fff; font-family: 'Syne', sans-serif; font-size: .95rem; font-weight: 700;
+    color: #fff; font-family: 'Montserrat', sans-serif; font-size: .95rem; font-weight: 700;
     border: none; border-radius: 12px; cursor: pointer;
     letter-spacing: .02em; transition: opacity .2s, transform .2s;
     display: flex; align-items: center; justify-content: center; gap: 10px;

@@ -82,7 +82,7 @@
         h2,
         h3,
         h4 {
-            font-family: 'Syne', sans-serif;
+            font-family: 'Montserrat', sans-serif;
             color: var(--text);
         }
 
@@ -372,7 +372,7 @@
         }
 
         .ms-n {
-            font-family: 'Syne', sans-serif;
+            font-family: 'Montserrat', sans-serif;
             font-size: 1.5rem;
             font-weight: 800;
             background: linear-gradient(130deg, var(--cyan), var(--violet));
@@ -526,7 +526,7 @@
         }
 
         .fc-num {
-            font-family: 'Syne', sans-serif;
+            font-family: 'Montserrat', sans-serif;
             font-size: .72rem;
             font-weight: 700;
             letter-spacing: .12em;
@@ -604,7 +604,7 @@
         }
 
         .sg-n {
-            font-family: 'Syne', sans-serif;
+            font-family: 'Montserrat', sans-serif;
             font-size: clamp(2rem, 3.5vw, 3rem);
             font-weight: 800;
             line-height: 1;
@@ -695,7 +695,7 @@
         }
 
         .step h4 {
-            font-family: 'Syne', sans-serif;
+            font-family: 'Montserrat', sans-serif;
             font-size: .95rem;
             font-weight: 700;
             margin-bottom: 5px;

@@ -4,7 +4,7 @@
 
 @push('styles')
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@300;400;500&display=swap"
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700;800;900&display=swap"
         rel="stylesheet">
 
     <style>
@@ -30,7 +30,7 @@
         body {
             background: var(--bg) !important;
             color: var(--text);
-            font-family: 'DM Sans', sans-serif;
+            font-family: 'Montserrat', sans-serif;
             overflow-x: hidden;
             -webkit-font-smoothing: antialiased;
         }
@@ -50,7 +50,7 @@
         h2,
         h3,
         h4 {
-            font-family: 'Syne', sans-serif;
+            font-family: 'Montserrat', sans-serif;
         }
 
         /* Dot BG */
@@ -233,7 +233,7 @@
             border: 1px solid var(--border);
             border-radius: 12px;
             color: var(--text);
-            font-family: 'DM Sans', sans-serif;
+            font-family: 'Montserrat', sans-serif;
             font-size: .95rem;
             outline: none;
             transition: border-color .2s, background .2s;
@@ -252,7 +252,7 @@
             padding: 14px 28px;
             border-radius: 12px;
             font-weight: 700;
-            font-family: 'Syne', sans-serif;
+            font-family: 'Montserrat', sans-serif;
             font-size: .93rem;
             color: #fff;
             border: none;
@@ -300,7 +300,7 @@
             border-bottom: 1px solid var(--border);
             background: transparent;
             color: var(--text);
-            font-family: 'DM Sans', sans-serif;
+            font-family: 'Montserrat', sans-serif;
             cursor: pointer;
             transition: background .15s;
             display: block;
@@ -465,7 +465,7 @@
             right: 28px;
             top: 50%;
             transform: translateY(-50%);
-            font-family: 'Syne', sans-serif;
+            font-family: 'Montserrat', sans-serif;
             font-weight: 800;
             font-size: 6rem;
             line-height: 1;
@@ -751,7 +751,7 @@
             cursor: pointer;
             border: none;
             transition: background .2s, transform .2s;
-            font-family: 'DM Sans', sans-serif;
+            font-family: 'Montserrat', sans-serif;
         }
 
         .btn-back {
@@ -846,7 +846,7 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            font-family: 'Syne', sans-serif;
+            font-family: 'Montserrat', sans-serif;
             font-weight: 800;
             font-size: 1rem;
         }
@@ -1238,7 +1238,7 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            font-family: 'Syne', sans-serif;
+            font-family: 'Montserrat', sans-serif;
             font-weight: 800;
             font-size: .88rem;
         }
@@ -1335,7 +1335,7 @@
             width: 100%;
             padding: 13px;
             border-radius: 12px;
-            font-family: 'Syne', sans-serif;
+            font-family: 'Montserrat', sans-serif;
             font-weight: 700;
             font-size: .95rem;
             cursor: pointer;
@@ -1922,7 +1922,7 @@
                             style="font-size:.72rem;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--cyan);margin-bottom:10px">
                             Panduan</div>
                         <h2 class="sr d1"
-                            style="font-family:'Syne',sans-serif;font-size:clamp(1.6rem,2.5vw,2.2rem);font-weight:800;letter-spacing:-.025em;margin-bottom:0">
+                            style="font-family:'Montserrat',sans-serif;font-size:clamp(1.6rem,2.5vw,2.2rem);font-weight:800;letter-spacing:-.025em;margin-bottom:0">
                             Cara Tracking PR</h2>
                     </div>
                     <div class="how-grid">
