@@ -58,6 +58,13 @@ class PrArchiveIntegrationTest extends TestCase
                         'id' => 10,
                         'nama_dokumen' => 'Scan Purchase Request',
                         'type' => 'PDF',
+                        'location' => [
+                            'label' => 'Rak Arsip 01 > Tingkat 2 > Box 5',
+                            'rak' => 'Rak Arsip 01',
+                            'tingkat' => 2,
+                            'box' => 5,
+                            'box_code' => 'R01-T02-B005',
+                        ],
                         'download_url' => '/documents/10/download',
                     ],
                     [
@@ -81,6 +88,10 @@ class PrArchiveIntegrationTest extends TestCase
                 'documents' => [
                     [
                         'name' => 'Scan Purchase Request',
+                        'location' => [
+                            'label' => 'Rak Arsip 01 > Tingkat 2 > Box 5',
+                            'box_code' => 'R01-T02-B005',
+                        ],
                         'download_url' => 'https://arsip.example.test/documents/10/download',
                     ],
                     [
@@ -150,6 +161,7 @@ class PrArchiveIntegrationTest extends TestCase
         $this->assertStringContainsString('id="detailArchiveCard"', $ppbjView);
         $this->assertStringContainsString('/ppbj/${id}/archive', $ppbjView);
         $this->assertStringContainsString('Buka PDF', $ppbjView);
+        $this->assertStringContainsString('Lokasi fisik:', $ppbjView);
         $this->assertStringNotContainsString('data-archive-status', $torprView);
         $this->assertStringNotContainsString('/torpr/${id}/archive', $torprView);
     }

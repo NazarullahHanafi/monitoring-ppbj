@@ -145,6 +145,7 @@ class PrArchiveService
                     'type' => (string) ($item['type'] ?? $item['category'] ?? $item['mime_type'] ?? 'PDF'),
                     'date' => $item['date'] ?? $item['uploaded_at'] ?? $item['created_at'] ?? null,
                     'size' => $item['size_label'] ?? $item['size'] ?? null,
+                    'location' => $this->normaliseLocation($item),
                     'download_url' => $this->normaliseUrl($url, $baseUrl),
                 ];
             })
@@ -191,6 +192,25 @@ class PrArchiveService
         }
 
         return $baseUrl . '/' . ltrim($url, '/');
+    }
+
+    private function normaliseLocation(array $item): array
+    {
+        $location = is_array($item['location'] ?? null) ? $item['location'] : [];
+
+        return [
+            'label' => $location['label']
+                ?? $item['location_label']
+                ?? $item['lokasi']
+                ?? null,
+            'rak' => $location['rak'] ?? $item['rak'] ?? $item['rak_nama'] ?? null,
+            'rak_number' => $location['rak_number'] ?? $item['rak_number'] ?? $item['nomor_rak'] ?? null,
+            'rak_location' => $location['rak_location'] ?? $item['rak_location'] ?? null,
+            'tingkat' => $location['tingkat'] ?? $item['tingkat'] ?? $item['nomor_tingkat'] ?? null,
+            'box' => $location['box'] ?? $item['box'] ?? $item['nomor_box'] ?? null,
+            'box_code' => $location['box_code'] ?? $item['box_code'] ?? $item['kode_box'] ?? null,
+            'box_description' => $location['box_description'] ?? $item['box_description'] ?? null,
+        ];
     }
 
     private function result(string $state, string $message, array $extra = []): array

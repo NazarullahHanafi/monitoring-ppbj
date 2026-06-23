@@ -1678,6 +1678,23 @@
                 });
             }
 
+            function formatArchiveLocation(location) {
+                if (!location || typeof location !== 'object') return null;
+                if (location.label) return location.label;
+
+                const parts = [];
+                if (location.rak) {
+                    parts.push(location.rak);
+                } else if (location.rak_number) {
+                    parts.push(`Rak ${location.rak_number}`);
+                }
+                if (location.tingkat) parts.push(`Tingkat ${location.tingkat}`);
+                if (location.box) parts.push(`Box ${location.box}`);
+                if (location.box_code) parts.push(`Kode ${location.box_code}`);
+
+                return parts.filter(Boolean).join(' • ') || null;
+            }
+
             function renderArchiveDocuments(documents) {
                 const list = document.getElementById('detailArchiveDocuments');
                 if (!list || !Array.isArray(documents) || !documents.length) return;
@@ -1696,6 +1713,15 @@
                     meta.textContent = [documentItem.type, documentItem.size, formatArchiveDate(documentItem.date)]
                         .filter(Boolean).join(' • ') || 'Dokumen';
                     info.append(name, meta);
+
+                    const locationText = formatArchiveLocation(documentItem.location);
+                    if (locationText) {
+                        const location = document.createElement('p');
+                        location.className = 'mt-1 inline-flex flex-wrap items-center gap-1 rounded-lg bg-amber-50 px-2 py-1 text-[11px] font-semibold text-amber-700 dark:bg-amber-900/30 dark:text-amber-200';
+                        location.textContent = `Lokasi fisik: ${locationText}`;
+                        info.append(location);
+                    }
+
                     item.append(info);
 
                     if (documentItem.download_url) {
