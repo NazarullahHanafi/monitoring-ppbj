@@ -46,7 +46,7 @@ class PrArchiveIntegrationTest extends TestCase
         config([
             'services.pr_archive.base_url' => 'https://arsip.example.test',
             'services.pr_archive.token' => 'secret-archive-token',
-            'services.pr_archive.pr_path' => '/api/pr/{nomor_pr}/documents',
+            'services.pr_archive.pr_path' => '/api/pr/documents',
         ]);
 
         Http::fake([
@@ -91,7 +91,7 @@ class PrArchiveIntegrationTest extends TestCase
             ]);
 
         Http::assertSent(function (Request $request) {
-            return str_contains($request->url(), 'PR%2F2026%2F001')
+            return str_contains($request->url(), '/api/pr/documents?nomor_pr=PR%2F2026%2F001')
                 && $request->hasHeader('Authorization', 'Bearer secret-archive-token');
         });
     }
@@ -100,7 +100,7 @@ class PrArchiveIntegrationTest extends TestCase
     {
         config([
             'services.pr_archive.base_url' => 'https://arsip.example.test',
-            'services.pr_archive.pr_path' => '/api/pr/{nomor_pr}/documents',
+            'services.pr_archive.pr_path' => '/api/pr/documents',
         ]);
 
         [$user, $emptyPpbjId] = $this->generalUserAndPpbj('PR-EMPTY');

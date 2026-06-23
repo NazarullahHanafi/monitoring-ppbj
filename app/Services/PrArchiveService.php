@@ -44,7 +44,7 @@ class PrArchiveService
 
     private function requestArchive(string $baseUrl, string $prNumber): array
     {
-        $path = (string) config('services.pr_archive.pr_path', '/api/pr/{nomor_pr}/documents');
+        $path = (string) config('services.pr_archive.pr_path', '/api/pr/documents');
         $url = $this->buildLookupUrl($baseUrl, $path, $prNumber);
         $token = trim((string) config('services.pr_archive.token'));
 
@@ -154,9 +154,17 @@ class PrArchiveService
 
     private function buildLookupUrl(string $baseUrl, string $path, string $prNumber): string
     {
-        $path = str_replace('{nomor_pr}', rawurlencode($prNumber), $path);
+        if (str_contains($path, '{nomor_pr}')) {
+            $path = str_replace('{nomor_pr}', rawurlencode($prNumber), $path);
 
-        return $baseUrl . '/' . ltrim($path, '/');
+            return $baseUrl . '/' . ltrim($path, '/');
+        }
+
+        $separator = str_contains($path, '?') ? '&' : '?';
+
+        return $baseUrl . '/' . ltrim($path, '/') . $separator . http_build_query([
+            'nomor_pr' => $prNumber,
+        ], '', '&', PHP_QUERY_RFC3986);
     }
 
     private function normaliseUrl(mixed $url, string $baseUrl): ?string

@@ -48,7 +48,7 @@ return [
     'pr_archive' => [
         'base_url' => env('ARCHIVE_API_URL'),
         'token' => env('ARCHIVE_API_TOKEN'),
-        'pr_path' => env('ARCHIVE_API_PR_PATH', '/api/pr/{nomor_pr}/documents'),
+        'pr_path' => env('ARCHIVE_API_PR_PATH', '/api/pr/documents'),
         'connect_timeout' => env('ARCHIVE_API_CONNECT_TIMEOUT', 2),
         'timeout' => env('ARCHIVE_API_TIMEOUT', 5),
         'cache_seconds' => env('ARCHIVE_API_CACHE_SECONDS', 300),
