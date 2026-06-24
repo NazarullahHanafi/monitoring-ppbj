@@ -107,7 +107,7 @@
 
         {{-- ================= STATISTICS CARDS ================= --}}
         @if(isset($stats))
-            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 mb-6">
                 {{-- Total Users --}}
                 <div
                     class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow duration-300">
@@ -188,6 +188,28 @@
                         </div>
                     </div>
                 </div>
+
+                {{-- Viewer / Read Only --}}
+                <div
+                    class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow duration-300">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-sm text-gray-500 dark:text-gray-400 font-medium">Viewer</p>
+                            <p class="text-3xl font-bold text-gray-900 dark:text-white mt-1">{{ $stats->viewer_count ?? 0 }}
+                            </p>
+                        </div>
+                        <div
+                            class="w-14 h-14 rounded-xl bg-gradient-to-br from-cyan-500 to-blue-500 flex items-center justify-center shadow-lg shadow-cyan-500/30">
+                            <svg class="w-7 h-7 stroke-white dark:text-white" fill="none" stroke="currentColor"
+                                viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                            </svg>
+                        </div>
+                    </div>
+                </div>
             </div>
         @endif
 
@@ -241,6 +263,8 @@
                         <option value="superadmin" {{ request('role') === 'superadmin' ? 'selected' : '' }}>Superadmin
                         </option>
                         <option value="user" {{ request('role') === 'user' ? 'selected' : '' }}>User</option>
+                        <option value="viewer" {{ request('role') === 'viewer' ? 'selected' : '' }}>Viewer / Read Only
+                        </option>
                     </select>
                 </div>
 
@@ -355,6 +379,17 @@
                                                     d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
                                             </svg>
                                             SUPERADMIN
+                                        </span>
+                                    @elseif($user->role === 'viewer')
+                                        <span
+                                            class="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-bold rounded-full bg-cyan-50 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-200 border border-cyan-200 dark:border-cyan-700">
+                                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                    d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                    d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                            </svg>
+                                            VIEWER
                                         </span>
                                     @else
                                         <span
@@ -544,6 +579,7 @@
                         <select name="role" required
                             class="w-full rounded-lg border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20">
                             <option value="user">User</option>
+                            <option value="viewer">Viewer / Read Only</option>
                             <option value="superadmin">Superadmin</option>
                         </select>
                     </div>
@@ -668,6 +704,7 @@
                         <select name="role" id="editRole" required
                             class="w-full rounded-lg border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20">
                             <option value="user">User</option>
+                            <option value="viewer">Viewer / Read Only</option>
                             <option value="superadmin">Superadmin</option>
                         </select>
                     </div>

@@ -39,5 +39,25 @@ class DefaultUsersSeeder extends Seeder
                 'role' => 'superadmin',
             ]
         );
+
+        User::updateOrCreate(
+            ['email' => 'viewer.umum@local.test'],
+            [
+                'name' => 'Viewer Umum',
+                'password' => Hash::make('Viewer!234'),
+                'department' => 'umum',
+                'role' => 'viewer',
+            ]
+        );
+
+        User::updateOrCreate(
+            ['email' => 'viewer.operasional@local.test'],
+            [
+                'name' => 'Viewer Operasional',
+                'password' => Hash::make('Viewer!234'),
+                'department' => 'operasional',
+                'role' => 'viewer',
+            ]
+        );
     }
 }

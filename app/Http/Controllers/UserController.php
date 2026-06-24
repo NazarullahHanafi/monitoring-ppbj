@@ -78,7 +78,8 @@ class UserController extends Controller
                     COUNT(*) as total,
                     SUM(CASE WHEN department = 'umum' THEN 1 ELSE 0 END) as umum_count,
                     SUM(CASE WHEN department = 'operasional' THEN 1 ELSE 0 END) as operasional_count,
-                    SUM(CASE WHEN role = 'superadmin' THEN 1 ELSE 0 END) as superadmin_count
+                    SUM(CASE WHEN role = 'superadmin' THEN 1 ELSE 0 END) as superadmin_count,
+                    SUM(CASE WHEN role = 'viewer' THEN 1 ELSE 0 END) as viewer_count
                 ")
                 ->first();
         });
@@ -117,7 +118,7 @@ class UserController extends Controller
             ],
             'role' => [
                 'required',
-                Rule::in(['user', 'superadmin'])
+                Rule::in(['user', 'superadmin', 'viewer'])
             ],
             'department' => [
                 'required',
@@ -207,7 +208,7 @@ class UserController extends Controller
             ],
             'role' => [
                 'required',
-                Rule::in(['user', 'superadmin'])
+                Rule::in(['user', 'superadmin', 'viewer'])
             ],
             'department' => [
                 'required',

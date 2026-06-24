@@ -2229,10 +2229,51 @@
         .send-flash {
             animation: sendFlash .5s ease
         }
+
+        .readonly-viewer-banner {
+            position: fixed;
+            z-index: 80;
+            left: 50%;
+            bottom: 18px;
+            transform: translateX(-50%);
+            max-width: calc(100vw - 24px);
+            border: 1px solid rgba(14, 165, 233, .25);
+            border-radius: 999px;
+            background: rgba(255, 255, 255, .94);
+            color: #0f172a;
+            box-shadow: 0 16px 45px rgba(15, 23, 42, .16);
+            backdrop-filter: blur(16px);
+            padding: 10px 16px;
+            font-size: .82rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .dark .readonly-viewer-banner {
+            background: rgba(15, 23, 42, .92);
+            color: #e0f2fe;
+            border-color: rgba(125, 211, 252, .24);
+            box-shadow: 0 16px 45px rgba(0, 0, 0, .35);
+        }
+
+        .readonly-locked {
+            opacity: .55 !important;
+            cursor: not-allowed !important;
+            filter: grayscale(.25);
+        }
     </style>
 </head>
 
 <body class="bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 transition-colors">
+    @if(auth()->user()?->isReadOnly())
+        <div class="readonly-viewer-banner" role="status">
+            <span>👁️</span>
+            <span>Mode Viewer: akun ini hanya dapat melihat data, tanpa akses ubah/simpan/hapus.</span>
+        </div>
+    @endif
+
     <div class="min-h-screen flex">
         {{-- SIDEBAR DESKTOP --}}
         <aside id="sidebarDesktop"
@@ -3350,6 +3391,60 @@
         /* ═══ APPROVAL PR POLLING ═══ */
         @if(auth()->user()?->department === 'umum')
             (function () { var url = '{{ route('approval.pr.pendingCount') }}', b1 = document.getElementById('badgePendingPr'), b2 = document.getElementById('badgePendingPrMobile'), t = null; function refresh() { fetch(url, { headers: { 'Accept': 'application/json' } }).then(function (r) { if (!r.ok) throw 0; return r.json() }).then(function (d) { var c = Number(d.count || 0);[b1, b2].forEach(function (b) { if (b) { b.textContent = c; if (c > 0) b.classList.remove('hidden'); else b.classList.add('hidden') } }) }).catch(function () { }) } document.addEventListener('visibilitychange', function () { if (document.hidden) { clearInterval(t); t = null } else { refresh(); t = setInterval(refresh, 30000) } }); if (!document.hidden) { refresh(); t = setInterval(refresh, 30000) } })();
+        @endif
+
+        @if(auth()->user()?->isReadOnly())
+            (function () {
+                var message = 'Akun viewer hanya memiliki akses baca. Perubahan data tidak diizinkan.';
+
+                function notifyReadOnly() {
+                    if (window.Swal) {
+                        Swal.fire({
+                            icon: 'info',
+                            title: 'Mode Viewer',
+                            text: message,
+                            confirmButtonColor: '#2563eb'
+                        });
+                    } else {
+                        alert(message);
+                    }
+                }
+
+                function isLogoutAction(action) {
+                    return (action || '').toLowerCase().indexOf('/logout') !== -1;
+                }
+
+                document.querySelectorAll('form').forEach(function (form) {
+                    var action = form.getAttribute('action') || '';
+                    var method = (form.getAttribute('method') || 'get').toLowerCase();
+                    var spoofedMethod = form.querySelector('input[name="_method"]');
+                    var unsafe = method !== 'get' || !!spoofedMethod;
+
+                    if (!unsafe || isLogoutAction(action)) return;
+
+                    form.dataset.readonlyBlocked = '1';
+                    form.addEventListener('submit', function (event) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        notifyReadOnly();
+                    }, true);
+
+                    form.querySelectorAll('button[type="submit"], input[type="submit"]').forEach(function (button) {
+                        button.classList.add('readonly-locked');
+                        button.setAttribute('title', message);
+                    });
+                });
+
+                document.querySelectorAll('[onclick*="delete"], [onclick*="Delete"], [onclick*="approve"], [onclick*="Approve"], [onclick*="reject"], [onclick*="Reject"]').forEach(function (element) {
+                    element.classList.add('readonly-locked');
+                    element.setAttribute('title', message);
+                    element.addEventListener('click', function (event) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        notifyReadOnly();
+                    }, true);
+                });
+            })();
         @endif
 
     </script>

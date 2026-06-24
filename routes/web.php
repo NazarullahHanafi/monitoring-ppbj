@@ -48,7 +48,7 @@ Route::get('/home', function () {
     return redirect(AppServiceProvider::homeFor(auth()->user()));
 })->middleware(['auth'])->name('dashboard');
 
-Route::middleware(['auth'])->group(function () {
+Route::middleware(['auth', 'readonly.block'])->group(function () {
     Route::get('/account', [AccountController::class, 'edit'])->name('account.edit');
     Route::post('/account/password', [AccountController::class, 'updatePassword'])->name('account.password');
     Route::post('/presence/heartbeat', [App\Http\Controllers\PresenceController::class, 'heartbeat'])

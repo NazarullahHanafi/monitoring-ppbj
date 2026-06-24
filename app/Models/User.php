@@ -25,6 +25,11 @@ class User extends Authenticatable
         'department'
     ];
 
+    public function isReadOnly(): bool
+    {
+        return strtolower((string) $this->role) === 'viewer';
+    }
+
     /**
      * The attributes that should be hidden for serialization.
      *

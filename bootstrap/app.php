@@ -5,6 +5,7 @@ use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use App\Http\Middleware\DeptMiddleware;
 use App\Http\Middleware\DisableLoggingForPolling;
+use App\Http\Middleware\EnsureNotReadOnly;
 use App\Http\Middleware\SecurityHeaders;
 
 return Application::configure(basePath: dirname(__DIR__))
@@ -16,6 +17,7 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware) {
         $middleware->alias([
             'dept' => DeptMiddleware::class,
+            'readonly.block' => EnsureNotReadOnly::class,
         ]);
 
         $middleware->prepend(DisableLoggingForPolling::class);
