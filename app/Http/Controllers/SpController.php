@@ -863,8 +863,8 @@ class SpController extends Controller
         $tbl->addRow();
         $tbl->addCell(600, $vC)->addText('No', $h, $ph);
         $tbl->addCell(4800, $vC)->addText('Nama Barang / Jasa', $h, $ph);
-        $tbl->addCell(1400, $vC)->addText('Unit Kerja', $h, $ph);
-        $tbl->addCell(700, $vC)->addText('Jumlah', $h, $ph);
+        $tbl->addCell(1200, $vC)->addText('Satuan', $h, $ph);
+        $tbl->addCell(900, $vC)->addText('Jumlah', $h, $ph);
         $tbl->addCell(1600, $vC)->addText('Harga Satuan', $h, $ph);
         $tbl->addCell(1600, $vC)->addText('Jumlah', $h, $ph);
 
