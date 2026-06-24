@@ -864,9 +864,9 @@ class SpController extends Controller
         $tbl->addCell(600, $vC)->addText('No', $h, $ph);
         $tbl->addCell(4800, $vC)->addText('Nama Barang / Jasa', $h, $ph);
         $tbl->addCell(1200, $vC)->addText('Satuan', $h, $ph);
-        $tbl->addCell(900, $vC)->addText('Jumlah', $h, $ph);
+        $tbl->addCell(1200, $vC)->addText('Jumlah', $h, $ph);
         $tbl->addCell(1600, $vC)->addText('Harga Satuan', $h, $ph);
-        $tbl->addCell(1600, $vC)->addText('Jumlah', $h, $ph);
+        $tbl->addCell(1600, $vC)->addText('Total', $h, $ph);
 
         // Parse items dengan struktur parent-child berdasarkan indentasi HTML
         $parsedItems = [];
