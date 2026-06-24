@@ -16,7 +16,7 @@ class EnsureNotReadOnly
             return $next($request);
         }
 
-        if ($request->isMethodSafe() || $request->routeIs('logout')) {
+        if ($request->isMethodSafe() || $request->routeIs('logout', 'presence.*', 'emoji.mood', 'chat.read')) {
             return $next($request);
         }
 
