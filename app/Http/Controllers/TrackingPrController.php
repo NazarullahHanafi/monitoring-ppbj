@@ -277,13 +277,20 @@ class TrackingPrController extends Controller
     private function searchLike(string $keyword): ?array
     {
         $results = [];
+        $allowContains = mb_strlen($keyword) >= 4;
 
         try {
             $prMatches = DB::table('torprs')
                 ->select(['nomor_pr', 'tujuan_pengadaan'])
                 ->whereNotNull('nomor_pr')
                 ->where('nomor_pr', '!=', '')
-                ->where('nomor_pr', 'like', '%' . $keyword . '%')
+                ->where(function ($query) use ($keyword, $allowContains) {
+                    $query->where('nomor_pr', 'like', $keyword . '%');
+
+                    if ($allowContains) {
+                        $query->orWhere('nomor_pr', 'like', '%' . $keyword . '%');
+                    }
+                })
                 ->limit(5)
                 ->get();
 
@@ -305,7 +312,13 @@ class TrackingPrController extends Controller
                 ->whereNotNull('ppbj_no')
                 ->where('ppbj_no', '!=', '')
                 ->when($prNumbers, fn($q, $nums) => $q->whereNotIn('ppbj_no', $nums))
-                ->where('ppbj_no', 'like', '%' . $keyword . '%')
+                ->where(function ($query) use ($keyword, $allowContains) {
+                    $query->where('ppbj_no', 'like', $keyword . '%');
+
+                    if ($allowContains) {
+                        $query->orWhere('ppbj_no', 'like', '%' . $keyword . '%');
+                    }
+                })
                 ->limit(5)
                 ->get();
 
@@ -336,15 +349,19 @@ class TrackingPrController extends Controller
             if ($cached !== null) return response()->json(['items' => $cached]);
 
             $items = [];
+            $allowContains = mb_strlen($q) >= 4;
 
             try {
                 $prResults = DB::table('torprs')
                     ->select(['nomor_pr', 'tujuan_pengadaan', 'tanggal_pr'])
                     ->whereNotNull('nomor_pr')
                     ->where('nomor_pr', '!=', '')
-                    ->where(function ($query) use ($q) {
-                        $query->where('nomor_pr', 'like', $q . '%')
-                            ->orWhere('nomor_pr', 'like', '%' . $q . '%');
+                    ->where(function ($query) use ($q, $allowContains) {
+                        $query->where('nomor_pr', 'like', $q . '%');
+
+                        if ($allowContains) {
+                            $query->orWhere('nomor_pr', 'like', '%' . $q . '%');
+                        }
                     })
                     ->orderByRaw("CASE WHEN nomor_pr = ? THEN 0 WHEN nomor_pr LIKE ? THEN 1 ELSE 2 END", [$q, $q . '%'])
                     ->orderBy('tanggal_pr', 'DESC')
@@ -373,9 +390,12 @@ class TrackingPrController extends Controller
                     ->whereNotNull('ppbj_no')
                     ->where('ppbj_no', '!=', '')
                     ->when($prNumbers, fn($query, $nums) => $query->whereNotIn('ppbj_no', $nums))
-                    ->where(function ($query) use ($q) {
-                        $query->where('ppbj_no', 'like', $q . '%')
-                            ->orWhere('ppbj_no', 'like', '%' . $q . '%');
+                    ->where(function ($query) use ($q, $allowContains) {
+                        $query->where('ppbj_no', 'like', $q . '%');
+
+                        if ($allowContains) {
+                            $query->orWhere('ppbj_no', 'like', '%' . $q . '%');
+                        }
                     })
                     ->orderByRaw("CASE WHEN ppbj_no = ? THEN 0 WHEN ppbj_no LIKE ? THEN 1 ELSE 2 END", [$q, $q . '%'])
                     ->orderBy('tgl_ppbj', 'DESC')

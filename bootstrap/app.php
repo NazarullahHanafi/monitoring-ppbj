@@ -4,6 +4,7 @@ use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use App\Http\Middleware\DeptMiddleware;
+use App\Http\Middleware\CachePublicGuestResponse;
 use App\Http\Middleware\DisableLoggingForPolling;
 use App\Http\Middleware\EnsureNotReadOnly;
 use App\Http\Middleware\SecurityHeaders;
@@ -17,6 +18,7 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware) {
         $middleware->alias([
             'dept' => DeptMiddleware::class,
+            'guest.page_cache' => CachePublicGuestResponse::class,
             'readonly.block' => EnsureNotReadOnly::class,
         ]);
 

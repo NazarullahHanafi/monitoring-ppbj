@@ -34,13 +34,15 @@ Route::post('/pr/sign/{token}/{type}', [TorprController::class, 'processQuickSig
 // ========================
 // PUBLIC ROUTES (Landing Page)
 // ========================
-Route::get('/', [LandingController::class, 'index'])->name('landing.index');
-Route::get('/about', [LandingController::class, 'about'])->name('landing.about');
-Route::get('/services', [LandingController::class, 'services'])->name('landing.services');
-Route::get('/contact', [LandingController::class, 'contact'])->name('landing.contact');
+Route::middleware('guest.page_cache')->group(function () {
+    Route::get('/', [LandingController::class, 'index'])->name('landing.index');
+    Route::get('/about', [LandingController::class, 'about'])->name('landing.about');
+    Route::get('/services', [LandingController::class, 'services'])->name('landing.services');
+    Route::get('/contact', [LandingController::class, 'contact'])->name('landing.contact');
 
-// Track PR/PPBJ (Public - No Login Required)
-Route::get('/track', [TrackingPrController::class, 'landing'])->name('landing.track');
+    // Track PR/PPBJ (Public - No Login Required)
+    Route::get('/track', [TrackingPrController::class, 'landing'])->name('landing.track');
+});
 Route::get('/track/suggest', [TrackingPrController::class, 'suggest'])->name('landing.track.suggest');
 
 // Dashboard redirect sesuai dept
