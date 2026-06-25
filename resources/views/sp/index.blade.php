@@ -3949,15 +3949,15 @@
             document.getElementById('sampaiInput').addEventListener('change', doSearch);
 
             // Polling
-            if (IS_FIRST_PAGE && !HAS_FILTER && !document.hidden) { pollNow(); pollTimer = setInterval(pollNow, 10000); }
+            if (IS_FIRST_PAGE && !HAS_FILTER && !document.hidden) { pollNow(); pollTimer = setInterval(pollNow, 15000); }
 
             // Presence
-            if (!document.hidden) { pollPresence(); presenceTimer = setInterval(pollPresence, 5000); }
+            if (!document.hidden) { pollPresence(); presenceTimer = setInterval(pollPresence, 15000); }
             document.addEventListener('visibilitychange', () => {
                 if (document.hidden) { clearInterval(pollTimer); clearInterval(presenceTimer); }
                 else {
-                    if (IS_FIRST_PAGE && !HAS_FILTER) { pollNow(); pollTimer = setInterval(pollNow, 10000); }
-                    pollPresence(); presenceTimer = setInterval(pollPresence, 5000);
+                    if (IS_FIRST_PAGE && !HAS_FILTER) { pollNow(); pollTimer = setInterval(pollNow, 15000); }
+                    pollPresence(); presenceTimer = setInterval(pollPresence, 15000);
                 }
             });
             window.addEventListener('beforeunload', () => {

@@ -452,24 +452,25 @@ class ChatController extends Controller
         ]);
 
         $userId = Auth::id();
-        $ids = array_map('intval', $request->input('message_ids', []));
-        $marked = 0;
+        $now = now();
+        $rows = collect($request->input('message_ids', []))
+            ->map(fn ($id) => (int) $id)
+            ->filter(fn ($id) => $id > 0)
+            ->unique()
+            ->take(self::PAGE_SIZE)
+            ->map(fn ($id) => [
+                'message_id' => $id,
+                'user_id' => $userId,
+                'read_at' => $now,
+            ])
+            ->values()
+            ->all();
 
-        foreach ($ids as $msgId) {
-            $exists = DB::table('chat_reads')
-                ->where('message_id', $msgId)
-                ->where('user_id', $userId)
-                ->exists();
-
-            if (! $exists) {
-                DB::table('chat_reads')->insert([
-                    'message_id' => $msgId,
-                    'user_id' => $userId,
-                    'read_at' => now(),
-                ]);
-                $marked++;
-            }
+        if ($rows === []) {
+            return response()->json(['marked' => 0]);
         }
+
+        $marked = DB::table('chat_reads')->insertOrIgnore($rows);
 
         return response()->json(['marked' => $marked]);
     }
