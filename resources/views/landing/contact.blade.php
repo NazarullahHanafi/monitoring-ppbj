@@ -5,6 +5,7 @@
 @push('styles')
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet">
 
 <style>
 :root { --r: 16px; --green: #34d399; --amber: #fbbf24; }
@@ -141,7 +142,151 @@ textarea.form-input { resize: vertical; min-height: 110px; }
     display: flex; align-items: center; gap: 12px;
 }
 .map-card-head .sec-label { margin-bottom: 0; }
-.map-card iframe { width: 100%; height: 300px; border: none; display: block; filter: invert(.9) hue-rotate(180deg) saturate(.6); }
+.mapcn-shell {
+    position: relative;
+    min-height: 360px;
+    overflow: hidden;
+    background:
+        radial-gradient(circle at 18% 18%, rgba(34,211,238,.14), transparent 32%),
+        radial-gradient(circle at 82% 18%, rgba(129,140,248,.16), transparent 30%),
+        #08111f;
+}
+.mapcn-map {
+    width: 100%;
+    height: 380px;
+    min-height: 320px;
+}
+.mapcn-map::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background:
+        linear-gradient(90deg, rgba(8,13,26,.32), transparent 35%, rgba(8,13,26,.28)),
+        linear-gradient(180deg, transparent 62%, rgba(8,13,26,.58));
+}
+.mapcn-map .maplibregl-ctrl-group {
+    overflow: hidden;
+    border: 1px solid rgba(255,255,255,.16);
+    border-radius: 14px;
+    background: rgba(15,23,42,.72);
+    backdrop-filter: blur(14px);
+    box-shadow: 0 18px 36px rgba(0,0,0,.22);
+}
+.mapcn-map .maplibregl-ctrl button {
+    filter: invert(1) grayscale(1);
+}
+.mapcn-card {
+    position: absolute;
+    left: 24px;
+    bottom: 24px;
+    z-index: 2;
+    width: min(360px, calc(100% - 48px));
+    padding: 18px;
+    border: 1px solid rgba(255,255,255,.14);
+    border-radius: 18px;
+    background: rgba(8,13,26,.82);
+    box-shadow: 0 22px 48px rgba(0,0,0,.32);
+    backdrop-filter: blur(18px);
+}
+.mapcn-card-top {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+}
+.mapcn-pin-icon {
+    width: 42px;
+    height: 42px;
+    display: grid;
+    place-items: center;
+    flex-shrink: 0;
+    border-radius: 14px;
+    color: #fff;
+    background: linear-gradient(135deg, var(--cyan), var(--violet));
+    box-shadow: 0 12px 30px rgba(34,211,238,.22);
+}
+.mapcn-card h3 {
+    margin: 0 0 4px;
+    font-size: 1rem;
+    line-height: 1.35;
+}
+.mapcn-card p {
+    margin: 0;
+    color: rgba(226,232,240,.68);
+    font-size: .82rem;
+    line-height: 1.65;
+}
+.mapcn-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 14px;
+}
+.mapcn-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 13px;
+    border: 1px solid rgba(255,255,255,.12);
+    border-radius: 999px;
+    color: var(--text);
+    font-size: .78rem;
+    font-weight: 700;
+    text-decoration: none;
+    background: rgba(255,255,255,.06);
+    transition: transform .2s ease, border-color .2s ease, background .2s ease;
+}
+.mapcn-action:hover {
+    transform: translateY(-2px);
+    border-color: rgba(34,211,238,.36);
+    background: rgba(34,211,238,.10);
+}
+.mapcn-marker {
+    width: 24px;
+    height: 24px;
+    border: 3px solid #fff;
+    border-radius: 999px;
+    background: linear-gradient(135deg, var(--cyan), var(--violet));
+    box-shadow: 0 0 0 10px rgba(34,211,238,.18), 0 14px 34px rgba(0,0,0,.35);
+}
+.mapcn-marker::after {
+    content: '';
+    position: absolute;
+    inset: -12px;
+    border-radius: inherit;
+    border: 1px solid rgba(34,211,238,.42);
+    animation: mapPulse 1.8s ease-out infinite;
+}
+@keyframes mapPulse {
+    from { opacity: .9; transform: scale(.75); }
+    to { opacity: 0; transform: scale(1.45); }
+}
+.mapcn-noscript {
+    display: block;
+    padding: 18px 24px;
+    color: var(--muted);
+}
+[data-theme="light"] .mapcn-shell {
+    background:
+        radial-gradient(circle at 18% 18%, rgba(14,165,233,.14), transparent 32%),
+        radial-gradient(circle at 82% 18%, rgba(99,102,241,.13), transparent 30%),
+        #f8fafc;
+}
+[data-theme="light"] .mapcn-map::after {
+    background:
+        linear-gradient(90deg, rgba(255,255,255,.36), transparent 35%, rgba(255,255,255,.22)),
+        linear-gradient(180deg, transparent 68%, rgba(248,250,252,.66));
+}
+[data-theme="light"] .mapcn-card {
+    background: rgba(255,255,255,.86);
+    border-color: rgba(15,23,42,.10);
+}
+[data-theme="light"] .mapcn-card p { color: var(--text-2) !important; }
+[data-theme="light"] .mapcn-action {
+    background: rgba(15,23,42,.04);
+    border-color: rgba(15,23,42,.10);
+    color: var(--text);
+}
 
 /* RESPONSIVE */
 @media(max-width:768px){
@@ -149,6 +294,8 @@ textarea.form-input { resize: vertical; min-height: 110px; }
     .form-row { grid-template-columns: 1fr; }
     .form-card { padding: 28px 20px; }
     .contact-sec { padding: 60px 0; }
+    .mapcn-map { height: 420px; }
+    .mapcn-card { left: 16px; bottom: 16px; width: calc(100% - 32px); }
 }
 
 
@@ -372,10 +519,41 @@ main, #main, #app, .main-content, .content-wrapper { background: var(--bg) !impo
                 <i class="fas fa-map-pin" style="color:var(--cyan)"></i>
                 <span class="sec-label">Lokasi Kantor — PT Cabang Pekanbaru</span>
             </div>
-            <iframe
-                src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3989.660193534937!2d101.44569731475403!3d0.5070649640095782!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x31d5a946c7b8b4d1%3A0x1e9a43fb3fca0e8c!2sPT%20Sucofindo%20Pekanbaru!5e0!3m2!1sid!2sid!4v1680000000000!5m2!1sid!2sid"
-                allowfullscreen="" loading="lazy" referrerpolicy="no-referrer-when-downgrade">
-            </iframe>
+            <div class="mapcn-shell">
+                <div id="sucofindoMap" class="mapcn-map" role="img" aria-label="Peta lokasi PT Sucofindo Cabang Pekanbaru"></div>
+
+                <div class="mapcn-card">
+                    <div class="mapcn-card-top">
+                        <div class="mapcn-pin-icon">
+                            <i class="fas fa-location-dot"></i>
+                        </div>
+                        <div>
+                            <h3>PT Sucofindo Cabang Pekanbaru</h3>
+                            <p>Jl. Jend. Sudirman, Pekanbaru, Riau. Gunakan tombol rute untuk membuka navigasi lokasi kantor.</p>
+                        </div>
+                    </div>
+                    <div class="mapcn-actions">
+                        <a class="mapcn-action"
+                            href="https://www.google.com/maps/search/?api=1&query=PT%20Sucofindo%20Pekanbaru"
+                            target="_blank" rel="noopener noreferrer">
+                            <i class="fas fa-route"></i> Buka Rute
+                        </a>
+                        <a class="mapcn-action"
+                            href="https://www.openstreetmap.org/?mlat=0.5070649640095782&mlon=101.44569731475403#map=17/0.5070649640095782/101.44569731475403"
+                            target="_blank" rel="noopener noreferrer">
+                            <i class="fas fa-map"></i> OpenStreetMap
+                        </a>
+                    </div>
+                </div>
+
+                <noscript>
+                    <a class="mapcn-noscript"
+                        href="https://www.openstreetmap.org/?mlat=0.5070649640095782&mlon=101.44569731475403#map=17/0.5070649640095782/101.44569731475403"
+                        target="_blank" rel="noopener noreferrer">
+                        Buka peta lokasi PT Sucofindo Cabang Pekanbaru
+                    </a>
+                </noscript>
+            </div>
         </div>
 
     </div>
@@ -386,12 +564,99 @@ main, #main, #app, .main-content, .content-wrapper { background: var(--bg) !impo
 @endsection
 
 @push('scripts')
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
 <script>
 (function(){
     var io = new IntersectionObserver(function(e){
         e.forEach(function(x){ if(x.isIntersecting){ x.target.classList.add('show'); io.unobserve(x.target); } });
     },{ threshold:0.1 });
     document.querySelectorAll('.sr').forEach(function(el){ io.observe(el); });
+})();
+
+(function(){
+    var mapEl = document.getElementById('sucofindoMap');
+    if (!mapEl || typeof maplibregl === 'undefined') return;
+
+    var sucofindo = [101.44569731475403, 0.5070649640095782];
+
+    var map = new maplibregl.Map({
+        container: mapEl,
+        center: sucofindo,
+        zoom: 15.6,
+        pitch: 48,
+        bearing: -12,
+        cooperativeGestures: true,
+        attributionControl: false,
+        style: {
+            version: 8,
+            sources: {
+                carto: {
+                    type: 'raster',
+                    tiles: [
+                        'https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+                        'https://b.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+                        'https://c.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+                        'https://d.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+                    ],
+                    tileSize: 256,
+                    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+                }
+            },
+            layers: [
+                {
+                    id: 'carto',
+                    type: 'raster',
+                    source: 'carto',
+                    paint: {
+                        'raster-opacity': 0.92,
+                        'raster-contrast': 0.08,
+                        'raster-saturation': -0.12
+                    }
+                }
+            ]
+        }
+    });
+
+    map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'top-right');
+    map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-right');
+
+    var markerEl = document.createElement('div');
+    markerEl.className = 'mapcn-marker';
+    markerEl.setAttribute('aria-label', 'PT Sucofindo Cabang Pekanbaru');
+
+    new maplibregl.Marker({
+        element: markerEl,
+        anchor: 'center'
+    })
+        .setLngLat(sucofindo)
+        .setPopup(new maplibregl.Popup({ offset: 18 }).setHTML('<strong>PT Sucofindo Cabang Pekanbaru</strong><br>Pekanbaru, Riau'))
+        .addTo(map);
+
+    map.on('load', function(){
+        map.addSource('sucofindo-point', {
+            type: 'geojson',
+            data: {
+                type: 'FeatureCollection',
+                features: [{
+                    type: 'Feature',
+                    geometry: { type: 'Point', coordinates: sucofindo },
+                    properties: {}
+                }]
+            }
+        });
+
+        map.addLayer({
+            id: 'sucofindo-glow',
+            type: 'circle',
+            source: 'sucofindo-point',
+            paint: {
+                'circle-radius': 34,
+                'circle-color': '#22d3ee',
+                'circle-opacity': 0.12,
+                'circle-blur': 0.55
+            }
+        });
+    });
 })();
 </script>
 @endpush
