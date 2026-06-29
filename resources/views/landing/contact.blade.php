@@ -465,8 +465,8 @@ main, #main, #app, .main-content, .content-wrapper { background: var(--bg) !impo
                         <div>
                             <div class="ii-label">Alamat</div>
                             <div class="ii-val">
-                                Jl. Ahmad Yani No. 1<br>
-                                Pekanbaru, Riau 28156
+                                Jl. Jend. Ahmad Yani No.79 <br>
+                                Tanah Datar, Pekanbaru Kota, Kota Pekanbaru, Riau 28156
                             </div>
                         </div>
                     </div>
