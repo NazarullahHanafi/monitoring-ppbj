@@ -534,12 +534,12 @@ main, #main, #app, .main-content, .content-wrapper { background: var(--bg) !impo
                     </div>
                     <div class="mapcn-actions">
                         <a class="mapcn-action"
-                            href="https://www.google.com/maps/search/?api=1&query=PT%20Sucofindo%20Pekanbaru"
+                            href="https://www.google.com/maps/search/?api=1&query=0.5206544258952752,101.44365607791217"
                             target="_blank" rel="noopener noreferrer">
                             <i class="fas fa-route"></i> Buka Rute
                         </a>
                         <a class="mapcn-action"
-                            href="https://www.openstreetmap.org/?mlat=0.5070649640095782&mlon=101.44569731475403#map=17/0.5070649640095782/101.44569731475403"
+                            href="https://www.openstreetmap.org/?mlat=0.5206544258952752&mlon=101.44365607791217#map=18/0.5206544258952752/101.44365607791217"
                             target="_blank" rel="noopener noreferrer">
                             <i class="fas fa-map"></i> OpenStreetMap
                         </a>
@@ -548,7 +548,7 @@ main, #main, #app, .main-content, .content-wrapper { background: var(--bg) !impo
 
                 <noscript>
                     <a class="mapcn-noscript"
-                        href="https://www.openstreetmap.org/?mlat=0.5070649640095782&mlon=101.44569731475403#map=17/0.5070649640095782/101.44569731475403"
+                        href="https://www.openstreetmap.org/?mlat=0.5206544258952752&mlon=101.44365607791217#map=18/0.5206544258952752/101.44365607791217"
                         target="_blank" rel="noopener noreferrer">
                         Buka peta lokasi PT Sucofindo Cabang Pekanbaru
                     </a>
@@ -577,7 +577,7 @@ main, #main, #app, .main-content, .content-wrapper { background: var(--bg) !impo
     var mapEl = document.getElementById('sucofindoMap');
     if (!mapEl || typeof maplibregl === 'undefined') return;
 
-    var sucofindo = [101.44569731475403, 0.5070649640095782];
+    var sucofindo = [101.44365607791217, 0.5206544258952752];
 
     var map = new maplibregl.Map({
         container: mapEl,
