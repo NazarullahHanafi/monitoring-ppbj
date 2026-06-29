@@ -12,6 +12,7 @@ use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Str;
 use App\Traits\HasPresence;
 use PhpOffice\PhpWord\PhpWord;
@@ -417,7 +418,7 @@ class SpController extends Controller
             'nomor_sp' => ['required', 'string', 'max:60', Rule::unique('sps', 'nomor_sp')],
             'tanggal_sp' => 'nullable|date',
             'nilai_sp' => 'nullable|numeric|min:0',
-            'nomor_pr' => 'nullable|string|max:100',
+            'nomor_pr' => ['nullable', 'string', 'max:100', Rule::unique('sps', 'nomor_pr')],
             'nilai_pr' => 'nullable|numeric|min:0',
             'nama_vendor' => 'required|string|max:255',
             'deskripsi_pengadaan' => 'required|string',
@@ -456,7 +457,24 @@ class SpController extends Controller
             }
         }
 
-        return DB::transaction(function () use ($request, $nomorPr) {
+        try {
+            return DB::transaction(function () use ($request, $nomorPr) {
+            $ppbjRecord = null;
+
+            if ($nomorPr) {
+                $ppbjRecord = Ppbj::where('ppbj_no', $nomorPr)->lockForUpdate()->first();
+
+                if ($ppbjRecord) {
+                    if ($ppbjRecord->status === 'CANCELLED') {
+                        return back()->withErrors(['nomor_pr' => "PPBJ \"{$nomorPr}\" sudah di-CANCELLED!"])->withInput();
+                    }
+
+                    if (!empty($ppbjRecord->awarding_sp)) {
+                        return back()->withErrors(['nomor_pr' => "PPBJ sudah terhubung dengan SP: {$ppbjRecord->awarding_sp}!"])->withInput();
+                    }
+                }
+            }
+
             $vendorName = $request->nama_vendor;
             if ($request->filled('vendor_baru')) {
                 $v = Vendor::firstOrCreate(['nama_vendor' => trim($request->vendor_baru)]);
@@ -464,16 +482,14 @@ class SpController extends Controller
                 Cache::forget('vendors:active');
             }
 
-            $seq = $this->extractSeq($request->nomor_sp) ?? (Sp::max('sequence_number') + 1);
+            $seq = $this->extractSeq($request->nomor_sp) ?? ((int) Sp::lockForUpdate()->max('sequence_number') + 1);
 
             // Hitung total dari items jika ada
             $items = $request->input('items', []);
             $calculatedTotal = $this->calculateItemsTotal($items);
             $nilaiSp = $request->nilai_sp ?: ($calculatedTotal > 0 ? $calculatedTotal : null);
 
-            $ppbjAuto = $nomorPr
-                ? Ppbj::where('ppbj_no', $nomorPr)->first()
-                : null;
+            $ppbjAuto = $ppbjRecord;
 
             $nomorPemenang = $request->nomor_pemenang ?: ($ppbjAuto?->pemenang ?? null);
             $tanggalPemenang = $request->tanggal_pemenang ?: ($ppbjAuto?->tgl_pemenang ?? null);
@@ -505,15 +521,7 @@ class SpController extends Controller
 
             // Link ke PPBJ
             if ($nomorPr) {
-                $ppbjRecord = Ppbj::where('ppbj_no', $nomorPr)
-                    ->where('status', '!=', 'CANCELLED')
-                    ->where(function ($q) {
-                        $q->whereNull('awarding_sp')
-                            ->orWhere('awarding_sp', '');
-                    })
-                    ->first();
-
-                if ($ppbjRecord) {
+                if ($ppbjRecord && $ppbjRecord->status !== 'CANCELLED' && empty($ppbjRecord->awarding_sp)) {
                     $ppbjRecord->awarding_sp = $sp->nomor_sp;
                     $ppbjRecord->tgl_awarding_sp = $sp->tanggal_sp;
                     $ppbjRecord->tgl_spk = $sp->tanggal_sp;
@@ -529,7 +537,12 @@ class SpController extends Controller
             Cache::forget('sp:suggest');
 
             return redirect()->route('sp.index')->with('success', 'Data SP berhasil disimpan!');
-        });
+            });
+        } catch (QueryException $e) {
+            return back()
+                ->withErrors(['nomor_pr' => 'Nomor SP atau nomor PR sudah dipakai oleh data lain. Silakan refresh halaman dan cek data terbaru.'])
+                ->withInput();
+        }
     }
 
     // =========================================================
@@ -541,7 +554,7 @@ class SpController extends Controller
             'nomor_sp' => ['required', 'string', 'max:60', Rule::unique('sps', 'nomor_sp')->ignore($sp->id)],
             'tanggal_sp' => 'nullable|date',
             'nilai_sp' => 'nullable|numeric|min:0',
-            'nomor_pr' => 'nullable|string|max:100',
+            'nomor_pr' => ['nullable', 'string', 'max:100', Rule::unique('sps', 'nomor_pr')->ignore($sp->id)],
             'nilai_pr' => 'nullable|numeric|min:0',
             'nama_vendor' => 'required|string|max:255',
             'deskripsi_pengadaan' => 'required|string',
@@ -580,7 +593,24 @@ class SpController extends Controller
             }
         }
 
-        return DB::transaction(function () use ($request, $sp, $nomorPr, $oldNomorPr) {
+        try {
+            return DB::transaction(function () use ($request, $sp, $nomorPr, $oldNomorPr) {
+            $newPpbj = null;
+
+            if ($nomorPr) {
+                $newPpbj = Ppbj::where('ppbj_no', $nomorPr)->lockForUpdate()->first();
+
+                if ($newPpbj) {
+                    if ($newPpbj->status === 'CANCELLED') {
+                        return back()->withErrors(['nomor_pr' => "PPBJ \"{$nomorPr}\" sudah di-CANCELLED!"])->withInput();
+                    }
+
+                    if (!empty($newPpbj->awarding_sp) && $newPpbj->awarding_sp !== $sp->nomor_sp) {
+                        return back()->withErrors(['nomor_pr' => "PPBJ sudah terhubung dengan SP: {$newPpbj->awarding_sp}!"])->withInput();
+                    }
+                }
+            }
+
             $seq = $this->extractSeq($request->nomor_sp) ?? $sp->sequence_number;
 
             // Hitung total dari items jika ada
@@ -588,9 +618,7 @@ class SpController extends Controller
             $calculatedTotal = $this->calculateItemsTotal($items);
             $nilaiSp = $request->nilai_sp ?: ($calculatedTotal > 0 ? $calculatedTotal : null);
 
-            $ppbjAuto = $nomorPr
-                ? Ppbj::where('ppbj_no', $nomorPr)->first()
-                : null;
+            $ppbjAuto = $newPpbj;
 
             $nomorPemenang = $request->nomor_pemenang ?: ($ppbjAuto?->pemenang ?? null);
             $tanggalPemenang = $request->tanggal_pemenang ?: ($ppbjAuto?->tgl_pemenang ?? null);
@@ -640,11 +668,7 @@ class SpController extends Controller
 
             // Set link baru ke PPBJ
             if ($nomorPr) {
-                $newPpbj = Ppbj::where('ppbj_no', $nomorPr)
-                    ->where('status', '!=', 'CANCELLED')
-                    ->first();
-
-                if ($newPpbj) {
+                if ($newPpbj && $newPpbj->status !== 'CANCELLED') {
                     $newPpbj->awarding_sp = $sp->nomor_sp;
                     $newPpbj->tgl_awarding_sp = $sp->tanggal_sp;
                     $newPpbj->tgl_spk = $sp->tanggal_sp;
@@ -660,7 +684,12 @@ class SpController extends Controller
             Cache::forget('sp:suggest');
 
             return redirect()->route('sp.index')->with('success', 'Data SP berhasil diperbarui!');
-        });
+            });
+        } catch (QueryException $e) {
+            return back()
+                ->withErrors(['nomor_pr' => 'Nomor SP atau nomor PR sudah dipakai oleh data lain. Silakan refresh halaman dan cek data terbaru.'])
+                ->withInput();
+        }
     }
 
     // =========================================================

@@ -14,6 +14,7 @@ use App\Http\Controllers\DashboardController;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Database\QueryException;
 use Carbon\Carbon;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
@@ -292,8 +293,14 @@ class PpbjController extends Controller
             'ppbj_no.required' => 'No PPBJ wajib diisi.',
         ]);
 
-        $data = $request->only(Ppbj::manualFields());
-        Ppbj::create($data);
+        try {
+            $data = $request->only(Ppbj::manualFields());
+            Ppbj::create($data);
+        } catch (QueryException $e) {
+            return response()->json([
+                'message' => 'No PPBJ sudah dipakai oleh data lain. Silakan refresh halaman dan cek data terbaru.',
+            ], 422);
+        }
 
         DashboardController::clearCache();
 
@@ -322,8 +329,14 @@ class PpbjController extends Controller
             'ppbj_no.unique' => 'No PPBJ tersebut sudah ada.',
         ]);
 
-        $data = $request->only(Ppbj::manualFields());
-        $ppbj->update($data);
+        try {
+            $data = $request->only(Ppbj::manualFields());
+            $ppbj->update($data);
+        } catch (QueryException $e) {
+            return response()->json([
+                'message' => 'No PPBJ sudah dipakai oleh data lain. Silakan refresh halaman dan cek data terbaru.',
+            ], 422);
+        }
 
         DashboardController::clearCache();
 

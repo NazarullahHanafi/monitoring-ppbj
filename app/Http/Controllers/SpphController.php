@@ -11,6 +11,7 @@ use App\Models\Ppbj;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Database\QueryException;
 use Illuminate\Validation\Rule;
 use App\Traits\HasPresence;
 use PhpOffice\PhpWord\PhpWord;
@@ -310,7 +311,7 @@ class SpphController extends Controller
         $request->validate([
             'nomor_spph' => ['required', 'string', 'max:60', Rule::unique('spphs', 'nomor_spph')],
             'tanggal' => 'required|date',
-            'nomor_pr' => 'nullable|string|max:100',
+            'nomor_pr' => ['nullable', 'string', 'max:100', Rule::unique('spphs', 'nomor_pr')],
             'nomor_pr_type' => 'nullable|in:ppbj,manual',
             'nama_vendor' => 'required|string|max:255',
             'deskripsi_pengadaan' => 'required|string',
@@ -336,7 +337,26 @@ class SpphController extends Controller
                 return back()->withErrors(['nomor_pr' => "PPBJ sudah terhubung dengan SPPH: {$ppbj->spph_rfq_1}!"])->withInput();
         }
 
-        return DB::transaction(function () use ($request, $nomorPr, $nomorPrType) {
+        try {
+            return DB::transaction(function () use ($request, $nomorPr, $nomorPrType) {
+            $ppbjRecord = null;
+
+            if ($nomorPr && $nomorPrType === 'ppbj') {
+                $ppbjRecord = Ppbj::where('ppbj_no', $nomorPr)->lockForUpdate()->first();
+
+                if (!$ppbjRecord) {
+                    return back()->withErrors(['nomor_pr' => "PPBJ \"{$nomorPr}\" tidak ditemukan!"])->withInput();
+                }
+
+                if ($ppbjRecord->status === 'CANCELLED') {
+                    return back()->withErrors(['nomor_pr' => "PPBJ ini sudah di-CANCELLED!"])->withInput();
+                }
+
+                if (!empty($ppbjRecord->spph_rfq_1)) {
+                    return back()->withErrors(['nomor_pr' => "PPBJ sudah terhubung dengan SPPH: {$ppbjRecord->spph_rfq_1}!"])->withInput();
+                }
+            }
+
             $vendorName = $request->nama_vendor;
             if ($request->filled('vendor_baru')) {
                 $v = Vendor::firstOrCreate(['nama_vendor' => trim($request->vendor_baru)]);
@@ -344,7 +364,7 @@ class SpphController extends Controller
                 Cache::forget('vendors:active');
             }
 
-            $seq = $this->extractSeq($request->nomor_spph) ?? (Spph::max('sequence_number') + 1);
+            $seq = $this->extractSeq($request->nomor_spph) ?? ((int) Spph::lockForUpdate()->max('sequence_number') + 1);
             $spph = Spph::create([
                 'nomor_spph' => $request->nomor_spph,
                 'sequence_number' => $seq,
@@ -358,11 +378,7 @@ class SpphController extends Controller
             $this->syncItems($spph, $request->input('items', []));
 
             if ($nomorPr && $nomorPrType === 'ppbj') {
-                $ppbjRecord = Ppbj::where('ppbj_no', $nomorPr)
-                    ->where('status', '!=', 'CANCELLED')
-                    ->where(fn($q) => $q->whereNull('spph_rfq_1')->orWhere('spph_rfq_1', ''))
-                    ->first();
-                if ($ppbjRecord) {
+                if ($ppbjRecord && $ppbjRecord->status !== 'CANCELLED' && empty($ppbjRecord->spph_rfq_1)) {
                     $ppbjRecord->spph_rfq_1 = $spph->nomor_spph;
                     $ppbjRecord->tgl_spph = $spph->tanggal;
                     $ppbjRecord->save();
@@ -373,7 +389,12 @@ class SpphController extends Controller
             Cache::forget('spph:suggest');
 
             return redirect()->route('spph.index')->with('success', 'Data SPPH berhasil disimpan!');
-        });
+            });
+        } catch (QueryException $e) {
+            return back()
+                ->withErrors(['nomor_pr' => 'Nomor SPPH atau nomor PR sudah dipakai oleh data lain. Silakan refresh halaman dan cek data terbaru.'])
+                ->withInput();
+        }
     }
 
     // =========================================================
@@ -384,7 +405,7 @@ class SpphController extends Controller
         $request->validate([
             'nomor_spph' => ['required', 'string', 'max:60', Rule::unique('spphs', 'nomor_spph')->ignore($spph->id)],
             'tanggal' => 'required|date',
-            'nomor_pr' => 'nullable|string|max:100',
+            'nomor_pr' => ['nullable', 'string', 'max:100', Rule::unique('spphs', 'nomor_pr')->ignore($spph->id)],
             'nomor_pr_type' => 'nullable|in:ppbj,manual',
             'nama_vendor' => 'required|string|max:255',
             'deskripsi_pengadaan' => 'required|string',
@@ -410,7 +431,26 @@ class SpphController extends Controller
                 return back()->withErrors(['nomor_pr' => "PPBJ sudah terhubung dengan SPPH: {$ppbj->spph_rfq_1}!"])->withInput();
         }
 
-        return DB::transaction(function () use ($request, $spph, $nomorPr, $nomorPrType, $oldNomorPr) {
+        try {
+            return DB::transaction(function () use ($request, $spph, $nomorPr, $nomorPrType, $oldNomorPr) {
+            $newPpbj = null;
+
+            if ($nomorPr && $nomorPrType === 'ppbj') {
+                $newPpbj = Ppbj::where('ppbj_no', $nomorPr)->lockForUpdate()->first();
+
+                if (!$newPpbj) {
+                    return back()->withErrors(['nomor_pr' => "PPBJ \"{$nomorPr}\" tidak ditemukan!"])->withInput();
+                }
+
+                if ($newPpbj->status === 'CANCELLED') {
+                    return back()->withErrors(['nomor_pr' => "PPBJ sudah di-CANCELLED!"])->withInput();
+                }
+
+                if (!empty($newPpbj->spph_rfq_1) && $newPpbj->spph_rfq_1 !== $spph->nomor_spph) {
+                    return back()->withErrors(['nomor_pr' => "PPBJ sudah terhubung dengan SPPH: {$newPpbj->spph_rfq_1}!"])->withInput();
+                }
+            }
+
             $seq = $this->extractSeq($request->nomor_spph) ?? $spph->sequence_number;
 
             $spph->update([
@@ -436,9 +476,7 @@ class SpphController extends Controller
             }
 
             if ($nomorPr && $nomorPrType === 'ppbj') {
-                $newPpbj = Ppbj::where('ppbj_no', $nomorPr)
-                    ->where('status', '!=', 'CANCELLED')->first();
-                if ($newPpbj) {
+                if ($newPpbj && $newPpbj->status !== 'CANCELLED') {
                     $newPpbj->spph_rfq_1 = $spph->nomor_spph;
                     $newPpbj->tgl_spph = $spph->tanggal;
                     $newPpbj->save();
@@ -449,7 +487,12 @@ class SpphController extends Controller
             Cache::forget('spph:suggest');
 
             return redirect()->route('spph.index')->with('success', 'Data SPPH berhasil diperbarui!');
-        });
+            });
+        } catch (QueryException $e) {
+            return back()
+                ->withErrors(['nomor_pr' => 'Nomor SPPH atau nomor PR sudah dipakai oleh data lain. Silakan refresh halaman dan cek data terbaru.'])
+                ->withInput();
+        }
     }
 
     // =========================================================

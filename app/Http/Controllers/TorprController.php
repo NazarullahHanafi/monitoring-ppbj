@@ -312,7 +312,13 @@ class TorprController extends Controller
         $data['sign_token_kacab_expires_at'] = now()->addDays(7);
         $data['sign_token_kabid_expires_at'] = now()->addDays(7);
 
-        $torpr = Torpr::create($data);
+        try {
+            $torpr = Torpr::create($data);
+        } catch (QueryException $e) {
+            return response()->json([
+                'message' => 'Nomor PR sudah dipakai oleh data lain. Silakan refresh halaman dan cek data terbaru.',
+            ], 422);
+        }
 
         $this->logActivity($torpr, 'created', "PR Baru Dibuat: {$torpr->nomor_pr}");
 
@@ -602,7 +608,13 @@ class TorprController extends Controller
         }
 
         // Eksekusi Update
-        $torpr->update($data);
+        try {
+            $torpr->update($data);
+        } catch (QueryException $e) {
+            return response()->json([
+                'message' => 'Nomor PR sudah dipakai oleh data lain. Silakan refresh halaman dan cek data terbaru.',
+            ], 422);
+        }
 
         // Simpan Log
         if (!empty($changes)) {
