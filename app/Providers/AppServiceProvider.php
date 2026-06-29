@@ -3,10 +3,12 @@
 namespace App\Providers;
 
 use Illuminate\Support\Facades\Cache;
+use App\Models\ContactMessage;
 use App\Models\PrReceiptApproval;
 use App\Models\User;
 use App\Policies\UserPolicy;
 use Illuminate\Support\ServiceProvider;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\View;
 use Illuminate\Auth\Events\Logout;
 use App\Models\Satuan;
@@ -42,6 +44,7 @@ class AppServiceProvider extends ServiceProvider
         View::composer('layouts.app', function ($view) {
             $user = auth()->user();
             $pendingCount = 0;
+            $unreadContactMessageCount = 0;
 
             if ($user && $user->department === 'umum') {
                 $pendingCount = Cache::remember(
@@ -49,9 +52,18 @@ class AppServiceProvider extends ServiceProvider
                     now()->addSeconds(30),
                     fn() => PrReceiptApproval::where('status', 'PENDING')->count()
                 );
+
+                if ($user->role === 'superadmin' && Schema::hasTable('contact_messages')) {
+                    $unreadContactMessageCount = Cache::remember(
+                        'contact_messages_unread_count',
+                        now()->addSeconds(30),
+                        fn() => ContactMessage::whereNull('read_at')->count()
+                    );
+                }
             }
 
             $view->with('pendingApprovalCount', $pendingCount);
+            $view->with('unreadContactMessageCount', $unreadContactMessageCount);
         });
 
         Satuan::observe(SatuanObserver::class);

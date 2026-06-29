@@ -1,417 +1,310 @@
 @extends('layouts.landing')
 
-@section('title', 'About - PPBJ Management System')
+@section('title', 'About - SIMONPR')
 
 @push('styles')
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        body, main.site-main {
+            background:
+                radial-gradient(circle at 12% 12%, rgba(34,211,238,.12), transparent 26rem),
+                radial-gradient(circle at 86% 20%, rgba(129,140,248,.13), transparent 28rem),
+                var(--bg) !important;
+            font-family: 'Montserrat', sans-serif;
+        }
 
-<style>
-:root { --r: 16px; --green: #34d399; --amber: #fbbf24; }
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-html { background: var(--bg) !important; }
-body {
-    background: var(--bg) !important; color: var(--text);
-    font-family: 'Montserrat', sans-serif;
-    overflow-x: hidden; -webkit-font-smoothing: antialiased;
-}
-/* Kill any layout wrapper backgrounds */
-main, #main, .main-content, [role="main"],
-.layout-content, .page-content, .container-fluid,
+        [data-theme="light"] body,
+        [data-theme="light"] main.site-main {
+            background:
+                radial-gradient(circle at 12% 12%, rgba(8,145,178,.10), transparent 26rem),
+                radial-gradient(circle at 86% 20%, rgba(99,102,241,.10), transparent 28rem),
+                #f8fbff !important;
+        }
 
-h1,h2,h3,h4 { font-family: 'Montserrat', sans-serif; }
+        .agency-wrap { width:min(1180px, calc(100% - 48px)); margin:0 auto; position:relative; z-index:1; }
+        .agency-hero { position:relative; overflow:hidden; padding:108px 0 68px; }
+        .agency-hero::before {
+            content:""; position:absolute; inset:0; opacity:.32;
+            background:
+                linear-gradient(90deg, var(--bg), rgba(8,13,26,.72), rgba(8,13,26,.5)),
+                url('{{ asset('images/hero-building.jpg') }}') center right/cover no-repeat;
+        }
+        [data-theme="light"] .agency-hero::before {
+            opacity:.62;
+            background:
+                linear-gradient(90deg, rgba(248,251,255,.98), rgba(248,251,255,.78), rgba(248,251,255,.55)),
+                url('{{ asset('images/hero-building.jpg') }}') center right/cover no-repeat;
+        }
+        .hero-split { display:grid; grid-template-columns:minmax(0,1.05fr) minmax(320px,.7fr); gap:56px; align-items:end; }
+        .eyebrow {
+            display:inline-flex; align-items:center; gap:10px; width:fit-content; padding:9px 13px;
+            border:1px solid rgba(34,211,238,.25); border-radius:999px; color:var(--cyan);
+            background:rgba(34,211,238,.08); font-size:.75rem; font-weight:800; letter-spacing:.12em; text-transform:uppercase;
+        }
+        .eyebrow::before { content:""; width:8px; height:8px; border-radius:999px; background:#34d399; box-shadow:0 0 0 6px rgba(52,211,153,.14); }
+        .hero-title {
+            margin:18px 0 20px; color:var(--text); font-size:clamp(3rem,7vw,6.4rem);
+            line-height:.9; letter-spacing:-.08em; font-weight:900; max-width:850px;
+        }
+        .hero-title span { display:block; }
+        .gradient-text {
+            background:linear-gradient(120deg,var(--cyan),var(--violet),#ec4899);
+            -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;
+        }
+        .hero-copy { color:var(--text-2); line-height:1.85; font-size:1.02rem; max-width:640px; }
+        .hero-card, .glass-card {
+            border:1px solid var(--border); border-radius:28px; background:rgba(255,255,255,.06);
+            box-shadow:0 18px 44px rgba(0,0,0,.18); overflow:hidden;
+        }
+        [data-theme="light"] .hero-card,
+        [data-theme="light"] .glass-card { background:rgba(255,255,255,.84); box-shadow:0 18px 44px rgba(15,23,42,.08); }
+        .hero-card { padding:24px; }
+        .mini-row { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:17px 0; border-bottom:1px solid var(--border); }
+        .mini-row:last-child { border-bottom:none; }
+        .mini-row b { color:var(--text); font-size:1.8rem; letter-spacing:-.06em; }
+        .mini-row span { color:var(--text-2); font-size:.82rem; font-weight:700; line-height:1.5; text-align:right; }
+        .section { padding:74px 0; }
+        .intro-grid { display:grid; grid-template-columns:minmax(0,.85fr) minmax(320px,1fr); gap:24px; align-items:stretch; }
+        .big-panel { padding:clamp(28px,5vw,52px); position:relative; }
+        .big-panel h2 { color:var(--text); font-size:clamp(2rem,4vw,4rem); line-height:.98; letter-spacing:-.065em; margin:14px 0 18px; }
+        .big-panel p { color:var(--text-2); line-height:1.85; max-width:760px; }
+        .info-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; }
+        .info-card { padding:24px; }
+        .info-icon { width:50px; height:50px; border-radius:18px; display:grid; place-items:center; color:#fff; background:linear-gradient(135deg,var(--cyan),var(--violet)); margin-bottom:18px; }
+        .info-card h3 { color:var(--text); font-size:1.05rem; margin-bottom:10px; }
+        .info-card p { color:var(--text-2); line-height:1.7; font-size:.9rem; }
+        .values-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px; }
+        .value-card { padding:26px; min-height:210px; transition:.22s ease; }
+        .value-card:hover { transform:translateY(-5px); border-color:rgba(34,211,238,.28); }
+        .value-no { color:var(--muted); font-size:.75rem; font-weight:900; letter-spacing:.12em; margin-bottom:24px; }
+        .value-card h3 { color:var(--text); margin-bottom:10px; font-size:1.08rem; }
+        .value-card p { color:var(--text-2); line-height:1.7; font-size:.9rem; }
+        .cta-panel {
+            display:grid; grid-template-columns:1fr auto; gap:28px; align-items:center; padding:36px;
+            border-radius:30px; background:linear-gradient(135deg,rgba(34,211,238,.18),rgba(129,140,248,.16)); border:1px solid var(--border);
+        }
+        .cta-panel h2 { color:var(--text); font-size:clamp(1.8rem,4vw,3.4rem); line-height:1; letter-spacing:-.06em; margin-bottom:10px; }
+        .cta-panel p { color:var(--text-2); line-height:1.75; }
+        .btn-row { display:flex; flex-wrap:wrap; gap:12px; }
+        .btn-primary, .btn-soft {
+            min-height:48px; padding:0 22px; border-radius:999px; display:inline-flex; align-items:center; justify-content:center; gap:10px;
+            font-weight:800; text-decoration:none; transition:.2s ease;
+        }
+        .btn-primary { color:#fff; background:linear-gradient(135deg,var(--cyan),var(--violet)); box-shadow:0 16px 34px rgba(99,102,241,.22); }
+        .btn-soft { color:var(--text); border:1px solid var(--border); background:rgba(255,255,255,.06); }
+        .btn-primary:hover, .btn-soft:hover { transform:translateY(-2px); }
+        .reveal { opacity:0; transform:translateY(20px); transition:.65s ease; }
+        .reveal.show { opacity:1; transform:none; }
+        /* Koral-inspired alignment with Home */
+        body,
+        main.site-main {
+            background: #fff !important;
+        }
 
-.dot-bg {
-    position: fixed; inset: 0; z-index: 0; pointer-events: none;
-    background-image: radial-gradient(circle, rgba(255,255,255,.04) 1px, transparent 1px);
-    background-size: 28px 28px;
-}
-.wrap { max-width: 1100px; margin: 0 auto; padding: 0 24px; position: relative; z-index: 1; }
+        [data-theme="dark"] body,
+        [data-theme="dark"] main.site-main {
+            background: #0e1020 !important;
+        }
 
-/* REVEAL */
-.sr { opacity:0; transform:translateY(20px); transition: opacity .55s ease, transform .55s ease; }
-.sr.d1{transition-delay:.08s;} .sr.d2{transition-delay:.16s;} .sr.d3{transition-delay:.24s;}
-.sr.show { opacity:1; transform:none; }
+        .agency-hero::before {
+            opacity: .92;
+            background:
+                linear-gradient(90deg, rgba(255,255,255,.96) 0%, rgba(255,255,255,.82) 48%, rgba(255,255,255,.48) 100%),
+                url('{{ asset('images/hero-building.jpg') }}') center right / cover no-repeat;
+        }
 
-/* HERO BANNER */
-.about-hero {
-    position: relative; overflow: hidden;
-    padding: 120px 0 80px; text-align: center;
-}
-.about-hero-bg {
-    position: absolute; inset: 0; z-index: 0;
-    background-image: url('{{ asset("images/hero-building.jpg") }}');
-    background-size: cover; background-position: center 30%;
-}
-.about-hero-bg::after {
-    content:''; position: absolute; inset: 0;
-    background:
-        linear-gradient(180deg, rgba(8,13,26,.88) 0%, rgba(8,13,26,.75) 50%, rgba(8,13,26,.95) 100%);
-}
-.about-hero-inner { position: relative; z-index: 1; }
-.page-tag {
-    display: inline-block; font-size:.72rem; font-weight:700;
-    letter-spacing:.18em; text-transform:uppercase; color:var(--cyan);
-    margin-bottom:16px;
-}
-.about-hero h1 {
-    font-size: clamp(2.4rem, 5vw, 3.8rem); font-weight:800;
-    line-height:1.1; letter-spacing:-.03em; margin-bottom:16px;
-}
-.grad { background:linear-gradient(130deg,var(--cyan),var(--violet)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
-.about-hero p { color:rgba(226,232,240,.65); font-size:1.05rem; max-width:480px; margin:0 auto; line-height:1.75; }
+        [data-theme="dark"] .agency-hero::before {
+            opacity: .95;
+            background:
+                linear-gradient(90deg, rgba(14,16,32,.95) 0%, rgba(14,16,32,.82) 48%, rgba(14,16,32,.56) 100%),
+                url('{{ asset('images/hero-building.jpg') }}') center right / cover no-repeat;
+        }
 
-/* SHARED SECTION */
-.sec { padding: 88px 0; }
-.sec.surface { background: var(--surface); }
-.sec-label { font-size:.72rem; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--cyan); margin-bottom:10px; }
-.sec-title { font-size:clamp(1.7rem,2.8vw,2.5rem); font-weight:800; letter-spacing:-.025em; line-height:1.15; margin-bottom:14px; }
-.sec-sub { color:var(--muted); font-size:.97rem; line-height:1.75; }
+        .eyebrow {
+            color: #ff6b66;
+            border: 0;
+            background: transparent;
+            padding: 0;
+            border-radius: 0;
+            letter-spacing: .14em;
+        }
 
-/* WHO WE ARE */
-.who-grid { display:grid; grid-template-columns:1fr 1fr; gap:56px; align-items:center; }
-.who-text p { color:var(--muted); font-size:.97rem; line-height:1.8; margin-bottom:16px; }
-.who-text p:last-child { margin-bottom:0; }
+        .eyebrow::before {
+            width: 34px;
+            height: 3px;
+            border-radius: 999px;
+            background: #ff6b66;
+            box-shadow: none;
+        }
 
-.trust-card {
-    background: var(--card); border: 1px solid var(--border);
-    border-radius: var(--r); padding: 28px; position: relative;
-}
-.trust-card::before {
-    content:''; position:absolute; top:0; left:12%; right:12%; height:1px;
-    background:linear-gradient(90deg,transparent,var(--cyan),transparent);
-}
-.trust-item { display:flex; align-items:center; gap:14px; padding:13px 0; border-bottom:1px solid var(--border); }
-.trust-item:last-child { border-bottom:none; padding-bottom:0; }
-.trust-item:first-child { padding-top:0; }
-.t-ic { width:42px; height:42px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:.9rem; flex-shrink:0; }
-.tc{background:rgba(34,211,238,.12);color:var(--cyan);}
-.tv{background:rgba(129,140,248,.12);color:var(--violet);}
-.tg{background:rgba(52,211,153,.12);color:var(--green);}
-.t-name { font-size:.92rem; font-weight:700; margin-bottom:2px; }
-.t-desc { font-size:.77rem; color:var(--muted); }
+        .hero-title {
+            color: #111229;
+            font-size: clamp(3.4rem, 8vw, 7.6rem);
+            line-height: .9;
+            letter-spacing: -.07em;
+        }
 
-/* VISI MISI */
-.vm-grid { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
-.vm-card {
-    background:var(--card); border:1px solid var(--border);
-    border-radius:var(--r); padding:32px; position:relative; overflow:hidden;
-    transition: border-color .25s, transform .25s;
-}
-.vm-card:hover { border-color:rgba(34,211,238,.2); transform:translateY(-3px); }
-.vm-card::before {
-    content:''; position:absolute; top:0; left:0; right:0; height:2px;
-}
-.vm-card.visi::before  { background:linear-gradient(90deg,var(--cyan),var(--violet)); }
-.vm-card.misi::before  { background:linear-gradient(90deg,var(--violet),var(--green)); }
-.vm-card h4 { font-size:1rem; font-weight:800; letter-spacing:.04em; text-transform:uppercase; margin-bottom:14px; }
-.vm-card.visi h4 { color:var(--cyan); }
-.vm-card.misi h4 { color:var(--violet); }
-.vm-card p { color:var(--muted); font-size:.9rem; line-height:1.75; }
-.misi-list { list-style:none; }
-.misi-list li { display:flex; align-items:flex-start; gap:10px; color:var(--muted); font-size:.9rem; line-height:1.6; margin-bottom:10px; }
-.misi-list li:last-child { margin-bottom:0; }
-.misi-list li::before { content:''; width:6px; height:6px; border-radius:50%; background:var(--violet); margin-top:7px; flex-shrink:0; }
+        [data-theme="dark"] .hero-title {
+            color: #f8fafc;
+        }
 
-/* VALUES */
-.val-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:18px; }
-.val-card {
-    background:var(--card); border:1px solid var(--border);
-    border-radius:var(--r); padding:28px 22px; text-align:center;
-    transition:border-color .25s, transform .25s;
-}
-.val-card:hover { border-color:rgba(34,211,238,.18); transform:translateY(-4px); }
-.val-n { font-size:.68rem; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--muted); margin-bottom:16px; }
-.val-ic { width:52px; height:52px; border-radius:14px; display:flex; align-items:center; justify-content:center; font-size:1.2rem; margin:0 auto 18px; }
-.vi-c{background:rgba(34,211,238,.1);color:var(--cyan);}
-.vi-v{background:rgba(129,140,248,.1);color:var(--violet);}
-.vi-g{background:rgba(52,211,153,.1);color:var(--green);}
-.vi-p{background:rgba(244,114,182,.1);color:#f472b6;}
-.vi-o{background:rgba(251,146,60,.1);color:#fb923c;}
-.vi-i{background:rgba(34,211,238,.1);color:var(--cyan);}
-.val-card h3 { font-size:.97rem; font-weight:700; margin-bottom:8px; }
-.val-card p  { color:var(--muted); font-size:.83rem; line-height:1.6; }
+        .gradient-text {
+            background: none;
+            -webkit-text-fill-color: #ff6b66;
+            color: #ff6b66;
+        }
 
-/* STATS ROW */
-.stats-row { display:grid; grid-template-columns:repeat(4,1fr); border:1px solid var(--border); border-radius:var(--r); overflow:hidden; }
-.st { padding:36px 20px; text-align:center; border-right:1px solid var(--border); transition:background .2s; }
-.st:last-child{border-right:none;}
-.st:hover{background:var(--surface);}
-.st-n { font-family:'Montserrat',sans-serif; font-size:clamp(2rem,3vw,2.8rem); font-weight:800; line-height:1; margin-bottom:8px; }
-.cn{color:var(--cyan);}.cv{color:var(--violet);}.cg{color:var(--green);}.cp{color:#f472b6;}
-.st p { color:var(--muted); font-size:.8rem; }
+        .hero-copy,
+        .big-panel p,
+        .info-card p,
+        .value-card p,
+        .cta-panel p {
+            line-height: 1.9;
+            font-weight: 500;
+        }
 
-/* RESPONSIVE */
-@media(max-width:900px){ .val-grid{grid-template-columns:repeat(2,1fr);} }
-@media(max-width:768px){
-    .who-grid{grid-template-columns:1fr; gap:32px;}
-    .vm-grid{grid-template-columns:1fr;}
-    .stats-row{grid-template-columns:repeat(2,1fr);}
-    .st{border-bottom:1px solid var(--border);}
-}
-@media(max-width:480px){ .val-grid{grid-template-columns:1fr;} }
+        .hero-card,
+        .glass-card {
+            border-radius: 0;
+            background: #fff;
+            border: 1px solid rgba(17,18,41,.10);
+            box-shadow: 0 22px 60px rgba(17,18,41,.08);
+        }
 
+        [data-theme="dark"] .hero-card,
+        [data-theme="dark"] .glass-card {
+            background: #171a2f;
+            border-color: rgba(255,255,255,.12);
+        }
 
-.page-shell { background: var(--bg); min-height: 100vh; position: relative; z-index: 1; }
+        .big-panel h2,
+        .cta-panel h2 {
+            letter-spacing: -.055em;
+            font-size: clamp(2.25rem, 4.6vw, 4.8rem);
+        }
 
-/* ── Mobile button fix ── */
-@media(max-width:600px){
-    .btn-row { flex-direction:row !important; flex-wrap:wrap; gap:10px; }
-    .btn-p, .btn-g, .btn-submit {
-        flex: 0 0 auto; width: auto !important;
-        padding: 12px 20px; font-size: .88rem;
-    }
-    .cta-strip .btn-row, .cta-b .btn-row { justify-content: center; }
-}
+        .info-icon {
+            border-radius: 0;
+            background: #ff6b66;
+        }
 
-/* ── Kill white backgrounds only — DO NOT touch padding ── */
-/* Only force dark bg, never override padding (that breaks navbar offset) */
-main, #main, #app, .main-content, .content-wrapper { background: var(--bg) !important; }
-.page-shell { background: var(--bg); }
+        .value-no {
+            color: #ff6b66;
+        }
 
-/* ══ LIGHT MODE overrides (token-based) ══ */
-[data-theme="light"] .page-shell,
-[data-theme="light"] main,
-[data-theme="light"] section { background: var(--bg) !important; }
-[data-theme="light"] .page-hero-bg::after,
-[data-theme="light"] .about-hero-bg::after {
-    background: linear-gradient(180deg,
-        rgba(255,255,255,.88) 0%,
-        rgba(255,255,255,.80) 55%,
-        rgba(255,255,255,1) 100%) !important;
-}
-[data-theme="light"] .hero-bg::after {
-    background: linear-gradient(135deg,
-        rgba(255,255,255,.92) 0%,
-        rgba(255,255,255,.78) 60%,
-        rgba(248,250,252,.92) 100%) !important;
-}
-[data-theme="light"] .search-card,
-[data-theme="light"] .pr-card,
-[data-theme="light"] .tl-card,
-[data-theme="light"] .fc,
-[data-theme="light"] .hv,
-[data-theme="light"] .ms,
-[data-theme="light"] .fi,
-[data-theme="light"] .how-card,
-[data-theme="light"] .sc-card,
-[data-theme="light"] .val-card,
-[data-theme="light"] .wf-card,
-[data-theme="light"] .contact-info-card,
-[data-theme="light"] .contact-form-card,
-[data-theme="light"] .not-found {
-    background: var(--card) !important;
-    border-color: var(--border) !important;
-    box-shadow: 0 4px 24px var(--shadow);
-}
-[data-theme="light"] .search-input,
-[data-theme="light"] .form-input,
-[data-theme="light"] .form-textarea {
-    background: rgba(0,0,0,.04) !important;
-    border-color: var(--border) !important;
-    color: var(--text) !important;
-}
-[data-theme="light"] .tl-body-inner { background: rgba(0,0,0,.025) !important; }
-[data-theme="light"] .pr-field { background: rgba(0,0,0,.03) !important; border-color: var(--border) !important; }
-[data-theme="light"] .prog-step { background: rgba(0,0,0,.02) !important; }
-[data-theme="light"] .cta-b { background: var(--card) !important; }
-[data-theme="light"] .sg { background: transparent !important; }
-[data-theme="light"] .features,
-[data-theme="light"] .how-section,
-[data-theme="light"] .stats-s,
-[data-theme="light"] .about-vals,
-[data-theme="light"] .about-vm { background: var(--surface) !important; }
-[data-theme="light"] .hero-card { background: rgba(255,255,255,.9) !important; backdrop-filter: blur(16px); }
-[data-theme="light"] .modal-box,
-[data-theme="light"] #suggestBox { background: var(--card) !important; }
-[data-theme="light"] .suggest-row { color: var(--text) !important; }
-[data-theme="light"] .suggest-row:hover { background: rgba(0,0,0,.04) !important; }
-[data-theme="light"] .dot-bg { opacity: 0.6; }
-[data-theme="light"] .sec-label,
-[data-theme="light"] .page-tag { color: var(--cyan) !important; }
-[data-theme="light"] h1, [data-theme="light"] h2,
-[data-theme="light"] h3, [data-theme="light"] h4 { color: var(--text) !important; }
-[data-theme="light"] p, [data-theme="light"] li { color: var(--text-2) !important; }
-[data-theme="light"] .hero-title,
-[data-theme="light"] .page-hero h1 { color: var(--text) !important; }
-[data-theme="light"] .hero-sub,
-[data-theme="light"] .page-hero p { color: var(--text-2) !important; }
-[data-theme="light"] .ms-l,
-[data-theme="light"] .fi-desc,
-[data-theme="light"] .fc p,
-[data-theme="light"] .tl-desc,
-[data-theme="light"] .pr-num-label,
-[data-theme="light"] .pr-field-label,
-[data-theme="light"] .tl-time-val { color: var(--muted) !important; }
-[data-theme="light"] .pr-num,
-[data-theme="light"] .fi-name,
-[data-theme="light"] .fc h3,
-[data-theme="light"] .tl-title,
-[data-theme="light"] .pr-field-val { color: var(--text) !important; }
-[data-theme="light"] .nav-link { color: var(--text-2) !important; }
-[data-theme="light"] .nav-link:hover,
-[data-theme="light"] .nav-link.active { color: var(--cyan) !important; }
-[data-theme="light"] .grad {
-    background: linear-gradient(130deg, var(--cyan), var(--violet)) !important;
-    -webkit-background-clip: text !important;
-    -webkit-text-fill-color: transparent !important;
-    background-clip: text !important;
-}
+        .btn-primary {
+            border-radius: 4px;
+            background: #ff6b66;
+            box-shadow: 0 16px 34px rgba(255,107,102,.24);
+        }
 
-[data-theme="light"] .ms-n { -webkit-text-fill-color: var(--cyan) !important; background: none !important; color: var(--cyan) !important; }
+        .btn-soft {
+            border-radius: 4px;
+        }
 
-::-webkit-scrollbar{width:5px;}
-::-webkit-scrollbar-track{background:var(--bg);}
-::-webkit-scrollbar-thumb{background:rgba(34,211,238,.2);border-radius:5px;}
-</style>
+        @media(max-width:900px){ .hero-split,.intro-grid,.cta-panel{grid-template-columns:1fr;} .values-grid,.info-grid{grid-template-columns:1fr 1fr;} }
+        @media(max-width:640px){ .agency-wrap{width:min(100% - 28px,1180px);} .values-grid,.info-grid{grid-template-columns:1fr;} .agency-hero{padding:78px 0 48px;} }
+    </style>
 @endpush
 
 @section('content')
-<div class="dot-bg"></div>
-<div class="page-shell">
-
-{{-- ── HERO BANNER ── --}}
-<section class="about-hero">
-    <div class="about-hero-bg"></div>
-    <div class="wrap about-hero-inner">
-        <div class="page-tag sr">Cabang Pekanbaru</div>
-        <h1 class="sr d1">Tentang <span class="grad">Sistem PPBJ</span></h1>
-        <p class="sr d2">Mengenal lebih dekat platform pengadaan barang dan jasa PT Pekanbaru yang modern, transparan, dan akuntabel.</p>
-    </div>
-</section>
-
-{{-- ── STATS ── --}}
-<section class="sec" style="background:var(--surface); padding:56px 0;">
-    <div class="wrap">
-        <div class="stats-row sr">
-            <div class="st"><div class="st-n cn">500+</div><p>PR Diproses</p></div>
-            <div class="st"><div class="st-n cv">98%</div><p>On-time Delivery</p></div>
-            <div class="st"><div class="st-n cg">24/7</div><p>System Uptime</p></div>
-            <div class="st"><div class="st-n cp">100%</div><p>Compliant</p></div>
-        </div>
-    </div>
-</section>
-
-{{-- ── SIAPA KAMI ── --}}
-<section class="sec">
-    <div class="wrap">
-        <div class="who-grid">
-            <div class="who-text">
-                <div class="sec-label sr">Tentang Kami</div>
-                <h2 class="sec-title sr d1">Siapa Kami?</h2>
-                <p class="sr d2">
-                    SIMON PR adalah sistem informasi monitoring pengadaan barang dan jasa (PPBJ) yang dirancang khusus untuk PT Pekanbaru guna meningkatkan efisiensi dan transparansi proses procurement.
-                </p>
-                <p class="sr d3">
-                    Dengan antarmuka modern dan alur kerja terstruktur, platform ini menghubungkan seluruh pihak terkait — dari pemohon, tim PPBJ, hingga manajemen — dalam satu ekosistem digital yang terintegrasi.
+    <section class="agency-hero">
+        <div class="agency-wrap hero-split">
+            <div class="reveal">
+                <div class="eyebrow">Tentang SIMONPR</div>
+                <h1 class="hero-title">
+                    <span>Sistem kecil,</span>
+                    <span class="gradient-text">dampak besar.</span>
+                </h1>
+                <p class="hero-copy">
+                    SIMONPR dibangun untuk membantu proses support pengadaan di Cabang Pekanbaru:
+                    pekerjaan lebih transparan, dokumen lebih rapi, dan status PR/PPBJ lebih mudah ditelusuri.
                 </p>
             </div>
+            <div class="hero-card reveal">
+                <div class="mini-row"><b>PR</b><span>Tracking proses dari masuk sampai selesai</span></div>
+                <div class="mini-row"><b>SPPH</b><span>Nomor dan dokumen dibuat lebih cepat</span></div>
+                <div class="mini-row"><b>API</b><span>Terhubung dengan sistem arsip digital</span></div>
+            </div>
+        </div>
+    </section>
 
-            <div class="sr d2">
-                <div class="trust-card">
-                    <div class="trust-item">
-                        <div class="t-ic tc"><i class="fas fa-award"></i></div>
-                        <div><div class="t-name">Trusted Platform</div><div class="t-desc">Digunakan seluruh unit Pekanbaru</div></div>
-                    </div>
-                    <div class="trust-item">
-                        <div class="t-ic tv"><i class="fas fa-shield-alt"></i></div>
-                        <div><div class="t-name">Secure & Reliable</div><div class="t-desc">Data terenkripsi dan tersimpan aman</div></div>
-                    </div>
-                    <div class="trust-item">
-                        <div class="t-ic tg"><i class="fas fa-headset"></i></div>
-                        <div><div class="t-name">24/7 Support</div><div class="t-desc">Tim siap membantu kapan saja</div></div>
-                    </div>
+    <section class="section">
+        <div class="agency-wrap intro-grid">
+            <div class="glass-card big-panel reveal">
+                <div class="eyebrow">Cerita sistem</div>
+                <h2>Dari pekerjaan manual menjadi alur digital yang bisa dipantau.</h2>
+                <p>
+                    Sebelumnya, status PR/PPBJ sering harus ditanyakan ulang lewat percakapan manual.
+                    SIMONPR merapikan alur itu dalam satu sistem: input PR/TORPR, approval, data vendor,
+                    SPPH, Surat Pesanan, kontrak, laporan, chat tim, chatbot, hingga integrasi arsip.
+                </p>
+            </div>
+            <div class="info-grid">
+                <div class="glass-card info-card reveal">
+                    <div class="info-icon"><i class="fas fa-users-gear"></i></div>
+                    <h3>Kolaborasi role</h3>
+                    <p>Umum, Operasional, Super Admin, dan Viewer memiliki akses sesuai kebutuhan kerja.</p>
+                </div>
+                <div class="glass-card info-card reveal">
+                    <div class="info-icon"><i class="fas fa-signature"></i></div>
+                    <h3>Tanda tangan token</h3>
+                    <p>Kabid/Kacab dapat mengisi atau menandatangani melalui token/QR sesuai alur operasional.</p>
+                </div>
+                <div class="glass-card info-card reveal">
+                    <div class="info-icon"><i class="fas fa-comments"></i></div>
+                    <h3>Komunikasi tim</h3>
+                    <p>Chat tim membantu koordinasi lintas fungsi tanpa keluar dari konteks pekerjaan.</p>
+                </div>
+                <div class="glass-card info-card reveal">
+                    <div class="info-icon"><i class="fas fa-box-archive"></i></div>
+                    <h3>Arsip terhubung</h3>
+                    <p>Dokumen PDF dan lokasi fisik arsip bisa dicek berdasarkan nomor PR/PPBJ.</p>
                 </div>
             </div>
         </div>
-    </div>
-</section>
+    </section>
 
-{{-- ── VISI MISI ── --}}
-<section class="sec surface">
-    <div class="wrap">
-        <div class="text-center" style="margin-bottom:48px">
-            <div class="sec-label sr">Arah & Tujuan</div>
-            <h2 class="sec-title sr d1">Visi &amp; Misi</h2>
-        </div>
-        <div class="vm-grid">
-            <div class="vm-card visi sr">
-                <h4>Visi</h4>
-                <p>Menjadi platform procurement digital terdepan di lingkungan PT Pekanbaru yang mendorong efisiensi, transparansi, dan akuntabilitas penuh dalam setiap siklus pengadaan barang dan jasa.</p>
+    <section class="section">
+        <div class="agency-wrap">
+            <div class="big-panel reveal" style="padding-left:0">
+                <div class="eyebrow">Nilai utama</div>
+                <h2 style="max-width:800px">Bukan hanya aplikasi, tapi cara kerja baru.</h2>
             </div>
-            <div class="vm-card misi sr d1">
-                <h4>Misi</h4>
-                <ul class="misi-list">
-                    <li>Mempercepat dan menyederhanakan proses pengadaan end-to-end</li>
-                    <li>Memberikan visibilitas real-time kepada seluruh pemangku kepentingan</li>
-                    <li>Memastikan kepatuhan terhadap regulasi dan kebijakan internal</li>
-                    <li>Mengintegrasikan monitoring SLA untuk menjamin ketepatan waktu</li>
-                </ul>
+            <div class="values-grid">
+                <div class="glass-card value-card reveal"><div class="value-no">01</div><h3>Transparan</h3><p>Status PR/PPBJ dapat dilihat tanpa harus bertanya berulang.</p></div>
+                <div class="glass-card value-card reveal"><div class="value-no">02</div><h3>Efisien</h3><p>Data yang sama dipakai untuk dokumen, laporan, tracking, dan arsip.</p></div>
+                <div class="glass-card value-card reveal"><div class="value-no">03</div><h3>Terukur</h3><p>Progress dan SLA proses support lebih mudah dibaca dari dashboard.</p></div>
+                <div class="glass-card value-card reveal"><div class="value-no">04</div><h3>Terintegrasi</h3><p>SIMONPR dapat berkomunikasi dengan sistem arsip melalui API.</p></div>
+                <div class="glass-card value-card reveal"><div class="value-no">05</div><h3>Ramah user</h3><p>Role viewer dapat melihat aktivitas tanpa risiko mengubah data.</p></div>
+                <div class="glass-card value-card reveal"><div class="value-no">06</div><h3>Siap direplikasi</h3><p>Konsepnya bisa diterapkan pada cabang/unit lain dengan proses serupa.</p></div>
             </div>
         </div>
-    </div>
-</section>
+    </section>
 
-{{-- ── VALUES ── --}}
-<section class="sec">
-    <div class="wrap">
-        <div class="text-center" style="margin-bottom:48px">
-            <div class="sec-label sr">Prinsip Kami</div>
-            <h2 class="sec-title sr d1">Nilai &amp; Komitmen</h2>
-            <p class="sec-sub sr d2" style="max-width:480px;margin:0 auto">Setiap fitur dan keputusan desain didasari oleh prinsip-prinsip berikut.</p>
-        </div>
-        <div class="val-grid">
-            <div class="val-card sr">
-                <div class="val-n">— 01</div>
-                <div class="val-ic vi-c"><i class="fas fa-eye"></i></div>
-                <h3>Transparansi</h3>
-                <p>Setiap tahap pengadaan terdokumentasi dan dapat diakses oleh pihak yang berwenang secara real-time.</p>
-            </div>
-            <div class="val-card sr d1">
-                <div class="val-n">— 02</div>
-                <div class="val-ic vi-v"><i class="fas fa-tachometer-alt"></i></div>
-                <h3>Efisiensi</h3>
-                <p>Otomatisasi alur persetujuan dan notifikasi mengurangi waktu proses secara signifikan.</p>
-            </div>
-            <div class="val-card sr d2">
-                <div class="val-n">— 03</div>
-                <div class="val-ic vi-g"><i class="fas fa-balance-scale"></i></div>
-                <h3>Akuntabilitas</h3>
-                <p>Setiap tindakan tercatat dalam audit trail lengkap untuk keperluan pelaporan dan kepatuhan.</p>
-            </div>
-            <div class="val-card sr">
-                <div class="val-n">— 04</div>
-                <div class="val-ic vi-p"><i class="fas fa-lock"></i></div>
-                <h3>Keamanan</h3>
-                <p>Data dilindungi dengan enkripsi standar industri dan kontrol akses berbasis peran.</p>
-            </div>
-            <div class="val-card sr d1">
-                <div class="val-n">— 05</div>
-                <div class="val-ic vi-o"><i class="fas fa-clock"></i></div>
-                <h3>Ketepatan Waktu</h3>
-                <p>SLA monitoring otomatis memastikan setiap permintaan diproses sesuai batas waktu yang ditetapkan.</p>
-            </div>
-            <div class="val-card sr d2">
-                <div class="val-n">— 06</div>
-                <div class="val-ic vi-i"><i class="fas fa-sync-alt"></i></div>
-                <h3>Integrasi</h3>
-                <p>Sistem terhubung antar departemen sehingga alur informasi berjalan mulus tanpa hambatan.</p>
+    <section class="section">
+        <div class="agency-wrap">
+            <div class="cta-panel reveal">
+                <div>
+                    <h2>Lihat prosesnya langsung.</h2>
+                    <p>Cari nomor PR/PPBJ melalui halaman tracking publik atau masuk ke dashboard untuk mengelola pekerjaan.</p>
+                </div>
+                <div class="btn-row">
+                    <a href="{{ route('landing.track') }}" class="btn-primary"><i class="fas fa-search"></i> Lacak PR</a>
+                    <a href="{{ route('landing.services') }}" class="btn-soft"><i class="fas fa-layer-group"></i> Lihat Fitur</a>
+                </div>
             </div>
         </div>
-    </div>
-</section>
-
-</div>{{-- end .page-shell --}}
-
+    </section>
 @endsection
 
 @push('scripts')
-<script>
-(function(){
-    var io = new IntersectionObserver(function(e){
-        e.forEach(function(x){ if(x.isIntersecting){ x.target.classList.add('show'); io.unobserve(x.target); } });
-    }, { threshold: 0.1 });
-    document.querySelectorAll('.sr').forEach(function(el){ io.observe(el); });
-})();
-</script>
+    <script>
+        (function () {
+            var items = document.querySelectorAll('.reveal');
+            var obs = new IntersectionObserver(function(entries){
+                entries.forEach(function(entry){ if(entry.isIntersecting){ entry.target.classList.add('show'); obs.unobserve(entry.target); }});
+            }, {threshold:.12});
+            items.forEach(function(item){ obs.observe(item); });
+        })();
+    </script>
 @endpush

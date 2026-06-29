@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\AccountController;
 use App\Http\Controllers\ChatController;
+use App\Http\Controllers\ContactMessageController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\LandingController;
 use App\Http\Controllers\MasterDataController;
@@ -43,6 +44,9 @@ Route::middleware('guest.page_cache')->group(function () {
     // Track PR/PPBJ (Public - No Login Required)
     Route::get('/track', [TrackingPrController::class, 'landing'])->name('landing.track');
 });
+Route::post('/contact', [ContactMessageController::class, 'store'])
+    ->name('landing.contact.store')
+    ->middleware('throttle:5,1');
 Route::get('/track/suggest', [TrackingPrController::class, 'suggest'])->name('landing.track.suggest');
 
 // Dashboard redirect sesuai dept
@@ -127,6 +131,10 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
         Route::put('/users/{id}/password', [UserController::class, 'updatePassword'])->name('users.password');
         Route::delete('/users/{id}', [UserController::class, 'destroy'])->name('users.destroy');
         Route::get('/users/export', [UserController::class, 'export'])->name('users.export');
+
+        Route::get('/contact-messages', [ContactMessageController::class, 'index'])->name('contact-messages.index');
+        Route::put('/contact-messages/{contactMessage}/read', [ContactMessageController::class, 'toggleRead'])->name('contact-messages.read');
+        Route::delete('/contact-messages/{contactMessage}', [ContactMessageController::class, 'destroy'])->name('contact-messages.destroy');
 
         Route::get('/dashboard', [App\Http\Controllers\DashboardController::class, 'index'])
             ->name('dashboard.indexumum');

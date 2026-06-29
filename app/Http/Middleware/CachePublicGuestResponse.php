@@ -61,7 +61,6 @@ class CachePublicGuestResponse
             '/',
             '/about',
             '/services',
-            '/contact',
             '/track',
             '/login',
         ], true);

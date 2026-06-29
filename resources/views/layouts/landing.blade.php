@@ -96,30 +96,31 @@
         transition: background .35s, border-color .35s;
     }
     .nav-inner {
-        max-width: 1200px; margin: 0 auto; padding: 0 24px;
+        width: min(100% - 56px, 1600px); margin: 0 auto;
         height: 100%; display: flex; align-items: center; justify-content: space-between; gap: 16px;
     }
 
     /* Logo */
     .nav-logo { display:flex; align-items:center; gap:10px; text-decoration:none; flex-shrink:0; }
     .nav-logo-ic {
-        width:36px; height:36px; border-radius:10px;
-        background: linear-gradient(135deg,var(--cyan),var(--violet));
+        width:42px; height:42px; border-radius:12px;
+        background: #fff;
         display:flex; align-items:center; justify-content:center;
-        padding:5px; overflow:hidden; flex-shrink:0;
-        transition: transform .2s;
+        padding:6px; overflow:hidden; flex-shrink:0;
+        box-shadow: 0 8px 22px rgba(15,23,42,.12);
+        transition: transform .2s, box-shadow .2s;
     }
     .nav-logo-img { width:100%; height:100%; object-fit:contain; display:block; }
     .nav-logo:hover .nav-logo-ic { transform: scale(1.1) rotate(-5deg); }
     .nav-logo-name {
-        font-family:'Montserrat',sans-serif; font-weight:700; font-size:1rem;
-        background: linear-gradient(130deg,var(--cyan),var(--violet));
-        -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text;
+        font-family:'Montserrat',sans-serif; font-weight:900; font-size:1rem;
+        color: var(--text);
         white-space:nowrap;
+        letter-spacing:-.03em;
     }
 
     /* Links */
-    .nav-links { display:flex; align-items:center; gap:2px; }
+    .nav-links { display:flex; align-items:center; gap:2px; margin-left:auto; margin-right:auto; }
     .nav-link {
         padding:7px 13px; border-radius:9px; font-size:.875rem; font-weight:500;
         text-decoration:none; color:var(--text-2); white-space:nowrap;
@@ -228,12 +229,13 @@
     .footer-grid { display:grid; grid-template-columns:1.4fr repeat(3,1fr); gap:40px; margin-bottom:40px; }
     .footer-logo { display:flex; align-items:center; gap:10px; margin-bottom:14px; }
     .footer-logo-ic {
-        width:36px; height:36px; border-radius:10px;
-        background:linear-gradient(135deg,var(--cyan),var(--violet));
-        display:flex; align-items:center; justify-content:center; padding:5px; overflow:hidden;
+        width:42px; height:42px; border-radius:12px;
+        background:#fff;
+        display:flex; align-items:center; justify-content:center; padding:6px; overflow:hidden;
+        box-shadow: 0 8px 22px rgba(15,23,42,.12);
     }
     .footer-logo-img { width:100%; height:100%; object-fit:contain; display:block; }
-    .footer-logo-name { font-family:'Montserrat',sans-serif; font-weight:800; font-size:1rem; color:var(--text); letter-spacing:-.015em; }
+    .footer-logo-name { font-family:'Montserrat',sans-serif; font-weight:900; font-size:1rem; color:var(--text); letter-spacing:-.03em; }
     .footer-desc { font-family:'Montserrat',sans-serif; font-size:.83rem; font-weight:500; color:var(--text-2); line-height:1.7; max-width:260px; }
     .footer-col h4 {
         font-family:'Montserrat',sans-serif; font-size:.78rem; font-weight:700;
@@ -314,9 +316,9 @@
     <div class="nav-inner">
         <a href="{{ route('landing.index') }}" class="nav-logo">
             <div class="nav-logo-ic">
-                <img src="{{ asset('images/logo4.png') }}" alt="Logo SIMON PR" class="nav-logo-img">
+                <img src="{{ asset('images/logo4.png') }}" alt="Logo Sucofindo" class="nav-logo-img">
             </div>
-            <span class="nav-logo-name">SIMON PR</span>
+            <span class="nav-logo-name">SUCOFINDO</span>
         </a>
 
         <div class="nav-links">
@@ -330,19 +332,6 @@
         </div>
 
         <div class="nav-right">
-            <div class="theme-wrap">
-                <span class="theme-label">
-                    <i id="themeLabelIcon" class="fas fa-moon"></i>
-                    <span id="themeLabelText">Dark</span>
-                </span>
-                <button class="theme-btn" id="themeToggle" aria-label="Toggle theme" title="Toggle dark/light mode">
-                    <div class="theme-thumb">
-                        <i class="fas fa-moon  t-icon-dark"></i>
-                        <i class="fas fa-sun   t-icon-light"></i>
-                    </div>
-                </button>
-            </div>
-
             @auth
                 @php
                     $dashboardUrl = match(strtolower(auth()->user()->department ?? 'umum')) {
@@ -358,6 +347,19 @@
                     <i class="fas fa-sign-in-alt"></i> Login
                 </a>
             @endauth
+
+            <div class="theme-wrap">
+                <span class="theme-label">
+                    <i id="themeLabelIcon" class="fas fa-moon"></i>
+                    <span id="themeLabelText">Dark</span>
+                </span>
+                <button class="theme-btn" id="themeToggle" aria-label="Toggle theme" title="Toggle dark/light mode">
+                    <div class="theme-thumb">
+                        <i class="fas fa-moon  t-icon-dark"></i>
+                        <i class="fas fa-sun   t-icon-light"></i>
+                    </div>
+                </button>
+            </div>
 
             <button class="nav-burger" id="navBurger" aria-label="Menu">
                 <span class="b-line"></span>
@@ -405,9 +407,9 @@
             <div>
                 <div class="footer-logo">
                     <div class="footer-logo-ic">
-                        <img src="{{ asset('images/logo4.png') }}" alt="Logo SIMON PR" class="footer-logo-img">
+                        <img src="{{ asset('images/logo4.png') }}" alt="Logo Sucofindo" class="footer-logo-img">
                     </div>
-                    <span class="footer-logo-name">SIMON PR</span>
+                    <span class="footer-logo-name">SUCOFINDO</span>
                 </div>
                 <p class="footer-desc">Platform manajemen pengadaan barang dan jasa PT Cabang Pekanbaru yang efisien dan terintegrasi.</p>
             </div>

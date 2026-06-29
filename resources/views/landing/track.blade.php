@@ -1625,6 +1625,200 @@
                 border: 1px solid #ddd !important;
             }
         }
+        /* Agency refresh: lighter and less centered */
+        .dot-bg {
+            display: none;
+        }
+
+        .page-hero {
+            text-align: center;
+            padding: 96px 0 86px;
+        }
+
+        .page-hero-bg::after {
+            background: linear-gradient(90deg,
+                    rgba(8, 13, 26, .96) 0%,
+                    rgba(8, 13, 26, .78) 48%,
+                    rgba(8, 13, 26, .62) 100%);
+        }
+
+        [data-theme="light"] .page-hero-bg::after {
+            background: linear-gradient(90deg,
+                    rgba(248, 251, 255, .98) 0%,
+                    rgba(248, 251, 255, .82) 52%,
+                    rgba(248, 251, 255, .62) 100%);
+        }
+
+        .hero-inner {
+            max-width: 760px;
+            margin: 0 auto;
+        }
+
+        .page-hero h1 {
+            font-size: clamp(3rem, 7vw, 6rem);
+            line-height: .92;
+            letter-spacing: -.075em;
+            font-weight: 900;
+        }
+
+        .page-hero p {
+            margin-left: auto;
+            margin-right: auto;
+            max-width: 620px;
+        }
+
+        .search-section {
+            margin-top: -48px;
+        }
+
+        .search-card,
+        .result-card,
+        .timeline-card,
+        .guide-card {
+            box-shadow: 0 18px 44px rgba(0, 0, 0, .18) !important;
+            backdrop-filter: none !important;
+        }
+
+        [data-theme="light"] .search-card,
+        [data-theme="light"] .result-card,
+        [data-theme="light"] .timeline-card,
+        [data-theme="light"] .guide-card {
+            box-shadow: 0 18px 44px rgba(15, 23, 42, .08) !important;
+        }
+
+        @media(max-width:768px) {
+            .page-hero {
+                padding: 76px 0 74px;
+            }
+
+            .page-hero h1 {
+                font-size: clamp(2.7rem, 14vw, 4rem);
+            }
+        }
+
+        /* Koral-inspired track polish */
+        body,
+        main.site-main,
+        .page-shell {
+            background: #fff !important;
+        }
+
+        [data-theme="dark"] body,
+        [data-theme="dark"] main.site-main,
+        [data-theme="dark"] .page-shell {
+            background: #0e1020 !important;
+        }
+
+        .page-hero-bg {
+            opacity: 1;
+            background: url('{{ asset('images/hero-building.jpg') }}') center right / cover no-repeat;
+        }
+
+        .page-hero-bg::after {
+            background: linear-gradient(90deg,
+                rgba(255,255,255,.98) 0%,
+                rgba(255,255,255,.86) 48%,
+                rgba(255,255,255,.58) 100%) !important;
+        }
+
+        [data-theme="dark"] .page-hero-bg::after {
+            background: linear-gradient(90deg,
+                rgba(14,16,32,.97) 0%,
+                rgba(14,16,32,.84) 48%,
+                rgba(14,16,32,.62) 100%) !important;
+        }
+
+        .page-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            color: #ff6b66 !important;
+            background: transparent !important;
+            border: 0 !important;
+            padding: 0 !important;
+            border-radius: 0 !important;
+            letter-spacing: .14em;
+            font-weight: 900;
+        }
+
+        .page-tag::before {
+            content: "";
+            width: 34px;
+            height: 3px;
+            border-radius: 999px;
+            background: #ff6b66;
+        }
+
+        .page-hero h1 {
+            color: #111229 !important;
+            font-size: clamp(3.4rem, 8vw, 7.6rem);
+            line-height: .9;
+            letter-spacing: -.07em;
+        }
+
+        [data-theme="dark"] .page-hero h1 {
+            color: #f8fafc !important;
+        }
+
+        .grad {
+            background: none !important;
+            -webkit-text-fill-color: #ff6b66 !important;
+            color: #ff6b66 !important;
+        }
+
+        .page-hero p {
+            line-height: 1.9;
+            font-weight: 500;
+        }
+
+        .search-card,
+        .result-card,
+        .timeline-card,
+        .guide-card,
+        .pr-card,
+        .tl-card {
+            border-radius: 0 !important;
+            background: #fff !important;
+            border: 1px solid rgba(17,18,41,.10) !important;
+            box-shadow: 0 22px 60px rgba(17,18,41,.08) !important;
+        }
+
+        [data-theme="dark"] .search-card,
+        [data-theme="dark"] .result-card,
+        [data-theme="dark"] .timeline-card,
+        [data-theme="dark"] .guide-card,
+        [data-theme="dark"] .pr-card,
+        [data-theme="dark"] .tl-card {
+            background: #171a2f !important;
+            border-color: rgba(255,255,255,.12) !important;
+        }
+
+        .search-card::before {
+            background: #ff6b66 !important;
+        }
+
+        .search-input {
+            border-radius: 4px !important;
+            background: rgba(248,250,252,.92) !important;
+        }
+
+        [data-theme="dark"] .search-input {
+            background: rgba(255,255,255,.06) !important;
+        }
+
+        .btn-track,
+        .btn-info,
+        .btn-print,
+        .btn-understand {
+            border-radius: 4px !important;
+            background: #ff6b66 !important;
+            box-shadow: 0 16px 34px rgba(255,107,102,.24) !important;
+        }
+
+        .btn-back,
+        .chip {
+            border-radius: 4px !important;
+        }
     </style>
 @endpush
 
