@@ -89,11 +89,16 @@ class ChatController extends Controller
      */
     public function getUsers()
     {
-        $users = DB::table('users')
-            ->select('id', 'name', 'department')
-            ->where('id', '!=', Auth::id())
-            ->orderBy('name')
-            ->get()
+        $authId = Auth::id();
+
+        $users = Cache::remember('chat:mention_users:v1', 60, function () {
+            return DB::table('users')
+                ->select('id', 'name', 'department')
+                ->orderBy('name')
+                ->get();
+        })
+            ->where('id', '!=', $authId)
+            ->values()
             ->map(function ($user) {
                 $colors = $this->colors();
 

@@ -82,7 +82,7 @@ class TrackingPrController extends Controller
      */
     private function trackByNomorPr(string $nomorPr)
     {
-        $cacheKey = 'tracking_pr_' . md5(strtolower($nomorPr)) . '_v6';
+        $cacheKey = 'tracking_pr_' . md5(strtolower($nomorPr)) . '_v7';
         $cached = Cache::get($cacheKey);
         if ($cached !== null) return $cached;
 
@@ -172,7 +172,7 @@ class TrackingPrController extends Controller
      */
     private function trackByPpbj(string $nomor)
     {
-        $cacheKey = 'tracking_ppbj_' . md5(strtolower($nomor)) . '_v6';
+        $cacheKey = 'tracking_ppbj_' . md5(strtolower($nomor)) . '_v7';
         $cached = Cache::get($cacheKey);
         if ($cached !== null) return $cached;
 
@@ -277,7 +277,7 @@ class TrackingPrController extends Controller
     private function searchLike(string $keyword): ?array
     {
         $results = [];
-        $allowContains = mb_strlen($keyword) >= 2;
+        $allowContains = mb_strlen($keyword) >= 3;
 
         try {
             $prMatches = DB::table('torprs')
@@ -348,12 +348,12 @@ class TrackingPrController extends Controller
             $q = preg_replace('/[^A-Z0-9\-\/\s]/i', '', $q);
             if (empty($q)) return response()->json(['items' => []]);
 
-            $cacheKey = 'tracking_suggest_' . md5(strtolower($q)) . '_v6';
+            $cacheKey = 'tracking_suggest_' . md5(strtolower($q)) . '_v7';
             $cached = Cache::get($cacheKey);
             if ($cached !== null) return response()->json(['items' => $cached]);
 
             $items = [];
-            $allowContains = mb_strlen($q) >= 2;
+            $allowContains = mb_strlen($q) >= 3;
 
             try {
                 $prResults = DB::table('torprs')
@@ -435,7 +435,7 @@ class TrackingPrController extends Controller
         if (!$nomor) return response()->json(['success' => false], 400);
 
         $cleared = [];
-        foreach (['_v1', '_v2', '_v3', '_v4', '_v5', '_v6'] as $v) {
+        foreach (['_v1', '_v2', '_v3', '_v4', '_v5', '_v6', '_v7'] as $v) {
             if (Cache::forget('tracking_pr_' . md5(strtolower($nomor)) . $v)) $cleared[] = 'PR';
             if (Cache::forget('tracking_ppbj_' . md5(strtolower($nomor)) . $v)) $cleared[] = 'PPBJ';
         }

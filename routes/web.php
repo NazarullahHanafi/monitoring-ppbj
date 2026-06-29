@@ -47,7 +47,9 @@ Route::middleware('guest.page_cache')->group(function () {
 Route::post('/contact', [ContactMessageController::class, 'store'])
     ->name('landing.contact.store')
     ->middleware('throttle:5,1');
-Route::get('/track/suggest', [TrackingPrController::class, 'suggest'])->name('landing.track.suggest');
+Route::get('/track/suggest', [TrackingPrController::class, 'suggest'])
+    ->name('landing.track.suggest')
+    ->middleware('throttle:60,1');
 
 // Dashboard redirect sesuai dept
 Route::get('/home', function () {
