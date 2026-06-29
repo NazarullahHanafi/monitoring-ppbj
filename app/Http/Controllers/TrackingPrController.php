@@ -82,7 +82,7 @@ class TrackingPrController extends Controller
      */
     private function trackByNomorPr(string $nomorPr)
     {
-        $cacheKey = 'tracking_pr_' . md5(strtolower($nomorPr)) . '_v5';
+        $cacheKey = 'tracking_pr_' . md5(strtolower($nomorPr)) . '_v6';
         $cached = Cache::get($cacheKey);
         if ($cached !== null) return $cached;
 
@@ -172,7 +172,7 @@ class TrackingPrController extends Controller
      */
     private function trackByPpbj(string $nomor)
     {
-        $cacheKey = 'tracking_ppbj_' . md5(strtolower($nomor)) . '_v5';
+        $cacheKey = 'tracking_ppbj_' . md5(strtolower($nomor)) . '_v6';
         $cached = Cache::get($cacheKey);
         if ($cached !== null) return $cached;
 
@@ -277,7 +277,7 @@ class TrackingPrController extends Controller
     private function searchLike(string $keyword): ?array
     {
         $results = [];
-        $allowContains = mb_strlen($keyword) >= 4;
+        $allowContains = mb_strlen($keyword) >= 2;
 
         try {
             $prMatches = DB::table('torprs')
@@ -291,7 +291,9 @@ class TrackingPrController extends Controller
                         $query->orWhere('nomor_pr', 'like', '%' . $keyword . '%');
                     }
                 })
-                ->limit(5)
+                ->orderByRaw("CASE WHEN nomor_pr = ? THEN 0 WHEN nomor_pr LIKE ? THEN 1 WHEN nomor_pr LIKE ? THEN 2 ELSE 3 END", [$keyword, $keyword . '%', '%' . $keyword . '%'])
+                ->orderBy('tanggal_pr', 'DESC')
+                ->limit(8)
                 ->get();
 
             foreach ($prMatches as $pr) {
@@ -319,7 +321,9 @@ class TrackingPrController extends Controller
                         $query->orWhere('ppbj_no', 'like', '%' . $keyword . '%');
                     }
                 })
-                ->limit(5)
+                ->orderByRaw("CASE WHEN ppbj_no = ? THEN 0 WHEN ppbj_no LIKE ? THEN 1 WHEN ppbj_no LIKE ? THEN 2 ELSE 3 END", [$keyword, $keyword . '%', '%' . $keyword . '%'])
+                ->orderBy('tgl_ppbj', 'DESC')
+                ->limit(8)
                 ->get();
 
             foreach ($ppbjMatches as $p) {
@@ -344,12 +348,12 @@ class TrackingPrController extends Controller
             $q = preg_replace('/[^A-Z0-9\-\/\s]/i', '', $q);
             if (empty($q)) return response()->json(['items' => []]);
 
-            $cacheKey = 'tracking_suggest_' . md5(strtolower($q)) . '_v5';
+            $cacheKey = 'tracking_suggest_' . md5(strtolower($q)) . '_v6';
             $cached = Cache::get($cacheKey);
             if ($cached !== null) return response()->json(['items' => $cached]);
 
             $items = [];
-            $allowContains = mb_strlen($q) >= 4;
+            $allowContains = mb_strlen($q) >= 2;
 
             try {
                 $prResults = DB::table('torprs')
@@ -363,7 +367,7 @@ class TrackingPrController extends Controller
                             $query->orWhere('nomor_pr', 'like', '%' . $q . '%');
                         }
                     })
-                    ->orderByRaw("CASE WHEN nomor_pr = ? THEN 0 WHEN nomor_pr LIKE ? THEN 1 ELSE 2 END", [$q, $q . '%'])
+                    ->orderByRaw("CASE WHEN nomor_pr = ? THEN 0 WHEN nomor_pr LIKE ? THEN 1 WHEN nomor_pr LIKE ? THEN 2 ELSE 3 END", [$q, $q . '%', '%' . $q . '%'])
                     ->orderBy('tanggal_pr', 'DESC')
                     ->limit(8)
                     ->get()
@@ -397,7 +401,7 @@ class TrackingPrController extends Controller
                             $query->orWhere('ppbj_no', 'like', '%' . $q . '%');
                         }
                     })
-                    ->orderByRaw("CASE WHEN ppbj_no = ? THEN 0 WHEN ppbj_no LIKE ? THEN 1 ELSE 2 END", [$q, $q . '%'])
+                    ->orderByRaw("CASE WHEN ppbj_no = ? THEN 0 WHEN ppbj_no LIKE ? THEN 1 WHEN ppbj_no LIKE ? THEN 2 ELSE 3 END", [$q, $q . '%', '%' . $q . '%'])
                     ->orderBy('tgl_ppbj', 'DESC')
                     ->limit(6)
                     ->get()
@@ -431,7 +435,7 @@ class TrackingPrController extends Controller
         if (!$nomor) return response()->json(['success' => false], 400);
 
         $cleared = [];
-        foreach (['_v1', '_v2', '_v3', '_v4', '_v5'] as $v) {
+        foreach (['_v1', '_v2', '_v3', '_v4', '_v5', '_v6'] as $v) {
             if (Cache::forget('tracking_pr_' . md5(strtolower($nomor)) . $v)) $cleared[] = 'PR';
             if (Cache::forget('tracking_ppbj_' . md5(strtolower($nomor)) . $v)) $cleared[] = 'PPBJ';
         }
