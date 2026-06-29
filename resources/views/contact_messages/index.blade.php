@@ -282,6 +282,12 @@
             color: #dc2626;
         }
 
+        .cm-btn.danger:hover {
+            border-color: #ef4444;
+            background: #fee2e2;
+            box-shadow: 0 12px 26px rgba(239, 68, 68, .14);
+        }
+
         .dark .cm-btn.secondary {
             border-color: rgba(148, 163, 184, .28);
             background: #0f172a;
@@ -291,6 +297,45 @@
         .dark .cm-btn.danger {
             border-color: rgba(248, 113, 113, .32);
             background: #0f172a;
+            color: #fca5a5;
+        }
+
+        .dark .cm-btn.danger:hover {
+            border-color: rgba(248, 113, 113, .58);
+            background: rgba(127, 29, 29, .32);
+        }
+
+        .cm-delete-preview {
+            margin-top: .75rem;
+            border: 1px solid #fecaca;
+            border-radius: 1rem;
+            background: #fff7f7;
+            color: #7f1d1d;
+            padding: .9rem;
+            text-align: left;
+            font-size: .84rem;
+            line-height: 1.55;
+        }
+
+        .dark .cm-delete-preview {
+            border-color: rgba(248, 113, 113, .28);
+            background: rgba(127, 29, 29, .18);
+            color: #fecaca;
+        }
+
+        .cm-delete-preview strong {
+            display: block;
+            color: inherit;
+            font-size: .9rem;
+            margin-bottom: .15rem;
+        }
+
+        .cm-delete-preview span {
+            color: #991b1b;
+            word-break: break-word;
+        }
+
+        .dark .cm-delete-preview span {
             color: #fca5a5;
         }
 
@@ -639,10 +684,16 @@
                                     </button>
                                 </form>
                                 <form method="POST" action="{{ route('contact-messages.destroy', $message) }}"
-                                    onsubmit="return confirm('Yakin hapus pesan contact ini?')">
+                                    class="cm-delete-form"
+                                    data-sender="{{ $message->name }}"
+                                    data-email="{{ $message->email }}"
+                                    data-subject="{{ $message->subject }}">
                                     @csrf
                                     @method('DELETE')
-                                    <button type="submit" class="cm-btn danger">Hapus</button>
+                                    <button type="submit" class="cm-btn danger">
+                                        <i class="fas fa-trash-alt"></i>
+                                        Hapus
+                                    </button>
                                 </form>
                             </div>
                         </div>
@@ -664,3 +715,69 @@
         </div>
     </div>
 @endsection
+
+@push('scripts')
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            function escapeHtml(value) {
+                return String(value || '')
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;')
+                    .replace(/'/g, '&#039;');
+            }
+
+            document.querySelectorAll('.cm-delete-form').forEach(function (form) {
+                form.addEventListener('submit', function (event) {
+                    event.preventDefault();
+
+                    const sender = form.dataset.sender || 'Pengirim';
+                    const email = form.dataset.email || '-';
+                    const subject = form.dataset.subject || '-';
+                    const darkMode = document.documentElement.classList.contains('dark');
+
+                    if (typeof Swal === 'undefined') {
+                        if (confirm('Yakin hapus pesan contact ini? Data yang dihapus tidak bisa dikembalikan.')) {
+                            form.submit();
+                        }
+                        return;
+                    }
+
+                    Swal.fire({
+                        title: 'Hapus pesan contact?',
+                        html: `
+                            <div style="font-size:.9rem;line-height:1.6">
+                                Pesan ini akan dihapus permanen dari inbox admin.
+                            </div>
+                            <div class="cm-delete-preview">
+                                <strong>${escapeHtml(subject)}</strong>
+                                <div>Dari: <span>${escapeHtml(sender)}</span></div>
+                                <div>Email: <span>${escapeHtml(email)}</span></div>
+                            </div>
+                        `,
+                        icon: 'warning',
+                        showCancelButton: true,
+                        confirmButtonText: 'Ya, hapus pesan',
+                        cancelButtonText: 'Batal',
+                        confirmButtonColor: '#ef4444',
+                        cancelButtonColor: '#64748b',
+                        reverseButtons: true,
+                        focusCancel: true,
+                        background: darkMode ? '#111827' : '#ffffff',
+                        color: darkMode ? '#f9fafb' : '#111827',
+                        customClass: {
+                            popup: 'rounded-2xl shadow-2xl',
+                            confirmButton: 'font-bold',
+                            cancelButton: 'font-bold'
+                        }
+                    }).then(function (result) {
+                        if (result.isConfirmed) {
+                            form.submit();
+                        }
+                    });
+                });
+            });
+        });
+    </script>
+@endpush
