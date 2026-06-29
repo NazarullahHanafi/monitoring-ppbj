@@ -529,7 +529,7 @@ main, #main, #app, .main-content, .content-wrapper { background: var(--bg) !impo
                         </div>
                         <div>
                             <h3>PT Sucofindo Cabang Pekanbaru</h3>
-                            <p>Jl. Jend. Sudirman, Pekanbaru, Riau. Gunakan tombol rute untuk membuka navigasi lokasi kantor.</p>
+                            <p>Jl. Jend. Ahmad Yani No.79, Tanah Datar, Pekanbaru Kota, Kota Pekanbaru, Riau 28156, Riau. Gunakan tombol rute untuk membuka navigasi lokasi kantor.</p>
                         </div>
                     </div>
                     <div class="mapcn-actions">
