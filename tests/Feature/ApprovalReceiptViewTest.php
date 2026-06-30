@@ -86,6 +86,7 @@ class ApprovalReceiptViewTest extends TestCase
 
         $this->assertDatabaseHas('ppbj', [
             'ppbj_no' => 'PKB/PR-26/CON/0402',
+            'portofolio' => 'CON',
             'buyer' => 'NAZAR',
             'total_sebelum_ppn' => 15000000,
         ]);
@@ -129,6 +130,7 @@ class ApprovalReceiptViewTest extends TestCase
 
         $this->assertDatabaseHas('ppbj', [
             'ppbj_no' => 'PKB/PR-26/CON/0404',
+            'portofolio' => 'CON',
             'buyer' => 'Pb',
         ]);
 
@@ -155,6 +157,7 @@ class ApprovalReceiptViewTest extends TestCase
             'ppbj_no' => 'PKB/PR-26/CON/0403',
             'tgl_terima_pr' => now()->subDay()->toDateString(),
             'uraian' => 'Data PPBJ lama',
+            'portofolio' => null,
             'buyer' => null,
             'total_sebelum_ppn' => 0,
             'created_at' => now(),
@@ -183,6 +186,7 @@ class ApprovalReceiptViewTest extends TestCase
 
         $this->assertDatabaseHas('ppbj', [
             'ppbj_no' => 'PKB/PR-26/CON/0403',
+            'portofolio' => 'CON',
             'buyer' => 'Buyer Baru',
         ]);
 

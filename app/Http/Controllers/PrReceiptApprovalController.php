@@ -100,13 +100,22 @@ class PrReceiptApprovalController extends Controller
                         ->first();
 
                     if ($existingPpbj) {
+                        $existingUpdates = [];
+
                         if ($buyerName && blank($existingPpbj->buyer ?? null)) {
+                            $existingUpdates['buyer'] = $buyerName;
+                        }
+
+                        if (filled($torpr->portofolio) && blank($existingPpbj->portofolio ?? null)) {
+                            $existingUpdates['portofolio'] = $torpr->portofolio;
+                        }
+
+                        if ($existingUpdates) {
+                            $existingUpdates['updated_at'] = now();
+
                             DB::table('ppbj')
                                 ->where('id', $existingPpbj->id)
-                                ->update([
-                                    'buyer' => $buyerName,
-                                    'updated_at' => now(),
-                                ]);
+                                ->update($existingUpdates);
                         }
 
                         // reset cache count karena status berubah
