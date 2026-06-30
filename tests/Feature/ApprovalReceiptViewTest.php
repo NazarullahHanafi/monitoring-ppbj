@@ -91,6 +91,53 @@ class ApprovalReceiptViewTest extends TestCase
         ]);
     }
 
+    public function test_approval_uses_mapped_buyer_name_instead_of_user_full_name(): void
+    {
+        $umumUser = User::factory()->create([
+            'name' => 'Putri',
+            'buyer_name' => 'Pb',
+            'department' => 'umum',
+            'role' => 'superadmin',
+        ]);
+
+        MasterBuyer::create(['nama' => 'Pb']);
+
+        $operasionalUser = User::factory()->create([
+            'department' => 'operasional',
+            'role' => 'user',
+        ]);
+
+        $torpr = Torpr::create([
+            'nomor_pr' => 'PKB/PR-26/CON/0404',
+            'tujuan_pengadaan' => 'Pengadaan jasa mapping buyer',
+            'portofolio' => 'CON',
+            'jumlah_pr' => 19000000,
+            'created_by_user_id' => $operasionalUser->id,
+        ]);
+
+        $approval = PrReceiptApproval::create([
+            'torpr_id' => $torpr->id,
+            'requested_by_user_id' => $operasionalUser->id,
+            'requested_name' => 'Operasional Test',
+            'requested_at' => now(),
+            'status' => 'PENDING',
+        ]);
+
+        $this->actingAs($umumUser)
+            ->post(route('approval.pr.approve', $approval->id))
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('ppbj', [
+            'ppbj_no' => 'PKB/PR-26/CON/0404',
+            'buyer' => 'Pb',
+        ]);
+
+        $this->assertDatabaseMissing('ppbj', [
+            'ppbj_no' => 'PKB/PR-26/CON/0404',
+            'buyer' => 'Putri',
+        ]);
+    }
+
     public function test_approval_fills_empty_buyer_on_existing_ppbj(): void
     {
         $umumUser = User::factory()->create([

@@ -333,6 +333,7 @@
                             </th>
                             <th class="px-6 py-4 text-center font-semibold">Role</th>
                             <th class="px-6 py-4 text-center font-semibold">Department</th>
+                            <th class="px-6 py-4 text-center font-semibold">Buyer Terkait</th>
                             <th class="px-6 py-4 text-center font-semibold">Dibuat</th>
                             <th class="px-6 py-4 text-center font-semibold">Aksi</th>
                         </tr>
@@ -428,6 +429,22 @@
                                     @endif
                                 </td>
 
+                                {{-- Buyer Mapping --}}
+                                <td class="px-6 py-4 text-center">
+                                    @if(!empty($user->buyer_name))
+                                        <span
+                                            class="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-bold rounded-full bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-200 border border-emerald-200 dark:border-emerald-700">
+                                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                    d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                            </svg>
+                                            {{ $user->buyer_name }}
+                                        </span>
+                                    @else
+                                        <span class="text-xs text-gray-400 dark:text-gray-500">Belum dipetakan</span>
+                                    @endif
+                                </td>
+
                                 {{-- Created At --}}
                                 <td class="px-6 py-4 text-center text-sm text-gray-500 dark:text-gray-400">
                                     {{ \Carbon\Carbon::parse($user->created_at)->format('d M Y') }}
@@ -438,7 +455,7 @@
                                     <div class="flex items-center justify-center gap-2">
                                         {{-- Edit Button --}}
                                         <button type="button"
-                                            onclick="openEditModal({{ $user->id }}, '{{ addslashes($user->name) }}', '{{ $user->email }}', '{{ $user->role }}', '{{ $user->department }}')"
+                                            onclick="openEditModal({{ $user->id }}, @js($user->name), @js($user->email), @js($user->role), @js($user->department), @js($user->buyer_name))"
                                             class="inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold transition-all duration-200
                                                                            bg-blue-600 hover:bg-blue-700 text-white border border-blue-700
                                                                            dark:bg-blue-600 dark:hover:bg-blue-700 dark:border-blue-500
@@ -485,7 +502,7 @@
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="6" class="text-center py-16 text-gray-500 dark:text-gray-400">
+                                <td colspan="7" class="text-center py-16 text-gray-500 dark:text-gray-400">
                                     <div class="flex flex-col items-center gap-4">
                                         <div
                                             class="w-20 h-20 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center">
@@ -594,6 +611,23 @@
                             <option value="umum">Umum</option>
                             <option value="operasional">Operasional</option>
                         </select>
+                    </div>
+
+                    {{-- Buyer Mapping --}}
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                            Buyer Terkait
+                        </label>
+                        <select name="buyer_name"
+                            class="w-full rounded-lg border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20">
+                            <option value="">-- Tidak dipetakan --</option>
+                            @foreach($masterBuyers as $buyer)
+                                <option value="{{ $buyer }}">{{ $buyer }}</option>
+                            @endforeach
+                        </select>
+                        <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                            Dipakai untuk mengisi kolom Buyer PPBJ saat user Umum approve PR.
+                        </p>
                     </div>
 
                     {{-- Password with Strength Checker --}}
@@ -718,6 +752,23 @@
                             <option value="umum">Umum</option>
                             <option value="operasional">Operasional</option>
                         </select>
+                    </div>
+
+                    {{-- Buyer Mapping --}}
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                            Buyer Terkait
+                        </label>
+                        <select name="buyer_name" id="editBuyerName"
+                            class="w-full rounded-lg border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20">
+                            <option value="">-- Tidak dipetakan --</option>
+                            @foreach($masterBuyers as $buyer)
+                                <option value="{{ $buyer }}">{{ $buyer }}</option>
+                            @endforeach
+                        </select>
+                        <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                            Jika diisi, nilai ini dipakai sebagai Buyer PPBJ. Jika kosong, sistem memakai nama user.
+                        </p>
                     </div>
                 </div>
 
@@ -943,12 +994,13 @@
                 document.getElementById('addPasswordStrength').className = 'password-strength-bar';
             }
 
-            function openEditModal(id, name, email, role, department) {
+            function openEditModal(id, name, email, role, department, buyerName) {
                 document.getElementById('editUserId').value = id;
                 document.getElementById('editName').value = name;
                 document.getElementById('editEmail').value = email;
                 document.getElementById('editRole').value = role;
                 document.getElementById('editDept').value = department;
+                document.getElementById('editBuyerName').value = buyerName || '';
 
                 document.getElementById('editUserModal').classList.remove('hidden');
                 document.getElementById('editUserModal').classList.add('flex');

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\User;
+use App\Models\MasterBuyer;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
@@ -31,6 +32,7 @@ class UserController extends Controller
                 'email',
                 'role',
                 'department',
+                'buyer_name',
                 'created_at',
                 'updated_at'
             ]);
@@ -84,7 +86,13 @@ class UserController extends Controller
                 ->first();
         });
 
-        return view('users.index', compact('users', 'stats'));
+        $masterBuyers = Cache::remember(
+            'master_buyers_for_user_mapping',
+            300,
+            fn() => MasterBuyer::orderBy('nama')->pluck('nama')->values()
+        );
+
+        return view('users.index', compact('users', 'stats', 'masterBuyers'));
     }
 
     /**
@@ -124,6 +132,12 @@ class UserController extends Controller
                 'required',
                 Rule::in(['umum', 'operasional'])
             ],
+            'buyer_name' => [
+                'nullable',
+                'string',
+                'max:50',
+                Rule::exists('master_buyer', 'nama')
+            ],
         ], [
             'name.required' => 'Nama wajib diisi',
             'name.min' => 'Nama minimal 3 karakter',
@@ -145,6 +159,7 @@ class UserController extends Controller
                     'password' => Hash::make($validated['password']),
                     'role' => $validated['role'],
                     'department' => $validated['department'],
+                    'buyer_name' => $validated['buyer_name'] ?? null,
                 ]);
             });
 
@@ -214,6 +229,12 @@ class UserController extends Controller
                 'required',
                 Rule::in(['umum', 'operasional'])
             ],
+            'buyer_name' => [
+                'nullable',
+                'string',
+                'max:50',
+                Rule::exists('master_buyer', 'nama')
+            ],
         ], [
             'name.required' => 'Nama wajib diisi',
             'name.min' => 'Nama minimal 3 karakter',
@@ -228,6 +249,7 @@ class UserController extends Controller
                     'email' => strtolower($validated['email']),
                     'role' => $validated['role'],
                     'department' => $validated['department'],
+                    'buyer_name' => $validated['buyer_name'] ?? null,
                 ]);
             });
 
@@ -465,11 +487,11 @@ class UserController extends Controller
             fprintf($out, chr(0xEF) . chr(0xBB) . chr(0xBF));
 
             // Header
-            fputcsv($out, ['ID', 'Nama', 'Email', 'Role', 'Department', 'Created At']);
+            fputcsv($out, ['ID', 'Nama', 'Email', 'Role', 'Department', 'Buyer Terkait', 'Created At']);
 
             // Query
             $query = DB::table('users')
-                ->select(['id', 'name', 'email', 'role', 'department', 'created_at']);
+                ->select(['id', 'name', 'email', 'role', 'department', 'buyer_name', 'created_at']);
 
             // Apply filters
             if ($request->filled('department')) {
@@ -489,6 +511,7 @@ class UserController extends Controller
                         $user->email,
                         $user->role,
                         $user->department,
+                        $user->buyer_name,
                         $user->created_at,
                     ]));
                 }

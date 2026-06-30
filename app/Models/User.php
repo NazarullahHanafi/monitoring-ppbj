@@ -22,7 +22,8 @@ class User extends Authenticatable
         'email',
         'password',
         'role',
-        'department'
+        'department',
+        'buyer_name',
     ];
 
     public function isReadOnly(): bool

@@ -155,7 +155,11 @@ class PrReceiptApprovalController extends Controller
 
     private function buyerNameFromApprover($user): ?string
     {
-        $name = trim((string) ($user?->name ?? ''));
+        $name = trim((string) ($user?->buyer_name ?? ''));
+
+        if ($name === '') {
+            $name = trim((string) ($user?->name ?? ''));
+        }
 
         if ($name === '') {
             return null;
