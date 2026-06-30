@@ -1135,38 +1135,114 @@ class PpbjController extends Controller
     // =====================
     public function reportIndex()
     {
-        return view('ppbj.report');
+        $portofolios = Cache::remember('report_filter_portofolios', 300, function () {
+            return collect(MasterPortofolio::orderBy('nama')->pluck('nama'))
+                ->merge(
+                    DB::table('ppbj')
+                        ->whereNotNull('portofolio')
+                        ->where('portofolio', '!=', '')
+                        ->distinct()
+                        ->orderBy('portofolio')
+                        ->pluck('portofolio')
+                )
+                ->map(fn($value) => trim((string) $value))
+                ->filter()
+                ->unique(fn($value) => mb_strtolower($value))
+                ->sort(SORT_NATURAL | SORT_FLAG_CASE)
+                ->values();
+        });
+
+        $vendors = Cache::remember('report_filter_vendors', 300, function () {
+            return collect(MasterPenyediaEksternal::orderBy('nama')->pluck('nama'))
+                ->merge(
+                    DB::table('ppbj')
+                        ->whereNotNull('penyedia_eksternal')
+                        ->where('penyedia_eksternal', '!=', '')
+                        ->distinct()
+                        ->orderBy('penyedia_eksternal')
+                        ->pluck('penyedia_eksternal')
+                )
+                ->map(fn($value) => trim((string) $value))
+                ->filter()
+                ->unique(fn($value) => mb_strtolower($value))
+                ->sort(SORT_NATURAL | SORT_FLAG_CASE)
+                ->values();
+        });
+
+        return view('ppbj.report', compact('portofolios', 'vendors'));
     }
 
     public function reportData(Request $request)
     {
-        $period = $request->get('period', 'monthly');
-        $startDate = $request->get('start_date');
-        $endDate = $request->get('end_date');
-        $query = Ppbj::query();
+        $query = $this->applyReportFilters(Ppbj::query(), $request);
 
-        if ($period === 'daily' && $startDate)
-            $query->whereDate('created_at', $startDate);
-        elseif ($period === 'monthly' && $startDate) {
-            $d = Carbon::parse($startDate);
-            $query->whereYear('created_at', $d->year)->whereMonth('created_at', $d->month);
-        } elseif ($period === 'yearly' && $startDate)
-            $query->whereYear('created_at', Carbon::parse($startDate)->year);
-        elseif ($period === 'custom' && $startDate && $endDate)
-            $query->whereBetween('created_at', [$startDate, $endDate]);
+        $statsRow = (clone $query)
+            ->selectRaw(<<<'SQL'
+                COUNT(*) as total,
+                SUM(CASE WHEN status_sla = 'ON TRACK' THEN 1 ELSE 0 END) as on_track,
+                SUM(CASE WHEN status_sla = 'WARNING' THEN 1 ELSE 0 END) as warning,
+                SUM(CASE WHEN status_sla = 'OVERDUE' THEN 1 ELSE 0 END) as overdue,
+                SUM(CASE WHEN status_sla = 'CANCELLED' OR status = 'CANCELLED' THEN 1 ELSE 0 END) as cancelled,
+                COALESCE(SUM(total_sebelum_ppn), 0) as total_value,
+                COALESCE(SUM(nilai_sp_spk), 0) as total_sp_value,
+                COALESCE(SUM(nilai_bpg), 0) as total_bpg_value,
+                AVG(progres) as avg_progress,
+                COUNT(DISTINCT NULLIF(portofolio, '')) as total_portofolio,
+                COUNT(DISTINCT NULLIF(penyedia_eksternal, '')) as total_vendor
+            SQL)
+            ->first();
 
-        $data = $query->orderByDesc('created_at')->get();
+        $byPortofolio = (clone $query)
+            ->selectRaw("COALESCE(NULLIF(portofolio, ''), 'Tanpa Portofolio') as label, COUNT(*) as total, COALESCE(SUM(total_sebelum_ppn), 0) as total_value, COALESCE(SUM(nilai_sp_spk), 0) as total_sp_value")
+            ->groupByRaw("COALESCE(NULLIF(portofolio, ''), 'Tanpa Portofolio')")
+            ->orderByDesc('total_value')
+            ->limit(20)
+            ->get();
+
+        $byVendor = (clone $query)
+            ->selectRaw("COALESCE(NULLIF(penyedia_eksternal, ''), 'Tanpa Vendor') as label, COUNT(*) as total, COALESCE(SUM(total_sebelum_ppn), 0) as total_value, COALESCE(SUM(nilai_sp_spk), 0) as total_sp_value")
+            ->groupByRaw("COALESCE(NULLIF(penyedia_eksternal, ''), 'Tanpa Vendor')")
+            ->orderByDesc('total_value')
+            ->limit(20)
+            ->get();
+
+        $data = (clone $query)
+            ->select([
+                'ppbj_no',
+                'created_at',
+                'uraian',
+                'portofolio',
+                'buyer',
+                'penyedia_eksternal',
+                'status_sla',
+                'status',
+                'progres',
+                'total_sebelum_ppn',
+                'nilai_sp_spk',
+                'nilai_bpg',
+            ])
+            ->orderByDesc('created_at')
+            ->limit(1000)
+            ->get();
 
         return response()->json([
             'data' => $data,
             'stats' => [
-                'total' => $data->count(),
-                'on_track' => $data->where('status_sla', 'ON TRACK')->count(),
-                'warning' => $data->where('status_sla', 'WARNING')->count(),
-                'overdue' => $data->where('status_sla', 'OVERDUE')->count(),
-                'cancelled' => $data->where('status_sla', 'CANCELLED')->count(),
-                'total_value' => $data->sum('total_sebelum_ppn'),
-                'avg_progress' => $data->avg('progres'),
+                'total' => (int) ($statsRow->total ?? 0),
+                'on_track' => (int) ($statsRow->on_track ?? 0),
+                'warning' => (int) ($statsRow->warning ?? 0),
+                'overdue' => (int) ($statsRow->overdue ?? 0),
+                'cancelled' => (int) ($statsRow->cancelled ?? 0),
+                'total_value' => (float) ($statsRow->total_value ?? 0),
+                'total_sp_value' => (float) ($statsRow->total_sp_value ?? 0),
+                'total_bpg_value' => (float) ($statsRow->total_bpg_value ?? 0),
+                'avg_progress' => (float) ($statsRow->avg_progress ?? 0),
+                'total_portofolio' => (int) ($statsRow->total_portofolio ?? 0),
+                'total_vendor' => (int) ($statsRow->total_vendor ?? 0),
+            ],
+            'breakdown' => [
+                'portofolio' => $byPortofolio,
+                'vendor' => $byVendor,
             ],
         ]);
     }
@@ -1174,25 +1250,14 @@ class PpbjController extends Controller
     public function reportExport(Request $request)
     {
         $period = $request->get('period', 'monthly');
-        $startDate = $request->get('start_date');
-        $endDate = $request->get('end_date');
         $filename = 'Laporan_PPBJ_' . ucfirst($period) . '_' . now()->format('Ymd_His') . '.csv';
 
-        return response()->streamDownload(function () use ($period, $startDate, $endDate) {
+        return response()->streamDownload(function () use ($request) {
             $out = fopen('php://output', 'w');
             fprintf($out, chr(0xEF) . chr(0xBB) . chr(0xBF));
-            fputcsv($out, ['No PPBJ', 'Tanggal Dibuat', 'Uraian', 'Portofolio', 'Buyer', 'Total (Rp)', 'Status SLA', 'Sisa SLA (Hari)', 'Progress (%)', 'Penyedia', 'Status']);
+            fputcsv($out, ['No PPBJ', 'Tanggal Dibuat', 'Uraian', 'Portofolio', 'Buyer', 'Penyedia/Vendor', 'Total PR (Rp)', 'Nilai SP/SPK (Rp)', 'Nilai BPG (Rp)', 'Status SLA', 'Sisa SLA (Hari)', 'Progress (%)', 'Status']);
 
-            $query = Ppbj::query();
-            if ($period === 'daily' && $startDate)
-                $query->whereDate('created_at', $startDate);
-            elseif ($period === 'monthly' && $startDate) {
-                $d = Carbon::parse($startDate);
-                $query->whereYear('created_at', $d->year)->whereMonth('created_at', $d->month);
-            } elseif ($period === 'yearly' && $startDate)
-                $query->whereYear('created_at', Carbon::parse($startDate)->year);
-            elseif ($period === 'custom' && $startDate && $endDate)
-                $query->whereBetween('created_at', [$startDate, $endDate]);
+            $query = $this->applyReportFilters(Ppbj::query(), $request);
 
             $query->orderByDesc('created_at')->chunk(500, function ($rows) use ($out) {
                 foreach ($rows as $r) {
@@ -1202,17 +1267,65 @@ class PpbjController extends Controller
                         $r->uraian,
                         $r->portofolio,
                         $r->buyer,
+                        $r->penyedia_eksternal,
                         number_format($r->total_sebelum_ppn, 0, ',', '.'),
+                        number_format($r->nilai_sp_spk ?? 0, 0, ',', '.'),
+                        number_format($r->nilai_bpg ?? 0, 0, ',', '.'),
                         $r->status_sla,
                         $r->sisa_target_sla . ' hari',
                         $r->progres . '%',
-                        $r->penyedia_eksternal,
                         $r->status ?? 'ACTIVE',
                     ]));
                 }
             });
             fclose($out);
         }, $filename, ['Content-Type' => 'text/csv; charset=UTF-8', 'Cache-Control' => 'no-store, no-cache']);
+    }
+
+    private function applyReportFilters($query, Request $request)
+    {
+        $period = $request->get('period', 'monthly');
+        $startDate = $request->get('start_date');
+        $endDate = $request->get('end_date');
+
+        if ($period === 'daily' && $startDate) {
+            $query->whereDate('created_at', $startDate);
+        } elseif ($period === 'monthly' && $startDate) {
+            $d = Carbon::parse($startDate);
+            $query->whereYear('created_at', $d->year)->whereMonth('created_at', $d->month);
+        } elseif ($period === 'yearly' && $startDate) {
+            $query->whereYear('created_at', Carbon::parse($startDate)->year);
+        } elseif ($period === 'custom' && $startDate && $endDate) {
+            $query->whereBetween('created_at', [
+                Carbon::parse($startDate)->startOfDay(),
+                Carbon::parse($endDate)->endOfDay(),
+            ]);
+        }
+
+        $portofolios = $this->multiFilterValues($request, 'portofolio');
+        if ($portofolios) {
+            $query->whereIn('portofolio', $portofolios);
+        }
+
+        $vendors = $this->multiFilterValues($request, 'vendor');
+        if ($vendors) {
+            $query->whereIn('penyedia_eksternal', $vendors);
+        }
+
+        return $query;
+    }
+
+    private function multiFilterValues(Request $request, string $key): array
+    {
+        $value = $request->input($key, $request->input($key . 's', []));
+
+        return collect(is_array($value) ? $value : [$value])
+            ->flatMap(fn($item) => is_string($item) ? explode(',', $item) : [$item])
+            ->map(fn($item) => trim((string) $item))
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
     }
 
     // =====================
