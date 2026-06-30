@@ -4,9 +4,11 @@ namespace App\Http\Controllers;
 
 use App\Models\PrReceiptApproval;
 use App\Models\Ppbj;
+use App\Models\MasterBuyer;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Database\QueryException;
 
 class PrReceiptApprovalController extends Controller
@@ -72,6 +74,8 @@ class PrReceiptApprovalController extends Controller
                     return ['type' => 'error', 'msg' => 'Nomor PR kosong. Tidak bisa approve.'];
                 }
 
+                $buyerName = $this->buyerNameFromApprover(auth()->user());
+
                 // 1) update approval
                 $appr->update([
                     'status' => self::STATUS_APPROVED,
@@ -88,17 +92,23 @@ class PrReceiptApprovalController extends Controller
 
                 // 3) insert/update ke PPBJ (ppbj_no unik)
                 //    - jika sudah ada, jangan buat baru (warning)
+                //    - buyer diisi dari user Umum yang approve
                 try {
-                    $ppbj = Ppbj::firstOrCreate(
-                        ['ppbj_no' => $torpr->nomor_pr],
-                        [
-                            'tgl_terima_pr' => now()->toDateString(),
-                            'uraian' => $torpr->tujuan_pengadaan,
-                            'total_sebelum_ppn' => (float) ($torpr->jumlah_pr ?? 0),
-                        ]
-                    );
+                    $existingPpbj = DB::table('ppbj')
+                        ->where('ppbj_no', $torpr->nomor_pr)
+                        ->lockForUpdate()
+                        ->first();
 
-                    if (!$ppbj->wasRecentlyCreated) {
+                    if ($existingPpbj) {
+                        if ($buyerName && blank($existingPpbj->buyer ?? null)) {
+                            DB::table('ppbj')
+                                ->where('id', $existingPpbj->id)
+                                ->update([
+                                    'buyer' => $buyerName,
+                                    'updated_at' => now(),
+                                ]);
+                        }
+
                         // reset cache count karena status berubah
                         Cache::forget(self::CACHE_KEY_PENDING_COUNT);
 
@@ -107,6 +117,8 @@ class PrReceiptApprovalController extends Controller
                             'msg' => 'PR berhasil dikonfirmasi diterima Umum. Tetapi PPBJ tidak dibuat karena nomor sudah ada: ' . $torpr->nomor_pr
                         ];
                     }
+
+                    DB::table('ppbj')->insert($this->ppbjPayloadFromTorpr($torpr, $buyerName));
 
                 } catch (QueryException $e) {
                     // fallback kalau race-condition unique
@@ -139,6 +151,58 @@ class PrReceiptApprovalController extends Controller
             \Log::error('Approval penerimaan PR gagal', ['error' => $e->getMessage()]);
             return back()->with('error', 'Terjadi kesalahan server. Silakan coba lagi.');
         }
+    }
+
+    private function buyerNameFromApprover($user): ?string
+    {
+        $name = trim((string) ($user?->name ?? ''));
+
+        if ($name === '') {
+            return null;
+        }
+
+        $name = substr($name, 0, 50);
+
+        $existingBuyerName = MasterBuyer::query()
+            ->whereRaw('LOWER(nama) = ?', [strtolower($name)])
+            ->value('nama');
+
+        if ($existingBuyerName) {
+            return $existingBuyerName;
+        }
+
+        MasterBuyer::create(['nama' => $name]);
+        Cache::forget('master_buyers');
+
+        return $name;
+    }
+
+    private function ppbjPayloadFromTorpr($torpr, ?string $buyerName): array
+    {
+        $total = (float) ($torpr->jumlah_pr ?? 0);
+        $targetSla = Ppbj::hitungTargetSla($total);
+        $sisaTargetSla = Ppbj::hitungSisaTarget($targetSla, now()->toDateString());
+        $payload = [
+            'ppbj_no' => $torpr->nomor_pr,
+            'tgl_terima_pr' => now()->toDateString(),
+            'uraian' => $torpr->tujuan_pengadaan,
+            'portofolio' => $torpr->portofolio,
+            'buyer' => $buyerName,
+            'total_sebelum_ppn' => $total,
+            'target_sla_hari' => $targetSla,
+            'sisa_target_sla' => $sisaTargetSla,
+            'realisasi_sla' => 0,
+            'persentase_realisasi' => 0,
+            'progres' => 0,
+            'status_sla' => Ppbj::hitungStatusSla($sisaTargetSla, 0, null),
+            'status' => 'ACTIVE',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ];
+
+        return collect($payload)
+            ->filter(fn($value, $column) => Schema::hasColumn('ppbj', $column))
+            ->all();
     }
 
     public function reject(Request $request, $id)
