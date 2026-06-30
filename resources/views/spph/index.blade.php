@@ -1952,8 +1952,9 @@
                     </thead>
                     <tbody id="spphBody" class="divide-y divide-gray-100 dark:divide-gray-700">
                         @forelse($spphs as $i => $s)
+                            @php($vendorList = $s->print_vendor_names)
                             <tr class="tbl-row-hover" data-id="{{ $s->id }}" data-pic="{{ $s->pic }}"
-                                data-search="{{ strtolower($s->nomor_spph . ' ' . $s->nomor_pr . ' ' . $s->nama_vendor . ' ' . $s->deskripsi_pengadaan) }}">
+                                data-search="{{ strtolower($s->nomor_spph . ' ' . $s->nomor_pr . ' ' . implode(' ', $vendorList) . ' ' . $s->deskripsi_pengadaan) }}">
                                 <td class="px-4 py-3 text-gray-400 text-xs font-mono">{{ $spphs->firstItem() + $i }}</td>
                                 <td class="px-4 py-3"><span
                                         class="badge-nomor inline-flex items-center px-2.5 py-1 rounded-lg bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800"
@@ -1964,7 +1965,14 @@
                                 <td class="px-4 py-3 text-gray-600 dark:text-gray-300 font-mono text-xs">
                                     {{ $s->nomor_pr ?? '-' }}
                                 </td>
-                                <td class="px-4 py-3 text-gray-700 dark:text-gray-200 font-medium text-xs">{{ $s->nama_vendor }}
+                                <td class="px-4 py-3 text-gray-700 dark:text-gray-200 font-medium text-xs">
+                                    <div class="flex flex-wrap gap-1">
+                                        @foreach($vendorList as $vendorName)
+                                            <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-600">
+                                                {{ $vendorName }}
+                                            </span>
+                                        @endforeach
+                                    </div>
                                 </td>
                                 <td class="px-4 py-3 text-gray-600 dark:text-gray-300 text-xs max-w-xs truncate"
                                     title="{{ $s->deskripsi_pengadaan }}">{{ $s->deskripsi_pengadaan }}</td>
@@ -1980,16 +1988,26 @@
                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h8m-8 4h5m8-2a8 8 0 01-8 8 8.5 8.5 0 01-3.8-.9L3 21l1.9-5.1A8 8 0 1119 17.2" />
                                             </svg>
                                         </button>
-                                        <a href="{{ route('spph.cetak', $s) }}" target="_blank"
+                                        <a href="{{ route('spph.cetak', ['spph' => $s, 'vendor' => $vendorList[0] ?? $s->nama_vendor]) }}" target="_blank"
                                             class="p-1.5 rounded-lg text-sky-600 hover:bg-sky-50 dark:hover:bg-sky-900/30 transition-colors"
-                                            title="Cetak SPPH">
+                                            title="Cetak SPPH vendor utama">
                                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                                     d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
                                             </svg>
                                         </a>
+                                        @if(count($vendorList) > 1)
+                                            <select onchange="if(this.value){ window.open(this.value, '_blank'); this.value=''; }"
+                                                class="text-[11px] rounded-lg border border-sky-200 dark:border-sky-800 bg-sky-50 dark:bg-sky-900/30 text-sky-700 dark:text-sky-200 px-1.5 py-1"
+                                                title="Cetak SPPH per vendor">
+                                                <option value="">Cetak vendor...</option>
+                                                @foreach($vendorList as $vendorName)
+                                                    <option value="{{ route('spph.cetak', ['spph' => $s, 'vendor' => $vendorName]) }}">{{ $vendorName }}</option>
+                                                @endforeach
+                                            </select>
+                                        @endif
                                         <button
-                                            onclick="openEditModal({{ $s->id }}, @js($s->nomor_spph), @js($s->tanggal?->format('Y-m-d')), @js($s->nomor_pr ?? ''), @js($s->nama_vendor), @js($s->deskripsi_pengadaan), @js($s->pic))"
+                                            onclick="openEditModal({{ $s->id }}, @js($s->nomor_spph), @js($s->tanggal?->format('Y-m-d')), @js($s->nomor_pr ?? ''), @js($vendorList), @js($s->deskripsi_pengadaan), @js($s->pic))"
                                             class="p-1.5 rounded-lg text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/30 transition-colors"
                                             title="Edit">
                                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2105,7 +2123,7 @@
 
                 <div class="form-group">
                     <label>Nama Vendor <span class="text-red-500">*</span></label>
-                    <select name="nama_vendor" id="vendorSelect" required class="vendor-select w-full">
+                    <select name="vendor_names[]" id="vendorSelect" required multiple class="vendor-select w-full">
                         <option value="">-- Pilih Vendor --</option>
                         @foreach($vendors as $v)<option value="{{ $v->nama_vendor }}">{{ $v->nama_vendor }}</option>
                         @endforeach
@@ -2219,7 +2237,7 @@
 
                 <div class="form-group">
                     <label>Nama Vendor <span class="text-red-500">*</span></label>
-                    <select name="nama_vendor" id="editVendor" required class="edit-vendor-select w-full">
+                    <select name="vendor_names[]" id="editVendor" required multiple class="edit-vendor-select w-full">
                         <option value="">-- Pilih Vendor --</option>
                         @foreach($vendors as $v)<option value="{{ $v->nama_vendor }}">{{ $v->nama_vendor }}</option>
                         @endforeach
@@ -2932,7 +2950,7 @@
             openModal('addModal');
         }
 
-        async function openEditModal(id, nomor, tgl, nomorPr, vendor, deskripsi, pic) {
+        async function openEditModal(id, nomor, tgl, nomorPr, vendorNames, deskripsi, pic) {
             document.getElementById('editForm').action = `/spph/${id}`;
             document.getElementById('editId').value = id;
             document.getElementById('editNomor').value = nomor;
@@ -2990,8 +3008,13 @@
             }
 
             const $ev = $('#editVendor'), $pc = $('#editPic');
-            if ($ev.find(`option[value="${vendor}"]`).length === 0) $ev.append(new Option(vendor, vendor, true, true));
-            $ev.val(vendor).trigger('change');
+            const vendorsForEdit = Array.isArray(vendorNames) ? vendorNames : [vendorNames].filter(Boolean);
+            vendorsForEdit.forEach(vendor => {
+                if (vendor && $ev.find(`option[value="${vendor}"]`).length === 0) {
+                    $ev.append(new Option(vendor, vendor, true, true));
+                }
+            });
+            $ev.val(vendorsForEdit).trigger('change');
             $pc.val(pic).trigger('change');
             document.getElementById('editNomor').dispatchEvent(new Event('input'));
             editIdx = 5000;
@@ -3236,13 +3259,15 @@
             initPpbjSelect2('.ppbj-select', 'ppbjInfo', 'ppbjStatus', 'ppbjInfoContent', () => updatePrFinalValue(), 'addDeskripsi', 'addDeskripsiBadge');
             initPpbjSelect2('.edit-ppbj-select', 'editPpbjInfo', 'editPpbjStatus', 'editPpbjInfoContent', () => updateEditPrFinalValue(), 'editDeskripsi', 'editDeskripsiBadge');
 
-            const cfg = ph => ({ placeholder: ph, allowClear: true, width: '100%', minimumResultsForSearch: 8 });
-            $('.vendor-select').select2(cfg('-- Pilih Vendor --'));
-            $('.pic-select').select2(cfg('-- Pilih PIC --'));
-            $('.edit-vendor-select').select2(cfg('-- Pilih Vendor --'));
-            $('.edit-pic-select').select2(cfg('-- Pilih PIC --'));
+            $('#vendorSelect option[value=""], #vendorSelect option[value="__tambah__"], #editVendor option[value=""]').remove();
+            $('#newVendorBox').remove();
 
-            $('#vendorSelect').on('change', function () { document.getElementById('newVendorBox').classList.toggle('hidden', $(this).val() !== '__tambah__'); });
+            const cfg = ph => ({ placeholder: ph, allowClear: true, width: '100%', minimumResultsForSearch: 8 });
+            const vendorCfg = ph => ({ placeholder: ph, allowClear: true, width: '100%', tags: true, tokenSeparators: ['|'], minimumResultsForSearch: 0 });
+            $('.vendor-select').select2(vendorCfg('-- Pilih satu atau banyak vendor --'));
+            $('.pic-select').select2(cfg('-- Pilih PIC --'));
+            $('.edit-vendor-select').select2(vendorCfg('-- Pilih satu atau banyak vendor --'));
+            $('.edit-pic-select').select2(cfg('-- Pilih PIC --'));
 
             // MANUAL INPUT CHECK (ADD)
             $('#nomorPrManual').on('input', function () {

@@ -13,6 +13,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Database\QueryException;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use App\Traits\HasPresence;
 use PhpOffice\PhpWord\PhpWord;
 use PhpOffice\PhpWord\Settings;
@@ -72,6 +73,7 @@ class SpphController extends Controller
             'tanggal',
             'nomor_pr',
             'nama_vendor',
+            'vendor_names',
             'deskripsi_pengadaan',
             'pic',
             'sequence_number',
@@ -209,7 +211,7 @@ class SpphController extends Controller
                     $row->nomor_spph,
                     $row->tanggal?->format('d/m/Y'),
                     $row->nomor_pr,
-                    $row->nama_vendor,
+                    implode(', ', $row->print_vendor_names),
                     $row->deskripsi_pengadaan,
                     $row->pic,
                 ]));
@@ -313,7 +315,9 @@ class SpphController extends Controller
             'tanggal' => 'required|date',
             'nomor_pr' => ['nullable', 'string', 'max:100', Rule::unique('spphs', 'nomor_pr')],
             'nomor_pr_type' => 'nullable|in:ppbj,manual',
-            'nama_vendor' => 'required|string|max:255',
+            'nama_vendor' => 'nullable|string|max:255',
+            'vendor_names' => 'required_without:nama_vendor|array|max:20',
+            'vendor_names.*' => 'nullable|string|max:255',
             'deskripsi_pengadaan' => 'required|string',
             'pic' => 'required|string|max:100',
             'vendor_baru' => 'nullable|string|max:255',
@@ -357,12 +361,8 @@ class SpphController extends Controller
                 }
             }
 
-            $vendorName = $request->nama_vendor;
-            if ($request->filled('vendor_baru')) {
-                $v = Vendor::firstOrCreate(['nama_vendor' => trim($request->vendor_baru)]);
-                $vendorName = $v->nama_vendor;
-                Cache::forget('vendors:active');
-            }
+            $vendorNames = $this->resolveVendorNames($request);
+            $vendorName = $vendorNames[0];
 
             $seq = $this->extractSeq($request->nomor_spph) ?? ((int) Spph::lockForUpdate()->max('sequence_number') + 1);
             $spph = Spph::create([
@@ -371,6 +371,7 @@ class SpphController extends Controller
                 'tanggal' => $request->tanggal,
                 'nomor_pr' => $nomorPr,
                 'nama_vendor' => $vendorName,
+                'vendor_names' => $vendorNames,
                 'deskripsi_pengadaan' => $request->deskripsi_pengadaan,
                 'pic' => $request->pic,
             ]);
@@ -408,7 +409,9 @@ class SpphController extends Controller
             'tanggal' => 'required|date',
             'nomor_pr' => ['nullable', 'string', 'max:100', Rule::unique('spphs', 'nomor_pr')->ignore($spph->id)],
             'nomor_pr_type' => 'nullable|in:ppbj,manual',
-            'nama_vendor' => 'required|string|max:255',
+            'nama_vendor' => 'nullable|string|max:255',
+            'vendor_names' => 'required_without:nama_vendor|array|max:20',
+            'vendor_names.*' => 'nullable|string|max:255',
             'deskripsi_pengadaan' => 'required|string',
             'pic' => 'required|string|max:100',
             'items' => 'nullable|array|max:20',
@@ -453,6 +456,8 @@ class SpphController extends Controller
                 }
             }
 
+            $vendorNames = $this->resolveVendorNames($request);
+            $vendorName = $vendorNames[0];
             $seq = $this->extractSeq($request->nomor_spph) ?? $spph->sequence_number;
 
             $spph->update([
@@ -460,7 +465,8 @@ class SpphController extends Controller
                 'sequence_number' => $seq,
                 'tanggal' => $request->tanggal,
                 'nomor_pr' => $nomorPr,
-                'nama_vendor' => $request->nama_vendor,
+                'nama_vendor' => $vendorName,
+                'vendor_names' => $vendorNames,
                 'deskripsi_pengadaan' => $request->deskripsi_pengadaan,
                 'pic' => $request->pic,
             ]);
@@ -484,7 +490,7 @@ class SpphController extends Controller
                 if ($newPpbj && $newPpbj->status !== 'CANCELLED') {
                     $newPpbj->spph_rfq_1 = $spph->nomor_spph;
                     $newPpbj->tgl_spph = $spph->tanggal;
-                    $newPpbj->penyedia_eksternal = $spph->nama_vendor;
+                    $newPpbj->penyedia_eksternal = $vendorName;
                     $newPpbj->save();
                 }
             }
@@ -563,10 +569,11 @@ class SpphController extends Controller
     // =========================================================
     // CETAK SPPH → WORD
     // =========================================================
-    public function cetakSpph(Spph $spph)
+    public function cetakSpph(Request $request, Spph $spph)
     {
         Settings::setOutputEscapingEnabled(true);
         $spph->load('items');
+        $printVendorName = $this->resolvePrintVendorName($spph, $request->query('vendor'));
 
         $phpWord = new PhpWord();
         $phpWord->setDefaultFontName('Arial');
@@ -622,14 +629,14 @@ class SpphController extends Controller
 
         $section->addTextBreak(1, $p0);
 
-        $vendor = Vendor::where('nama_vendor', $spph->nama_vendor)->first();
+        $vendor = Vendor::where('nama_vendor', $printVendorName)->first();
         $alamat = ($vendor && $vendor->alamat) ? $vendor->alamat : '-';
         $telp = ($vendor && $vendor->telepon) ? $vendor->telepon : '-';
         $fax = ($vendor && $vendor->fax) ? $vendor->fax : '-';
         $email = ($vendor && $vendor->email) ? $vendor->email : '-';
 
         $section->addText('Kepada Yth,', $fn, $pBoth);
-        $section->addText($spph->nama_vendor, $fb, $pBoth);
+        $section->addText($printVendorName, $fb, $pBoth);
         foreach (explode("\n", $alamat) as $baris) {
             if (trim($baris))
                 $section->addText(trim($baris), $fn, $pBoth);
@@ -760,7 +767,10 @@ class SpphController extends Controller
         $cleanDesc = preg_replace('/[^A-Za-z0-9\s\-]/', '', $cleanDesc);
         $cleanDesc = trim(preg_replace('/\s+/', ' ', $cleanDesc));
         $shortDesc = strlen($cleanDesc) > 40 ? substr($cleanDesc, 0, 40) : $cleanDesc;
-        $filename = 'Surat Permintaan Penawaran Harga ' . $shortDesc . '.docx';
+        $cleanVendor = preg_replace('/[^A-Za-z0-9\s\-]/', '', $printVendorName);
+        $cleanVendor = trim(preg_replace('/\s+/', ' ', $cleanVendor));
+        $shortVendor = $cleanVendor ? ' - ' . (strlen($cleanVendor) > 30 ? substr($cleanVendor, 0, 30) : $cleanVendor) : '';
+        $filename = 'Surat Permintaan Penawaran Harga ' . $shortDesc . $shortVendor . '.docx';
         $tempPath = storage_path('app/spph_' . $spph->id . '_' . Str::random(8) . '.docx');
 
         IOFactory::createWriter($phpWord, 'Word2007')->save($tempPath);
@@ -1513,6 +1523,45 @@ XML;
 
         // Formatting tags stay available, but attributes/event handlers do not.
         return (string) preg_replace('/<([a-z][a-z0-9]*)\b[^>]*>/i', '<$1>', $clean);
+    }
+
+    private function resolveVendorNames(Request $request): array
+    {
+        $names = collect($request->input('vendor_names', []))
+            ->merge([$request->input('nama_vendor')])
+            ->when($request->filled('vendor_baru'), fn ($collection) => $collection->push($request->input('vendor_baru')))
+            ->flatMap(fn ($vendor) => is_string($vendor) ? explode('|', $vendor) : [$vendor])
+            ->map(fn ($vendor) => trim((string) $vendor))
+            ->reject(fn ($vendor) => $vendor === '' || $vendor === '__tambah__')
+            ->unique(fn ($vendor) => mb_strtolower($vendor))
+            ->values();
+
+        if ($names->isEmpty()) {
+            throw ValidationException::withMessages([
+                'nama_vendor' => 'Minimal pilih satu vendor.',
+            ]);
+        }
+
+        $names->each(function (string $vendorName) {
+            Vendor::firstOrCreate(['nama_vendor' => $vendorName]);
+        });
+
+        Cache::forget('vendors:active');
+
+        return $names->all();
+    }
+
+    private function resolvePrintVendorName(Spph $spph, ?string $requestedVendor): string
+    {
+        $vendors = $spph->print_vendor_names;
+        if ($requestedVendor) {
+            $match = collect($vendors)->first(fn ($vendor) => mb_strtolower($vendor) === mb_strtolower(trim($requestedVendor)));
+            if ($match) {
+                return $match;
+            }
+        }
+
+        return $vendors[0] ?? $spph->nama_vendor;
     }
 
     // =========================================================

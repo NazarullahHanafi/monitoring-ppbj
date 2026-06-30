@@ -9,12 +9,23 @@ class Spph extends Model
 {
     protected $fillable = [
         'nomor_spph', 'sequence_number', 'tanggal',
-        'nomor_pr', 'nama_vendor', 'deskripsi_pengadaan', 'pic',
+        'nomor_pr', 'nama_vendor', 'vendor_names', 'deskripsi_pengadaan', 'pic',
     ];
 
     protected $casts = [
         'tanggal' => 'date',
+        'vendor_names' => 'array',
     ];
+
+    public function getPrintVendorNamesAttribute(): array
+    {
+        return collect(array_merge([$this->nama_vendor], $this->vendor_names ?? []))
+            ->map(fn ($vendor) => trim((string) $vendor))
+            ->filter()
+            ->unique(fn ($vendor) => mb_strtolower($vendor))
+            ->values()
+            ->all();
+    }
 
     /**
      * Generate next SPPH number atomically inside a transaction.

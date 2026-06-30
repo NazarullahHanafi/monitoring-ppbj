@@ -45,6 +45,48 @@ class SpphPpbjSyncTest extends TestCase
         ]);
     }
 
+    public function test_creating_spph_can_store_multiple_print_vendors(): void
+    {
+        $user = User::factory()->create([
+            'department' => 'umum',
+            'role' => 'superadmin',
+        ]);
+
+        Ppbj::create([
+            'ppbj_no' => 'PKB/PR-26/CON/0901',
+            'tgl_ppbj' => now()->toDateString(),
+            'tgl_terima_pr' => now()->toDateString(),
+            'uraian' => 'Pengadaan multi vendor SPPH',
+            'portofolio' => 'CON',
+            'buyer' => 'NAZAR',
+            'total_sebelum_ppn' => 2000000,
+        ]);
+
+        $this->actingAs($user)
+            ->post(route('spph.store'), [
+                'nomor_spph' => '090/PKU-VI/SPPH/2026',
+                'tanggal' => now()->toDateString(),
+                'nomor_pr' => 'PKB/PR-26/CON/0901',
+                'nomor_pr_type' => 'ppbj',
+                'vendor_names' => ['Vendor Audit A', 'Vendor Audit B'],
+                'deskripsi_pengadaan' => 'Pengadaan multi vendor SPPH',
+                'pic' => $user->name,
+            ])
+            ->assertRedirect(route('spph.index'));
+
+        $spph = Spph::where('nomor_spph', '090/PKU-VI/SPPH/2026')->firstOrFail();
+
+        $this->assertSame('Vendor Audit A', $spph->nama_vendor);
+        $this->assertSame(['Vendor Audit A', 'Vendor Audit B'], $spph->print_vendor_names);
+        $this->assertDatabaseHas('vendors', ['nama_vendor' => 'Vendor Audit A']);
+        $this->assertDatabaseHas('vendors', ['nama_vendor' => 'Vendor Audit B']);
+        $this->assertDatabaseHas('ppbj', [
+            'ppbj_no' => 'PKB/PR-26/CON/0901',
+            'spph_rfq_1' => '090/PKU-VI/SPPH/2026',
+            'penyedia_eksternal' => 'Vendor Audit A',
+        ]);
+    }
+
     public function test_updating_spph_syncs_vendor_to_linked_ppbj(): void
     {
         $user = User::factory()->create([
