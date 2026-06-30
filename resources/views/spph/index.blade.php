@@ -1879,6 +1879,15 @@
                         {{ $p }}
                     </option>@endforeach
                 </select>
+                <select id="filterVendor"
+                    class="px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm min-w-[190px]">
+                    <option value="">Semua Vendor</option>
+                    @foreach($vendors as $v)
+                        <option value="{{ $v->nama_vendor }}" {{ (isset($vendorFilter) && $vendorFilter === $v->nama_vendor) ? 'selected' : '' }}>
+                            {{ $v->nama_vendor }}
+                        </option>
+                    @endforeach
+                </select>
                 <input type="date" id="dariInput" value="{{ $dari ?? '' }}"
                     class="px-3 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm">
                 <input type="date" id="sampaiInput" value="{{ $sampai ?? '' }}"
@@ -1907,6 +1916,9 @@
                     @if($pic)<span
                         class="inline-flex items-center gap-1 text-xs bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 px-2 py-0.5 rounded-full">PIC:
                     {{ $pic }} <button onclick="clearPic()" class="hover:text-red-500 ml-0.5">✕</button></span>@endif
+                    @if($vendorFilter)<span
+                        class="inline-flex items-center gap-1 text-xs bg-sky-100 dark:bg-sky-900/40 text-sky-700 dark:text-sky-300 px-2 py-0.5 rounded-full">Vendor:
+                    {{ $vendorFilter }} <button onclick="clearVendor()" class="hover:text-red-500 ml-0.5">x</button></span>@endif
                     @if($dari || $sampai)<span
                         class="inline-flex items-center gap-1 text-xs bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300 px-2 py-0.5 rounded-full">📅
                         {{ ($dari ? \Carbon\Carbon::parse($dari)->format('d/m/Y') : '...') }} –
@@ -1967,6 +1979,11 @@
                                 </td>
                                 <td class="px-4 py-3 text-gray-700 dark:text-gray-200 font-medium text-xs">
                                     <div class="flex flex-wrap gap-1">
+                                        @if(count($vendorList) > 1)
+                                            <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-700 font-semibold">
+                                                {{ count($vendorList) }} vendor
+                                            </span>
+                                        @endif
                                         @foreach($vendorList as $vendorName)
                                             <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-600">
                                                 {{ $vendorName }}
@@ -1997,6 +2014,11 @@
                                             </svg>
                                         </a>
                                         @if(count($vendorList) > 1)
+                                            <a href="{{ route('spph.cetak-semua-vendor', $s) }}" target="_blank"
+                                                class="px-2 py-1 rounded-lg text-[11px] font-semibold text-emerald-700 dark:text-emerald-200 bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition-colors"
+                                                title="Cetak semua vendor sekaligus dalam ZIP">
+                                                ZIP
+                                            </a>
                                             <select onchange="if(this.value){ window.open(this.value, '_blank'); this.value=''; }"
                                                 class="text-[11px] rounded-lg border border-sky-200 dark:border-sky-800 bg-sky-50 dark:bg-sky-900/30 text-sky-700 dark:text-sky-200 px-1.5 py-1"
                                                 title="Cetak SPPH per vendor">
@@ -2900,15 +2922,17 @@
             const p = new URLSearchParams();
             const q = document.getElementById('searchInput').value.trim();
             const pic = document.getElementById('filterPic').value;
+            const vendor = document.getElementById('filterVendor').value;
             const d = document.getElementById('dariInput').value;
             const s = document.getElementById('sampaiInput').value;
-            if (q) p.set('search', q); if (pic) p.set('pic', pic); if (d) p.set('dari', d); if (s) p.set('sampai', s);
+            if (q) p.set('search', q); if (pic) p.set('pic', pic); if (vendor) p.set('vendor', vendor); if (d) p.set('dari', d); if (s) p.set('sampai', s);
             return p.toString();
         }
         function doSearch() { const qs = getQS(); window.location.href = qs ? `/spph?${qs}` : '/spph'; }
         function doExport() { const qs = getQS(); window.location.href = qs ? `/spph/export?${qs}` : '/spph/export'; }
         function clearSearch() { document.getElementById('searchInput').value = ''; doSearch(); }
         function clearPic() { document.getElementById('filterPic').value = ''; doSearch(); }
+        function clearVendor() { document.getElementById('filterVendor').value = ''; doSearch(); }
         function clearDate() { document.getElementById('dariInput').value = ''; document.getElementById('sampaiInput').value = ''; doSearch(); }
         function setQuickDate(t) {
             const d = document.getElementById('dariInput'), s = document.getElementById('sampaiInput'), n = new Date(), y = n.getFullYear(), m = String(n.getMonth() + 1).padStart(2, '0'), dd = String(n.getDate()).padStart(2, '0');
@@ -3129,7 +3153,12 @@
                     tr.className = 'tbl-row-hover new-row-flash';
                     tr.dataset.id = Number(row.id);
                     tr.dataset.pic = String(row.pic || '');
+                    const vendorCount = Number(row.vendor_count || 1);
+                    const vendorBadge = vendorCount > 1 ? `<span class="inline-flex items-center px-2 py-0.5 rounded-full bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-700 font-semibold mr-1">${vendorCount} vendor</span>` : '';
                     tr.innerHTML = `<td class="px-4 py-3 text-gray-400 text-xs font-mono">—</td><td class="px-4 py-3"><span class="badge-nomor inline-flex items-center px-2.5 py-1 rounded-lg bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800">${escapedHtml(row.nomor_spph)}</span></td><td class="px-4 py-3 text-gray-600 dark:text-gray-300 text-xs">${escapedHtml(row.tanggal || '-')}</td><td class="px-4 py-3 text-gray-600 dark:text-gray-300 font-mono text-xs">${escapedHtml(row.nomor_pr)}</td><td class="px-4 py-3 text-gray-700 dark:text-gray-200 font-medium text-xs">${escapedHtml(row.nama_vendor)}</td><td class="px-4 py-3 text-gray-600 dark:text-gray-300 text-xs max-w-xs truncate">${escapedHtml(row.deskripsi_pengadaan)}</td><td class="px-4 py-3"><span class="inline-block bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 text-xs font-semibold px-2 py-0.5 rounded-full">${escapedHtml(row.pic)}</span></td><td class="px-4 py-3 text-center"><button type="button" onclick="shareRecordToChat('spph', ${Number(row.id)})" class="px-2 py-1 rounded-lg text-indigo-600 bg-indigo-50 dark:bg-indigo-900/30 text-xs font-semibold" title="Bagikan SPPH ke Chat Tim">💬</button></td>`;
+                    if (tr.children[4]) {
+                        tr.children[4].innerHTML = vendorBadge + escapedHtml(row.vendor_label || row.nama_vendor);
+                    }
                     tbody.insertBefore(tr, tbody.firstChild);
                     Swal.fire({ toast: true, position: 'top-end', icon: 'info', title: `📋 SPPH baru: ${String(row.nomor_spph || '')}`, showConfirmButton: false, timer: 3000, timerProgressBar: true, background: document.documentElement.classList.contains('dark') ? '#1f2937' : '#fff', color: document.documentElement.classList.contains('dark') ? '#f3f4f6' : '#111827' });
                 });
@@ -3384,6 +3413,7 @@
             });
 
             document.getElementById('filterPic').addEventListener('change', doSearch);
+            document.getElementById('filterVendor').addEventListener('change', doSearch);
             document.getElementById('dariInput').addEventListener('change', doSearch);
             document.getElementById('sampaiInput').addEventListener('change', doSearch);
 

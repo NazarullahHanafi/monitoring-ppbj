@@ -38,6 +38,7 @@ class SpphController extends Controller
     {
         $search = $request->get('search', '');
         $pic = $request->get('pic', '');
+        $vendorFilter = $request->get('vendor', '');
         $dari = $request->get('dari', '');
         $sampai = $request->get('sampai', '');
 
@@ -82,9 +83,14 @@ class SpphController extends Controller
                 $q2->where('nomor_spph', 'LIKE', "%{$search}%")
                     ->orWhere('nomor_pr', 'LIKE', "%{$search}%")
                     ->orWhere('nama_vendor', 'LIKE', "%{$search}%")
+                    ->orWhere('vendor_names', 'LIKE', "%{$search}%")
                     ->orWhere('deskripsi_pengadaan', 'LIKE', "%{$search}%");
             }))
             ->when($pic, fn($q) => $q->where('pic', $pic))
+            ->when($vendorFilter, fn($q) => $q->where(function ($q2) use ($vendorFilter) {
+                $q2->where('nama_vendor', $vendorFilter)
+                    ->orWhere('vendor_names', 'LIKE', '%"'.str_replace(['\\', '"'], ['\\\\', '\"'], $vendorFilter).'"%');
+            }))
             ->when($dari, fn($q) => $q->where('tanggal', '>=', $dari))
             ->when($sampai, fn($q) => $q->where('tanggal', '<=', $sampai))
             ->orderBy('sequence_number', 'desc')
@@ -101,6 +107,7 @@ class SpphController extends Controller
             'lastNomor',
             'search',
             'pic',
+            'vendorFilter',
             'dari',
             'sampai',
             'onboardingSeen'
@@ -183,6 +190,7 @@ class SpphController extends Controller
     {
         $search = $request->get('search', '');
         $pic = $request->get('pic', '');
+        $vendorFilter = $request->get('vendor', '');
         $dari = $request->get('dari', '');
         $sampai = $request->get('sampai', '');
 
@@ -190,9 +198,14 @@ class SpphController extends Controller
             $q2->where('nomor_spph', 'like', "%{$search}%")
                 ->orWhere('nomor_pr', 'like', "%{$search}%")
                 ->orWhere('nama_vendor', 'like', "%{$search}%")
+                ->orWhere('vendor_names', 'like', "%{$search}%")
                 ->orWhere('deskripsi_pengadaan', 'like', "%{$search}%");
         }))
             ->when($pic, fn($q) => $q->where('pic', $pic))
+            ->when($vendorFilter, fn($q) => $q->where(function ($q2) use ($vendorFilter) {
+                $q2->where('nama_vendor', $vendorFilter)
+                    ->orWhere('vendor_names', 'LIKE', '%"'.str_replace(['\\', '"'], ['\\\\', '\"'], $vendorFilter).'"%');
+            }))
             ->when($dari, fn($q) => $q->where('tanggal', '>=', $dari))
             ->when($sampai, fn($q) => $q->where('tanggal', '<=', $sampai))
             ->orderBy('sequence_number', 'desc')
@@ -287,7 +300,7 @@ class SpphController extends Controller
     {
         $lastId = (int) $request->get('last_id', 0);
 
-        $rows = Spph::select(['id', 'nomor_spph', 'tanggal', 'nomor_pr', 'nama_vendor', 'deskripsi_pengadaan', 'pic'])
+        $rows = Spph::select(['id', 'nomor_spph', 'tanggal', 'nomor_pr', 'nama_vendor', 'vendor_names', 'deskripsi_pengadaan', 'pic'])
             ->where('id', '>', $lastId)
             ->orderBy('id')
             ->limit(50)
@@ -298,6 +311,9 @@ class SpphController extends Controller
                 'tanggal' => $r->tanggal?->format('d/m/Y'),
                 'nomor_pr' => $r->nomor_pr ?? '-',
                 'nama_vendor' => $r->nama_vendor,
+                'vendor_names' => $r->print_vendor_names,
+                'vendor_label' => implode(', ', $r->print_vendor_names),
+                'vendor_count' => count($r->print_vendor_names),
                 'deskripsi_pengadaan' => Str::limit($r->deskripsi_pengadaan, 100),
                 'pic' => $r->pic,
             ]);
@@ -790,6 +806,50 @@ class SpphController extends Controller
         }
 
         return response()->download($tempPath, $filename)->deleteFileAfterSend(true);
+    }
+
+    public function cetakSemuaVendor(Request $request, Spph $spph)
+    {
+        $spph->load('items');
+        $vendors = $spph->print_vendor_names;
+
+        if (count($vendors) <= 1) {
+            return $this->cetakSpph($request, $spph);
+        }
+
+        $zipName = $this->safeDownloadName('SPPH ' . $spph->nomor_spph . ' - Semua Vendor.zip');
+        $zipPath = storage_path('app/spph_all_' . $spph->id . '_' . Str::random(8) . '.zip');
+
+        if (! class_exists(ZipArchive::class)) {
+            abort(500, 'Ekstensi ZIP belum aktif di server.');
+        }
+
+        $zip = new ZipArchive();
+
+        if ($zip->open($zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
+            abort(500, 'Gagal membuat file ZIP SPPH.');
+        }
+
+        $tempFiles = [];
+        foreach ($vendors as $vendorName) {
+            $vendorRequest = Request::create($request->path(), 'GET', ['vendor' => $vendorName]);
+            $response = $this->cetakSpph($vendorRequest, $spph);
+            $filePath = $response->getFile()->getPathname();
+            $entryName = $this->safeDownloadName('SPPH ' . $spph->nomor_spph . ' - ' . $vendorName . '.docx');
+
+            if (is_file($filePath)) {
+                $zip->addFile($filePath, $entryName);
+                $tempFiles[] = $filePath;
+            }
+        }
+
+        $zip->close();
+
+        foreach ($tempFiles as $filePath) {
+            @unlink($filePath);
+        }
+
+        return response()->download($zipPath, $zipName)->deleteFileAfterSend(true);
     }
 
     // =========================================================
@@ -1568,6 +1628,14 @@ XML;
         }
 
         return $vendors[0] ?? $spph->nama_vendor;
+    }
+
+    private function safeDownloadName(string $name): string
+    {
+        $name = preg_replace('/[^\pL\pN\s\.\-_]+/u', ' ', $name);
+        $name = trim(preg_replace('/\s+/', ' ', (string) $name));
+
+        return $name !== '' ? $name : 'download';
     }
 
     // =========================================================

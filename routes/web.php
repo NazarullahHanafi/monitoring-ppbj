@@ -264,6 +264,7 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
             Route::put('/{spph}', [SpphController::class, 'update'])->name('update');
             Route::delete('/{spph}', [SpphController::class, 'destroy'])->name('destroy');
             Route::get('/{spph}/cetak', [SpphController::class, 'cetakSpph'])->name('cetak');
+            Route::get('/{spph}/cetak-semua-vendor', [SpphController::class, 'cetakSemuaVendor'])->name('cetak-semua-vendor');
             Route::get('/{spph}/items', [SpphController::class, 'getItems'])->name('items');
         });
 

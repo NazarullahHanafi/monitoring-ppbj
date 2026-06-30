@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Ppbj;
 use App\Models\Spph;
 use App\Models\User;
+use App\Models\Vendor;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -130,6 +131,50 @@ class SpphPpbjSyncTest extends TestCase
             'spph_rfq_1' => '002/PKU-VI/SPPH/2026',
             'penyedia_eksternal' => 'PT Vendor Baru',
         ]);
+    }
+
+    public function test_spph_index_can_filter_by_vendor_inside_multi_vendor_list(): void
+    {
+        $user = User::factory()->create([
+            'department' => 'umum',
+            'role' => 'superadmin',
+        ]);
+
+        Vendor::create(['nama_vendor' => 'Vendor Filter A', 'is_active' => true]);
+        Vendor::create(['nama_vendor' => 'Vendor Filter B', 'is_active' => true]);
+        Vendor::create(['nama_vendor' => 'Vendor Filter C', 'is_active' => true]);
+
+        Spph::create([
+            'nomor_spph' => '101/PKU-VI/SPPH/2026',
+            'sequence_number' => 101,
+            'tanggal' => '2026-06-30',
+            'nomor_pr' => 'PKB/PR-26/CON/1001',
+            'nama_vendor' => 'Vendor Filter A',
+            'vendor_names' => ['Vendor Filter A', 'Vendor Filter B'],
+            'deskripsi_pengadaan' => 'SPPH yang dicari',
+            'pic' => $user->name,
+        ]);
+
+        Spph::create([
+            'nomor_spph' => '102/PKU-VI/SPPH/2026',
+            'sequence_number' => 102,
+            'tanggal' => '2026-06-30',
+            'nomor_pr' => 'PKB/PR-26/CON/1002',
+            'nama_vendor' => 'Vendor Filter C',
+            'vendor_names' => ['Vendor Filter C'],
+            'deskripsi_pengadaan' => 'SPPH lain',
+            'pic' => $user->name,
+        ]);
+
+        $response = $this->actingAs($user)
+            ->get(route('spph.index', ['vendor' => 'Vendor Filter B']))
+            ->assertOk()
+            ->assertSee('101/PKU-VI/SPPH/2026');
+
+        $numbers = $response->viewData('spphs')->pluck('nomor_spph')->all();
+
+        $this->assertContains('101/PKU-VI/SPPH/2026', $numbers);
+        $this->assertNotContains('102/PKU-VI/SPPH/2026', $numbers);
     }
 
     public function test_deleting_spph_clears_matching_ppbj_penyedia_eksternal(): void
