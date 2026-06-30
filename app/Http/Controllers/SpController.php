@@ -369,7 +369,21 @@ class SpController extends Controller
     public function poll(Request $request)
     {
         $lastId = (int) $request->get('last_id', 0);
-        $rows = Sp::where('id', '>', $lastId)->orderBy('id')->get()
+        $rows = Sp::select([
+                'id',
+                'nomor_sp',
+                'tanggal_sp',
+                'nilai_sp',
+                'nomor_pr',
+                'nilai_pr',
+                'nama_vendor',
+                'deskripsi_pengadaan',
+                'pic',
+            ])
+            ->where('id', '>', $lastId)
+            ->orderBy('id')
+            ->limit(50)
+            ->get()
             ->map(fn($r) => [
                 'id' => $r->id,
                 'nomor_sp' => $r->nomor_sp,

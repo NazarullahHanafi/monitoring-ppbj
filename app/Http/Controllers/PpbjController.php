@@ -110,9 +110,20 @@ class PpbjController extends Controller
                 'no_invoice' => 'No. Invoice',
             ];
 
+            $matchSelects = [];
+            $matchBindings = [];
+            foreach (array_keys($fieldMap) as $col) {
+                $matchSelects[] = "MAX(CASE WHEN {$col} LIKE ? THEN 1 ELSE 0 END) as match_{$col}";
+                $matchBindings[] = $likeKeyword;
+            }
+
+            $matchRow = DB::table('ppbj')
+                ->selectRaw(implode(', ', $matchSelects), $matchBindings)
+                ->first();
+
             $matchedFields = [];
             foreach ($fieldMap as $col => $label) {
-                if (DB::table('ppbj')->where($col, 'like', $likeKeyword)->exists()) {
+                if ((int) ($matchRow?->{"match_{$col}"} ?? 0) === 1) {
                     $matchedFields[] = $label;
                 }
             }
