@@ -214,7 +214,7 @@
             </div>
             <div class="office-card reveal">
                 <strong>PT Sucofindo Cabang Pekanbaru</strong>
-                <span>Jl. Jend. Sudirman, Pekanbaru, Riau. Titik peta sudah diarahkan ke lokasi kantor cabang.</span>
+                <span>JL. Jend. A. Yani No.73, Kelurahan Padang Bulan, Senapelan, Pekanbaru City, Riau 28156. Titik peta sudah diarahkan ke lokasi kantor cabang.</span>
             </div>
         </div>
     </section>
@@ -225,7 +225,7 @@
                 <div class="eyebrow">Informasi</div>
                 <h2>Kontak utama</h2>
                 <div class="info-list">
-                    <div class="info-item"><div class="info-icon"><i class="fas fa-location-dot"></i></div><div><div class="info-label">Alamat</div><div class="info-value">PT Sucofindo Cabang Pekanbaru, Pekanbaru, Riau</div></div></div>
+                    <div class="info-item"><div class="info-icon"><i class="fas fa-location-dot"></i></div><div><div class="info-label">Alamat</div><div class="info-value">JL. Jend. A. Yani No.73, Kelurahan Padang Bulan, Senapelan, Pekanbaru City, Riau 28156</div></div></div>
                     <div class="info-item"><div class="info-icon"><i class="fas fa-envelope"></i></div><div><div class="info-label">Email</div><div class="info-value">support@sucofindoumumpku.com</div></div></div>
                     <div class="info-item"><div class="info-icon"><i class="fas fa-clock"></i></div><div><div class="info-label">Jam kerja</div><div class="info-value">Senin - Jumat, mengikuti jam operasional kantor</div></div></div>
                     <div class="info-item"><div class="info-icon"><i class="fas fa-magnifying-glass"></i></div><div><div class="info-label">Tracking</div><div class="info-value">Gunakan menu Track PR untuk mencari nomor PR/PPBJ tanpa login.</div></div></div>
