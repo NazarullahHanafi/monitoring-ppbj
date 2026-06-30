@@ -1543,7 +1543,13 @@ XML;
         }
 
         $names->each(function (string $vendorName) {
-            Vendor::firstOrCreate(['nama_vendor' => $vendorName]);
+            try {
+                Vendor::firstOrCreate(['nama_vendor' => $vendorName]);
+            } catch (QueryException $e) {
+                if (! Vendor::where('nama_vendor', $vendorName)->exists()) {
+                    throw $e;
+                }
+            }
         });
 
         Cache::forget('vendors:active');
