@@ -437,7 +437,7 @@
                 <ul>
                     <li><span><i class="fas fa-envelope"></i> ppbj@co.id</span></li>
                     <li><span><i class="fas fa-phone"></i> (0761) 123 456</span></li>
-                    <li><span><i class="fas fa-location-dot"></i> Pekanbaru, Riau</span></li>
+                    <li><span><i class="fas fa-location-dot"></i> JL. Jend. A. Yani No.73, Kelurahan Padang Bulan, Senapelan, Pekanbaru City, Riau 28156</span></li>
                     <li><span><i class="fas fa-clock"></i> Sen–Jum 08:00–17:00</span></li>
                 </ul>
             </div>
