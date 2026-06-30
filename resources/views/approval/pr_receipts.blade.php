@@ -154,6 +154,9 @@
                             Tujuan Pengadaan</th>
                         <th
                             class="px-6 py-4 text-left text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300">
+                            Nilai PR</th>
+                        <th
+                            class="px-6 py-4 text-left text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300">
                             Diajukan Oleh</th>
                         <th
                             class="px-6 py-4 text-left text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300">
@@ -178,10 +181,15 @@
                         @php
                             $isResubmit = !is_null($row->previous_rejection_id);
                             $previousRejection = $isResubmit ? \App\Models\PrReceiptApproval::find($row->previous_rejection_id) : null;
+                            $nilaiPrRaw = $row->torpr?->jumlah_pr;
+                            $nilaiPrFormatted = filled($nilaiPrRaw) && (float) $nilaiPrRaw > 0
+                                ? 'Rp ' . number_format((float) $nilaiPrRaw, 0, ',', '.')
+                                : '—';
                             $prDetailJson = json_encode([
                                 'id' => $row->id,
                                 'nomor_pr' => $row->torpr->nomor_pr ?? '-',
                                 'tujuan_pengadaan' => $row->torpr->tujuan_pengadaan ?? '-',
+                                'nilai_pr' => $nilaiPrFormatted,
                                 'keterangan' => $row->torpr->keterangan ?? '-',
                                 'requested_name' => $row->requested_name ?? '-',
                                 'requested_at' => $row->requested_at?->format('d M Y H:i') ?? '-',
@@ -230,6 +238,18 @@
                                     </svg>
                                     Lihat Detail
                                 </button>
+                            </td>
+
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <div
+                                    class="inline-flex flex-col gap-1 px-3 py-2 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800/70">
+                                    <span class="text-[10px] font-black uppercase tracking-wider text-emerald-700 dark:text-emerald-300">
+                                        Harga / Nilai
+                                    </span>
+                                    <span class="font-bold text-sm text-emerald-900 dark:text-emerald-100">
+                                        {{ $nilaiPrFormatted }}
+                                    </span>
+                                </div>
                             </td>
 
                             <td class="px-6 py-4 whitespace-nowrap">
@@ -366,7 +386,7 @@
                         @if($isResubmit && $previousRejection)
                             <tr
                                 class="bg-gradient-to-r from-amber-50 via-orange-50 to-amber-50 dark:from-amber-900/20 dark:via-orange-900/20 dark:to-amber-900/20 border-t-2 border-amber-300 dark:border-amber-700">
-                                <td colspan="8" class="px-6 py-5">
+                                <td colspan="9" class="px-6 py-5">
                                     <div class="space-y-4">
                                         <div class="flex items-center gap-3 mb-3">
                                             <div
@@ -490,7 +510,7 @@
 
                         @if($row->status === 'REJECTED' && $row->rejected_reason && !$isResubmit)
                             <tr class="bg-red-50 dark:bg-red-900/10">
-                                <td colspan="8" class="px-6 py-4">
+                                <td colspan="9" class="px-6 py-4">
                                     <div class="flex items-start gap-3 border-l-4 border-red-500 pl-4">
                                         <svg class="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor"
                                             viewBox="0 0 24 24">
@@ -512,7 +532,7 @@
                         @endif
                     @empty
                         <tr>
-                            <td colspan="8" class="px-6 py-16 text-center">
+                            <td colspan="9" class="px-6 py-16 text-center">
                                 <div class="flex flex-col items-center gap-3">
                                     <svg class="w-16 h-16 text-gray-300 dark:text-gray-700" fill="none" stroke="currentColor"
                                         viewBox="0 0 24 24">
@@ -553,6 +573,7 @@
 
             const nomorPr = escapeHtml(data.nomor_pr || '-');
             const tujuan = escapeHtml(data.tujuan_pengadaan || '-');
+            const nilaiPr = escapeHtml(data.nilai_pr || '—');
             const keterangan = escapeHtml(data.keterangan || '-');
             const requestedBy = escapeHtml(data.requested_name || '-');
             const requestedAt = escapeHtml(data.requested_at || '-');
@@ -637,6 +658,18 @@
                         <div class="pr-d-section">
                             <div class="pr-d-label">🎯 Tujuan Pengadaan</div>
                             <div class="pr-d-box">${tujuan}</div>
+                        </div>
+
+                        <div class="pr-d-price-card">
+                            <div class="pr-d-price-icon">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                </svg>
+                            </div>
+                            <div>
+                                <div class="pr-d-price-label">Harga / Nilai PR</div>
+                                <div class="pr-d-price-value">${nilaiPr}</div>
+                            </div>
                         </div>
 
                         <div class="pr-d-section">
@@ -947,6 +980,63 @@
             background: #111827;
             border-color: #374151;
             color: #E5E7EB;
+        }
+
+        .pr-d-price-card {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin: -4px 0 18px;
+            padding: 14px 16px;
+            border-radius: 14px;
+            border: 1px solid #BBF7D0;
+            background: linear-gradient(135deg, #ECFDF5, #F0FDFA);
+        }
+
+        .dark .pr-d-price-card {
+            border-color: rgba(52, 211, 153, .26);
+            background: linear-gradient(135deg, rgba(6, 78, 59, .24), rgba(20, 83, 45, .16));
+        }
+
+        .pr-d-price-icon {
+            width: 42px;
+            height: 42px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #047857;
+            background: #D1FAE5;
+            flex-shrink: 0;
+        }
+
+        .dark .pr-d-price-icon {
+            color: #A7F3D0;
+            background: rgba(16, 185, 129, .18);
+        }
+
+        .pr-d-price-label {
+            font-size: 10px;
+            font-weight: 800;
+            color: #047857;
+            text-transform: uppercase;
+            letter-spacing: .08em;
+            margin-bottom: 2px;
+        }
+
+        .dark .pr-d-price-label {
+            color: #6EE7B7;
+        }
+
+        .pr-d-price-value {
+            font-size: 18px;
+            line-height: 1.2;
+            font-weight: 900;
+            color: #064E3B;
+        }
+
+        .dark .pr-d-price-value {
+            color: #ECFDF5;
         }
 
         .pr-d-box-sm {
