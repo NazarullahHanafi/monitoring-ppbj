@@ -1194,14 +1194,14 @@ class PpbjController extends Controller
 
         $byPortofolio = (clone $query)
             ->selectRaw("COALESCE(NULLIF(portofolio, ''), 'Tanpa Portofolio') as label, COUNT(*) as total, COALESCE(SUM(total_sebelum_ppn), 0) as total_value, COALESCE(SUM(nilai_sp_spk), 0) as total_sp_value")
-            ->groupByRaw("COALESCE(NULLIF(portofolio, ''), 'Tanpa Portofolio')")
+            ->groupBy('portofolio')
             ->orderByDesc('total_value')
             ->limit(20)
             ->get();
 
         $byVendor = (clone $query)
             ->selectRaw("COALESCE(NULLIF(penyedia_eksternal, ''), 'Tanpa Vendor') as label, COUNT(*) as total, COALESCE(SUM(total_sebelum_ppn), 0) as total_value, COALESCE(SUM(nilai_sp_spk), 0) as total_sp_value")
-            ->groupByRaw("COALESCE(NULLIF(penyedia_eksternal, ''), 'Tanpa Vendor')")
+            ->groupBy('penyedia_eksternal')
             ->orderByDesc('total_value')
             ->limit(20)
             ->get();
