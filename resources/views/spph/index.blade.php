@@ -2602,7 +2602,7 @@
         let modalOpen = false, addIdx = 0, editIdx = 5000;
         let currentPrMode = 'ppbj', currentEditPrMode = 'ppbj';
         const IS_FIRST = {{ $spphs->onFirstPage() ? 'true' : 'false' }};
-        const HAS_FILTER = {{ (($search ?? '') || ($pic ?? '') || ($dari ?? '') || ($sampai ?? '')) ? 'true' : 'false' }};
+        const HAS_FILTER = {{ (($search ?? '') || ($pic ?? '') || ($vendorFilter ?? '') || ($dari ?? '') || ($sampai ?? '')) ? 'true' : 'false' }};
 
         // ════════════════════════════════════════════════════════════
         // HELPERS

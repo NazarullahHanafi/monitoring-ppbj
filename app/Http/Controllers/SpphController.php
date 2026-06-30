@@ -87,10 +87,7 @@ class SpphController extends Controller
                     ->orWhere('deskripsi_pengadaan', 'LIKE', "%{$search}%");
             }))
             ->when($pic, fn($q) => $q->where('pic', $pic))
-            ->when($vendorFilter, fn($q) => $q->where(function ($q2) use ($vendorFilter) {
-                $q2->where('nama_vendor', $vendorFilter)
-                    ->orWhere('vendor_names', 'LIKE', '%"'.str_replace(['\\', '"'], ['\\\\', '\"'], $vendorFilter).'"%');
-            }))
+            ->when($vendorFilter, fn($q) => $this->applyVendorFilter($q, $vendorFilter))
             ->when($dari, fn($q) => $q->where('tanggal', '>=', $dari))
             ->when($sampai, fn($q) => $q->where('tanggal', '<=', $sampai))
             ->orderBy('sequence_number', 'desc')
@@ -202,10 +199,7 @@ class SpphController extends Controller
                 ->orWhere('deskripsi_pengadaan', 'like', "%{$search}%");
         }))
             ->when($pic, fn($q) => $q->where('pic', $pic))
-            ->when($vendorFilter, fn($q) => $q->where(function ($q2) use ($vendorFilter) {
-                $q2->where('nama_vendor', $vendorFilter)
-                    ->orWhere('vendor_names', 'LIKE', '%"'.str_replace(['\\', '"'], ['\\\\', '\"'], $vendorFilter).'"%');
-            }))
+            ->when($vendorFilter, fn($q) => $this->applyVendorFilter($q, $vendorFilter))
             ->when($dari, fn($q) => $q->where('tanggal', '>=', $dari))
             ->when($sampai, fn($q) => $q->where('tanggal', '<=', $sampai))
             ->orderBy('sequence_number', 'desc')
@@ -1615,6 +1609,18 @@ XML;
         Cache::forget('vendors:active');
 
         return $names->all();
+    }
+
+    private function applyVendorFilter($query, string $vendor)
+    {
+        $vendor = trim($vendor);
+        $jsonVendor = json_encode($vendor, JSON_UNESCAPED_UNICODE);
+        $likeJsonVendor = '%' . addcslashes((string) $jsonVendor, '\\%_') . '%';
+
+        return $query->where(function ($q) use ($vendor, $likeJsonVendor) {
+            $q->where('nama_vendor', $vendor)
+                ->orWhere('vendor_names', 'LIKE', $likeJsonVendor);
+        });
     }
 
     private function resolvePrintVendorName(Spph $spph, ?string $requestedVendor): string

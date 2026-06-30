@@ -169,7 +169,8 @@ class SpphPpbjSyncTest extends TestCase
         $response = $this->actingAs($user)
             ->get(route('spph.index', ['vendor' => 'Vendor Filter B']))
             ->assertOk()
-            ->assertSee('101/PKU-VI/SPPH/2026');
+            ->assertSee('101/PKU-VI/SPPH/2026')
+            ->assertSee('const HAS_FILTER = true;', false);
 
         $numbers = $response->viewData('spphs')->pluck('nomor_spph')->all();
 
