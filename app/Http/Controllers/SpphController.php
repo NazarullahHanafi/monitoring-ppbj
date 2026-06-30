@@ -381,6 +381,7 @@ class SpphController extends Controller
                 if ($ppbjRecord && $ppbjRecord->status !== 'CANCELLED' && empty($ppbjRecord->spph_rfq_1)) {
                     $ppbjRecord->spph_rfq_1 = $spph->nomor_spph;
                     $ppbjRecord->tgl_spph = $spph->tanggal;
+                    $ppbjRecord->penyedia_eksternal = $vendorName;
                     $ppbjRecord->save();
                 }
             }
@@ -420,6 +421,7 @@ class SpphController extends Controller
         $nomorPr = $request->nomor_pr ?: null;
         $nomorPrType = $request->nomor_pr_type;
         $oldNomorPr = $spph->nomor_pr;
+        $oldVendorName = $spph->nama_vendor;
 
         if ($nomorPr && $nomorPrType === 'ppbj') {
             $ppbj = Ppbj::where('ppbj_no', $nomorPr)->first();
@@ -432,7 +434,7 @@ class SpphController extends Controller
         }
 
         try {
-            return DB::transaction(function () use ($request, $spph, $nomorPr, $nomorPrType, $oldNomorPr) {
+            return DB::transaction(function () use ($request, $spph, $nomorPr, $nomorPrType, $oldNomorPr, $oldVendorName) {
             $newPpbj = null;
 
             if ($nomorPr && $nomorPrType === 'ppbj') {
@@ -471,6 +473,9 @@ class SpphController extends Controller
                 if ($oldPpbj) {
                     $oldPpbj->spph_rfq_1 = null;
                     $oldPpbj->tgl_spph = null;
+                    if (trim((string) $oldPpbj->penyedia_eksternal) === trim((string) $oldVendorName)) {
+                        $oldPpbj->penyedia_eksternal = null;
+                    }
                     $oldPpbj->save();
                 }
             }
@@ -479,6 +484,7 @@ class SpphController extends Controller
                 if ($newPpbj && $newPpbj->status !== 'CANCELLED') {
                     $newPpbj->spph_rfq_1 = $spph->nomor_spph;
                     $newPpbj->tgl_spph = $spph->tanggal;
+                    $newPpbj->penyedia_eksternal = $spph->nama_vendor;
                     $newPpbj->save();
                 }
             }
@@ -507,6 +513,9 @@ class SpphController extends Controller
                 if ($ppbj) {
                     $ppbj->spph_rfq_1 = null;
                     $ppbj->tgl_spph = null;
+                    if (trim((string) $ppbj->penyedia_eksternal) === trim((string) $spph->nama_vendor)) {
+                        $ppbj->penyedia_eksternal = null;
+                    }
                     $ppbj->save();
                 }
             }
