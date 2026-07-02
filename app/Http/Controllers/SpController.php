@@ -4009,7 +4009,9 @@ class SpController extends Controller
         $mediaName2 = 'kop_surat_lanjutan.' . $ext2;
         $mediaDefault = $hasPage2 ? $mediaName2 : $mediaName1;
 
-        $makeHeaderXml = function (string $rid, string $title, string $shapeId, string $lanjutanText = '', string $shapeTop = '-113.5pt', bool $fullPageA4 = false): string {
+        $usePrintSafeKop = trim((string) $nomorKontrak) === '';
+
+        $makeHeaderXml = function (string $rid, string $title, string $shapeId, string $lanjutanText = '', string $shapeTop = '-113.5pt', bool $fullPageA4 = false) use ($usePrintSafeKop): string {
             $safeTitle = htmlspecialchars($title, ENT_XML1 | ENT_COMPAT, 'UTF-8');
             $safeLanjutan = htmlspecialchars($lanjutanText, ENT_XML1 | ENT_COMPAT, 'UTF-8');
 
@@ -4043,7 +4045,12 @@ class SpController extends Controller
                 }
             }
 
-            if ($fullPageA4) {
+            if ($usePrintSafeKop) {
+                // Surat Pesanan biasa memakai footer alamat pada gambar kop.
+                // Inset kecil menjaga teks footer tidak terpotong oleh area non-printable printer.
+                $shapeStyle = 'position:absolute;margin-left:14pt;margin-top:10pt;width:567.3pt;height:802.2pt;z-index:-251656192;mso-position-horizontal-relative:page;mso-position-vertical-relative:page';
+                $wrapAnchor = 'page';
+            } elseif ($fullPageA4) {
                 $shapeStyle = 'position:absolute;margin-left:0pt;margin-top:0pt;width:595.3pt;height:842.1pt;z-index:-251656192;mso-position-horizontal-relative:page;mso-position-vertical-relative:page';
                 $wrapAnchor = 'page';
             } else {
