@@ -594,6 +594,8 @@ class SpphController extends Controller
         $pBoth = ['spaceAfter' => 0, 'spaceBefore' => 0, 'lineHeight' => 1.0, 'alignment' => 'both'];
         $p0 = ['spaceAfter' => 0, 'spaceBefore' => 0, 'lineHeight' => 1.0];
         $pC = ['spaceAfter' => 0, 'spaceBefore' => 0, 'lineHeight' => 1.0, 'alignment' => 'center'];
+        $pTopInfo = ['spaceAfter' => 0, 'spaceBefore' => 0, 'lineHeight' => 1.15];
+        $pTtd = ['spaceAfter' => 40, 'spaceBefore' => 0, 'lineHeight' => 1.18];
 
         $fn = ['size' => 9, 'name' => 'Arial'];
         $fb = ['size' => 9, 'name' => 'Arial', 'bold' => true];
@@ -630,13 +632,13 @@ class SpphController extends Controller
         // ── Nomor & Tanggal ──
         $t1 = $section->addTable($noBdrTbl);
         $t1->addRow();
-        $t1->addCell(1458, ['borders' => $noBdr])->addText('Nomor SPPH', $fn, $p0);
-        $t1->addCell(360, ['borders' => $noBdr])->addText(':', $fn, $p0);
-        $t1->addCell(7758, ['borders' => $noBdr])->addText($spph->nomor_spph, $fn, $p0);
+        $t1->addCell(1458, ['borders' => $noBdr])->addText('Nomor SPPH', $fn, $pTopInfo);
+        $t1->addCell(360, ['borders' => $noBdr])->addText(':', $fn, $pTopInfo);
+        $t1->addCell(7758, ['borders' => $noBdr])->addText($spph->nomor_spph, $fn, $pTopInfo);
         $t1->addRow();
-        $t1->addCell(1458, ['borders' => $noBdr])->addText('Tanggal', $fn, $p0);
-        $t1->addCell(360, ['borders' => $noBdr])->addText(':', $fn, $p0);
-        $t1->addCell(7758, ['borders' => $noBdr])->addText($tgl, $fn, $p0);
+        $t1->addCell(1458, ['borders' => $noBdr])->addText('Tanggal', $fn, $pTopInfo);
+        $t1->addCell(360, ['borders' => $noBdr])->addText(':', $fn, $pTopInfo);
+        $t1->addCell(7758, ['borders' => $noBdr])->addText($tgl, $fn, $pTopInfo);
 
         $section->addTextBreak(1, $p0);
 
@@ -759,16 +761,16 @@ class SpphController extends Controller
 
         $ttd = $section->addTable($noBdrTbl);
         $ttd->addRow();
-        $ttd->addCell(4788, ['borders' => $noBdr])->addText('PT SUPERINTENDING COMPANY OF INDONESIA', $fb, $p0);
+        $ttd->addCell(4788, ['borders' => $noBdr])->addText('PT SUPERINTENDING COMPANY OF INDONESIA', $fb, $pTtd);
         for ($i = 0; $i < 6; $i++) {
             $ttd->addRow();
             $ttd->addCell(4788, ['borders' => $noBdr])->addText('', $fn, $p0);
         }
         $ttd->addRow();
         $ttd->addCell(4788, ['borders' => $noBdr])
-            ->addText($signer['name'], ['size' => 9, 'name' => 'Arial', 'bold' => true, 'underline' => 'single'], $p0);
+            ->addText($signer['name'], ['size' => 9, 'name' => 'Arial', 'bold' => true, 'underline' => 'single'], $pTtd);
         $ttd->addRow();
-        $ttd->addCell(4788, ['borders' => $noBdr])->addText($signer['title'], $fb, $p0);
+        $ttd->addCell(4788, ['borders' => $noBdr])->addText($signer['title'], $fb, $pTtd);
 
         $section->addTextBreak(1, $p0);
         $section->addText('Catatan : *) Pilih yang digunakan', $fsm, $pBoth);
