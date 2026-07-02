@@ -4009,9 +4009,7 @@ class SpController extends Controller
         $mediaName2 = 'kop_surat_lanjutan.' . $ext2;
         $mediaDefault = $hasPage2 ? $mediaName2 : $mediaName1;
 
-        $usePrintSafeKop = trim((string) $nomorKontrak) === '';
-
-        $makeHeaderXml = function (string $rid, string $title, string $shapeId, string $lanjutanText = '', string $shapeTop = '-113.5pt', bool $fullPageA4 = false) use ($usePrintSafeKop): string {
+        $makeHeaderXml = function (string $rid, string $title, string $shapeId, string $lanjutanText = '', string $shapeTop = '-113.5pt', bool $fullPageA4 = false): string {
             $safeTitle = htmlspecialchars($title, ENT_XML1 | ENT_COMPAT, 'UTF-8');
             $safeLanjutan = htmlspecialchars($lanjutanText, ENT_XML1 | ENT_COMPAT, 'UTF-8');
 
@@ -4045,12 +4043,7 @@ class SpController extends Controller
                 }
             }
 
-            if ($usePrintSafeKop) {
-                // Surat Pesanan biasa memakai footer alamat pada gambar kop.
-                // Pertahankan proporsi A4 penuh, cukup naikkan sedikit agar footer bawah tidak terpotong saat print.
-                $shapeStyle = 'position:absolute;margin-left:0pt;margin-top:-10pt;width:595.3pt;height:842.1pt;z-index:-251656192;mso-position-horizontal-relative:page;mso-position-vertical-relative:page';
-                $wrapAnchor = 'page';
-            } elseif ($fullPageA4) {
+            if ($fullPageA4) {
                 $shapeStyle = 'position:absolute;margin-left:0pt;margin-top:0pt;width:595.3pt;height:842.1pt;z-index:-251656192;mso-position-horizontal-relative:page;mso-position-vertical-relative:page';
                 $wrapAnchor = 'page';
             } else {
@@ -4072,9 +4065,12 @@ class SpController extends Controller
                 $putFile($imagePath2, 'word/media/' . $mediaName2);
             }
 
-            $lanjutan = trim((string) $nomorKontrak) !== '' ? ('Lanjutan Kontrak No. ' . trim((string) $nomorKontrak)) : '';
+            $isSuratPesananBiasa = trim((string) $nomorKontrak) === '';
+            $lanjutan = ! $isSuratPesananBiasa ? ('Lanjutan Kontrak No. ' . trim((string) $nomorKontrak)) : '';
 
-            $putString('word/header1.xml', $makeHeaderXml('rId1', 'kop_surat_halaman_1', 'WordPictureWatermark27082704', '', '-91.5pt', false));
+            $firstPageShapeTop = $isSuratPesananBiasa ? '-110pt' : '-91.5pt';
+
+            $putString('word/header1.xml', $makeHeaderXml('rId1', 'kop_surat_halaman_1', 'WordPictureWatermark27082704', '', $firstPageShapeTop, false));
             $putString('word/header2.xml', $makeHeaderXml('rId1', 'kop_surat_lanjutan', 'WordPictureWatermark27082705', $lanjutan, '-113.5pt', true));
             $putString('word/header3.xml', $makeHeaderXml('rId1', 'kop_surat_lanjutan_even', 'WordPictureWatermark27082706', $lanjutan, '-113.5pt', true));
 
@@ -4136,7 +4132,7 @@ class SpController extends Controller
                 $docXml = $zip->getFromName('word/document.xml');
                 if ($docXml !== false) {
                     $sectIndex = 0;
-                    $docXml = preg_replace_callback('/<w:sectPr\b[^>]*>.*?<\/w:sectPr>/s', function ($m) use ($rIdEven, $rIdDefault, $rIdFirst, $rIdPaktaHeader, $rIdPaktaFooter, &$sectIndex) {
+                    $docXml = preg_replace_callback('/<w:sectPr\b[^>]*>.*?<\/w:sectPr>/s', function ($m) use ($rIdEven, $rIdDefault, $rIdFirst, $rIdPaktaHeader, $rIdPaktaFooter, $isSuratPesananBiasa, &$sectIndex) {
                         $sectIndex++;
                         $sect = $m[0];
                         $sect = preg_replace('/<w:headerReference\b[^>]*\/>/', '', $sect);
@@ -4167,7 +4163,8 @@ class SpController extends Controller
                             }
                         }
 
-                        $sect = preg_replace('/<w:pgMar\b[^>]*\/>/', '<w:pgMar w:top="1750" w:right="1418" w:bottom="1304" w:left="1418" w:header="737" w:footer="709" w:gutter="0"/>', $sect, 1);
+                        $bottomMargin = $isSuratPesananBiasa ? '2400' : '1304';
+                        $sect = preg_replace('/<w:pgMar\b[^>]*\/>/', '<w:pgMar w:top="1750" w:right="1418" w:bottom="' . $bottomMargin . '" w:left="1418" w:header="737" w:footer="709" w:gutter="0"/>', $sect, 1);
                         return $sect;
                     }, $docXml);
                     $putString('word/document.xml', $docXml);

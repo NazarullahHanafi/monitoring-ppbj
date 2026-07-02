@@ -46,21 +46,30 @@ class SpKopSuratPrintSafeTest extends TestCase
         $zip = new ZipArchive();
         $this->assertTrue($zip->open($docxPath));
 
+        $documentXml = $zip->getFromName('word/document.xml');
         $header1 = $zip->getFromName('word/header1.xml');
         $header2 = $zip->getFromName('word/header2.xml');
         $zip->close();
 
         @unlink($docxPath);
 
+        $this->assertIsString($header1);
+        $this->assertIsString($documentXml);
+        $this->assertStringContainsString('w:bottom="2400"', $documentXml);
+        $this->assertStringContainsString('margin-left:-79pt', $header1);
+        $this->assertStringContainsString('margin-top:-110pt', $header1);
+        $this->assertStringContainsString('width:611.5pt', $header1);
+        $this->assertStringContainsString('height:885.6pt', $header1);
+
+        $this->assertIsString($header2);
+        $this->assertStringContainsString('margin-left:0pt', $header2);
+        $this->assertStringContainsString('margin-top:0pt', $header2);
+        $this->assertStringContainsString('width:595.3pt', $header2);
+        $this->assertStringContainsString('height:842.1pt', $header2);
+
         foreach ([$header1, $header2] as $headerXml) {
-            $this->assertIsString($headerXml);
-            $this->assertStringContainsString('margin-left:0pt', $headerXml);
-            $this->assertStringContainsString('margin-top:-10pt', $headerXml);
-            $this->assertStringContainsString('width:595.3pt', $headerXml);
-            $this->assertStringContainsString('height:842.1pt', $headerXml);
             $this->assertStringNotContainsString('width:567.3pt', $headerXml);
             $this->assertStringNotContainsString('height:802.2pt', $headerXml);
-            $this->assertStringNotContainsString('height:885.6pt', $headerXml);
         }
     }
 }
