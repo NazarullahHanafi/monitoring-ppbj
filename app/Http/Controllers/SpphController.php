@@ -584,6 +584,7 @@ class SpphController extends Controller
         Settings::setOutputEscapingEnabled(true);
         $spph->load('items');
         $printVendorName = $this->resolvePrintVendorName($spph, $request->query('vendor'));
+        $signer = $this->resolveSpphSigner($request->query('penandatangan'));
 
         $phpWord = new PhpWord();
         $phpWord->setDefaultFontName('Arial');
@@ -765,9 +766,9 @@ class SpphController extends Controller
         }
         $ttd->addRow();
         $ttd->addCell(4788, ['borders' => $noBdr])
-            ->addText('Jumelda', ['size' => 9, 'name' => 'Arial', 'bold' => true, 'underline' => 'single'], $p0);
+            ->addText($signer['name'], ['size' => 9, 'name' => 'Arial', 'bold' => true, 'underline' => 'single'], $p0);
         $ttd->addRow();
-        $ttd->addCell(4788, ['borders' => $noBdr])->addText('Pj. Kepala Bidang Dukungan Bisnis', $fb, $p0);
+        $ttd->addCell(4788, ['borders' => $noBdr])->addText($signer['title'], $fb, $p0);
 
         $section->addTextBreak(1, $p0);
         $section->addText('Catatan : *) Pilih yang digunakan', $fsm, $pBoth);
@@ -826,7 +827,10 @@ class SpphController extends Controller
 
         $tempFiles = [];
         foreach ($vendors as $vendorName) {
-            $vendorRequest = Request::create($request->path(), 'GET', ['vendor' => $vendorName]);
+            $vendorRequest = Request::create($request->path(), 'GET', [
+                'vendor' => $vendorName,
+                'penandatangan' => $request->query('penandatangan'),
+            ]);
             $response = $this->cetakSpph($vendorRequest, $spph);
             $filePath = $response->getFile()->getPathname();
             $entryName = $this->safeDownloadName('SPPH ' . $spph->nomor_spph . ' - ' . $vendorName . '.docx');
@@ -849,6 +853,24 @@ class SpphController extends Controller
     // =========================================================
     // PRIVATE: Sanitize untuk XML 1.0 — buang karakter ilegal
     // =========================================================
+    private function resolveSpphSigner(?string $signerKey): array
+    {
+        $signers = [
+            'jumelda' => [
+                'name' => 'Jumelda',
+                'title' => 'Pj. Kepala Bidang Dukungan Bisnis',
+            ],
+            'bambang' => [
+                'name' => 'Bambang Harwanta',
+                'title' => 'Kepala Cabang',
+            ],
+        ];
+
+        $key = strtolower((string) $signerKey);
+
+        return $signers[$key] ?? $signers['jumelda'];
+    }
+
     private function sanitizeXml(string $text): string
     {
         // Pastikan UTF-8 valid dulu

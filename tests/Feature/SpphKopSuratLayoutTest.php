@@ -58,4 +58,38 @@ class SpphKopSuratLayoutTest extends TestCase
             $this->assertStringContainsString('height:841.9pt', $headerXml);
         }
     }
+
+    public function test_spph_print_can_use_branch_head_signer(): void
+    {
+        Vendor::create([
+            'nama_vendor' => 'Vendor SPPH Signer',
+            'alamat' => 'Jl. Penanda Tangan No. 1',
+        ]);
+
+        $spph = Spph::create([
+            'nomor_spph' => '778/PKU-VII/SPPH/2026',
+            'sequence_number' => 778,
+            'tanggal' => '2026-07-02',
+            'nama_vendor' => 'Vendor SPPH Signer',
+            'deskripsi_pengadaan' => 'Pengadaan pilihan penandatangan SPPH',
+            'pic' => 'Tester',
+        ]);
+
+        $request = Request::create('/spph-preview', 'GET', ['penandatangan' => 'bambang']);
+        $response = (new SpphController())->cetakSpph($request, $spph);
+        $docxPath = $response->getFile()->getPathname();
+
+        $zip = new ZipArchive();
+        $this->assertTrue($zip->open($docxPath));
+        $documentXml = $zip->getFromName('word/document.xml');
+        $zip->close();
+
+        @unlink($docxPath);
+
+        $this->assertIsString($documentXml);
+        $this->assertStringContainsString('Bambang Harwanta', $documentXml);
+        $this->assertStringContainsString('Kepala Cabang', $documentXml);
+        $this->assertStringNotContainsString('Jumelda', $documentXml);
+        $this->assertStringNotContainsString('Pj. Kepala Bidang Dukungan Bisnis', $documentXml);
+    }
 }

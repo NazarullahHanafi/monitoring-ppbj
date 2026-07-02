@@ -2005,7 +2005,14 @@
                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h8m-8 4h5m8-2a8 8 0 01-8 8 8.5 8.5 0 01-3.8-.9L3 21l1.9-5.1A8 8 0 1119 17.2" />
                                             </svg>
                                         </button>
+                                        <select id="spphSigner-{{ $s->id }}"
+                                            class="text-[11px] rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 px-1.5 py-1 max-w-[118px]"
+                                            title="Penandatangan SPPH">
+                                            <option value="jumelda">Jumelda - Kabid</option>
+                                            <option value="bambang">Bambang - Kacab</option>
+                                        </select>
                                         <a href="{{ route('spph.cetak', ['spph' => $s, 'vendor' => $vendorList[0] ?? $s->nama_vendor]) }}" target="_blank"
+                                            onclick="event.preventDefault(); openSpphPrint(this.href, {{ $s->id }});"
                                             class="p-1.5 rounded-lg text-sky-600 hover:bg-sky-50 dark:hover:bg-sky-900/30 transition-colors"
                                             title="Cetak SPPH vendor utama">
                                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2015,11 +2022,12 @@
                                         </a>
                                         @if(count($vendorList) > 1)
                                             <a href="{{ route('spph.cetak-semua-vendor', $s) }}" target="_blank"
+                                                onclick="event.preventDefault(); openSpphPrint(this.href, {{ $s->id }});"
                                                 class="px-2 py-1 rounded-lg text-[11px] font-semibold text-emerald-700 dark:text-emerald-200 bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition-colors"
                                                 title="Cetak semua vendor sekaligus dalam ZIP">
                                                 ZIP
                                             </a>
-                                            <select onchange="if(this.value){ window.open(this.value, '_blank'); this.value=''; }"
+                                            <select onchange="openSpphSelectedVendor(this, {{ $s->id }});"
                                                 class="text-[11px] rounded-lg border border-sky-200 dark:border-sky-800 bg-sky-50 dark:bg-sky-900/30 text-sky-700 dark:text-sky-200 px-1.5 py-1"
                                                 title="Cetak SPPH per vendor">
                                                 <option value="">Cetak vendor...</option>
@@ -3284,6 +3292,23 @@
         // ════════════════════════════════════════════════════════════
         // INIT
         // ════════════════════════════════════════════════════════════
+        function buildSpphPrintUrl(url, spphId) {
+            const printUrl = new URL(url, window.location.origin);
+            const signer = document.getElementById(`spphSigner-${spphId}`)?.value || 'jumelda';
+            printUrl.searchParams.set('penandatangan', signer);
+            return printUrl.toString();
+        }
+
+        function openSpphPrint(url, spphId) {
+            window.open(buildSpphPrintUrl(url, spphId), '_blank', 'noopener');
+        }
+
+        function openSpphSelectedVendor(select, spphId) {
+            if (!select.value) return;
+            openSpphPrint(select.value, spphId);
+            select.value = '';
+        }
+
         $(document).ready(function () {
             initPpbjSelect2('.ppbj-select', 'ppbjInfo', 'ppbjStatus', 'ppbjInfoContent', () => updatePrFinalValue(), 'addDeskripsi', 'addDeskripsiBadge');
             initPpbjSelect2('.edit-ppbj-select', 'editPpbjInfo', 'editPpbjStatus', 'editPpbjInfoContent', () => updateEditPrFinalValue(), 'editDeskripsi', 'editDeskripsiBadge');
