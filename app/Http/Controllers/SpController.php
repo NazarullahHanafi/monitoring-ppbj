@@ -4047,8 +4047,8 @@ class SpController extends Controller
 
             if ($usePrintSafeKop) {
                 // Surat Pesanan biasa memakai footer alamat pada gambar kop.
-                // Inset kecil menjaga teks footer tidak terpotong oleh area non-printable printer.
-                $shapeStyle = 'position:absolute;margin-left:14pt;margin-top:10pt;width:567.3pt;height:802.2pt;z-index:-251656192;mso-position-horizontal-relative:page;mso-position-vertical-relative:page';
+                // Pertahankan proporsi A4 penuh, cukup naikkan sedikit agar footer bawah tidak terpotong saat print.
+                $shapeStyle = 'position:absolute;margin-left:0pt;margin-top:-10pt;width:595.3pt;height:842.1pt;z-index:-251656192;mso-position-horizontal-relative:page;mso-position-vertical-relative:page';
                 $wrapAnchor = 'page';
             } elseif ($fullPageA4) {
                 $shapeStyle = 'position:absolute;margin-left:0pt;margin-top:0pt;width:595.3pt;height:842.1pt;z-index:-251656192;mso-position-horizontal-relative:page;mso-position-vertical-relative:page';

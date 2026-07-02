@@ -54,10 +54,12 @@ class SpKopSuratPrintSafeTest extends TestCase
 
         foreach ([$header1, $header2] as $headerXml) {
             $this->assertIsString($headerXml);
-            $this->assertStringContainsString('margin-left:14pt', $headerXml);
-            $this->assertStringContainsString('margin-top:10pt', $headerXml);
-            $this->assertStringContainsString('width:567.3pt', $headerXml);
-            $this->assertStringContainsString('height:802.2pt', $headerXml);
+            $this->assertStringContainsString('margin-left:0pt', $headerXml);
+            $this->assertStringContainsString('margin-top:-10pt', $headerXml);
+            $this->assertStringContainsString('width:595.3pt', $headerXml);
+            $this->assertStringContainsString('height:842.1pt', $headerXml);
+            $this->assertStringNotContainsString('width:567.3pt', $headerXml);
+            $this->assertStringNotContainsString('height:802.2pt', $headerXml);
             $this->assertStringNotContainsString('height:885.6pt', $headerXml);
         }
     }
