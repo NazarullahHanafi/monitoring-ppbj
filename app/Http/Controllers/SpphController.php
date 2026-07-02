@@ -611,7 +611,7 @@ class SpphController extends Controller
             'pageSizeW' => 11906,
             'pageSizeH' => 16838,
             'marginTop' => 1900,
-            'marginBottom' => 1100,
+            'marginBottom' => 2400,
             'marginLeft' => 1320,
             'marginRight' => 1320,
             'headerHeight' => 1440,
