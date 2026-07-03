@@ -7,6 +7,7 @@ use App\Http\Middleware\DeptMiddleware;
 use App\Http\Middleware\CachePublicGuestResponse;
 use App\Http\Middleware\DisableLoggingForPolling;
 use App\Http\Middleware\EnsureNotReadOnly;
+use App\Http\Middleware\EnsureOwnerAccess;
 use App\Http\Middleware\SecurityHeaders;
 
 return Application::configure(basePath: dirname(__DIR__))
@@ -19,6 +20,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'dept' => DeptMiddleware::class,
             'guest.page_cache' => CachePublicGuestResponse::class,
+            'owner' => EnsureOwnerAccess::class,
             'readonly.block' => EnsureNotReadOnly::class,
         ]);
 

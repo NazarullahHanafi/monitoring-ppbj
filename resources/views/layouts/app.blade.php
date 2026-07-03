@@ -2331,6 +2331,13 @@
                             class="nav-item group flex items-center gap-3 px-4 py-3 rounded-xl {{ request()->is('users*') ? 'active' : 'text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-blue-600 dark:hover:text-blue-400' }}"><span
                                 class="icon-box text-xl">👥</span><span class="nav-text font-medium">Management Users</span></a>
                     @endif
+                    @if(auth()->user()?->isOwner())
+                        <a href="{{ route('owner.index') }}"
+                            class="nav-item group flex items-center gap-3 px-4 py-3 rounded-xl {{ request()->is('owner*') ? 'active' : 'text-gray-700 dark:text-gray-300 hover:bg-violet-50 dark:hover:bg-violet-900/20 hover:text-violet-600 dark:hover:text-violet-300' }}">
+                            <span class="icon-box text-xl">👑</span>
+                            <span class="nav-text font-medium">Owner Center</span>
+                        </a>
+                    @endif
                     @if(auth()->user()->role === 'superadmin')
                         <a href="{{ route('contact-messages.index') }}"
                             class="nav-item group flex items-center justify-between gap-3 px-4 py-3 rounded-xl {{ request()->is('contact-messages*') ? 'active' : 'text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-blue-600 dark:hover:text-blue-400' }}">
@@ -2417,6 +2424,13 @@
                                 class="nav-item block px-4 py-3 rounded-xl {{ request()->is('users*') ? 'active' : 'text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-blue-900/20' }}"><span
                                     class="flex items-center gap-3"><span class="text-xl">👥</span><span
                                         class="font-medium">Management Users</span></span></a>
+                        @endif
+                        @if(auth()->user()?->isOwner())
+                            <a href="{{ route('owner.index') }}"
+                                class="nav-item block px-4 py-3 rounded-xl {{ request()->is('owner*') ? 'active' : 'text-gray-700 dark:text-gray-300 hover:bg-violet-50 dark:hover:bg-violet-900/20' }}">
+                                <span class="flex items-center gap-3"><span class="text-xl">👑</span><span
+                                        class="font-medium">Owner Center</span></span>
+                            </a>
                         @endif
                         @if(auth()->user()->role === 'superadmin')
                             <a href="{{ route('contact-messages.index') }}"

@@ -7,6 +7,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\LandingController;
 use App\Http\Controllers\MasterDataController;
 use App\Http\Controllers\OperasionalDashboardController;
+use App\Http\Controllers\OwnerController;
 use App\Http\Controllers\PpbjController;
 use App\Http\Controllers\PresenceController;
 use App\Http\Controllers\PrReceiptApprovalController;
@@ -93,6 +94,10 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
     Route::post('/chat/read', [ChatController::class, 'markRead'])->name('chat.read');
     Route::get('/chat/{id}/reads', [ChatController::class, 'getReads'])->name('chat.reads');
     Route::get('/chat/users', [ChatController::class, 'getUsers'])->name('chat.users');
+
+    Route::middleware('owner')->group(function () {
+        Route::get('/owner', [OwnerController::class, 'index'])->name('owner.index');
+    });
 
     // ========================
     // UMUM (Dept: umum)

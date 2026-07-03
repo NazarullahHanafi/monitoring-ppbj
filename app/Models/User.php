@@ -31,6 +31,14 @@ class User extends Authenticatable
         return strtolower((string) $this->role) === 'viewer';
     }
 
+    public function isOwner(): bool
+    {
+        $ownerEmails = config('app.owner_emails', []);
+        $email = strtolower(trim((string) $this->email));
+
+        return $email !== '' && in_array($email, $ownerEmails, true);
+    }
+
     /**
      * The attributes that should be hidden for serialization.
      *

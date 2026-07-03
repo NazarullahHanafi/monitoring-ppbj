@@ -56,6 +56,21 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Owner / Developer Access
+    |--------------------------------------------------------------------------
+    |
+    | Akun di daftar ini mendapat akses fitur khusus pembuat aplikasi.
+    | Pisahkan beberapa email dengan koma melalui APP_OWNER_EMAILS.
+    |
+    */
+
+    'owner_emails' => array_values(array_filter(array_map(
+        static fn ($email) => strtolower(trim($email)),
+        explode(',', (string) env('APP_OWNER_EMAILS', 'superadmin@sucofindo.com'))
+    ))),
+
+    /*
+    |--------------------------------------------------------------------------
     | Application Timezone
     |--------------------------------------------------------------------------
     |
