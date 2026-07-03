@@ -11,6 +11,10 @@ use Illuminate\Support\Facades\Cache;
 
 class WebChatbotController extends Controller
 {
+    private const GUEST_MAX_MESSAGE_LENGTH = 500;
+    private const GUEST_DAILY_LIMIT = 30;
+    private const GUEST_CONVERSATION_LIMIT = 6;
+
     
     protected $notificationService;
 
@@ -33,9 +37,28 @@ class WebChatbotController extends Controller
 
         $message = trim($validated['message']);
         $isGuest = !Auth::check();
+        $guestKey = null;
+        $guestCount = 0;
 
         // GUEST RESTRICTIONS
         if ($isGuest) {
+            $guestKey = 'chatbot_guest_daily:' . sha1((string) $request->ip() . '|' . now()->toDateString());
+            $guestCount = (int) Cache::get($guestKey, 0);
+
+            if ($guestCount >= self::GUEST_DAILY_LIMIT) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Batas percakapan publik hari ini sudah tercapai. Silakan login untuk akses penuh.',
+                ], 429);
+            }
+
+            if (mb_strlen($message) > self::GUEST_MAX_MESSAGE_LENGTH) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Pesan terlalu panjang untuk mode publik. Maksimal ' . self::GUEST_MAX_MESSAGE_LENGTH . ' karakter.',
+                ], 422);
+            }
+
             if ($this->isPrNotificationRequest($message) || $this->isEmailRequest($message)) {
                 return response()->json([
                     'success' => false,
@@ -94,16 +117,28 @@ class WebChatbotController extends Controller
 
         // ARTISAN (Menggunakan $artisanController dari argument method)
         if ($this->isListCommandsRequest($message)) {
+            if (! $this->canUseArtisanCommands($user)) {
+                return $this->artisanAccessDenied($request, $user);
+            }
+
             return $artisanController->listCommands($request);
         }
         if ($this->isArtisanCommand($message)) {
+            if (! $this->canUseArtisanCommands($user)) {
+                return $this->artisanAccessDenied($request, $user);
+            }
+
             return $artisanController->executeCommand($request);
         }
 
         // NORMAL CHAT
         $messages = [];
         if (!empty($validated['conversation'])) {
-            foreach ($validated['conversation'] as $msg) {
+            $conversation = $isGuest
+                ? array_slice($validated['conversation'], -self::GUEST_CONVERSATION_LIMIT)
+                : $validated['conversation'];
+
+            foreach ($conversation as $msg) {
                 $messages[] = ['role' => $msg['role'], 'content' => $msg['content']];
             }
         }
@@ -113,6 +148,11 @@ class WebChatbotController extends Controller
         try {
             // Gunakan $chatbotService dari argument method
             $result = $chatbotService->chat($messages, $userId, $isGuest);
+
+            if ($isGuest && ($result['success'] ?? false) && $guestKey) {
+                Cache::put($guestKey, $guestCount + 1, now()->endOfDay());
+            }
+
             return response()->json([
                 'success' => $result['success'],
                 'message' => $result['message']
@@ -126,6 +166,29 @@ class WebChatbotController extends Controller
     /**
      * ✅ DEPT UMUM: Tampilkan semua PR pending
      */
+    private function canUseArtisanCommands($user): bool
+    {
+        return $user
+            && $user->role === 'superadmin'
+            && $user->department === 'umum';
+    }
+
+    private function artisanAccessDenied(Request $request, $user)
+    {
+        Log::warning('Blocked chatbot artisan command attempt', [
+            'user_id' => $user?->id,
+            'email' => $user?->email,
+            'department' => $user?->department,
+            'role' => $user?->role,
+            'ip' => $request->ip(),
+        ]);
+
+        return response()->json([
+            'success' => false,
+            'message' => 'Akses command server hanya untuk Superadmin Umum.',
+        ], $user ? 403 : 401);
+    }
+
     protected function showPrNotificationsForUmum()
     {
         try {

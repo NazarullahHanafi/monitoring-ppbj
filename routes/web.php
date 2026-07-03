@@ -422,7 +422,7 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
         // Chat endpoint (available for both authenticated and guest)
         Route::post('/chat', [App\Http\Controllers\WebChatbotController::class, 'chat'])
             ->name('chatbot.web.chat')
-            ->middleware('throttle:10,1')
+            ->middleware('throttle:5,1')
             ->withoutMiddleware(['auth']); // Allow guest access
 
         Route::get('/quick-replies', [App\Http\Controllers\WebChatbotController::class, 'quickReplies'])
@@ -448,9 +448,11 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
 
         // ==== ARTISAN COMMANDS (Super Admin Only) ====
         Route::post('/artisan/execute', [App\Http\Controllers\ArtisanCommandController::class, 'executeCommand'])
+            ->middleware(['auth', 'dept:umum', 'throttle:5,1'])
             ->name('chatbot.artisan.execute');
 
         Route::get('/artisan/list', [App\Http\Controllers\ArtisanCommandController::class, 'listCommands'])
+            ->middleware(['auth', 'dept:umum', 'throttle:10,1'])
             ->name('chatbot.artisan.list');
 
     });
