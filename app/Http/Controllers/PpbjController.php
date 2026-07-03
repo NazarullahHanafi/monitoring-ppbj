@@ -1069,65 +1069,170 @@ class PpbjController extends Controller
 
         foreach ($request->data as $item) {
             try {
+                $rowNumber = $item['row_number'] ?? '-';
+
                 if (isset($item['status']) && $item['status'] === 'error') {
                     $failed++;
                     continue;
                 }
 
-                if (Ppbj::where('ppbj_no', $item['ppbj_no'])->exists()) {
+                [$isValid, $validatedItem, $validationErrors] = $this->validatePpbjImportItem($item);
+
+                if (! $isValid) {
                     $failed++;
-                    $errors[] = "Baris {$item['row_number']}: PPBJ No {$item['ppbj_no']} sudah terdaftar";
+                    $errors[] = "Baris {$rowNumber}: " . implode(', ', $validationErrors);
+                    continue;
+                }
+
+                if (Ppbj::where('ppbj_no', $validatedItem['ppbj_no'])->exists()) {
+                    $failed++;
+                    $errors[] = "Baris {$rowNumber}: PPBJ No {$validatedItem['ppbj_no']} sudah terdaftar";
                     continue;
                 }
 
                 Ppbj::create([
-                    'ppbj_no' => $item['ppbj_no'],
-                    'tgl_ppbj' => $this->parseDate($item['tgl_ppbj'] ?? null),
-                    'tgl_terima_pr' => $this->parseDate($item['tgl_terima_pr'] ?? null),
-                    'uraian' => $item['uraian'] ?? null,
-                    'note' => $item['note'] ?? null,
-                    'portofolio' => $item['portofolio'] ?? null,
-                    'buyer' => $item['buyer'] ?? null,
-                    'total_sebelum_ppn' => !empty($item['total_sebelum_ppn']) ? (float) str_replace(',', '', $item['total_sebelum_ppn']) : null,
-                    'metode_pengadaan' => $item['metode_pengadaan'] ?? null,
-                    'spph_rfq_1' => $item['spph_rfq_1'] ?? null,
-                    'rfq_2' => $item['rfq_2'] ?? null,
-                    'rfq_3' => $item['rfq_3'] ?? null,
-                    'tgl_spph' => $this->parseDate($item['tgl_spph'] ?? null),
-                    'closed_date' => $this->parseDate($item['closed_date'] ?? null),
-                    'sph' => $item['sph'] ?? null,
-                    'tgl_sph' => $this->parseDate($item['tgl_sph'] ?? null),
-                    'awarding_sp' => $item['awarding_sp'] ?? null,
-                    'tgl_awarding_sp' => $this->parseDate($item['tgl_awarding_sp'] ?? null),
-                    'penyedia_eksternal' => $item['penyedia_eksternal'] ?? null,
-                    'tgl_spk' => $this->parseDate($item['tgl_spk'] ?? null),
-                    'nilai_sp_spk' => !empty($item['nilai_sp_spk']) ? (float) str_replace(',', '', $item['nilai_sp_spk']) : null,
-                    'promised_date' => $this->parseDate($item['promised_date'] ?? null),
-                    'do_no' => $item['do_no'] ?? null,
-                    'bpg_no' => $item['bpg_no'] ?? null,
-                    'nilai_bpg' => !empty($item['nilai_bpg']) ? (float) str_replace(',', '', $item['nilai_bpg']) : null,
-                    'tgl_bpg' => $this->parseDate($item['tgl_bpg'] ?? null),
-                    'receiving_transaction' => $item['receiving_transaction'] ?? null,
-                    'bpb_no' => $item['bpb_no'] ?? null,
-                    'tgl_bpb' => $this->parseDate($item['tgl_bpb'] ?? null),
-                    'no_invoice' => $item['no_invoice'] ?? null,
-                    'tgl_invoice' => $this->parseDate($item['tgl_invoice'] ?? null),
-                    'keterangan' => $item['keterangan'] ?? null,
-                    'tgl_diserahkan' => $this->parseDate($item['tgl_diserahkan'] ?? null),
+                    'ppbj_no' => $validatedItem['ppbj_no'],
+                    'tgl_ppbj' => $validatedItem['tgl_ppbj'],
+                    'tgl_terima_pr' => $validatedItem['tgl_terima_pr'],
+                    'uraian' => $validatedItem['uraian'],
+                    'note' => $validatedItem['note'],
+                    'portofolio' => $validatedItem['portofolio'],
+                    'buyer' => $validatedItem['buyer'],
+                    'total_sebelum_ppn' => $validatedItem['total_sebelum_ppn'],
+                    'metode_pengadaan' => $validatedItem['metode_pengadaan'],
+                    'spph_rfq_1' => $validatedItem['spph_rfq_1'],
+                    'rfq_2' => $validatedItem['rfq_2'],
+                    'rfq_3' => $validatedItem['rfq_3'],
+                    'tgl_spph' => $validatedItem['tgl_spph'],
+                    'closed_date' => $validatedItem['closed_date'],
+                    'sph' => $validatedItem['sph'],
+                    'tgl_sph' => $validatedItem['tgl_sph'],
+                    'awarding_sp' => $validatedItem['awarding_sp'],
+                    'tgl_awarding_sp' => $validatedItem['tgl_awarding_sp'],
+                    'penyedia_eksternal' => $validatedItem['penyedia_eksternal'],
+                    'tgl_spk' => $validatedItem['tgl_spk'],
+                    'nilai_sp_spk' => $validatedItem['nilai_sp_spk'],
+                    'promised_date' => $validatedItem['promised_date'],
+                    'do_no' => $validatedItem['do_no'],
+                    'bpg_no' => $validatedItem['bpg_no'],
+                    'nilai_bpg' => $validatedItem['nilai_bpg'],
+                    'tgl_bpg' => $validatedItem['tgl_bpg'],
+                    'receiving_transaction' => $validatedItem['receiving_transaction'],
+                    'bpb_no' => $validatedItem['bpb_no'],
+                    'tgl_bpb' => $validatedItem['tgl_bpb'],
+                    'no_invoice' => $validatedItem['no_invoice'],
+                    'tgl_invoice' => $validatedItem['tgl_invoice'],
+                    'keterangan' => $validatedItem['keterangan'],
+                    'tgl_diserahkan' => $validatedItem['tgl_diserahkan'],
                 ]);
 
                 $imported++;
 
             } catch (\Exception $e) {
                 $failed++;
-                $errors[] = "Baris {$item['row_number']}: " . $e->getMessage();
-                Log::error("Import error on row {$item['row_number']}: " . $e->getMessage());
+                $rowNumber = $item['row_number'] ?? '-';
+                $errors[] = "Baris {$rowNumber}: " . $e->getMessage();
+                Log::error("Import error on row {$rowNumber}: " . $e->getMessage());
             }
         }
 
         DashboardController::clearCache();
 
         return response()->json(['success' => true, 'imported' => $imported, 'failed' => $failed, 'errors' => $errors]);
+    }
+
+    private function validatePpbjImportItem(array $item): array
+    {
+        $validator = validator($item, [
+            'ppbj_no' => ['required', 'string', 'max:255'],
+            'tgl_ppbj' => ['nullable', 'max:60'],
+            'tgl_terima_pr' => ['nullable', 'max:60'],
+            'uraian' => ['nullable', 'string', 'max:5000'],
+            'note' => ['nullable', 'string', 'max:2000'],
+            'portofolio' => ['nullable', 'string', 'max:255'],
+            'buyer' => ['nullable', 'string', 'max:255'],
+            'total_sebelum_ppn' => ['nullable', 'max:60'],
+            'metode_pengadaan' => ['nullable', 'string', 'max:255'],
+            'spph_rfq_1' => ['nullable', 'string', 'max:255'],
+            'rfq_2' => ['nullable', 'string', 'max:255'],
+            'rfq_3' => ['nullable', 'string', 'max:255'],
+            'tgl_spph' => ['nullable', 'max:60'],
+            'closed_date' => ['nullable', 'max:60'],
+            'sph' => ['nullable', 'string', 'max:255'],
+            'tgl_sph' => ['nullable', 'max:60'],
+            'awarding_sp' => ['nullable', 'string', 'max:255'],
+            'tgl_awarding_sp' => ['nullable', 'max:60'],
+            'penyedia_eksternal' => ['nullable', 'string', 'max:255'],
+            'tgl_spk' => ['nullable', 'max:60'],
+            'nilai_sp_spk' => ['nullable', 'max:60'],
+            'promised_date' => ['nullable', 'max:60'],
+            'do_no' => ['nullable', 'string', 'max:255'],
+            'bpg_no' => ['nullable', 'string', 'max:255'],
+            'nilai_bpg' => ['nullable', 'max:60'],
+            'tgl_bpg' => ['nullable', 'max:60'],
+            'receiving_transaction' => ['nullable', 'string', 'max:255'],
+            'bpb_no' => ['nullable', 'string', 'max:255'],
+            'tgl_bpb' => ['nullable', 'max:60'],
+            'no_invoice' => ['nullable', 'string', 'max:255'],
+            'tgl_invoice' => ['nullable', 'max:60'],
+            'keterangan' => ['nullable', 'string', 'max:5000'],
+            'tgl_diserahkan' => ['nullable', 'max:60'],
+        ]);
+
+        if ($validator->fails()) {
+            return [false, [], $validator->errors()->all()];
+        }
+
+        $clean = [];
+        foreach ($validator->validated() as $key => $value) {
+            $clean[$key] = is_string($value) ? trim($value) : $value;
+        }
+
+        $errors = [];
+        foreach ([
+            'tgl_ppbj', 'tgl_terima_pr', 'tgl_spph', 'closed_date', 'tgl_sph',
+            'tgl_awarding_sp', 'tgl_spk', 'promised_date', 'tgl_bpg', 'tgl_bpb',
+            'tgl_invoice', 'tgl_diserahkan',
+        ] as $field) {
+            $value = $clean[$field] ?? null;
+            $clean[$field] = $value === null || $value === '' ? null : $this->parseDate($value);
+
+            if (($value !== null && $value !== '') && ! $clean[$field]) {
+                $errors[] = ucwords(str_replace('_', ' ', $field)) . ' format tidak valid';
+            }
+        }
+
+        foreach (['total_sebelum_ppn', 'nilai_sp_spk', 'nilai_bpg'] as $field) {
+            $clean[$field] = $this->parseImportNumber($clean[$field] ?? null, $field, $errors);
+        }
+
+        foreach ([
+            'uraian', 'note', 'portofolio', 'buyer', 'metode_pengadaan', 'spph_rfq_1',
+            'rfq_2', 'rfq_3', 'sph', 'awarding_sp', 'penyedia_eksternal', 'do_no',
+            'bpg_no', 'receiving_transaction', 'bpb_no', 'no_invoice', 'keterangan',
+        ] as $field) {
+            $clean[$field] = ($clean[$field] ?? null) === '' ? null : ($clean[$field] ?? null);
+        }
+
+        return [$errors === [], $clean, $errors];
+    }
+
+    private function parseImportNumber(mixed $value, string $field, array &$errors): ?float
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        $cleaned = str_replace(['Rp', 'rp', ' ', '.'], '', (string) $value);
+        $cleaned = str_replace(',', '.', $cleaned);
+
+        if (! is_numeric($cleaned)) {
+            $errors[] = ucwords(str_replace('_', ' ', $field)) . ' harus berupa angka';
+
+            return null;
+        }
+
+        return (float) $cleaned;
     }
 
     // =====================

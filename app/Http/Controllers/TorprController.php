@@ -1250,19 +1250,28 @@ class TorprController extends Controller
 
         foreach ($request->data as $item) {
             try {
+                $rowNumber = $item['row_number'] ?? '-';
                 if (isset($item['status']) && $item['status'] === 'error') {
                     $failed++;
                     continue;
                 }
 
-                if (Torpr::where('nomor_pr', $item['nomor_pr'])->exists()) {
+                [$isValid, $validatedItem, $validationErrors] = $this->validateTorprImportItem($item);
+
+                if (! $isValid) {
                     $failed++;
-                    $errors[] = "Baris {$item['row_number']}: Nomor PR {$item['nomor_pr']} sudah terdaftar";
+                    $errors[] = "Baris {$rowNumber}: " . implode(', ', $validationErrors);
+                    continue;
+                }
+
+                if (Torpr::where('nomor_pr', $validatedItem['nomor_pr'])->exists()) {
+                    $failed++;
+                    $errors[] = "Baris {$rowNumber}: Nomor PR {$validatedItem['nomor_pr']} sudah terdaftar";
                     continue;
                 }
 
                 // ✅ 2. FILTER KEAMANAN TTD KACAB
-                $tglTtdKacab = $this->parseDateTime($item['tgl_ttd_kacab_pr'] ?? null);
+                $tglTtdKacab = $validatedItem['tgl_ttd_kacab_pr'];
                 $signedByKacab = null;
 
                 // Jika ada tanggal TTD Kacab, cek apakah boleh
@@ -1273,18 +1282,18 @@ class TorprController extends Controller
                     } else {
                         // Jika bukan, abaikan (reset jadi null) dan catat warning
                         $tglTtdKacab = null;
-                        $errors[] = "Baris {$item['row_number']}: TTD Kacab diabaikan (Hanya Superadmin Operasional yang berhak).";
+                        $errors[] = "Baris {$rowNumber}: TTD Kacab diabaikan (Hanya Superadmin Operasional yang berhak).";
                     }
                 }
 
                 // ✅ 3. SIAPKAN DATA TERMASUK QR TOKEN
                 $data = [
-                    'tujuan_pengadaan' => $item['tujuan_pengadaan'] ?? null,
-                    'portofolio' => $item['portofolio'] ?? null,
-                    'nomor_pr' => $item['nomor_pr'] ?? null,
-                    'tanggal_pr' => $this->parseDateTime($item['tanggal_pr'] ?? null),
-                    'jumlah_pr' => !empty($item['jumlah_pr']) ? (float) str_replace(',', '', $item['jumlah_pr']) : null,
-                    'tgl_ttd_kabid_pr' => $this->parseDateTime($item['tgl_ttd_kabid_pr'] ?? null),
+                    'tujuan_pengadaan' => $validatedItem['tujuan_pengadaan'],
+                    'portofolio' => $validatedItem['portofolio'],
+                    'nomor_pr' => $validatedItem['nomor_pr'],
+                    'tanggal_pr' => $validatedItem['tanggal_pr'],
+                    'jumlah_pr' => $validatedItem['jumlah_pr'],
+                    'tgl_ttd_kabid_pr' => $validatedItem['tgl_ttd_kabid_pr'],
 
                     // Data yang sudah di-filter
                     'tgl_ttd_kacab_pr' => $tglTtdKacab,
@@ -1295,6 +1304,8 @@ class TorprController extends Controller
                     // ✅ FIX: GENERATE QR TOKEN (Supaya tombol QR muncul)
                     'sign_token_kabid' => \Illuminate\Support\Str::random(32),
                     'sign_token_kacab' => \Illuminate\Support\Str::random(32),
+                    'sign_token_kabid_expires_at' => now()->addDays(7),
+                    'sign_token_kacab_expires_at' => now()->addDays(7),
                 ];
 
                 Torpr::create($data);
@@ -1302,8 +1313,9 @@ class TorprController extends Controller
 
             } catch (\Exception $e) {
                 $failed++;
-                $errors[] = "Baris {$item['row_number']}: " . $e->getMessage();
-                \Log::error("TORPR Import error on row {$item['row_number']}: " . $e->getMessage());
+                $rowNumber = $item['row_number'] ?? '-';
+                $errors[] = "Baris {$rowNumber}: " . $e->getMessage();
+                \Log::error("TORPR Import error on row {$rowNumber}: " . $e->getMessage());
             }
         }
 
@@ -1313,6 +1325,61 @@ class TorprController extends Controller
             'failed' => $failed,
             'errors' => $errors,
         ]);
+    }
+
+    private function validateTorprImportItem(array $item): array
+    {
+        $validator = validator($item, [
+            'tujuan_pengadaan' => ['required', 'string', 'max:255'],
+            'portofolio' => ['nullable', 'string', 'max:255'],
+            'nomor_pr' => ['required', 'string', 'max:255'],
+            'tanggal_pr' => ['nullable', 'max:60'],
+            'jumlah_pr' => ['nullable', 'max:60'],
+            'tgl_ttd_kabid_pr' => ['nullable', 'max:60'],
+            'tgl_ttd_kacab_pr' => ['nullable', 'max:60'],
+        ]);
+
+        if ($validator->fails()) {
+            return [false, [], $validator->errors()->all()];
+        }
+
+        $clean = [];
+        foreach ($validator->validated() as $key => $value) {
+            $clean[$key] = is_string($value) ? trim($value) : $value;
+        }
+
+        $errors = [];
+        foreach (['tanggal_pr', 'tgl_ttd_kabid_pr', 'tgl_ttd_kacab_pr'] as $field) {
+            $value = $clean[$field] ?? null;
+            $clean[$field] = $value === null || $value === '' ? null : $this->parseDateTime($value);
+
+            if (($value !== null && $value !== '') && ! $clean[$field]) {
+                $errors[] = ucwords(str_replace('_', ' ', $field)) . ' format tidak valid';
+            }
+        }
+
+        $clean['jumlah_pr'] = $this->parseImportNumber($clean['jumlah_pr'] ?? null, 'jumlah_pr', $errors);
+        $clean['portofolio'] = ($clean['portofolio'] ?? null) === '' ? null : ($clean['portofolio'] ?? null);
+
+        return [$errors === [], $clean, $errors];
+    }
+
+    private function parseImportNumber(mixed $value, string $field, array &$errors): ?float
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        $cleaned = str_replace(['Rp', 'rp', ' ', '.'], '', (string) $value);
+        $cleaned = str_replace(',', '.', $cleaned);
+
+        if (! is_numeric($cleaned)) {
+            $errors[] = ucwords(str_replace('_', ' ', $field)) . ' harus berupa angka';
+
+            return null;
+        }
+
+        return (float) $cleaned;
     }
 
     private function parseDateTime($value)
