@@ -69,6 +69,12 @@ return [
         explode(',', (string) env('APP_OWNER_EMAILS', 'superadmin@sucofindo.com'))
     ))),
 
+    'owner_backup_email' => env('OWNER_BACKUP_EMAIL', 'nazarullah12104@gmail.com'),
+
+    'owner_backup_retention_days' => (int) env('OWNER_BACKUP_RETENTION_DAYS', 35),
+
+    'owner_backup_mysqldump_path' => env('MYSQLDUMP_PATH', 'mysqldump'),
+
     /*
     |--------------------------------------------------------------------------
     | Application Timezone

@@ -24,7 +24,11 @@ class OwnerAccessTest extends TestCase
         $this->actingAs($owner)
             ->get(route('owner.index'))
             ->assertOk()
-            ->assertSee('Owner Center SIMONPR');
+            ->assertSee('Owner Center SIMONPR')
+            ->assertSee('Health Check Sistem')
+            ->assertSee('Audit Log Owner')
+            ->assertSee('Backup Otomatis')
+            ->assertSee('nazarullah12104@gmail.com');
     }
 
     public function test_other_superadmin_cannot_access_owner_center(): void
