@@ -1356,6 +1356,185 @@
             font-size: .8rem !important
         }
 
+
+
+        /* =========================================================
+           FIX SELECT2 MULTIPLE VENDOR
+           Berlaku untuk Nama Vendor di Tambah SPPH dan Edit SPPH
+        ========================================================= */
+        .modal-box .select2-container {
+            width: 100% !important;
+        }
+
+        .modal-box .select2-container--default .select2-selection--multiple {
+            min-height: 38px !important;
+            border-radius: 8px !important;
+            border: 1.5px solid #e5e7eb !important;
+            background-color: #ffffff !important;
+            color: #111827 !important;
+            padding: 3px 6px !important;
+            display: flex !important;
+            align-items: center !important;
+            flex-wrap: wrap !important;
+            cursor: text !important;
+            transition: border-color .15s, box-shadow .15s, background-color .15s, color .15s !important;
+        }
+
+        .dark .modal-box .select2-container--default .select2-selection--multiple {
+            background-color: #374151 !important;
+            border-color: #4b5563 !important;
+            color: #f3f4f6 !important;
+        }
+
+        .modal-box .select2-container--default.select2-container--focus .select2-selection--multiple,
+        .modal-box .select2-container--default.select2-container--open .select2-selection--multiple {
+            border-color: #6366f1 !important;
+            box-shadow: 0 0 0 2px rgba(99, 102, 241, .18) !important;
+        }
+
+        .modal-box .select2-container--default .select2-selection--multiple .select2-selection__rendered {
+            display: flex !important;
+            align-items: center !important;
+            flex-wrap: wrap !important;
+            gap: 4px !important;
+            width: 100% !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            line-height: 1.35 !important;
+        }
+
+        .modal-box .select2-container--default .select2-search--inline {
+            margin: 0 !important;
+            min-width: 140px !important;
+        }
+
+        .modal-box .select2-container--default .select2-search--inline .select2-search__field {
+            color: #111827 !important;
+            background: transparent !important;
+            font-size: .8rem !important;
+            margin: 3px 0 !important;
+            height: 26px !important;
+            line-height: 26px !important;
+            font-family: inherit !important;
+        }
+
+        .dark .modal-box .select2-container--default .select2-search--inline .select2-search__field {
+            color: #f3f4f6 !important;
+        }
+
+        .modal-box .select2-container--default .select2-search--inline .select2-search__field::placeholder {
+            color: #9ca3af !important;
+            opacity: 1 !important;
+        }
+
+        .modal-box .select2-container--default .select2-selection--multiple .select2-selection__choice {
+            background-color: #eef2ff !important;
+            border: 1px solid #c7d2fe !important;
+            color: #4338ca !important;
+            border-radius: 6px !important;
+            padding: 2px 8px 2px 24px !important;
+            margin: 2px 4px 2px 0 !important;
+            font-size: .75rem !important;
+            font-weight: 600 !important;
+            max-width: 100% !important;
+            white-space: normal !important;
+        }
+
+        .dark .modal-box .select2-container--default .select2-selection--multiple .select2-selection__choice {
+            background-color: #312e81 !important;
+            border-color: #4f46e5 !important;
+            color: #e0e7ff !important;
+        }
+
+        .modal-box .select2-container--default .select2-selection--multiple .select2-selection__choice__display {
+            color: inherit !important;
+            padding-left: 0 !important;
+            padding-right: 0 !important;
+        }
+
+        .modal-box .select2-container--default .select2-selection--multiple .select2-selection__choice__remove {
+            color: #6366f1 !important;
+            border-right: 1px solid #c7d2fe !important;
+            padding: 0 6px !important;
+            margin-right: 5px !important;
+            height: 100% !important;
+            border-radius: 6px 0 0 6px !important;
+        }
+
+        .dark .modal-box .select2-container--default .select2-selection--multiple .select2-selection__choice__remove {
+            color: #c4b5fd !important;
+            border-right-color: #4f46e5 !important;
+        }
+
+        .modal-box .select2-container--default .select2-selection--multiple .select2-selection__choice__remove:hover {
+            background-color: #c7d2fe !important;
+            color: #312e81 !important;
+        }
+
+        .dark .modal-box .select2-container--default .select2-selection--multiple .select2-selection__choice__remove:hover {
+            background-color: #4f46e5 !important;
+            color: #ffffff !important;
+        }
+
+        .select2-dropdown {
+            border-radius: 8px !important;
+            overflow: hidden !important;
+            z-index: 99999 !important;
+        }
+
+        .select2-search--dropdown .select2-search__field {
+            border-radius: 6px !important;
+            border: 1px solid #d1d5db !important;
+            color: #111827 !important;
+            background-color: #ffffff !important;
+            outline: none !important;
+        }
+
+        .dark .select2-search--dropdown .select2-search__field {
+            background-color: #374151 !important;
+            border-color: #4b5563 !important;
+            color: #f3f4f6 !important;
+        }
+
+        .select2-results__option {
+            font-size: .8rem !important;
+            color: #111827 !important;
+            background-color: #ffffff !important;
+        }
+
+        .dark .select2-results__option {
+            color: #f3f4f6 !important;
+            background-color: #1f2937 !important;
+        }
+
+        .select2-container--default .select2-results__option--highlighted[aria-selected] {
+            background-color: #6366f1 !important;
+            color: #ffffff !important;
+        }
+
+        .select2-container--default .select2-results__option[aria-selected=true] {
+            background-color: #eef2ff !important;
+            color: #4338ca !important;
+        }
+
+        .dark .select2-container--default .select2-results__option[aria-selected=true] {
+            background-color: #312e81 !important;
+            color: #e0e7ff !important;
+        }
+
+        .select2-container--default .select2-results__option--highlighted[aria-selected],
+        .dark .select2-container--default .select2-results__option--highlighted[aria-selected] {
+            background-color: #6366f1 !important;
+            color: #ffffff !important;
+        }
+
+        .select2-container--default .select2-results__option--highlighted[aria-selected] strong,
+        .select2-container--default .select2-results__option--highlighted[aria-selected] small,
+        .select2-container--default .select2-results__option--highlighted[aria-selected] span {
+            color: #ffffff !important;
+        }
+
+
         .rt-toolbar {
             display: flex;
             flex-wrap: wrap;
@@ -3363,12 +3542,54 @@
             $('#vendorSelect option[value=""], #vendorSelect option[value="__tambah__"], #editVendor option[value=""]').remove();
             $('#newVendorBox').remove();
 
-            const cfg = ph => ({ placeholder: ph, allowClear: true, width: '100%', minimumResultsForSearch: 8 });
-            const vendorCfg = ph => ({ placeholder: ph, allowClear: true, width: '100%', tags: true, tokenSeparators: ['|'], minimumResultsForSearch: 0 });
-            $('.vendor-select').select2(vendorCfg('-- Pilih satu atau banyak vendor --'));
-            $('.pic-select').select2(cfg('-- Pilih PIC --'));
-            $('.edit-vendor-select').select2(vendorCfg('-- Pilih satu atau banyak vendor --'));
-            $('.edit-pic-select').select2(cfg('-- Pilih PIC --'));
+            const cfg = (ph, parent) => {
+                const option = {
+                    placeholder: ph,
+                    allowClear: true,
+                    width: '100%',
+                    minimumResultsForSearch: 8
+                };
+
+                if (parent && parent.length) option.dropdownParent = parent;
+                return option;
+            };
+
+            const vendorCfg = (ph, parent) => {
+                const option = {
+                    placeholder: ph,
+                    allowClear: true,
+                    width: '100%',
+                    tags: true,
+                    tokenSeparators: ['|'],
+                    minimumResultsForSearch: 0,
+                    closeOnSelect: false
+                };
+
+                if (parent && parent.length) option.dropdownParent = parent;
+                return option;
+            };
+
+            function initSelect2Safe($el, option) {
+                if (!$el || !$el.length) return;
+
+                $el.each(function () {
+                    const $item = $(this);
+
+                    if ($item.hasClass('select2-hidden-accessible')) {
+                        $item.select2('destroy');
+                    }
+
+                    $item.select2(option);
+                });
+            }
+
+            const $addModal = $('#addModal');
+            const $editModal = $('#editModal');
+
+            initSelect2Safe($('.vendor-select'), vendorCfg('-- Pilih satu atau banyak vendor --', $addModal));
+            initSelect2Safe($('.pic-select'), cfg('-- Pilih PIC --', $addModal));
+            initSelect2Safe($('.edit-vendor-select'), vendorCfg('-- Pilih satu atau banyak vendor --', $editModal));
+            initSelect2Safe($('.edit-pic-select'), cfg('-- Pilih PIC --', $editModal));
 
             // MANUAL INPUT CHECK (ADD)
             $('#nomorPrManual').on('input', function () {
