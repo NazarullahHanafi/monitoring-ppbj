@@ -10,6 +10,15 @@
             'danger' => 'bg-red-100 text-red-800 ring-red-200 dark:bg-red-400/10 dark:text-red-200 dark:ring-red-400/30',
         ];
 
+        $levelClass = [
+            'ERROR' => $badgeClass['danger'],
+            'CRITICAL' => $badgeClass['danger'],
+            'ALERT' => $badgeClass['danger'],
+            'EMERGENCY' => $badgeClass['danger'],
+            'WARNING' => $badgeClass['warning'],
+            'LOG' => 'bg-slate-100 text-slate-700 ring-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:ring-slate-700',
+        ];
+
         $quickLinks = [
             ['label' => 'Management Users', 'route' => route('users.index'), 'icon' => '👥', 'desc' => 'Kelola akun dan role'],
             ['label' => 'Pesan Contact', 'route' => route('contact-messages.index'), 'icon' => '💬', 'desc' => 'Baca pesan landing'],
@@ -114,6 +123,19 @@
                     <div class="rounded-2xl bg-amber-50 p-4 text-sm leading-6 text-amber-900 ring-1 ring-amber-200 dark:bg-amber-400/10 dark:text-amber-100 dark:ring-amber-400/30">
                         Cron cPanel tetap perlu aktif: <code class="font-black">php artisan schedule:run</code> setiap menit.
                     </div>
+                    <div class="rounded-2xl bg-slate-50 p-4 ring-1 ring-slate-200 dark:bg-slate-950 dark:ring-slate-700">
+                        <p class="text-xs font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">Backup terakhir</p>
+                        <div class="mt-3 space-y-2">
+                            @forelse($backupFiles as $file)
+                                <div class="rounded-xl bg-white px-3 py-2 ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-700">
+                                    <p class="truncate text-sm font-black text-slate-900 dark:text-white">{{ $file['name'] }}</p>
+                                    <p class="mt-1 text-xs font-semibold text-slate-500 dark:text-slate-400">{{ $file['created_at'] }} • {{ $file['size'] }}</p>
+                                </div>
+                            @empty
+                                <p class="text-sm font-semibold text-slate-600 dark:text-slate-300">Belum ada file backup.</p>
+                            @endforelse
+                        </div>
+                    </div>
                 </div>
             </div>
         </section>
@@ -121,16 +143,34 @@
         <section class="grid gap-6 xl:grid-cols-[1fr_.85fr]">
             <div class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700 dark:bg-slate-900">
                 <p class="text-xs font-black uppercase tracking-[0.22em] text-violet-700 dark:text-violet-300">Audit Log Owner</p>
-                <h2 class="mt-2 text-2xl font-black text-slate-950 dark:text-white">Aktivitas terbaru</h2>
+                <h2 class="mt-2 text-2xl font-black text-slate-950 dark:text-white">Aktivitas dan jejak sistem</h2>
+
+                <div class="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+                    @foreach([
+                        ['label' => 'Total log', 'value' => number_format($auditSummary['total'])],
+                        ['label' => 'Hari ini', 'value' => number_format($auditSummary['today'])],
+                        ['label' => '7 hari', 'value' => number_format($auditSummary['this_week'])],
+                        ['label' => 'Backup terkirim', 'value' => number_format($auditSummary['backup_sent'])],
+                        ['label' => 'Terakhir', 'value' => $auditSummary['last_activity']],
+                    ] as $item)
+                        <div class="rounded-2xl bg-violet-50 p-4 ring-1 ring-violet-100 dark:bg-violet-400/10 dark:ring-violet-400/20">
+                            <p class="text-[11px] font-black uppercase tracking-widest text-violet-700 dark:text-violet-200">{{ $item['label'] }}</p>
+                            <p class="mt-2 text-lg font-black text-slate-950 dark:text-white">{{ $item['value'] }}</p>
+                        </div>
+                    @endforeach
+                </div>
 
                 <div class="mt-6 space-y-3">
                     @forelse($auditLogs as $log)
-                        <div class="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-950">
+                        <div class="rounded-2xl border border-slate-200 bg-slate-50 p-4 transition hover:border-violet-300 hover:bg-violet-50/70 dark:border-slate-700 dark:bg-slate-950 dark:hover:border-violet-500/50 dark:hover:bg-violet-500/10">
                             <div class="flex flex-wrap items-start justify-between gap-3">
                                 <div>
                                     <p class="font-black text-slate-900 dark:text-white">{{ $log->description ?: $log->action }}</p>
                                     <p class="mt-1 text-xs font-semibold text-slate-500 dark:text-slate-400">
                                         {{ $log->user?->name ?? 'System' }} • {{ $log->created_at?->format('d M Y H:i') }}
+                                    </p>
+                                    <p class="mt-2 text-xs font-semibold text-slate-500 dark:text-slate-400">
+                                        Model: {{ class_basename($log->model_type) }} #{{ $log->model_id }}
                                     </p>
                                 </div>
                                 <span class="rounded-full bg-white px-3 py-1 text-xs font-black text-slate-700 ring-1 ring-slate-200 dark:bg-slate-900 dark:text-slate-200 dark:ring-slate-700">
@@ -144,6 +184,36 @@
                         </div>
                     @endforelse
                 </div>
+
+                <div class="mt-8 rounded-3xl border border-slate-200 bg-slate-50 p-5 dark:border-slate-700 dark:bg-slate-950">
+                    <div class="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                            <p class="text-xs font-black uppercase tracking-[0.22em] text-red-700 dark:text-red-300">System Event Log</p>
+                            <h3 class="mt-2 text-xl font-black text-slate-950 dark:text-white">Warning/Error terbaru</h3>
+                        </div>
+                        <span class="rounded-full bg-white px-3 py-1 text-xs font-black text-slate-700 ring-1 ring-slate-200 dark:bg-slate-900 dark:text-slate-200 dark:ring-slate-700">
+                            Laravel logs
+                        </span>
+                    </div>
+
+                    <div class="mt-5 space-y-3">
+                        @forelse($systemEvents as $event)
+                            <div class="rounded-2xl bg-white p-4 ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-700">
+                                <div class="flex flex-wrap items-center justify-between gap-3">
+                                    <span class="rounded-full px-3 py-1 text-xs font-black ring-1 {{ $levelClass[$event['level']] ?? $levelClass['LOG'] }}">
+                                        {{ $event['level'] }}
+                                    </span>
+                                    <span class="text-xs font-bold text-slate-500 dark:text-slate-400">{{ $event['time'] }} • {{ $event['file'] }}</span>
+                                </div>
+                                <p class="mt-3 break-words text-sm leading-6 text-slate-700 dark:text-slate-300">{{ $event['message'] }}</p>
+                            </div>
+                        @empty
+                            <div class="rounded-2xl border border-dashed border-slate-300 bg-white p-5 text-sm font-semibold text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
+                                Tidak ada warning/error terbaru di file log.
+                            </div>
+                        @endforelse
+                    </div>
+                </div>
             </div>
 
             <div class="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700 dark:bg-slate-900">
@@ -153,12 +223,12 @@
                 <div class="mt-6 grid gap-3">
                     @foreach($quickLinks as $link)
                         <a href="{{ $link['route'] }}"
-                            class="group rounded-2xl border border-slate-200 bg-slate-50 p-4 transition hover:-translate-y-0.5 hover:border-blue-300 hover:bg-blue-50 hover:shadow-lg dark:border-slate-700 dark:bg-slate-950 dark:hover:border-blue-500/50 dark:hover:bg-blue-500/10">
+                            class="group rounded-2xl border border-slate-200 bg-slate-50 p-4 transition hover:-translate-y-0.5 hover:border-slate-300 hover:bg-slate-100 hover:shadow-lg dark:border-slate-700 dark:bg-slate-950 dark:hover:border-slate-600 dark:hover:bg-slate-800">
                             <div class="flex items-center gap-3">
                                 <span class="grid h-11 w-11 place-items-center rounded-2xl bg-white text-xl shadow-sm ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-700">{{ $link['icon'] }}</span>
                                 <div>
-                                    <p class="font-black text-slate-950 group-hover:text-blue-700 dark:text-white dark:group-hover:text-blue-200">{{ $link['label'] }}</p>
-                                    <p class="text-xs text-slate-500 dark:text-slate-400">{{ $link['desc'] }}</p>
+                                    <p class="font-black text-slate-950 group-hover:text-slate-950 dark:text-white dark:group-hover:text-white">{{ $link['label'] }}</p>
+                                    <p class="text-xs text-slate-500 group-hover:text-slate-600 dark:text-slate-400 dark:group-hover:text-slate-300">{{ $link['desc'] }}</p>
                                 </div>
                             </div>
                         </a>
@@ -192,7 +262,7 @@
                 <h2 class="mt-2 text-2xl font-black text-slate-950 dark:text-white">Fitur berikutnya untuk Nazar</h2>
                 <div class="mt-6 grid gap-3">
                     @foreach($recommendations as $title => $description)
-                        <div class="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-950">
+                        <div class="rounded-2xl border border-slate-200 bg-slate-50 p-4 transition hover:border-slate-300 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-950 dark:hover:border-slate-600 dark:hover:bg-slate-800">
                             <h3 class="font-black text-slate-900 dark:text-white">{{ $title }}</h3>
                             <p class="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">{{ $description }}</p>
                         </div>

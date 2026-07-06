@@ -13,6 +13,7 @@ use App\Models\User;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
 
 class OwnerController extends Controller
 {
@@ -85,9 +86,13 @@ class OwnerController extends Controller
             ? ActivityLog::query()
                 ->with('user:id,name,email')
                 ->latest()
-                ->limit(8)
+                ->limit(20)
                 ->get()
             : collect();
+
+        $auditSummary = $this->auditSummary();
+        $systemEvents = $this->latestSystemEvents();
+        $backupFiles = $this->latestBackupFiles();
 
         $recommendations = [
             'Release Notes Internal' => 'Mencatat perubahan fitur setiap deploy agar mudah dipresentasikan saat audit/lomba.',
@@ -103,6 +108,9 @@ class OwnerController extends Controller
             'healthChecks',
             'securityChecks',
             'auditLogs',
+            'auditSummary',
+            'systemEvents',
+            'backupFiles',
             'recommendations'
         ));
     }
@@ -198,5 +206,110 @@ class OwnerController extends Controller
         }
 
         return $model::query()->count();
+    }
+
+    private function auditSummary(): array
+    {
+        if (! Schema::hasTable('activity_logs')) {
+            return [
+                'total' => 0,
+                'today' => 0,
+                'this_week' => 0,
+                'backup_sent' => 0,
+                'last_activity' => 'Belum ada',
+            ];
+        }
+
+        $lastActivity = ActivityLog::query()->latest()->first()?->created_at;
+
+        return [
+            'total' => ActivityLog::query()->count(),
+            'today' => ActivityLog::query()->whereDate('created_at', today())->count(),
+            'this_week' => ActivityLog::query()->where('created_at', '>=', now()->subDays(7))->count(),
+            'backup_sent' => ActivityLog::query()->where('action', 'owner_backup_email_sent')->count(),
+            'last_activity' => $lastActivity ? $lastActivity->format('d M Y H:i') : 'Belum ada',
+        ];
+    }
+
+    private function latestSystemEvents(): array
+    {
+        $files = glob(storage_path('logs/*.log')) ?: [];
+
+        usort($files, static fn ($a, $b) => filemtime($b) <=> filemtime($a));
+
+        $events = [];
+
+        foreach (array_slice($files, 0, 3) as $file) {
+            foreach ($this->tailLines($file, 220) as $line) {
+                if (! str_contains($line, '.ERROR:')
+                    && ! str_contains($line, '.WARNING:')
+                    && ! str_contains($line, '.CRITICAL:')
+                    && ! str_contains($line, '.ALERT:')
+                    && ! str_contains($line, '.EMERGENCY:')
+                ) {
+                    continue;
+                }
+
+                $events[] = $this->formatLogLine($line, basename($file));
+            }
+        }
+
+        return array_slice(array_reverse(array_filter($events)), 0, 8);
+    }
+
+    private function tailLines(string $file, int $lineLimit): array
+    {
+        if (! is_readable($file)) {
+            return [];
+        }
+
+        $size = filesize($file);
+        $handle = fopen($file, 'rb');
+
+        if (! $handle) {
+            return [];
+        }
+
+        fseek($handle, max(0, $size - 200000));
+        $content = stream_get_contents($handle) ?: '';
+        fclose($handle);
+
+        return array_slice(explode(PHP_EOL, $content), -$lineLimit);
+    }
+
+    private function formatLogLine(string $line, string $file): array
+    {
+        preg_match('/^\[(?<time>[^\]]+)\]\s+(?<env>[^.]+)\.(?<level>[^:]+):\s+(?<message>.*)$/', $line, $matches);
+
+        return [
+            'time' => $matches['time'] ?? '-',
+            'level' => strtoupper($matches['level'] ?? 'LOG'),
+            'message' => Str::limit($matches['message'] ?? $line, 160),
+            'file' => $file,
+        ];
+    }
+
+    private function latestBackupFiles(): array
+    {
+        $files = glob(storage_path('app/owner-backups/*.sql.gz')) ?: [];
+
+        usort($files, static fn ($a, $b) => filemtime($b) <=> filemtime($a));
+
+        return array_map(function ($file) {
+            return [
+                'name' => basename($file),
+                'size' => $this->humanSize((int) filesize($file)),
+                'created_at' => date('d M Y H:i', filemtime($file)),
+            ];
+        }, array_slice($files, 0, 5));
+    }
+
+    private function humanSize(int $bytes): string
+    {
+        if ($bytes >= 1024 * 1024) {
+            return round($bytes / 1024 / 1024, 2).' MB';
+        }
+
+        return round($bytes / 1024, 2).' KB';
     }
 }
