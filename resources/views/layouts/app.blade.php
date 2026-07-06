@@ -13,7 +13,43 @@
     <link rel="icon" href="{{ asset('images/logo4.png') }}" type="image/x-icon">
     <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
     <script>
-        (function () { var s = localStorage.getItem('theme'), d = window.matchMedia && window.matchMedia('(prefers-color-scheme:dark)').matches; document.documentElement.classList.toggle('dark', s === 'dark' || (!s && d)) })();
+        (function () {
+            var root = document.documentElement;
+            var savedTheme = localStorage.getItem('theme');
+            var systemDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+            var useDark = savedTheme === 'dark' || (!savedTheme && systemDark);
+
+            function applyTheme(mode) {
+                var isDark = mode === 'dark';
+                root.classList.toggle('dark', isDark);
+                root.style.colorScheme = isDark ? 'dark' : 'light';
+            }
+
+            window.setThemeMode = function (mode) {
+                var nextMode = mode === 'dark' ? 'dark' : 'light';
+
+                localStorage.setItem('theme', nextMode);
+                applyTheme(nextMode);
+
+                document.dispatchEvent(new CustomEvent('app:theme-changed', {
+                    detail: { mode: nextMode }
+                }));
+
+                if (window.jQuery) {
+                    window.jQuery('.select2-hidden-accessible').trigger('change.select2');
+                }
+            };
+
+            window.toggleThemeMode = function () {
+                window.setThemeMode(root.classList.contains('dark') ? 'light' : 'dark');
+            };
+
+            window.getThemeMode = function () {
+                return root.classList.contains('dark') ? 'dark' : 'light';
+            };
+
+            applyTheme(useDark ? 'dark' : 'light');
+        })();
     </script>
     <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.1/xlsx.full.min.js"></script>
@@ -2263,6 +2299,142 @@
             cursor: not-allowed !important;
             filter: grayscale(.25);
         }
+
+
+        /* =========================================================
+           Global Select2 Theme Fix
+           Biar Select2 tidak kabur sendiri saat dark mode aktif.
+        ========================================================= */
+        .select2-container {
+            width: 100% !important;
+        }
+
+        .select2-container--default .select2-selection--single,
+        .select2-container--default .select2-selection--multiple {
+            border-color: #e5e7eb !important;
+            background-color: #ffffff !important;
+            color: #111827 !important;
+            transition: background-color .15s, color .15s, border-color .15s, box-shadow .15s !important;
+        }
+
+        .dark .select2-container--default .select2-selection--single,
+        .dark .select2-container--default .select2-selection--multiple {
+            border-color: #4b5563 !important;
+            background-color: #374151 !important;
+            color: #f3f4f6 !important;
+        }
+
+        .select2-container--default .select2-selection--single .select2-selection__rendered {
+            color: #111827 !important;
+        }
+
+        .dark .select2-container--default .select2-selection--single .select2-selection__rendered {
+            color: #f3f4f6 !important;
+        }
+
+        .select2-container--default .select2-selection--multiple .select2-selection__choice {
+            background-color: #eef2ff !important;
+            border-color: #c7d2fe !important;
+            color: #4338ca !important;
+        }
+
+        .dark .select2-container--default .select2-selection--multiple .select2-selection__choice {
+            background-color: #312e81 !important;
+            border-color: #4f46e5 !important;
+            color: #e0e7ff !important;
+        }
+
+        .select2-container--default .select2-selection--multiple .select2-selection__choice__display {
+            color: inherit !important;
+        }
+
+        .select2-container--default .select2-selection--multiple .select2-selection__choice__remove {
+            color: #6366f1 !important;
+            border-right-color: #c7d2fe !important;
+        }
+
+        .dark .select2-container--default .select2-selection--multiple .select2-selection__choice__remove {
+            color: #c4b5fd !important;
+            border-right-color: #4f46e5 !important;
+        }
+
+        .select2-container--default .select2-search--inline .select2-search__field {
+            color: #111827 !important;
+            background: transparent !important;
+        }
+
+        .dark .select2-container--default .select2-search--inline .select2-search__field {
+            color: #f3f4f6 !important;
+        }
+
+        .select2-container--default .select2-search--inline .select2-search__field::placeholder {
+            color: #9ca3af !important;
+            opacity: 1 !important;
+        }
+
+        .select2-dropdown {
+            border-color: #e5e7eb !important;
+            background-color: #ffffff !important;
+            color: #111827 !important;
+            z-index: 99999 !important;
+        }
+
+        .dark .select2-dropdown {
+            border-color: #374151 !important;
+            background-color: #1f2937 !important;
+            color: #f3f4f6 !important;
+        }
+
+        .select2-search--dropdown .select2-search__field {
+            border-color: #d1d5db !important;
+            background-color: #ffffff !important;
+            color: #111827 !important;
+        }
+
+        .dark .select2-search--dropdown .select2-search__field {
+            border-color: #4b5563 !important;
+            background-color: #374151 !important;
+            color: #f3f4f6 !important;
+        }
+
+        .select2-results__option {
+            color: #111827 !important;
+            background-color: #ffffff !important;
+        }
+
+        .dark .select2-results__option {
+            color: #f3f4f6 !important;
+            background-color: #1f2937 !important;
+        }
+
+        .select2-container--default .select2-results__option--highlighted[aria-selected] {
+            background-color: #6366f1 !important;
+            color: #ffffff !important;
+        }
+
+        .select2-container--default .select2-results__option[aria-selected=true] {
+            background-color: #eef2ff !important;
+            color: #4338ca !important;
+        }
+
+        .dark .select2-container--default .select2-results__option[aria-selected=true] {
+            background-color: #312e81 !important;
+            color: #e0e7ff !important;
+        }
+
+        .select2-container--default .select2-results__option--highlighted[aria-selected],
+        .dark .select2-container--default .select2-results__option--highlighted[aria-selected] {
+            background-color: #6366f1 !important;
+            color: #ffffff !important;
+        }
+
+        .select2-container--default .select2-results__option--highlighted[aria-selected] strong,
+        .select2-container--default .select2-results__option--highlighted[aria-selected] small,
+        .select2-container--default .select2-results__option--highlighted[aria-selected] span {
+            color: #ffffff !important;
+        }
+
+
     </style>
 </head>
 
@@ -2648,7 +2820,36 @@
         })();
 
         /* ═══ THEME ═══ */
-        (function () { var r = document.documentElement, b = document.getElementById('themeToggle'); if (!b) return; var i = b.querySelector('div'); function s() { i.style.transform = r.classList.contains('dark') ? 'rotate(180deg)' : 'rotate(0deg)' } s(); b.addEventListener('click', function () { r.classList.toggle('dark'); localStorage.setItem('theme', r.classList.contains('dark') ? 'dark' : 'light'); s(); b.classList.add('animate-pulse'); setTimeout(function () { b.classList.remove('animate-pulse') }, 300) }) })();
+        (function () {
+            var root = document.documentElement;
+            var button = document.getElementById('themeToggle');
+            if (!button) return;
+
+            var indicator = button.querySelector('div');
+
+            function syncThemeButton() {
+                if (!indicator) return;
+                indicator.style.transform = root.classList.contains('dark') ? 'rotate(180deg)' : 'rotate(0deg)';
+            }
+
+            syncThemeButton();
+            document.addEventListener('app:theme-changed', syncThemeButton);
+
+            button.addEventListener('click', function () {
+                if (window.toggleThemeMode) {
+                    window.toggleThemeMode();
+                } else {
+                    root.classList.toggle('dark');
+                    localStorage.setItem('theme', root.classList.contains('dark') ? 'dark' : 'light');
+                }
+
+                syncThemeButton();
+                button.classList.add('animate-pulse');
+                setTimeout(function () {
+                    button.classList.remove('animate-pulse');
+                }, 300);
+            });
+        })();
 
         /* ═══ PRESENCE + MOOD ═══ */
         var cPP;
