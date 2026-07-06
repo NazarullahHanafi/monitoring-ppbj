@@ -237,20 +237,26 @@ class SpphController extends Controller
     // =========================================================
     public function checkNomor(Request $request)
     {
-        $nomor = trim($request->get('nomor', ''));
+        $originalNomor = trim($request->get('nomor', ''));
+        $nomor = $this->normalizeNumberPeriod($originalNomor, $request->get('tanggal'), 'SPPH');
         $excludeId = (int) $request->get('exclude_id', 0);
+        $tanggal = $request->get('tanggal');
 
         if (!$nomor)
             return response()->json(['status' => 'empty']);
 
-        $cacheKey = 'spph:check:' . md5($nomor . ':' . $excludeId);
-        return Cache::remember($cacheKey, 30, function () use ($nomor, $excludeId) {
+        $cacheKey = 'spph:check:' . md5($originalNomor . ':' . $nomor . ':' . $excludeId . ':' . $tanggal);
+        return Cache::remember($cacheKey, 30, function () use ($nomor, $originalNomor, $excludeId, $tanggal) {
             $exists = Spph::where('nomor_spph', $nomor)
                 ->when($excludeId, fn($q) => $q->where('id', '!=', $excludeId))
                 ->exists();
 
             if ($exists)
-                return ['status' => 'duplicate', 'message' => "Nomor \"{$nomor}\" sudah digunakan!"];
+                return [
+                    'status' => 'duplicate',
+                    'message' => "Nomor \"{$nomor}\" sudah digunakan!",
+                    'normalized_nomor' => $nomor !== $originalNomor ? $nomor : null,
+                ];
 
             $seqInput = $this->extractSeq($nomor);
             $warning = null;
@@ -270,21 +276,30 @@ class SpphController extends Controller
                 }
             }
 
-            return ['status' => 'ok', 'warning' => $warning];
+            if ($nomor !== $originalNomor) {
+                $warning = "Nomor otomatis disesuaikan dengan tanggal dokumen menjadi {$nomor}.";
+            }
+
+            return [
+                'status' => 'ok',
+                'warning' => $warning,
+                'normalized_nomor' => $nomor !== $originalNomor ? $nomor : null,
+            ];
         });
     }
 
     // =========================================================
     // SUGGEST NOMOR
     // =========================================================
-    public function suggestNomor()
+    public function suggestNomor(Request $request)
     {
-        return Cache::remember('spph:suggest', 60, function () {
-            $lastNomor = Spph::orderBy('sequence_number', 'desc')->value('nomor_spph');
-            if (!$lastNomor)
-                return ['suggestions' => ['001/PKU-' . now()->format('n') . '/SPPH/' . now()->year], 'last' => null];
-            return ['suggestions' => $this->buildSuggestions($lastNomor), 'last' => $lastNomor];
-        });
+        [$year, $roman] = $this->periodFromDate($request->query('tanggal'));
+
+        $lastNomor = Spph::orderBy('sequence_number', 'desc')->value('nomor_spph');
+        if (!$lastNomor)
+            return ['suggestions' => [sprintf('001/PKU-%s/SPPH/%d', $roman, $year)], 'last' => null];
+
+        return ['suggestions' => $this->buildSuggestions($lastNomor, $year, $roman), 'last' => $lastNomor];
     }
 
     // =========================================================
@@ -320,6 +335,10 @@ class SpphController extends Controller
     // =========================================================
     public function store(Request $request)
     {
+        $request->merge([
+            'nomor_spph' => $this->normalizeNumberPeriod($request->input('nomor_spph', ''), $request->input('tanggal'), 'SPPH'),
+        ]);
+
         $request->validate([
             'nomor_spph' => ['required', 'string', 'max:60', Rule::unique('spphs', 'nomor_spph')],
             'tanggal' => 'required|date',
@@ -337,6 +356,8 @@ class SpphController extends Controller
             'items.*.jumlah' => 'nullable|string|max:50',
             'items.*.tgl_pemenuhan' => 'nullable|date',
         ]);
+
+        $this->validateNumberPeriod($request->nomor_spph, $request->tanggal, 'SPPH', 'nomor_spph');
 
         $nomorPr = $request->nomor_pr ?: null;
         $nomorPrType = $request->nomor_pr_type;
@@ -414,6 +435,10 @@ class SpphController extends Controller
     // =========================================================
     public function update(Request $request, Spph $spph)
     {
+        $request->merge([
+            'nomor_spph' => $this->normalizeNumberPeriod($request->input('nomor_spph', ''), $request->input('tanggal'), 'SPPH'),
+        ]);
+
         $request->validate([
             'nomor_spph' => ['required', 'string', 'max:60', Rule::unique('spphs', 'nomor_spph')->ignore($spph->id)],
             'tanggal' => 'required|date',
@@ -430,6 +455,8 @@ class SpphController extends Controller
             'items.*.jumlah' => 'nullable|string|max:50',
             'items.*.tgl_pemenuhan' => 'nullable|date',
         ]);
+
+        $this->validateNumberPeriod($request->nomor_spph, $request->tanggal, 'SPPH', 'nomor_spph');
 
         $nomorPr = $request->nomor_pr ?: null;
         $nomorPrType = $request->nomor_pr_type;
@@ -1683,11 +1710,81 @@ XML;
     // =========================================================
     // PRIVATE: Build suggestions nomor berikutnya
     // =========================================================
-    private function buildSuggestions(string $last): array
+    private function periodFromDate(?string $date): array
     {
-        $year = now()->year;
+        try {
+            $carbon = $date ? \Carbon\Carbon::parse($date) : now();
+        } catch (\Throwable) {
+            $carbon = now();
+        }
+
         $romans = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII'];
-        $roman = $romans[now()->month - 1];
+
+        return [(int) $carbon->year, $romans[((int) $carbon->month) - 1]];
+    }
+
+    private function numberPeriodFromNomor(string $nomor, string $documentType): ?array
+    {
+        $documentType = preg_quote($documentType, '/');
+
+        if (! preg_match('/^\d+\/PKU-([IVXLCDM]+)\/' . $documentType . '\/(\d{4})$/i', trim($nomor), $matches)) {
+            return null;
+        }
+
+        return [
+            'roman' => strtoupper($matches[1]),
+            'year' => (int) $matches[2],
+        ];
+    }
+
+    private function numberPeriodWarning(string $nomor, ?string $date, string $documentType): ?string
+    {
+        $numberPeriod = $this->numberPeriodFromNomor($nomor, $documentType);
+
+        if (! $numberPeriod || ! $date) {
+            return null;
+        }
+
+        [$year, $roman] = $this->periodFromDate($date);
+
+        if ($numberPeriod['roman'] !== $roman || $numberPeriod['year'] !== $year) {
+            return "Bulan/tahun nomor harus mengikuti tanggal dokumen: PKU-{$roman}/{$documentType}/{$year}.";
+        }
+
+        return null;
+    }
+
+    private function normalizeNumberPeriod(string $nomor, ?string $date, string $documentType): string
+    {
+        $numberPeriod = $this->numberPeriodFromNomor($nomor, $documentType);
+
+        if (! $numberPeriod || ! $date) {
+            return trim($nomor);
+        }
+
+        [$year, $roman] = $this->periodFromDate($date);
+
+        return preg_replace(
+            '/^(\d+\/PKU-)([IVXLCDM]+)(\/' . preg_quote($documentType, '/') . '\/)(\d{4})$/i',
+            '${1}' . $roman . '${3}' . $year,
+            trim($nomor)
+        );
+    }
+
+    private function validateNumberPeriod(string $nomor, ?string $date, string $documentType, string $field): void
+    {
+        $warning = $this->numberPeriodWarning($nomor, $date, $documentType);
+
+        if ($warning) {
+            throw ValidationException::withMessages([$field => $warning]);
+        }
+    }
+
+    // =========================================================
+    // PRIVATE: Build suggestions nomor berikutnya
+    // =========================================================
+    private function buildSuggestions(string $last, int $year, string $roman): array
+    {
         $sugg = [];
 
         if (preg_match('/^(\d+)\/PKU-([A-Z]+)\/SPPH\/(\d+)$/', $last, $m)) {

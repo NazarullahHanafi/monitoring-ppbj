@@ -2052,7 +2052,7 @@
                     <div>
                         <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Tanggal
                             SP</label>
-                        <input type="date" name="tanggal_sp" value="{{ date('Y-m-d') }}"
+                        <input type="date" name="tanggal_sp" id="tanggalSpInput" value="{{ date('Y-m-d') }}"
                             class="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm">
                     </div>
                     <div>
@@ -3124,9 +3124,40 @@
         // ═══════════════════════════════════════
         function setStatus(inputEl, statusEl, state, msg) { inputEl.classList.remove('nomor-input-ok', 'nomor-input-error', 'nomor-input-warn'); statusEl.innerHTML = ''; if (!msg) return; const i = { ok: '✅', duplicate: '❌', warn: '⚠️', checking: '🔄' }, c = { ok: 'nomor-status-ok', duplicate: 'nomor-status-error', warn: 'nomor-status-warn', checking: 'text-gray-400' }, b = { ok: 'nomor-input-ok', duplicate: 'nomor-input-error', warn: 'nomor-input-warn' }; if (b[state]) inputEl.classList.add(b[state]); statusEl.innerHTML = `<span class="${c[state] || ''}">${i[state] || ''} ${msg}</span>`; }
 
-        async function loadSuggestionsSp() { const box = document.getElementById('suggBoxSp'); try { const r = await fetch(SUGGEST_URL_SP); const d = await r.json(); box.innerHTML = d.last ? `<span class="text-xs text-gray-400 dark:text-gray-500 mr-1">Terakhir: <span class="font-mono font-semibold">${d.last}</span> →</span>` : `<span class="text-xs text-gray-400 mr-1">Saran:</span>`; d.suggestions.forEach(s => { const p = document.createElement('span'); p.className = 'suggest-pill'; p.innerHTML = `✨ ${s}`; p.onclick = () => { document.getElementById('nomorSpInput').value = s; document.getElementById('nomorSpInput').dispatchEvent(new Event('input')); }; box.appendChild(p); }); } catch { box.innerHTML = '<span class="text-xs text-gray-400">Tidak bisa memuat saran</span>'; } }
+        function getSuggestionUrlSp() { const url = new URL(SUGGEST_URL_SP, window.location.origin); const tanggal = document.getElementById('tanggalSpInput')?.value; if (tanggal) url.searchParams.set('tanggal', tanggal); return url.toString(); }
+        async function loadSuggestionsSp() { const box = document.getElementById('suggBoxSp'); try { const r = await fetch(getSuggestionUrlSp()); const d = await r.json(); box.innerHTML = d.last ? `<span class="text-xs text-gray-400 dark:text-gray-500 mr-1">Terakhir: <span class="font-mono font-semibold">${d.last}</span> →</span>` : `<span class="text-xs text-gray-400 mr-1">Saran:</span>`; d.suggestions.forEach(s => { const p = document.createElement('span'); p.className = 'suggest-pill'; p.innerHTML = `✨ ${s}`; p.onclick = () => { document.getElementById('nomorSpInput').value = s; document.getElementById('nomorSpInput').dispatchEvent(new Event('input')); }; box.appendChild(p); }); } catch { box.innerHTML = '<span class="text-xs text-gray-400">Tidak bisa memuat saran</span>'; } }
 
-        function attachNomorCheck(inputId, statusId, getExcludeId) { const input = document.getElementById(inputId), status = document.getElementById(statusId); input.addEventListener('input', () => { const v = input.value.trim(); if (!v) { setStatus(input, status, null, ''); return; } setStatus(input, status, 'checking', 'Memeriksa...'); clearTimeout(checkTimer); checkTimer = setTimeout(async () => { try { const r = await fetch(`${CHECK_URL_SP}?nomor=${encodeURIComponent(v)}&exclude_id=${getExcludeId()}`); const d = await r.json(); if (d.status === 'duplicate') setStatus(input, status, 'duplicate', d.message); else if (d.warning) setStatus(input, status, 'warn', d.warning); else { setStatus(input, status, 'ok', 'Tersedia ✓'); setTimeout(() => { if (status.textContent.includes('Tersedia')) setStatus(input, status, null, ''); }, 400); } } catch { setStatus(input, status, null, ''); } }, 400); }); }
+        function attachNomorCheck(inputId, statusId, getExcludeId, dateInputId = null) {
+            const input = document.getElementById(inputId), status = document.getElementById(statusId);
+            const runCheck = () => {
+                const v = input.value.trim();
+                if (!v) { setStatus(input, status, null, ''); return; }
+                setStatus(input, status, 'checking', 'Memeriksa...');
+                clearTimeout(checkTimer);
+                checkTimer = setTimeout(async () => {
+                    try {
+                        const url = new URL(CHECK_URL_SP, window.location.origin);
+                        url.searchParams.set('nomor', v);
+                        url.searchParams.set('exclude_id', getExcludeId());
+                        const tanggal = dateInputId ? document.getElementById(dateInputId)?.value : '';
+                        if (tanggal) url.searchParams.set('tanggal', tanggal);
+                        const r = await fetch(url.toString());
+                        const d = await r.json();
+                        if (d.normalized_nomor && input.value.trim() !== d.normalized_nomor) {
+                            input.value = d.normalized_nomor;
+                        }
+                        if (d.status === 'duplicate') setStatus(input, status, 'duplicate', d.message);
+                        else if (d.warning) setStatus(input, status, 'warn', d.warning);
+                        else {
+                            setStatus(input, status, 'ok', 'Tersedia ✓');
+                            setTimeout(() => { if (status.textContent.includes('Tersedia')) setStatus(input, status, null, ''); }, 400);
+                        }
+                    } catch { setStatus(input, status, null, ''); }
+                }, 400);
+            };
+            input.addEventListener('input', runCheck);
+            if (dateInputId) document.getElementById(dateInputId)?.addEventListener('change', runCheck);
+        }
 
         // ═══════════════════════════════════════
         // OPEN EDIT MODAL
@@ -3865,8 +3896,9 @@
             });
 
             // Nomor check
-            attachNomorCheck('nomorSpInput', 'nomorStatusSp', () => 0);
-            attachNomorCheck('editNomorSp', 'editNomorStatusSp', () => document.getElementById('editIdSp').value || 0);
+            attachNomorCheck('nomorSpInput', 'nomorStatusSp', () => 0, 'tanggalSpInput');
+            attachNomorCheck('editNomorSp', 'editNomorStatusSp', () => document.getElementById('editIdSp').value || 0, 'editTanggalSp');
+            document.getElementById('tanggalSpInput')?.addEventListener('change', loadSuggestionsSp);
 
             // ── FIX BUG 4 & Guard submit TAMBAH ──
             document.getElementById('addFormSp').addEventListener('submit', function (e) {

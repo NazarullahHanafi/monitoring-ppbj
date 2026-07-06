@@ -42,14 +42,25 @@ class Spph extends Model
         return ['sequence' => $nextSeq, 'nomor' => $nomor];
     }
 
-    public static function previewNextNomor(): string
+    public static function previewNextNomor(?string $tanggal = null): string
     {
-        $year   = now()->year;
-        $romans = ['I','II','III','IV','V','VI','VII','VIII','IX','X','XI','XII'];
-        $roman  = $romans[now()->month - 1];
+        [$year, $roman] = self::periodFromDate($tanggal);
         $lastSeq = self::whereYear('created_at', $year)->max('sequence_number') ?? 0;
         $nextSeq = $lastSeq + 1;
         return sprintf('%03d/PKU-%s/SPPH/%d', $nextSeq, $roman, $year);
+    }
+
+    private static function periodFromDate(?string $tanggal): array
+    {
+        try {
+            $date = $tanggal ? \Carbon\Carbon::parse($tanggal) : now();
+        } catch (\Throwable) {
+            $date = now();
+        }
+
+        $romans = ['I','II','III','IV','V','VI','VII','VIII','IX','X','XI','XII'];
+
+        return [(int) $date->year, $romans[((int) $date->month) - 1]];
     }
 
     public function items()

@@ -2102,7 +2102,7 @@
                 <div class="form-row">
                     <div class="form-group">
                         <label>Tanggal <span class="text-red-500">*</span></label>
-                        <input type="date" name="tanggal" value="{{ date('Y-m-d') }}" required class="m-input">
+                        <input type="date" name="tanggal" id="tanggalSpphInput" value="{{ date('Y-m-d') }}" required class="m-input">
                     </div>
                     <div class="form-group">
                         <label>Nomor PR <span class="text-xs text-gray-400 font-normal">— Opsional</span></label>
@@ -3124,8 +3124,39 @@
         // NOMOR CHECK
         // ════════════════════════════════════════════════════════════
         function setStatus(inp, stEl, state, msg) { inp.classList.remove('nomor-input-ok', 'nomor-input-error', 'nomor-input-warn'); stEl.innerHTML = ''; if (!msg) return; const ic = { ok: '✅', duplicate: '❌', warn: '⚠️', checking: '🔄' }, cl = { ok: 'nomor-status-ok', duplicate: 'nomor-status-error', warn: 'nomor-status-warn', checking: 'text-gray-400' }, bd = { ok: 'nomor-input-ok', duplicate: 'nomor-input-error', warn: 'nomor-input-warn' }; if (bd[state]) inp.classList.add(bd[state]); stEl.innerHTML = `<span class="${cl[state] || ''}">${ic[state] || ''} ${escapedHtml(msg)}</span>`; }
-        function attachCheck(inputId, statusId, getExcId) { const inp = document.getElementById(inputId), st = document.getElementById(statusId); inp.addEventListener('input', () => { const v = inp.value.trim(); if (!v) { setStatus(inp, st, null, ''); return; } setStatus(inp, st, 'checking', 'Memeriksa...'); clearTimeout(checkTimer); checkTimer = setTimeout(async () => { try { const r = await fetch(`${CHECK_URL}?nomor=${encodeURIComponent(v)}&exclude_id=${getExcId()}`); const d = await r.json(); if (d.status === 'duplicate') setStatus(inp, st, 'duplicate', d.message); else if (d.warning) setStatus(inp, st, 'warn', d.warning); else { setStatus(inp, st, 'ok', 'Tersedia ✓'); setTimeout(() => { if (st.textContent.includes('tersedia')) setStatus(inp, st, null, ''); }, 2000); } } catch { setStatus(inp, st, null, ''); } }, 400); }); }
-        async function loadSuggestions() { const box = document.getElementById('suggBox'); try { const r = await fetch(SUGGEST_URL), data = await r.json(); box.innerHTML = data.last ? `<span class="text-xs text-gray-400 dark:text-gray-500 mr-1">Terakhir: <span class="font-mono font-semibold">${data.last}</span> →</span>` : '<span class="text-xs text-gray-400 mr-1">Saran:</span>'; data.suggestions.forEach(s => { const p = document.createElement('span'); p.className = 'suggest-pill'; p.textContent = '✨ ' + s; p.onclick = () => { document.getElementById('nomorSpphInput').value = s; document.getElementById('nomorSpphInput').dispatchEvent(new Event('input')); }; box.appendChild(p); }); } catch { box.innerHTML = '<span class="text-xs text-gray-400">Tidak bisa memuat saran</span>'; } }
+        function attachCheck(inputId, statusId, getExcId, dateInputId = null) {
+            const inp = document.getElementById(inputId), st = document.getElementById(statusId);
+            const runCheck = () => {
+                const v = inp.value.trim();
+                if (!v) { setStatus(inp, st, null, ''); return; }
+                setStatus(inp, st, 'checking', 'Memeriksa...');
+                clearTimeout(checkTimer);
+                checkTimer = setTimeout(async () => {
+                    try {
+                        const url = new URL(CHECK_URL, window.location.origin);
+                        url.searchParams.set('nomor', v);
+                        url.searchParams.set('exclude_id', getExcId());
+                        const tanggal = dateInputId ? document.getElementById(dateInputId)?.value : '';
+                        if (tanggal) url.searchParams.set('tanggal', tanggal);
+                        const r = await fetch(url.toString());
+                        const d = await r.json();
+                        if (d.normalized_nomor && inp.value.trim() !== d.normalized_nomor) {
+                            inp.value = d.normalized_nomor;
+                        }
+                        if (d.status === 'duplicate') setStatus(inp, st, 'duplicate', d.message);
+                        else if (d.warning) setStatus(inp, st, 'warn', d.warning);
+                        else {
+                            setStatus(inp, st, 'ok', 'Tersedia ✓');
+                            setTimeout(() => { if (st.textContent.includes('tersedia')) setStatus(inp, st, null, ''); }, 2000);
+                        }
+                    } catch { setStatus(inp, st, null, ''); }
+                }, 400);
+            };
+            inp.addEventListener('input', runCheck);
+            if (dateInputId) document.getElementById(dateInputId)?.addEventListener('change', runCheck);
+        }
+        function getSuggestionUrl() { const url = new URL(SUGGEST_URL, window.location.origin); const tanggal = document.getElementById('tanggalSpphInput')?.value; if (tanggal) url.searchParams.set('tanggal', tanggal); return url.toString(); }
+        async function loadSuggestions() { const box = document.getElementById('suggBox'); try { const r = await fetch(getSuggestionUrl()), data = await r.json(); box.innerHTML = data.last ? `<span class="text-xs text-gray-400 dark:text-gray-500 mr-1">Terakhir: <span class="font-mono font-semibold">${data.last}</span> →</span>` : '<span class="text-xs text-gray-400 mr-1">Saran:</span>'; data.suggestions.forEach(s => { const p = document.createElement('span'); p.className = 'suggest-pill'; p.textContent = '✨ ' + s; p.onclick = () => { document.getElementById('nomorSpphInput').value = s; document.getElementById('nomorSpphInput').dispatchEvent(new Event('input')); }; box.appendChild(p); }); } catch { box.innerHTML = '<span class="text-xs text-gray-400">Tidak bisa memuat saran</span>'; } }
 
         // ════════════════════════════════════════════════════════════
         // PRESENCE & HEARTBEAT
@@ -3407,8 +3438,9 @@
                 if (!$(this).val().trim()) { $(this).css({ 'border-color': '', 'background-color': '' }); $('#editPpbjStatus').html(''); }
             });
 
-            attachCheck('nomorSpphInput', 'nomorStatus', () => 0);
-            attachCheck('editNomor', 'editNomorStatus', () => document.getElementById('editId').value || 0);
+            attachCheck('nomorSpphInput', 'nomorStatus', () => 0, 'tanggalSpphInput');
+            attachCheck('editNomor', 'editNomorStatus', () => document.getElementById('editId').value || 0, 'editTanggal');
+            document.getElementById('tanggalSpphInput')?.addEventListener('change', loadSuggestions);
 
             document.getElementById('addForm').addEventListener('submit', function (e) {
                 syncAll(this);
