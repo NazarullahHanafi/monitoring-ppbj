@@ -430,8 +430,8 @@ class SpController extends Controller
                     'nama_barang' => $item->nama_barang,
                     'satuan' => $item->satuan,
                     'jumlah' => $item->jumlah,
-                    'harga_satuan' => $item->harga_satuan ? number_format((float) $item->harga_satuan, 0, ',', '.') : '',
-                    'subtotal' => $item->subtotal ? number_format((float) $item->subtotal, 0, ',', '.') : '',
+                    'harga_satuan' => $item->harga_satuan ? $this->formatMoney($item->harga_satuan) : '',
+                    'subtotal' => $item->subtotal ? $this->formatMoney($item->subtotal) : '',
                     'tgl_pemenuhan' => $item->tgl_pemenuhan
                         ? \Carbon\Carbon::parse($item->tgl_pemenuhan)->format('Y-m-d')
                         : null,
@@ -446,6 +446,8 @@ class SpController extends Controller
     {
         $request->merge([
             'nomor_sp' => $this->normalizeNumberPeriod($request->input('nomor_sp', ''), $request->input('tanggal_sp'), 'SP'),
+            'nilai_sp' => $this->moneyToNullableFloat($request->input('nilai_sp')),
+            'nilai_pr' => $this->moneyToNullableFloat($request->input('nilai_pr')),
         ]);
 
         $request->validate([
@@ -588,6 +590,8 @@ class SpController extends Controller
     {
         $request->merge([
             'nomor_sp' => $this->normalizeNumberPeriod($request->input('nomor_sp', ''), $request->input('tanggal_sp'), 'SP'),
+            'nilai_sp' => $this->moneyToNullableFloat($request->input('nilai_sp')),
+            'nilai_pr' => $this->moneyToNullableFloat($request->input('nilai_pr')),
         ]);
 
         $request->validate([
@@ -927,7 +931,7 @@ class SpController extends Controller
         $fmtNum = function ($num) {
             if (!$num && $num !== 0)
                 return '-';
-            return number_format((float) $num, 0, ',', '.');
+            return $this->formatMoney($num);
         };
 
         // Header Row
@@ -1027,8 +1031,8 @@ class SpController extends Controller
         // Render tabel
         $grandTotal = 0;
         foreach ($parsedItems as $item) {
-            $hargaSatuan = (float) ($item['harga_satuan'] ?? 0);
-            $subtotal = (float) ($item['subtotal'] ?? 0);
+            $hargaSatuan = $this->moneyToFloat($item['harga_satuan'] ?? 0);
+            $subtotal = $this->moneyToFloat($item['subtotal'] ?? 0);
             $grandTotal += $subtotal;
 
             // Row Parent
@@ -1067,6 +1071,10 @@ class SpController extends Controller
                     $tbl->addCell(1600, $vC);
                 }
             }
+        }
+
+        if ($grandTotal <= 0 && $sp->nilai_sp) {
+            $grandTotal = $this->moneyToFloat($sp->nilai_sp);
         }
 
         // Hitung PPN dan Total
@@ -1369,16 +1377,16 @@ class SpController extends Controller
         $items = $sp->items;
         $subtotal = 0.0;
         foreach ($items as $it) {
-            $subtotal += (float) ($it->subtotal ?? 0);
+            $subtotal += $this->moneyToFloat($it->subtotal ?? 0);
         }
         if ($subtotal <= 0 && $sp->nilai_sp) {
-            $subtotal = (float) $sp->nilai_sp;
+            $subtotal = $this->moneyToFloat($sp->nilai_sp);
         }
         $ppn = round($subtotal * 0.11);
         $total = $subtotal + $ppn;
         $jampel5 = round($total * 0.05, 2);
 
-        $fmt = fn($n) => number_format((float) $n, 0, ',', '.');
+        $fmt = fn($n) => $this->formatMoney($n);
         $terbilangSubtotal = ucwords($this->terbilang($subtotal));
         $terbilangTotal = ucwords($this->terbilang($total));
         $terbilangJampel = ucwords($this->terbilang(round($jampel5)));
@@ -1460,7 +1468,7 @@ class SpController extends Controller
         $addPasal('1', ['LINGKUP PEKERJAAN DAN HARGA BORONGAN']);
         $addPara('PIHAK KESATU menyerahkan pekerjaan kepada PIHAK KEDUA, sebagaimana PIHAK KEDUA menerima penyerahan pekerjaan tersebut dari PIHAK KESATU dan berjanji untuk melaksanakan pekerjaan dengan spesifikasi dan harga sebagai berikut:');
 
-        $fmtTable = fn($n) => number_format((float) $n, 0, ',', '.');
+        $fmtTable = fn($n) => $this->formatMoney($n);
         $tbl = $section->addTable([
             'borderSize' => 4,
             'borderColor' => '000001',
@@ -2087,16 +2095,16 @@ class SpController extends Controller
         $items = $sp->items;
         $subtotal = 0.0;
         foreach ($items as $it) {
-            $subtotal += (float) ($it->subtotal ?? 0);
+            $subtotal += $this->moneyToFloat($it->subtotal ?? 0);
         }
         if ($subtotal <= 0 && $sp->nilai_sp) {
-            $subtotal = (float) $sp->nilai_sp;
+            $subtotal = $this->moneyToFloat($sp->nilai_sp);
         }
         $ppn = round($subtotal * 0.11);
         $total = $subtotal + $ppn;
         $jampel5 = round($total * 0.05, 2);
 
-        $fmt = fn($n) => number_format((float) $n, 0, ',', '.');
+        $fmt = fn($n) => $this->formatMoney($n);
         $terbilangSubtotal = ucwords($this->terbilang($subtotal));
         $terbilangTotal = ucwords($this->terbilang($total));
         $terbilangJampel = ucwords($this->terbilang(round($jampel5)));
@@ -2178,7 +2186,7 @@ class SpController extends Controller
         $addPasal('1', ['LINGKUP PEKERJAAN DAN HARGA BORONGAN']);
         $addPara('PIHAK KESATU menyerahkan pekerjaan kepada PIHAK KEDUA, sebagaimana PIHAK KEDUA menerima penyerahan pekerjaan tersebut dari PIHAK KESATU dan berjanji untuk melaksanakan pekerjaan dengan spesifikasi dan harga sebagai berikut:');
 
-        $fmtTable = fn($n) => number_format((float) $n, 0, ',', '.');
+        $fmtTable = fn($n) => $this->formatMoney($n);
         $tbl = $section->addTable([
             'borderSize' => 4,
             'borderColor' => '000001',
@@ -2810,14 +2818,14 @@ class SpController extends Controller
         $items = $sp->items;
         $subtotal = 0.0;
         foreach ($items as $it) {
-            $subtotal += (float) ($it->subtotal ?? 0);
+            $subtotal += $this->moneyToFloat($it->subtotal ?? 0);
         }
         if ($subtotal <= 0 && $sp->nilai_sp) {
-            $subtotal = (float) $sp->nilai_sp;
+            $subtotal = $this->moneyToFloat($sp->nilai_sp);
         }
         $ppn = round($subtotal * 0.11);
         $total = $subtotal + $ppn;
-        $fmt = fn($n) => number_format((float) $n, 0, ',', '.');
+        $fmt = fn($n) => $this->formatMoney($n);
         $terbilangSubtotal = ucwords($this->terbilang($subtotal));
         $terbilangTotal = ucwords($this->terbilang($total));
 
@@ -2912,7 +2920,7 @@ class SpController extends Controller
         // Struktur dibuat 7 kolom seperti template:
         // No | Nama | Satuan | Qty | Harga Satuan | Rp | Nilai Total
         // Bagian Jumlah/PPN/Total dibuat nested table di kanan agar tidak geser di Microsoft Word.
-        $fmtTable = fn($n) => number_format((float) $n, 0, '.', ',');
+        $fmtTable = fn($n) => $this->formatMoney($n);
 
         $tbl = $section->addTable([
             'borderSize' => 4,
@@ -4282,11 +4290,10 @@ class SpController extends Controller
             if (!trim(strip_tags($nama)))
                 continue;
 
-            // Parse harga satuan (hapus format ribuan)
-            $hargaSatuanRaw = $item['harga_satuan'] ?? '';
-            $hargaSatuanRaw = str_replace('.', '', $hargaSatuanRaw);
-            $hargaSatuan = is_numeric($hargaSatuanRaw) && $hargaSatuanRaw > 0
-                ? (float) $hargaSatuanRaw
+            // Parse harga satuan dengan aman, termasuk format rupiah 1.234.567.890
+            $hargaSatuan = $this->moneyToFloat($item['harga_satuan'] ?? '');
+            $hargaSatuan = $hargaSatuan > 0
+                ? $hargaSatuan
                 : null;
 
             // Parse jumlah
@@ -4319,10 +4326,9 @@ class SpController extends Controller
     {
         $total = 0;
         foreach ($items as $item) {
-            $hargaRaw = str_replace('.', '', $item['harga_satuan'] ?? '');
             $jumlahRaw = $item['jumlah'] ?? '';
 
-            $harga = is_numeric($hargaRaw) ? (float) $hargaRaw : 0;
+            $harga = $this->moneyToFloat($item['harga_satuan'] ?? '');
             $jumlah = is_numeric($jumlahRaw) ? (float) $jumlahRaw : 0;
 
             if ($harga > 0 && $jumlah > 0) {
@@ -4334,12 +4340,13 @@ class SpController extends Controller
 
     private function hitungNilaiAcuan(Sp $sp): float
     {
-        if ($sp->nilai_sp && (float) $sp->nilai_sp > 0) {
-            return (float) $sp->nilai_sp;
+        $nilaiSp = $this->moneyToFloat($sp->nilai_sp);
+        if ($nilaiSp > 0) {
+            return $nilaiSp;
         }
         $subtotal = 0.0;
         foreach ($sp->items as $it) {
-            $subtotal += (float) ($it->subtotal ?? 0);
+            $subtotal += $this->moneyToFloat($it->subtotal ?? 0);
         }
         return $subtotal > 0 ? $subtotal + round($subtotal * 0.11) : 0.0;
     }
@@ -4834,30 +4841,110 @@ class SpController extends Controller
     }
 
     // =========================================================
+    // PRIVATE: Money helpers
+    // =========================================================
+    private function moneyToNullableFloat($value): ?float
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        if (is_string($value) && trim($value) === '') {
+            return null;
+        }
+
+        return $this->moneyToFloat($value);
+    }
+
+    private function moneyToFloat($value): float
+    {
+        if ($value === null || $value === '') {
+            return 0.0;
+        }
+
+        if (is_int($value) || is_float($value)) {
+            return (float) $value;
+        }
+
+        $value = trim((string) $value);
+        if ($value === '') {
+            return 0.0;
+        }
+
+        $value = preg_replace('/[^\d,\.\-]/', '', $value) ?? '';
+        if ($value === '' || $value === '-') {
+            return 0.0;
+        }
+
+        $dotCount = substr_count($value, '.');
+        $commaCount = substr_count($value, ',');
+
+        if ($dotCount > 0 && $commaCount > 0) {
+            // Format Indonesia: 1.234.567,89
+            $value = str_replace('.', '', $value);
+            $value = str_replace(',', '.', $value);
+        } elseif ($dotCount > 1) {
+            // Format ribuan: 1.234.567.890
+            $value = str_replace('.', '', $value);
+        } elseif ($commaCount > 1) {
+            // Format internasional ribuan: 1,234,567,890
+            $value = str_replace(',', '', $value);
+        } elseif ($commaCount === 1) {
+            $parts = explode(',', $value);
+            $decimalLength = strlen($parts[1] ?? '');
+            $value = ($decimalLength === 3 && strlen(ltrim($parts[0], '-')) <= 3)
+                ? str_replace(',', '', $value)
+                : str_replace(',', '.', $value);
+        } elseif ($dotCount === 1) {
+            $parts = explode('.', $value);
+            $decimalLength = strlen($parts[1] ?? '');
+            if ($decimalLength === 3 && strlen(ltrim($parts[0], '-')) <= 3) {
+                $value = str_replace('.', '', $value);
+            }
+        }
+
+        return is_numeric($value) ? (float) $value : 0.0;
+    }
+
+    private function moneyToInt($value): int
+    {
+        return (int) round($this->moneyToFloat($value));
+    }
+
+    private function formatMoney($value): string
+    {
+        return number_format($this->moneyToFloat($value), 0, ',', '.');
+    }
+
+    // =========================================================
     // PRIVATE: Terbilang
     // =========================================================
     private function terbilang($angka): string
     {
-        $angka = abs((int) $angka);
+        $angka = abs($this->moneyToInt($angka));
         $baca = ['', 'Satu', 'Dua', 'Tiga', 'Empat', 'Lima', 'Enam', 'Tujuh', 'Delapan', 'Sembilan', 'Sepuluh', 'Sebelas'];
+        if ($angka === 0)
+            return 'Nol';
         if ($angka < 12)
             return $baca[$angka];
         if ($angka < 20)
             return $this->terbilang($angka - 10) . ' Belas';
         if ($angka < 100)
-            return $this->terbilang((int) ($angka / 10)) . ' Puluh' . ($angka % 10 ? ' ' . $this->terbilang($angka % 10) : '');
+            return $this->terbilang(intdiv($angka, 10)) . ' Puluh' . ($angka % 10 ? ' ' . $this->terbilang($angka % 10) : '');
         if ($angka < 200)
             return 'Seratus' . ($angka - 100 ? ' ' . $this->terbilang($angka - 100) : '');
         if ($angka < 1000)
-            return $this->terbilang((int) ($angka / 100)) . ' Ratus' . ($angka % 100 ? ' ' . $this->terbilang($angka % 100) : '');
+            return $this->terbilang(intdiv($angka, 100)) . ' Ratus' . ($angka % 100 ? ' ' . $this->terbilang($angka % 100) : '');
         if ($angka < 2000)
             return 'Seribu' . ($angka - 1000 ? ' ' . $this->terbilang($angka - 1000) : '');
         if ($angka < 1000000)
-            return $this->terbilang((int) ($angka / 1000)) . ' Ribu' . ($angka % 1000 ? ' ' . $this->terbilang($angka % 1000) : '');
+            return $this->terbilang(intdiv($angka, 1000)) . ' Ribu' . ($angka % 1000 ? ' ' . $this->terbilang($angka % 1000) : '');
         if ($angka < 1000000000)
-            return $this->terbilang((int) ($angka / 1000000)) . ' Juta' . ($angka % 1000000 ? ' ' . $this->terbilang($angka % 1000000) : '');
+            return $this->terbilang(intdiv($angka, 1000000)) . ' Juta' . ($angka % 1000000 ? ' ' . $this->terbilang($angka % 1000000) : '');
         if ($angka < 1000000000000)
-            return $this->terbilang((int) ($angka / 1000000000)) . ' Miliar' . ($angka % 1000000000 ? ' ' . $this->terbilang($angka % 1000000000) : '');
-        return 'Nol';
+            return $this->terbilang(intdiv($angka, 1000000000)) . ' Miliar' . ($angka % 1000000000 ? ' ' . $this->terbilang($angka % 1000000000) : '');
+        if ($angka < 1000000000000000)
+            return $this->terbilang(intdiv($angka, 1000000000000)) . ' Triliun' . ($angka % 1000000000000 ? ' ' . $this->terbilang($angka % 1000000000000) : '');
+        return (string) $angka;
     }
 }
