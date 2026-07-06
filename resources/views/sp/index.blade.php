@@ -1748,6 +1748,11 @@
         </div>
 
         {{-- STATS BAR --}}
+        @php
+            $statsTotalCount = (float) data_get($stats, 'total_count', 0);
+            $statsTotalNilaiSp = (float) data_get($stats, 'total_nilai_sp', 0);
+            $statsTotalNilaiPr = (float) data_get($stats, 'total_nilai_pr', 0);
+        @endphp
         <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div
                 class="bg-white dark:bg-gray-800 rounded-xl p-3.5 shadow-sm border border-gray-100 dark:border-gray-700 flex items-center gap-3">
@@ -1760,7 +1765,7 @@
                 <div>
                     <p class="text-xs text-gray-500 dark:text-gray-400">Total Data</p>
                     <p class="text-lg font-bold text-gray-900 dark:text-gray-100">
-                        {{ number_format($stats->total_count, 0, ',', '.') }}
+                        {{ number_format($statsTotalCount, 0, ',', '.') }}
                     </p>
                 </div>
             </div>
@@ -1775,7 +1780,7 @@
                 <div>
                     <p class="text-xs text-gray-500 dark:text-gray-400">Total Nilai SP</p>
                     <p class="text-base font-bold text-emerald-700 dark:text-emerald-400 font-mono">Rp
-                        {{ number_format($stats->total_nilai_sp, 0, ',', '.') }}
+                        {{ number_format($statsTotalNilaiSp, 0, ',', '.') }}
                     </p>
                 </div>
             </div>
@@ -1790,7 +1795,7 @@
                 <div>
                     <p class="text-xs text-gray-500 dark:text-gray-400">Total Nilai PR</p>
                     <p class="text-base font-bold text-indigo-600 dark:text-indigo-400 font-mono">Rp
-                        {{ number_format($stats->total_nilai_pr, 0, ',', '.') }}
+                        {{ number_format($statsTotalNilaiPr, 0, ',', '.') }}
                     </p>
                 </div>
             </div>
