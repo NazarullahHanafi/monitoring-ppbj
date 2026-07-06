@@ -82,7 +82,7 @@ class TrackingPrController extends Controller
      */
     private function trackByNomorPr(string $nomorPr)
     {
-        $cacheKey = 'tracking_pr_' . md5(strtolower($nomorPr)) . '_v7';
+        $cacheKey = 'tracking_pr_' . md5(strtolower($nomorPr)) . '_v8';
         $cached = Cache::get($cacheKey);
         if ($cached !== null) return $cached;
 
@@ -91,7 +91,7 @@ class TrackingPrController extends Controller
                 ->select([
                     'id', 'nomor_pr', 'tujuan_pengadaan', 'tanggal_pr',
                     'tgl_ttd_kabid_pr', 'tgl_ttd_kacab_pr', 'jumlah_pr',
-                    'received_at', 'received_by_umum_user_id',
+                    'received_at', 'received_by_umum_user_id', 'created_by_user_id',
                     'created_at', 'updated_at',
                     'signed_by_kabid_name', 'signed_by_kacab_name',
                     'sign_token_kabid', 'sign_token_kacab',
@@ -138,6 +138,14 @@ class TrackingPrController extends Controller
                 $receivedByUser = DB::table('users')->select(['id', 'name'])->where('id', $torpr->received_by_umum_user_id)->first();
             }
 
+            $createdByUser = null;
+            if (!empty($torpr->created_by_user_id)) {
+                $createdByUser = DB::table('users')
+                    ->select(['id', 'name'])
+                    ->where('id', $torpr->created_by_user_id)
+                    ->first();
+            }
+
             $result = (object) [
                 'id' => $torpr->id,
                 'nomor_pr' => $torpr->nomor_pr,
@@ -155,7 +163,7 @@ class TrackingPrController extends Controller
                 'sign_token_kacab' => $torpr->sign_token_kacab,
                 'latestReceiptApproval' => $latestApproval,
                 'receivedByUmum' => $receivedByUser,
-                'createdBy' => null,
+                'createdBy' => $createdByUser,
             ];
 
             Cache::put($cacheKey, $result, self::CACHE_TRACKING);
@@ -435,7 +443,7 @@ class TrackingPrController extends Controller
         if (!$nomor) return response()->json(['success' => false], 400);
 
         $cleared = [];
-        foreach (['_v1', '_v2', '_v3', '_v4', '_v5', '_v6', '_v7'] as $v) {
+        foreach (['_v1', '_v2', '_v3', '_v4', '_v5', '_v6', '_v7', '_v8'] as $v) {
             if (Cache::forget('tracking_pr_' . md5(strtolower($nomor)) . $v)) $cleared[] = 'PR';
             if (Cache::forget('tracking_ppbj_' . md5(strtolower($nomor)) . $v)) $cleared[] = 'PPBJ';
         }
