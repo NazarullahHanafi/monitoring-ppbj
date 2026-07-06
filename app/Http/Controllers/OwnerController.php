@@ -10,6 +10,7 @@ use App\Models\Sp;
 use App\Models\Spph;
 use App\Models\Torpr;
 use App\Models\User;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -17,10 +18,11 @@ use Illuminate\Support\Str;
 
 class OwnerController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
         $ownerEmails = config('app.owner_emails', []);
         $user = auth()->user();
+        $auditFilters = $this->auditFilters($request);
 
         $stats = [
             'users' => User::count(),
@@ -83,14 +85,23 @@ class OwnerController extends Controller
         ];
 
         $auditLogs = Schema::hasTable('activity_logs')
-            ? ActivityLog::query()
+            ? $this->filteredAuditQuery($auditFilters)
                 ->with('user:id,name,email')
                 ->latest()
-                ->limit(20)
+                ->limit(50)
                 ->get()
             : collect();
 
         $auditSummary = $this->auditSummary();
+        $auditFilterCount = Schema::hasTable('activity_logs')
+            ? $this->filteredAuditQuery($auditFilters)->count()
+            : 0;
+        $auditActions = $this->auditActions();
+        $auditUsers = User::query()
+            ->select('id', 'name', 'email')
+            ->orderBy('name')
+            ->get();
+        $userActivityInsights = $this->userActivityInsights();
         $systemEvents = $this->latestSystemEvents();
         $backupFiles = $this->latestBackupFiles();
 
@@ -109,10 +120,57 @@ class OwnerController extends Controller
             'securityChecks',
             'auditLogs',
             'auditSummary',
+            'auditFilterCount',
+            'auditActions',
+            'auditUsers',
+            'auditFilters',
+            'userActivityInsights',
             'systemEvents',
             'backupFiles',
             'recommendations'
         ));
+    }
+
+    public function exportAudit(Request $request)
+    {
+        $filters = $this->auditFilters($request);
+        $fileName = 'owner-audit-log-'.now()->format('Ymd-His').'.csv';
+
+        return response()->streamDownload(function () use ($filters) {
+            $handle = fopen('php://output', 'w');
+            fputcsv($handle, [
+                'Waktu',
+                'User',
+                'Email',
+                'Action',
+                'Deskripsi',
+                'Model',
+                'Model ID',
+            ]);
+
+            if (Schema::hasTable('activity_logs')) {
+                $this->filteredAuditQuery($filters)
+                    ->with('user:id,name,email')
+                    ->latest()
+                    ->limit(5000)
+                    ->cursor()
+                    ->each(function (ActivityLog $log) use ($handle) {
+                        fputcsv($handle, [
+                            optional($log->created_at)->format('Y-m-d H:i:s'),
+                            $log->user?->name ?? 'System',
+                            $log->user?->email ?? '-',
+                            $log->action,
+                            $log->description,
+                            class_basename($log->model_type),
+                            $log->model_id,
+                        ]);
+                    });
+            }
+
+            fclose($handle);
+        }, $fileName, [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+        ]);
     }
 
     private function healthChecks(): array
@@ -229,6 +287,177 @@ class OwnerController extends Controller
             'backup_sent' => ActivityLog::query()->where('action', 'owner_backup_email_sent')->count(),
             'last_activity' => $lastActivity ? $lastActivity->format('d M Y H:i') : 'Belum ada',
         ];
+    }
+
+    private function auditFilters(Request $request): array
+    {
+        return [
+            'q' => trim((string) $request->query('q', '')),
+            'user_id' => $request->query('user_id'),
+            'action' => trim((string) $request->query('action', '')),
+            'date_from' => $request->query('date_from'),
+            'date_to' => $request->query('date_to'),
+        ];
+    }
+
+    private function filteredAuditQuery(array $filters)
+    {
+        $query = ActivityLog::query();
+
+        if (filled($filters['user_id'] ?? null)) {
+            $query->where('user_id', (int) $filters['user_id']);
+        }
+
+        if (filled($filters['action'] ?? null)) {
+            $query->where('action', $filters['action']);
+        }
+
+        if (filled($filters['date_from'] ?? null)) {
+            $query->whereDate('created_at', '>=', $filters['date_from']);
+        }
+
+        if (filled($filters['date_to'] ?? null)) {
+            $query->whereDate('created_at', '<=', $filters['date_to']);
+        }
+
+        if (filled($filters['q'] ?? null)) {
+            $keyword = $filters['q'];
+            $query->where(function ($subQuery) use ($keyword) {
+                $subQuery
+                    ->where('action', 'like', "%{$keyword}%")
+                    ->orWhere('description', 'like', "%{$keyword}%")
+                    ->orWhere('model_type', 'like', "%{$keyword}%")
+                    ->orWhereHas('user', function ($userQuery) use ($keyword) {
+                        $userQuery
+                            ->where('name', 'like', "%{$keyword}%")
+                            ->orWhere('email', 'like', "%{$keyword}%");
+                    });
+            });
+        }
+
+        return $query;
+    }
+
+    private function auditActions()
+    {
+        if (! Schema::hasTable('activity_logs')) {
+            return collect();
+        }
+
+        return ActivityLog::query()
+            ->select('action')
+            ->whereNotNull('action')
+            ->distinct()
+            ->orderBy('action')
+            ->pluck('action');
+    }
+
+    private function userActivityInsights(): array
+    {
+        $hasLogs = Schema::hasTable('activity_logs');
+
+        $topUsers = collect();
+        $topActions = collect();
+        $dailyTrend = collect(range(6, 0))
+            ->map(function ($daysAgo) {
+                $date = now()->subDays($daysAgo);
+
+                return [
+                    'label' => $date->format('d M'),
+                    'count' => 0,
+                ];
+            });
+
+        if ($hasLogs) {
+            $topUserRows = ActivityLog::query()
+                ->select('user_id', DB::raw('count(*) as total'), DB::raw('max(created_at) as last_seen'))
+                ->where('created_at', '>=', now()->subDays(7))
+                ->groupBy('user_id')
+                ->orderByDesc('total')
+                ->limit(5)
+                ->get();
+
+            $users = User::query()
+                ->whereIn('id', $topUserRows->pluck('user_id')->filter())
+                ->get()
+                ->keyBy('id');
+
+            $topUsers = $topUserRows->map(function ($row) use ($users) {
+                $user = $row->user_id ? $users->get($row->user_id) : null;
+
+                return [
+                    'name' => $user?->name ?? 'System',
+                    'email' => $user?->email ?? '-',
+                    'total' => (int) $row->total,
+                    'last_seen' => $row->last_seen ? date('d M H:i', strtotime($row->last_seen)) : '-',
+                ];
+            });
+
+            $topActions = ActivityLog::query()
+                ->select('action', DB::raw('count(*) as total'))
+                ->where('created_at', '>=', now()->subDays(7))
+                ->groupBy('action')
+                ->orderByDesc('total')
+                ->limit(5)
+                ->get()
+                ->map(fn ($row) => [
+                    'action' => $row->action ?: '-',
+                    'total' => (int) $row->total,
+                ]);
+
+            $dailyCounts = ActivityLog::query()
+                ->select(DB::raw('DATE(created_at) as activity_date'), DB::raw('count(*) as total'))
+                ->where('created_at', '>=', now()->subDays(6)->startOfDay())
+                ->groupBy('activity_date')
+                ->pluck('total', 'activity_date');
+
+            $dailyTrend = collect(range(6, 0))
+                ->map(function ($daysAgo) use ($dailyCounts) {
+                    $date = now()->subDays($daysAgo);
+                    $key = $date->toDateString();
+
+                    return [
+                        'label' => $date->format('d M'),
+                        'count' => (int) ($dailyCounts[$key] ?? 0),
+                    ];
+                });
+        }
+
+        return [
+            'active_today' => $hasLogs
+                ? ActivityLog::query()->whereDate('created_at', today())->distinct('user_id')->count('user_id')
+                : 0,
+            'events_today' => $hasLogs
+                ? ActivityLog::query()->whereDate('created_at', today())->count()
+                : 0,
+            'events_week' => $hasLogs
+                ? ActivityLog::query()->where('created_at', '>=', now()->subDays(7))->count()
+                : 0,
+            'pending_approvals' => Schema::hasTable('pr_receipt_approvals')
+                ? PrReceiptApproval::where('status', 'PENDING')->count()
+                : 0,
+            'module_totals' => [
+                ['label' => 'PPBJ', 'total' => $this->safeCount(Ppbj::class, 'ppbj'), 'month' => $this->safePeriodCount('ppbj')],
+                ['label' => 'TOR/PR', 'total' => $this->safeCount(Torpr::class, 'torprs'), 'month' => $this->safePeriodCount('torprs')],
+                ['label' => 'SPPH', 'total' => $this->safeCount(Spph::class, 'spphs'), 'month' => $this->safePeriodCount('spphs')],
+                ['label' => 'SP', 'total' => $this->safeCount(Sp::class, 'sps'), 'month' => $this->safePeriodCount('sps')],
+            ],
+            'top_users' => $topUsers,
+            'top_actions' => $topActions,
+            'daily_trend' => $dailyTrend,
+            'max_daily' => max(1, (int) $dailyTrend->max('count')),
+        ];
+    }
+
+    private function safePeriodCount(string $table): int
+    {
+        if (! Schema::hasTable($table) || ! Schema::hasColumn($table, 'created_at')) {
+            return 0;
+        }
+
+        return DB::table($table)
+            ->where('created_at', '>=', now()->startOfMonth())
+            ->count();
     }
 
     private function latestSystemEvents(): array

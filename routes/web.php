@@ -97,6 +97,7 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
 
     Route::middleware('owner')->group(function () {
         Route::get('/owner', [OwnerController::class, 'index'])->name('owner.index');
+        Route::get('/owner/audit/export', [OwnerController::class, 'exportAudit'])->name('owner.audit.export');
     });
 
     // ========================

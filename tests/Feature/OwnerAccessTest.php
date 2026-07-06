@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\ActivityLog;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -45,6 +46,31 @@ class OwnerAccessTest extends TestCase
         $this->actingAs($otherSuperadmin)
             ->get(route('owner.index'))
             ->assertForbidden();
+    }
+
+    public function test_owner_can_export_filtered_audit_log(): void
+    {
+        config(['app.owner_emails' => ['superadmin@sucofindo.com']]);
+
+        $owner = User::factory()->create([
+            'name' => 'Nazar',
+            'email' => 'superadmin@sucofindo.com',
+            'role' => 'superadmin',
+            'department' => 'umum',
+        ]);
+
+        ActivityLog::create([
+            'user_id' => $owner->id,
+            'model_type' => 'Owner',
+            'model_id' => 1,
+            'action' => 'owner_test_export',
+            'description' => 'Audit export test',
+        ]);
+
+        $this->actingAs($owner)
+            ->get(route('owner.audit.export', ['action' => 'owner_test_export']))
+            ->assertOk()
+            ->assertHeader('content-type', 'text/csv; charset=UTF-8');
     }
 
     public function test_user_owner_helper_uses_configured_email(): void
