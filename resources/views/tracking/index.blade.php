@@ -1163,7 +1163,7 @@
                         'status' => 'done',
                     ];
 
-                    $ppbjData = \App\Models\Ppbj::where('ppbj_no', $row->nomor_pr)->first();
+                    $ppbjData = $row->linked_ppbj ?? null;
                     if ($ppbjData) {
                         $progressStatus = $ppbjData->progres == 100 ? 'done' : 'pending';
                         $ppbjHtml = '<div class="space-y-3 mt-1">';
@@ -1187,7 +1187,7 @@
                             $ppbjHtml .= '<div class="bg-red-50 dark:bg-red-900/20 p-3 rounded-lg border border-red-200 dark:border-red-800"><div class="text-xs font-semibold text-red-700 dark:text-red-300 mb-1">Alasan Cancel:</div><div class="text-sm text-red-900 dark:text-red-100">' . e($ppbjData->cancel_reason) . '</div></div>';
                         $ppbjHtml .= '</div>';
                         $events[] = [
-                            'time' => $ppbjData->updated_at->format('d M Y H:i'),
+                            'time' => $ppbjData->updated_at?->format('d M Y H:i') ?? '-',
                             'title' => 'Progress PPBJ',
                             'desc' => $ppbjHtml,
                             'done' => $ppbjData->progres == 100,
@@ -1252,6 +1252,73 @@
                         </div>
                     @endif
                 </div>
+
+                {{-- Reminder PR Macet --}}
+                @if(!empty($row->stuck_reminders))
+                    <div class="px-6 pt-6">
+                        <div class="grid md:grid-cols-3 gap-3">
+                            @foreach($row->stuck_reminders as $reminder)
+                                @php
+                                    $reminderClass = match ($reminder['level'] ?? 'info') {
+                                        'danger' => 'border-red-200 bg-red-50 text-red-900 dark:border-red-800/70 dark:bg-red-900/20 dark:text-red-100',
+                                        'warning' => 'border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-800/70 dark:bg-amber-900/20 dark:text-amber-100',
+                                        'success' => 'border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-800/70 dark:bg-emerald-900/20 dark:text-emerald-100',
+                                        default => 'border-blue-200 bg-blue-50 text-blue-900 dark:border-blue-800/70 dark:bg-blue-900/20 dark:text-blue-100',
+                                    };
+                                    $reminderIcon = match ($reminder['level'] ?? 'info') {
+                                        'danger' => '🚨',
+                                        'warning' => '⏳',
+                                        'success' => '✅',
+                                        default => '💡',
+                                    };
+                                @endphp
+                                <div class="rounded-xl border p-4 {{ $reminderClass }}">
+                                    <div class="flex items-start gap-3">
+                                        <div class="text-xl">{{ $reminderIcon }}</div>
+                                        <div>
+                                            <div class="font-bold text-sm">{{ $reminder['title'] }}</div>
+                                            <div class="text-xs mt-1 opacity-80">{{ $reminder['message'] }}</div>
+                                            @if(!is_null($reminder['days'] ?? null))
+                                                <div class="text-[11px] font-bold mt-2 opacity-70">Sudah {{ $reminder['days'] }} hari</div>
+                                            @endif
+                                        </div>
+                                    </div>
+                                </div>
+                            @endforeach
+                        </div>
+                    </div>
+                @endif
+
+                {{-- Audit Detail --}}
+                @if(!empty($row->audit_details))
+                    <div class="px-6 pt-6">
+                        <div class="rounded-2xl border border-gray-200 dark:border-gray-700 bg-gray-50/70 dark:bg-gray-900/40 p-5">
+                            <div class="flex items-center justify-between gap-3 mb-4">
+                                <div>
+                                    <div class="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">Audit Trail Detail</div>
+                                    <div class="text-lg font-bold text-gray-900 dark:text-white">Jejak proses PR tanpa data arsip</div>
+                                </div>
+                                <span class="text-xs font-bold px-3 py-1 rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-200">{{ count($row->audit_details) }} event</span>
+                            </div>
+                            <div class="grid md:grid-cols-2 gap-3">
+                                @foreach($row->audit_details as $audit)
+                                    @php
+                                        $auditClass = match ($audit['status'] ?? 'done') {
+                                            'pending' => 'border-amber-200 dark:border-amber-800/60',
+                                            'rejected' => 'border-red-200 dark:border-red-800/60',
+                                            default => 'border-emerald-200 dark:border-emerald-800/60',
+                                        };
+                                    @endphp
+                                    <div class="rounded-xl border {{ $auditClass }} bg-white dark:bg-gray-800/70 p-4">
+                                        <div class="text-[11px] font-bold text-gray-500 dark:text-gray-400">{{ $audit['time'] }}</div>
+                                        <div class="mt-1 font-semibold text-gray-900 dark:text-white">{{ $audit['title'] }}</div>
+                                        <div class="mt-1 text-xs text-gray-600 dark:text-gray-300">{{ $audit['desc'] }}</div>
+                                    </div>
+                                @endforeach
+                            </div>
+                        </div>
+                    </div>
+                @endif
 
                 {{-- Timeline --}}
                 <div class="p-6">

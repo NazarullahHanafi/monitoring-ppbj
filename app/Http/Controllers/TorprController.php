@@ -890,7 +890,7 @@ class TorprController extends Controller
     private function forgetTrackingCache(Torpr $torpr, ?string $oldNomorPr = null): void
     {
         foreach (array_filter([$oldNomorPr, $torpr->nomor_pr]) as $nomorPr) {
-            foreach (['_v8', '_v9'] as $version) {
+            foreach (['_v8', '_v9', '_v10'] as $version) {
                 Cache::forget('tracking_pr_' . md5(strtolower($nomorPr)) . $version);
             }
         }

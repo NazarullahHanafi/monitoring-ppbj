@@ -82,14 +82,14 @@ class TrackingPrController extends Controller
      */
     private function trackByNomorPr(string $nomorPr)
     {
-        $cacheKey = 'tracking_pr_' . md5(strtolower($nomorPr)) . '_v9';
+        $cacheKey = 'tracking_pr_' . md5(strtolower($nomorPr)) . '_v10';
         $cached = Cache::get($cacheKey);
         if ($cached !== null) return $cached;
 
         try {
             $torpr = DB::table('torprs')
                 ->select([
-                    'id', 'nomor_pr', 'tujuan_pengadaan', 'tanggal_pr',
+                    'id', 'nomor_pr', 'tujuan_pengadaan', 'portofolio', 'tanggal_pr',
                     'tgl_ttd_kabid_pr', 'tgl_ttd_kacab_pr', 'jumlah_pr',
                     'received_at', 'received_by_umum_user_id', 'created_by_user_id',
                     'created_at', 'updated_at',
@@ -106,9 +106,11 @@ class TrackingPrController extends Controller
             try {
                 $latestApproval = DB::table('pr_receipt_approvals')
                     ->select([
-                        'id', 'status', 'requested_at', 'requested_by',
-                        'approved_at', 'approved_by', 'rejected_at', 'rejected_by',
-                        'rejection_reason', 'notes'
+                        'id', 'status', 'requested_at', 'requested_name',
+                        'requested_by_user_id as requested_by',
+                        'approved_at', 'approved_by_user_id as approved_by',
+                        'rejected_at', 'rejected_by_user_id as rejected_by',
+                        'rejected_reason', 'resubmit_notes', 'updated_at'
                     ])
                     ->where('torpr_id', $torpr->id)
                     ->orderBy('id', 'DESC')
@@ -121,8 +123,10 @@ class TrackingPrController extends Controller
                     if (!empty($latestApproval->rejected_by)) {
                         $latestApproval->rejectedBy = DB::table('users')->select(['id', 'name'])->where('id', $latestApproval->rejected_by)->first();
                     }
-                    $latestApproval->requested_name = 'Unknown';
-                    if (!empty($latestApproval->requested_by)) {
+                    if (empty($latestApproval->requested_name)) {
+                        $latestApproval->requested_name = 'Unknown';
+                    }
+                    if ($latestApproval->requested_name === 'Unknown' && !empty($latestApproval->requested_by)) {
                         $reqUser = DB::table('users')->select(['name'])->where('id', $latestApproval->requested_by)->first();
                         if ($reqUser) $latestApproval->requested_name = $reqUser->name;
                     }
@@ -150,6 +154,7 @@ class TrackingPrController extends Controller
                 'id' => $torpr->id,
                 'nomor_pr' => $torpr->nomor_pr,
                 'tujuan_pengadaan' => $torpr->tujuan_pengadaan,
+                'portofolio' => $torpr->portofolio ?? null,
                 'tanggal_pr' => $this->parseDate($torpr->tanggal_pr),
                 'tgl_ttd_kabid_pr' => $this->parseDate($torpr->tgl_ttd_kabid_pr),
                 'tgl_ttd_kacab_pr' => $this->parseDate($torpr->tgl_ttd_kacab_pr),
@@ -165,6 +170,11 @@ class TrackingPrController extends Controller
                 'receivedByUmum' => $receivedByUser,
                 'createdBy' => $createdByUser,
             ];
+
+            $linkedPpbj = $this->findLinkedPpbj($torpr->nomor_pr);
+            $result->linked_ppbj = $linkedPpbj;
+            $result->audit_details = $this->buildPrAuditDetails($result, $latestApproval, $linkedPpbj);
+            $result->stuck_reminders = $this->buildPrStuckReminders($result, $latestApproval, $linkedPpbj);
 
             Cache::put($cacheKey, $result, self::CACHE_TRACKING);
             return $result;
@@ -282,6 +292,175 @@ class TrackingPrController extends Controller
         }
     }
 
+    private function findLinkedPpbj(string $nomorPr): ?object
+    {
+        try {
+            $ppbj = DB::table('ppbj')
+                ->select([
+                    'id', 'ppbj_no', 'tgl_ppbj', 'tgl_terima_pr', 'tgl_diserahkan',
+                    'uraian', 'buyer', 'portofolio', 'metode_pengadaan', 'penyedia_eksternal',
+                    'spph_rfq_1', 'tgl_spph', 'sph', 'tgl_sph', 'awarding_sp', 'tgl_awarding_sp',
+                    'tgl_spk', 'nilai_sp_spk', 'bpg_no', 'tgl_bpg', 'no_invoice', 'tgl_invoice',
+                    'progres', 'status_sla', 'sisa_target_sla', 'status', 'cancel_reason',
+                    'created_at', 'updated_at',
+                ])
+                ->where('ppbj_no', $nomorPr)
+                ->first();
+
+            if (!$ppbj) {
+                return null;
+            }
+
+            foreach ([
+                'tgl_ppbj', 'tgl_terima_pr', 'tgl_diserahkan', 'tgl_spph', 'tgl_sph',
+                'tgl_awarding_sp', 'tgl_spk', 'tgl_bpg', 'tgl_invoice', 'created_at', 'updated_at',
+            ] as $field) {
+                $ppbj->{$field} = $this->parseDate($ppbj->{$field} ?? null);
+            }
+
+            $ppbj->progres = (int) ($ppbj->progres ?? 0);
+
+            return $ppbj;
+        } catch (\Exception $e) {
+            Log::warning('findLinkedPpbj failed: ' . $e->getMessage());
+            return null;
+        }
+    }
+
+    private function buildPrAuditDetails(object $row, ?object $latestApproval, ?object $ppbj): array
+    {
+        $events = [];
+
+        $add = function (?Carbon $time, string $title, string $desc, string $status = 'done') use (&$events) {
+            $events[] = [
+                'time' => $time?->format('d M Y H:i') ?? '-',
+                'title' => $title,
+                'desc' => $desc,
+                'status' => $status,
+            ];
+        };
+
+        $add($row->created_at ?: $row->tanggal_pr, 'Input PR Operasional', 'Dibuat oleh ' . ($row->createdBy?->name ?? 'Tidak Diketahui') . '.');
+
+        if ($row->tanggal_pr) {
+            $add($row->tanggal_pr, 'Tanggal PR tercatat', 'Nomor PR ' . $row->nomor_pr . ' mulai menjadi kunci tracking.');
+        }
+
+        if ($row->tgl_ttd_kabid_pr) {
+            $method = is_null($row->sign_token_kabid) ? 'QR Token' : 'Manual';
+            $add($row->tgl_ttd_kabid_pr, 'Persetujuan Kepala Bidang', 'Ditandatangani oleh ' . ($row->signed_by_kabid_name ?? 'Kepala Bidang') . ' melalui ' . $method . '.');
+        }
+
+        if ($row->tgl_ttd_kacab_pr) {
+            $method = is_null($row->sign_token_kacab) ? 'QR Token' : 'Manual';
+            $add($row->tgl_ttd_kacab_pr, 'Persetujuan Kepala Cabang', 'Ditandatangani oleh ' . ($row->signed_by_kacab_name ?? 'Kepala Cabang') . ' melalui ' . $method . '.');
+        }
+
+        if ($latestApproval) {
+            $statusText = match ($latestApproval->status) {
+                'APPROVED' => 'disetujui Bagian Umum',
+                'REJECTED' => 'ditolak Bagian Umum',
+                default => 'menunggu persetujuan Bagian Umum',
+            };
+
+            $add(
+                $this->parseDate($latestApproval->requested_at ?? null),
+                'Request ke Bagian Umum',
+                'Dikirim oleh ' . ($latestApproval->requested_name ?? 'Unknown') . ' dan saat ini ' . $statusText . '.',
+                $latestApproval->status === 'REJECTED' ? 'rejected' : ($latestApproval->status === 'PENDING' ? 'pending' : 'done')
+            );
+
+            if ($latestApproval->status === 'REJECTED') {
+                $add(
+                    $this->parseDate($latestApproval->rejected_at ?? $latestApproval->updated_at ?? null),
+                    'Catatan Penolakan',
+                    $latestApproval->rejected_reason ?? 'Tidak ada alasan penolakan yang dicatat.',
+                    'rejected'
+                );
+            }
+        }
+
+        if ($row->received_at) {
+            $add($row->received_at, 'PR diterima Bagian Umum', 'Diterima oleh ' . ($row->receivedByUmum?->name ?? $latestApproval?->approvedBy?->name ?? 'Bagian Umum') . '.');
+        }
+
+        if ($ppbj) {
+            $add($ppbj->tgl_ppbj ?: $ppbj->created_at, 'Data PPBJ terbentuk', 'Buyer: ' . ($ppbj->buyer ?: 'Belum diisi') . ', portofolio: ' . ($ppbj->portofolio ?: 'Belum diisi') . '.');
+
+            if ($ppbj->spph_rfq_1) {
+                $add($ppbj->tgl_spph, 'SPPH/RFQ tercatat', 'Nomor: ' . $ppbj->spph_rfq_1 . '.');
+            }
+            if ($ppbj->awarding_sp) {
+                $add($ppbj->tgl_awarding_sp, 'Surat Pesanan tercatat', 'Nomor: ' . $ppbj->awarding_sp . '.');
+            }
+            if ($ppbj->progres >= 100 || $ppbj->bpg_no || $ppbj->no_invoice) {
+                $add($ppbj->updated_at, 'Proses PPBJ selesai/siap rekap', 'Progress ' . $ppbj->progres . '% dengan status SLA ' . ($ppbj->status_sla ?: '-') . '.');
+            } else {
+                $add($ppbj->updated_at, 'Progress PPBJ berjalan', 'Progress saat ini ' . $ppbj->progres . '% dengan status SLA ' . ($ppbj->status_sla ?: '-') . '.', 'pending');
+            }
+        }
+
+        usort($events, function ($a, $b) {
+            if ($a['time'] === '-') return 1;
+            if ($b['time'] === '-') return -1;
+            return strtotime($a['time']) <=> strtotime($b['time']);
+        });
+
+        return $events;
+    }
+
+    private function buildPrStuckReminders(object $row, ?object $latestApproval, ?object $ppbj): array
+    {
+        $reminders = [];
+        $now = now();
+
+        $push = function (string $level, string $title, string $message, ?Carbon $since = null) use (&$reminders, $now) {
+            $days = $since ? max(0, $since->diffInDays($now)) : null;
+            $reminders[] = compact('level', 'title', 'message', 'days');
+        };
+
+        if (!$row->tgl_ttd_kabid_pr && $row->tanggal_pr && $row->tanggal_pr->diffInDays($now) >= 2) {
+            $push('warning', 'PR menunggu TTD Kabid', 'Tanggal PR sudah tercatat, namun tanggal TTD Kepala Bidang belum ada.', $row->tanggal_pr);
+        }
+
+        if ($row->tgl_ttd_kabid_pr && !$row->tgl_ttd_kacab_pr && $row->tgl_ttd_kabid_pr->diffInDays($now) >= 2) {
+            $push('warning', 'PR menunggu TTD Kacab', 'Kabid sudah tanda tangan, namun tanggal TTD Kepala Cabang belum ada.', $row->tgl_ttd_kabid_pr);
+        }
+
+        if ($row->tgl_ttd_kacab_pr && !$latestApproval && $row->tgl_ttd_kacab_pr->diffInDays($now) >= 1) {
+            $push('info', 'Belum request ke Bagian Umum', 'PR sudah lengkap tanda tangan, namun belum ada request penerimaan ke Bagian Umum.', $row->tgl_ttd_kacab_pr);
+        }
+
+        if ($latestApproval && $latestApproval->status === 'PENDING') {
+            $requestedAt = $this->parseDate($latestApproval->requested_at ?? null);
+            if ($requestedAt && $requestedAt->diffInDays($now) >= 2) {
+                $push('danger', 'Request PR macet di approval Umum', 'Request sudah pending lebih dari 2 hari. Perlu follow up ke Bagian Umum.', $requestedAt);
+            }
+        }
+
+        if ($row->received_at && !$ppbj && $row->received_at->diffInDays($now) >= 2) {
+            $push('warning', 'Belum masuk data PPBJ', 'PR sudah diterima Umum, namun belum ditemukan data PPBJ dengan nomor yang sama.', $row->received_at);
+        }
+
+        if ($ppbj && $ppbj->progres < 100) {
+            $lastMove = $ppbj->updated_at ?: $ppbj->tgl_ppbj ?: $row->received_at;
+            if ($lastMove && $lastMove->diffInDays($now) >= 3) {
+                $push('danger', 'Progress PPBJ belum bergerak', 'Data PPBJ belum selesai dan tidak berubah minimal 3 hari.', $lastMove);
+            }
+        }
+
+        if (empty($reminders)) {
+            $reminders[] = [
+                'level' => 'success',
+                'title' => 'Tidak ada indikasi PR macet',
+                'message' => 'Alur PR masih terbaca normal berdasarkan data tanggal dan status terakhir.',
+                'days' => null,
+            ];
+        }
+
+        return $reminders;
+    }
+
     private function searchLike(string $keyword): ?array
     {
         $results = [];
@@ -289,14 +468,16 @@ class TrackingPrController extends Controller
 
         try {
             $prMatches = DB::table('torprs')
-                ->select(['nomor_pr', 'tujuan_pengadaan'])
+                ->select(['nomor_pr', 'tujuan_pengadaan', 'portofolio'])
                 ->whereNotNull('nomor_pr')
                 ->where('nomor_pr', '!=', '')
                 ->where(function ($query) use ($keyword, $allowContains) {
                     $query->where('nomor_pr', 'like', $keyword . '%');
 
                     if ($allowContains) {
-                        $query->orWhere('nomor_pr', 'like', '%' . $keyword . '%');
+                        $query->orWhere('nomor_pr', 'like', '%' . $keyword . '%')
+                            ->orWhere('tujuan_pengadaan', 'like', '%' . $keyword . '%')
+                            ->orWhere('portofolio', 'like', '%' . $keyword . '%');
                     }
                 })
                 ->orderByRaw("CASE WHEN nomor_pr = ? THEN 0 WHEN nomor_pr LIKE ? THEN 1 WHEN nomor_pr LIKE ? THEN 2 ELSE 3 END", [$keyword, $keyword . '%', '%' . $keyword . '%'])
@@ -307,7 +488,7 @@ class TrackingPrController extends Controller
             foreach ($prMatches as $pr) {
                 $results[] = [
                     'nomor' => $pr->nomor_pr,
-                    'tujuan' => $pr->tujuan_pengadaan ?? '-',
+                    'tujuan' => trim(($pr->tujuan_pengadaan ?? '-') . ($pr->portofolio ? ' • ' . $pr->portofolio : '')),
                     'type' => 'pr',
                     'type_label' => 'PR',
                 ];
@@ -318,7 +499,7 @@ class TrackingPrController extends Controller
             $prNumbers = array_column($results, 'nomor');
 
             $ppbjMatches = DB::table('ppbj')
-                ->select(['ppbj_no', 'uraian'])
+                ->select(['ppbj_no', 'uraian', 'buyer', 'portofolio', 'metode_pengadaan', 'penyedia_eksternal', 'spph_rfq_1', 'awarding_sp'])
                 ->whereNotNull('ppbj_no')
                 ->where('ppbj_no', '!=', '')
                 ->when($prNumbers, fn($q, $nums) => $q->whereNotIn('ppbj_no', $nums))
@@ -326,7 +507,14 @@ class TrackingPrController extends Controller
                     $query->where('ppbj_no', 'like', $keyword . '%');
 
                     if ($allowContains) {
-                        $query->orWhere('ppbj_no', 'like', '%' . $keyword . '%');
+                        $query->orWhere('ppbj_no', 'like', '%' . $keyword . '%')
+                            ->orWhere('uraian', 'like', '%' . $keyword . '%')
+                            ->orWhere('buyer', 'like', '%' . $keyword . '%')
+                            ->orWhere('portofolio', 'like', '%' . $keyword . '%')
+                            ->orWhere('metode_pengadaan', 'like', '%' . $keyword . '%')
+                            ->orWhere('penyedia_eksternal', 'like', '%' . $keyword . '%')
+                            ->orWhere('spph_rfq_1', 'like', '%' . $keyword . '%')
+                            ->orWhere('awarding_sp', 'like', '%' . $keyword . '%');
                     }
                 })
                 ->orderByRaw("CASE WHEN ppbj_no = ? THEN 0 WHEN ppbj_no LIKE ? THEN 1 WHEN ppbj_no LIKE ? THEN 2 ELSE 3 END", [$keyword, $keyword . '%', '%' . $keyword . '%'])
@@ -335,9 +523,10 @@ class TrackingPrController extends Controller
                 ->get();
 
             foreach ($ppbjMatches as $p) {
+                $meta = array_filter([$p->buyer ?? null, $p->portofolio ?? null, $p->penyedia_eksternal ?? null]);
                 $results[] = [
                     'nomor' => $p->ppbj_no,
-                    'tujuan' => $p->uraian ?? '-',
+                    'tujuan' => trim(($p->uraian ?? '-') . (!empty($meta) ? ' • ' . implode(' • ', $meta) : '')),
                     'type' => 'ppbj',
                     'type_label' => 'PPBJ',
                 ];
@@ -356,7 +545,7 @@ class TrackingPrController extends Controller
             $q = preg_replace('/[^A-Z0-9\-\/\s]/i', '', $q);
             if (empty($q)) return response()->json(['items' => []]);
 
-            $cacheKey = 'tracking_suggest_' . md5(strtolower($q)) . '_v7';
+            $cacheKey = 'tracking_suggest_' . md5(strtolower($q)) . '_v8';
             $cached = Cache::get($cacheKey);
             if ($cached !== null) return response()->json(['items' => $cached]);
 
@@ -365,14 +554,16 @@ class TrackingPrController extends Controller
 
             try {
                 $prResults = DB::table('torprs')
-                    ->select(['nomor_pr', 'tujuan_pengadaan', 'tanggal_pr'])
+                    ->select(['nomor_pr', 'tujuan_pengadaan', 'portofolio', 'tanggal_pr'])
                     ->whereNotNull('nomor_pr')
                     ->where('nomor_pr', '!=', '')
                     ->where(function ($query) use ($q, $allowContains) {
                         $query->where('nomor_pr', 'like', $q . '%');
 
                         if ($allowContains) {
-                            $query->orWhere('nomor_pr', 'like', '%' . $q . '%');
+                            $query->orWhere('nomor_pr', 'like', '%' . $q . '%')
+                                ->orWhere('tujuan_pengadaan', 'like', '%' . $q . '%')
+                                ->orWhere('portofolio', 'like', '%' . $q . '%');
                         }
                     })
                     ->orderByRaw("CASE WHEN nomor_pr = ? THEN 0 WHEN nomor_pr LIKE ? THEN 1 WHEN nomor_pr LIKE ? THEN 2 ELSE 3 END", [$q, $q . '%', '%' . $q . '%'])
@@ -382,9 +573,7 @@ class TrackingPrController extends Controller
                     ->map(fn ($r) => [
                         'nomor' => $r->nomor_pr,
                         'label' => $r->nomor_pr,
-                        'tujuan' => $r->tujuan_pengadaan
-                            ? (mb_strlen($r->tujuan_pengadaan) > 50 ? mb_substr($r->tujuan_pengadaan, 0, 50) . '...' : $r->tujuan_pengadaan)
-                            : '-',
+                        'tujuan' => $this->shortText(trim(($r->tujuan_pengadaan ?: '-') . ($r->portofolio ? ' • ' . $r->portofolio : '')), 70),
                         'tanggal' => $this->parseDate($r->tanggal_pr)?->format('Y-m-d'),
                         'source_type' => 'pr',
                         'source_label' => 'PR',
@@ -398,7 +587,7 @@ class TrackingPrController extends Controller
                 $prNumbers = array_column($items, 'nomor');
 
                 $ppbjResults = DB::table('ppbj')
-                    ->select(['ppbj_no', 'uraian', 'tgl_ppbj', 'buyer', 'metode_pengadaan'])
+                    ->select(['ppbj_no', 'uraian', 'tgl_ppbj', 'buyer', 'portofolio', 'metode_pengadaan', 'penyedia_eksternal', 'spph_rfq_1', 'awarding_sp'])
                     ->whereNotNull('ppbj_no')
                     ->where('ppbj_no', '!=', '')
                     ->when($prNumbers, fn($query, $nums) => $query->whereNotIn('ppbj_no', $nums))
@@ -406,23 +595,32 @@ class TrackingPrController extends Controller
                         $query->where('ppbj_no', 'like', $q . '%');
 
                         if ($allowContains) {
-                            $query->orWhere('ppbj_no', 'like', '%' . $q . '%');
+                            $query->orWhere('ppbj_no', 'like', '%' . $q . '%')
+                                ->orWhere('uraian', 'like', '%' . $q . '%')
+                                ->orWhere('buyer', 'like', '%' . $q . '%')
+                                ->orWhere('portofolio', 'like', '%' . $q . '%')
+                                ->orWhere('metode_pengadaan', 'like', '%' . $q . '%')
+                                ->orWhere('penyedia_eksternal', 'like', '%' . $q . '%')
+                                ->orWhere('spph_rfq_1', 'like', '%' . $q . '%')
+                                ->orWhere('awarding_sp', 'like', '%' . $q . '%');
                         }
                     })
                     ->orderByRaw("CASE WHEN ppbj_no = ? THEN 0 WHEN ppbj_no LIKE ? THEN 1 WHEN ppbj_no LIKE ? THEN 2 ELSE 3 END", [$q, $q . '%', '%' . $q . '%'])
                     ->orderBy('tgl_ppbj', 'DESC')
                     ->limit(6)
                     ->get()
-                    ->map(fn ($r) => [
-                        'nomor' => $r->ppbj_no,
-                        'label' => $r->ppbj_no,
-                        'tujuan' => $r->uraian
-                            ? (mb_strlen($r->uraian) > 50 ? mb_substr($r->uraian, 0, 50) . '...' : $r->uraian)
-                            : ($r->metode_pengadaan ?? ($r->buyer ?? 'PPBJ Manual')),
-                        'tanggal' => $this->parseDate($r->tgl_ppbj)?->format('Y-m-d'),
-                        'source_type' => 'ppbj',
-                        'source_label' => 'PPBJ',
-                    ])
+                    ->map(function ($r) {
+                        $meta = array_filter([$r->buyer ?? null, $r->portofolio ?? null, $r->penyedia_eksternal ?? null]);
+
+                        return [
+                            'nomor' => $r->ppbj_no,
+                            'label' => $r->ppbj_no,
+                            'tujuan' => $this->shortText(trim(($r->uraian ?: ($r->metode_pengadaan ?? 'PPBJ Manual')) . (!empty($meta) ? ' • ' . implode(' • ', $meta) : '')), 70),
+                            'tanggal' => $this->parseDate($r->tgl_ppbj)?->format('Y-m-d'),
+                            'source_type' => 'ppbj',
+                            'source_label' => 'PPBJ',
+                        ];
+                    })
                     ->toArray();
 
                 $items = array_merge($items, $ppbjResults);
@@ -437,13 +635,23 @@ class TrackingPrController extends Controller
         }
     }
 
+    private function shortText(?string $text, int $limit = 70): string
+    {
+        $text = trim((string) $text);
+        if ($text === '') {
+            return '-';
+        }
+
+        return mb_strlen($text) > $limit ? mb_substr($text, 0, $limit) . '...' : $text;
+    }
+
     public function clearCache(Request $request)
     {
         $nomor = $request->get('nomor_pr');
         if (!$nomor) return response()->json(['success' => false], 400);
 
         $cleared = [];
-        foreach (['_v1', '_v2', '_v3', '_v4', '_v5', '_v6', '_v7', '_v8', '_v9'] as $v) {
+        foreach (['_v1', '_v2', '_v3', '_v4', '_v5', '_v6', '_v7', '_v8', '_v9', '_v10'] as $v) {
             if (Cache::forget('tracking_pr_' . md5(strtolower($nomor)) . $v)) $cleared[] = 'PR';
             if (Cache::forget('tracking_ppbj_' . md5(strtolower($nomor)) . $v)) $cleared[] = 'PPBJ';
         }

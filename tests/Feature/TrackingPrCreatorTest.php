@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Torpr;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 class TrackingPrCreatorTest extends TestCase
@@ -143,5 +144,48 @@ class TrackingPrCreatorTest extends TestCase
             ->assertSee('Eli')
             ->assertDontSee('Kepala Bidang (Manual)')
             ->assertDontSee('Kepala Cabang (Manual)');
+    }
+
+    public function test_landing_tracking_shows_stuck_reminder_and_audit_detail(): void
+    {
+        $creator = User::factory()->create([
+            'name' => 'Eli',
+            'department' => 'operasional',
+        ]);
+
+        Torpr::create([
+            'nomor_pr' => 'PKB/PR-26/CON/0601',
+            'tanggal_pr' => now()->subDays(4)->format('Y-m-d H:i:s'),
+            'tujuan_pengadaan' => 'Pengadaan reminder tracking',
+            'jumlah_pr' => 1000000,
+            'created_by_user_id' => $creator->id,
+        ]);
+
+        $this->get(route('landing.track', ['q' => 'PKB/PR-26/CON/0601']))
+            ->assertOk()
+            ->assertSee('Reminder Otomatis PR')
+            ->assertSee('PR menunggu TTD Kabid')
+            ->assertSee('Timeline Audit Detail')
+            ->assertSee('Input PR Operasional');
+    }
+
+    public function test_smart_search_suggests_by_vendor_buyer_and_portofolio(): void
+    {
+        DB::table('ppbj')->insert([
+            'ppbj_no' => 'PKB/PR-26/CON/0602',
+            'tgl_ppbj' => now()->format('Y-m-d'),
+            'uraian' => 'Pengadaan jasa audit vendor',
+            'buyer' => 'Nazar',
+            'portofolio' => 'INS',
+            'penyedia_eksternal' => 'PT Vendor Pintar',
+            'metode_pengadaan' => 'Penunjukan langsung',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->getJson(route('landing.track.suggest', ['q' => 'Vendor Pintar']))
+            ->assertOk()
+            ->assertJsonPath('items.0.nomor', 'PKB/PR-26/CON/0602')
+            ->assertJsonPath('items.0.source_label', 'PPBJ');
     }
 }

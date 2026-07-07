@@ -2195,7 +2195,7 @@
                     ];
 
                     // 7. PPBJ
-                    $ppbj = \App\Models\Ppbj::where('ppbj_no', $row->nomor_pr)->first();
+                    $ppbj = $row->linked_ppbj ?? null;
                     if ($ppbj) {
                         $descParts = [];
                         if ($ppbj->buyer) {
@@ -2232,7 +2232,7 @@
                             : ($ppbj->sisa_target_sla < 0 ? 'reject' : 'wait');
 
                         $events[] = [
-                            'time' => $ppbj->updated_at->format('d M Y H:i'),
+                            'time' => $ppbj->updated_at?->format('d M Y H:i') ?? '-',
                             'title' => 'Progres PPBJ: ' . $ppbj->progres . '%',
                             'desc' => implode('<br>', $descParts),
                             'icon' => $ppbj->progres == 100 ? 'fa-check-double' : 'fa-spinner',
@@ -2279,6 +2279,80 @@
                             </div>
                         </div>
                     </div>
+
+                    {{-- Reminder PR Macet --}}
+                    @if(!empty($row->stuck_reminders))
+                        <div class="tl-card sr d1" style="margin-top:22px">
+                            <div class="tl-header" style="margin-bottom:18px">
+                                <div class="tl-header-ic"><i class="fas fa-bell"></i></div>
+                                <div>
+                                    <h3>Reminder Otomatis PR</h3>
+                                    <p style="color:var(--muted);font-size:.82rem;margin-top:4px">Sistem membaca potensi PR macet dari tanggal dan status terakhir.</p>
+                                </div>
+                            </div>
+                            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px">
+                                @foreach($row->stuck_reminders as $reminder)
+                                    @php
+                                        $color = match ($reminder['level'] ?? 'info') {
+                                            'danger' => '248, 113, 113',
+                                            'warning' => '251, 191, 36',
+                                            'success' => '52, 211, 153',
+                                            default => '34, 211, 238',
+                                        };
+                                        $icon = match ($reminder['level'] ?? 'info') {
+                                            'danger' => 'fa-triangle-exclamation',
+                                            'warning' => 'fa-hourglass-half',
+                                            'success' => 'fa-circle-check',
+                                            default => 'fa-lightbulb',
+                                        };
+                                    @endphp
+                                    <div style="border:1px solid rgba({{ $color }},.32);background:rgba({{ $color }},.08);border-radius:16px;padding:16px">
+                                        <div style="display:flex;gap:12px;align-items:flex-start">
+                                            <div style="width:36px;height:36px;border-radius:12px;background:rgba({{ $color }},.16);color:rgb({{ $color }});display:flex;align-items:center;justify-content:center;flex-shrink:0">
+                                                <i class="fas {{ $icon }}"></i>
+                                            </div>
+                                            <div>
+                                                <div style="font-weight:800;color:var(--text);font-size:.9rem">{{ $reminder['title'] }}</div>
+                                                <div style="color:var(--muted);font-size:.78rem;line-height:1.6;margin-top:4px">{{ $reminder['message'] }}</div>
+                                                @if(!is_null($reminder['days'] ?? null))
+                                                    <div style="color:rgb({{ $color }});font-size:.72rem;font-weight:800;margin-top:8px">Sudah {{ $reminder['days'] }} hari</div>
+                                                @endif
+                                            </div>
+                                        </div>
+                                    </div>
+                                @endforeach
+                            </div>
+                        </div>
+                    @endif
+
+                    {{-- Audit Detail --}}
+                    @if(!empty($row->audit_details))
+                        <div class="tl-card sr d1" style="margin-top:22px">
+                            <div class="tl-header" style="margin-bottom:18px">
+                                <div class="tl-header-ic"><i class="fas fa-shield-alt"></i></div>
+                                <div>
+                                    <h3>Timeline Audit Detail</h3>
+                                    <p style="color:var(--muted);font-size:.82rem;margin-top:4px">Jejak proses PR, approval, dan PPBJ. Data arsip tidak ditampilkan di bagian ini.</p>
+                                </div>
+                            </div>
+                            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px">
+                                @foreach($row->audit_details as $audit)
+                                    @php
+                                        $color = match ($audit['status'] ?? 'done') {
+                                            'pending' => '251, 191, 36',
+                                            'rejected' => '248, 113, 113',
+                                            default => '52, 211, 153',
+                                        };
+                                    @endphp
+                                    <div style="border:1px solid rgba({{ $color }},.28);background:rgba(255,255,255,.035);border-radius:16px;padding:15px">
+                                        <div style="font-size:.7rem;color:var(--muted);font-weight:800;letter-spacing:.06em">{{ $audit['time'] }}</div>
+                                        <div style="font-weight:800;color:var(--text);font-size:.9rem;margin-top:5px">{{ $audit['title'] }}</div>
+                                        <div style="color:var(--muted);font-size:.78rem;line-height:1.6;margin-top:5px">{{ $audit['desc'] }}</div>
+                                    </div>
+                                @endforeach
+                            </div>
+                        </div>
+                    @endif
 
                     {{-- Timeline --}}
                     <div class="tl-card sr d1">
