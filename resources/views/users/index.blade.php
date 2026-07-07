@@ -1032,12 +1032,6 @@
                 const form = event.target;
                 const formData = new FormData(form);
 
-                // ✅ DEBUG
-                console.log('=== CREATE USER DEBUG ===');
-                for (let [key, value] of formData.entries()) {
-                    console.log(key + ':', value);
-                }
-
                 try {
                     const response = await fetch('{{ route("users.store") }}', {
                         method: 'POST',
@@ -1094,13 +1088,6 @@
 
                 // ✅ CRITICAL FIX: Add _method for Laravel PUT request
                 formData.append('_method', 'PUT');
-
-                // ✅ DEBUG: Log what we're sending
-                console.log('=== UPDATE USER DEBUG ===');
-                console.log('User ID:', userId);
-                for (let [key, value] of formData.entries()) {
-                    console.log(key + ':', value);
-                }
 
                 try {
                     const response = await fetch(`/users/${userId}`, {

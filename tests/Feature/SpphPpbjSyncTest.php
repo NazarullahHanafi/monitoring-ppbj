@@ -66,7 +66,7 @@ class SpphPpbjSyncTest extends TestCase
         $this->actingAs($user)
             ->post(route('spph.store'), [
                 'nomor_spph' => '090/PKU-VI/SPPH/2026',
-                'tanggal' => now()->toDateString(),
+                'tanggal' => '2026-06-30',
                 'nomor_pr' => 'PKB/PR-26/CON/0901',
                 'nomor_pr_type' => 'ppbj',
                 'vendor_names' => ['Vendor Audit A', 'Vendor Audit B'],

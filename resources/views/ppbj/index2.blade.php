@@ -1047,7 +1047,6 @@ php
                     }
                 });
 
-                console.log('Select2 Filter initialized:', $('.select2-filter').length, 'dropdowns');
             }
 
             function initSelect2Modal() {
@@ -1080,7 +1079,6 @@ php
                         }
                     });
 
-                    console.log('Select2 Modal initialized:', $('#formModal .select2').length, 'dropdowns');
                 }, 100);
             }
 

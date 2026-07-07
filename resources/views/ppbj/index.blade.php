@@ -1528,28 +1528,6 @@
                 toggleDateInputs();
                 initSelect2Filter();
 
-                const filterForm = document.getElementById('ulala');
-                if (filterForm) {
-                    filterForm.addEventListener('submit', function (e) {
-                        console.log('=== FORM SUBMIT DEBUG ===');
-
-                        // Log semua input biasa
-                        const formData = new FormData(this);
-                        console.log('Form Data:');
-                        for (let [key, value] of formData.entries()) {
-                            console.log('  ' + key + ': ' + value);
-                        }
-
-                        // Log semua Select2 value
-                        console.log('\nSelect2 Values:');
-                        $('.select2-filter').each(function () {
-                            console.log('  ' + this.name + ': ' + $(this).val());
-                        });
-
-                        console.log('========================');
-                    });
-                }
-
                 // Cleanup: hapus parameter _t dari URL setelah reload
                 const url = new URL(window.location.href);
                 if (url.searchParams.has('_t')) {
