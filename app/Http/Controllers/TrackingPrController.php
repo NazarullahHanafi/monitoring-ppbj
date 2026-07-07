@@ -82,7 +82,7 @@ class TrackingPrController extends Controller
      */
     private function trackByNomorPr(string $nomorPr)
     {
-        $cacheKey = 'tracking_pr_' . md5(strtolower($nomorPr)) . '_v8';
+        $cacheKey = 'tracking_pr_' . md5(strtolower($nomorPr)) . '_v9';
         $cached = Cache::get($cacheKey);
         if ($cached !== null) return $cached;
 
@@ -157,8 +157,8 @@ class TrackingPrController extends Controller
                 'received_at' => $this->parseDate($torpr->received_at),
                 'created_at' => $this->parseDate($torpr->created_at),
                 'updated_at' => $this->parseDate($torpr->updated_at),
-                'signed_by_kabid_name' => $torpr->signed_by_kabid_name,
-                'signed_by_kacab_name' => $torpr->signed_by_kacab_name,
+                'signed_by_kabid_name' => $torpr->signed_by_kabid_name ?: ($torpr->tgl_ttd_kabid_pr ? ($createdByUser?->name ?? null) : null),
+                'signed_by_kacab_name' => $torpr->signed_by_kacab_name ?: ($torpr->tgl_ttd_kacab_pr ? ($createdByUser?->name ?? null) : null),
                 'sign_token_kabid' => $torpr->sign_token_kabid,
                 'sign_token_kacab' => $torpr->sign_token_kacab,
                 'latestReceiptApproval' => $latestApproval,
@@ -443,7 +443,7 @@ class TrackingPrController extends Controller
         if (!$nomor) return response()->json(['success' => false], 400);
 
         $cleared = [];
-        foreach (['_v1', '_v2', '_v3', '_v4', '_v5', '_v6', '_v7', '_v8'] as $v) {
+        foreach (['_v1', '_v2', '_v3', '_v4', '_v5', '_v6', '_v7', '_v8', '_v9'] as $v) {
             if (Cache::forget('tracking_pr_' . md5(strtolower($nomor)) . $v)) $cleared[] = 'PR';
             if (Cache::forget('tracking_ppbj_' . md5(strtolower($nomor)) . $v)) $cleared[] = 'PPBJ';
         }

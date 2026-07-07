@@ -302,6 +302,7 @@ class TorprController extends Controller
     {
         $data = $this->validateTorpr($request, null);
         $data = $this->normalizeDateTimes($data);
+        $data = $this->applyManualSignerNames($data, null);
 
         // ✅ FIX: Set created_by_user_id dari user yang login
         $data['created_by_user_id'] = auth()->id(); // <-- INI YANG KURANG!
@@ -319,6 +320,8 @@ class TorprController extends Controller
                 'message' => 'Nomor PR sudah dipakai oleh data lain. Silakan refresh halaman dan cek data terbaru.',
             ], 422);
         }
+
+        $this->forgetTrackingCache($torpr);
 
         $this->logActivity($torpr, 'created', "PR Baru Dibuat: {$torpr->nomor_pr}");
 
@@ -428,6 +431,7 @@ class TorprController extends Controller
         ]);
 
         Cache::forget("torpr_json_{$torpr->id}");
+        $this->forgetTrackingCache($torpr);
 
         \App\Models\ActivityLog::create([
             'user_id' => auth()->id(),
@@ -537,6 +541,7 @@ class TorprController extends Controller
 
         // Cek Hak Akses Kacab
         $isSuperadminOps = (auth()->user()->role === 'superadmin' && auth()->user()->department === 'operasional');
+        $data = $this->applyManualSignerNames($data, $torpr);
 
         // ==========================================
         // LOGIKA TTD KABID (Berlaku untuk semua user)
@@ -552,7 +557,7 @@ class TorprController extends Controller
                 $data['signed_by_kabid_name'] = auth()->user()->name;
             } else {
                 // Tidak berubah → pertahankan nama lama
-                $data['signed_by_kabid_name'] = $torpr->signed_by_kabid_name;
+                $data['signed_by_kabid_name'] = $torpr->signed_by_kabid_name ?: auth()->user()->name;
             }
         } else {
             // Tanggal dikosongkan → hapus nama juga
@@ -579,7 +584,7 @@ class TorprController extends Controller
                     $data['signed_by_kacab_name'] = auth()->user()->name;
                 } else {
                     // Tidak berubah → pertahankan nama lama
-                    $data['signed_by_kacab_name'] = $torpr->signed_by_kacab_name;
+                    $data['signed_by_kacab_name'] = $torpr->signed_by_kacab_name ?: auth()->user()->name;
                 }
             } else {
                 // Tanggal dikosongkan → hapus nama juga
@@ -592,6 +597,7 @@ class TorprController extends Controller
         // ==========================================
         $changes = [];
         $original = $torpr->getOriginal();
+        $oldNomorPr = $torpr->nomor_pr;
 
         foreach ($data as $key => $value) {
             if (array_key_exists($key, $original)) {
@@ -610,6 +616,8 @@ class TorprController extends Controller
         // Eksekusi Update
         try {
             $torpr->update($data);
+            $torpr->refresh();
+            $this->forgetTrackingCache($torpr, $oldNomorPr);
         } catch (QueryException $e) {
             return response()->json([
                 'message' => 'Nomor PR sudah dipakai oleh data lain. Silakan refresh halaman dan cek data terbaru.',
@@ -852,6 +860,40 @@ class TorprController extends Controller
             'nomor_pr.unique' => 'Nomor PR sudah terdaftar.',
             'date_format' => 'Format tanggal tidak valid.',
         ]);
+    }
+
+    private function applyManualSignerNames(array $data, ?Torpr $torpr = null): array
+    {
+        foreach (['kabid', 'kacab'] as $type) {
+            $dateColumn = "tgl_ttd_{$type}_pr";
+            $nameColumn = "signed_by_{$type}_name";
+
+            if (empty($data[$dateColumn])) {
+                $data[$nameColumn] = null;
+                continue;
+            }
+
+            $oldDate = $torpr?->{$dateColumn}
+                ? Carbon::parse($torpr->{$dateColumn})->format('Y-m-d H:i:s')
+                : null;
+
+            $oldName = trim((string) ($torpr?->{$nameColumn} ?? ''));
+
+            $data[$nameColumn] = ($oldDate === $data[$dateColumn] && $oldName !== '')
+                ? $oldName
+                : auth()->user()->name;
+        }
+
+        return $data;
+    }
+
+    private function forgetTrackingCache(Torpr $torpr, ?string $oldNomorPr = null): void
+    {
+        foreach (array_filter([$oldNomorPr, $torpr->nomor_pr]) as $nomorPr) {
+            foreach (['_v8', '_v9'] as $version) {
+                Cache::forget('tracking_pr_' . md5(strtolower($nomorPr)) . $version);
+            }
+        }
     }
 
     private function normalizeDateTimes(array $data): array
