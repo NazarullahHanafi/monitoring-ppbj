@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\PrReceiptApproval;
 use App\Models\Ppbj;
 use App\Models\MasterBuyer;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -110,6 +111,11 @@ class PrReceiptApprovalController extends Controller
                             $existingUpdates['portofolio'] = $torpr->portofolio;
                         }
 
+                        $tanggalPpbj = $this->tanggalPpbjFromTorpr($torpr);
+                        if ($tanggalPpbj && blank($existingPpbj->tgl_ppbj ?? null)) {
+                            $existingUpdates['tgl_ppbj'] = $tanggalPpbj;
+                        }
+
                         if ($existingUpdates) {
                             $existingUpdates['updated_at'] = now();
 
@@ -197,6 +203,7 @@ class PrReceiptApprovalController extends Controller
         $sisaTargetSla = Ppbj::hitungSisaTarget($targetSla, now()->toDateString());
         $payload = [
             'ppbj_no' => $torpr->nomor_pr,
+            'tgl_ppbj' => $this->tanggalPpbjFromTorpr($torpr),
             'tgl_terima_pr' => now()->toDateString(),
             'uraian' => $torpr->tujuan_pengadaan,
             'portofolio' => $torpr->portofolio,
@@ -216,6 +223,19 @@ class PrReceiptApprovalController extends Controller
         return collect($payload)
             ->filter(fn($value, $column) => Schema::hasColumn('ppbj', $column))
             ->all();
+    }
+
+    private function tanggalPpbjFromTorpr($torpr): ?string
+    {
+        if (blank($torpr?->tanggal_pr ?? null)) {
+            return null;
+        }
+
+        try {
+            return Carbon::parse($torpr->tanggal_pr)->toDateString();
+        } catch (\Throwable) {
+            return null;
+        }
     }
 
     public function reject(Request $request, $id)

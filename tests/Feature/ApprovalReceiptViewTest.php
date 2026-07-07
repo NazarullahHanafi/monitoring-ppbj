@@ -66,6 +66,7 @@ class ApprovalReceiptViewTest extends TestCase
 
         $torpr = Torpr::create([
             'nomor_pr' => 'PKB/PR-26/CON/0402',
+            'tanggal_pr' => '2026-06-12 09:15:00',
             'tujuan_pengadaan' => 'Pengadaan jasa inspeksi',
             'portofolio' => 'CON',
             'jumlah_pr' => 15000000,
@@ -86,6 +87,7 @@ class ApprovalReceiptViewTest extends TestCase
 
         $this->assertDatabaseHas('ppbj', [
             'ppbj_no' => 'PKB/PR-26/CON/0402',
+            'tgl_ppbj' => '2026-06-12',
             'portofolio' => 'CON',
             'buyer' => 'NAZAR',
             'total_sebelum_ppn' => 15000000,
@@ -155,6 +157,7 @@ class ApprovalReceiptViewTest extends TestCase
 
         DB::table('ppbj')->insert([
             'ppbj_no' => 'PKB/PR-26/CON/0403',
+            'tgl_ppbj' => null,
             'tgl_terima_pr' => now()->subDay()->toDateString(),
             'uraian' => 'Data PPBJ lama',
             'portofolio' => null,
@@ -166,6 +169,7 @@ class ApprovalReceiptViewTest extends TestCase
 
         $torpr = Torpr::create([
             'nomor_pr' => 'PKB/PR-26/CON/0403',
+            'tanggal_pr' => '2026-06-13 10:30:00',
             'tujuan_pengadaan' => 'Pengadaan jasa existing',
             'portofolio' => 'CON',
             'jumlah_pr' => 17000000,
@@ -186,6 +190,7 @@ class ApprovalReceiptViewTest extends TestCase
 
         $this->assertDatabaseHas('ppbj', [
             'ppbj_no' => 'PKB/PR-26/CON/0403',
+            'tgl_ppbj' => '2026-06-13',
             'portofolio' => 'CON',
             'buyer' => 'Buyer Baru',
         ]);
