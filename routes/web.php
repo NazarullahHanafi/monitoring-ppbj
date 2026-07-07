@@ -81,10 +81,12 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
             ->name('mentions.unread')
             ->middleware(\App\Http\Middleware\DisableLoggingForPolling::class);
         Route::get('/search', [App\Http\Controllers\ChatController::class, 'search'])->name('search');
+        Route::get('/followups', [App\Http\Controllers\ChatController::class, 'followups'])->name('followups');
         Route::get('/reactions', [App\Http\Controllers\ChatController::class, 'reactions'])
             ->name('reactions')
             ->middleware(\App\Http\Middleware\DisableLoggingForPolling::class);
         Route::post('/share', [App\Http\Controllers\ChatController::class, 'share'])->name('share');
+        Route::post('/followup', [App\Http\Controllers\ChatController::class, 'followup'])->name('followup');
         Route::post('/{id}/reaction', [App\Http\Controllers\ChatController::class, 'react'])->name('react');
         Route::post('/send', [App\Http\Controllers\ChatController::class, 'send'])->name('send');
         Route::patch('/{id}', [App\Http\Controllers\ChatController::class, 'update'])->name('update');

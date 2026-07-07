@@ -360,6 +360,190 @@ class ChatController extends Controller
     }
 
     /**
+     * Daftar PR/PPBJ untuk tombol follow up cepat di Chat Tim.
+     */
+    public function followups(Request $request)
+    {
+        $query = trim((string) $request->query('q', ''));
+        $query = trim(preg_replace('/^\/@/u', '', $query) ?? '');
+        $cacheKey = 'chat_followups:v2:'.md5(mb_strtolower($query));
+
+        $items = Cache::remember($cacheKey, 45, function () use ($query) {
+            $items = collect();
+
+            $prRows = DB::table('torprs')
+                ->select([
+                    'id',
+                    'nomor_pr',
+                    'tujuan_pengadaan',
+                    'portofolio',
+                    'jumlah_pr',
+                    'tanggal_pr',
+                    'tgl_ttd_kabid_pr',
+                    'tgl_ttd_kacab_pr',
+                    'received_at',
+                    'updated_at',
+                    'created_at',
+                ])
+                ->when($query !== '', function ($builder) use ($query) {
+                    $like = '%'.$query.'%';
+
+                    $builder->where(function ($sub) use ($like) {
+                        $sub->where('nomor_pr', 'like', $like)
+                            ->orWhere('tujuan_pengadaan', 'like', $like)
+                            ->orWhere('portofolio', 'like', $like);
+                    });
+                })
+                ->orderByDesc('updated_at')
+                ->orderByDesc('id')
+                ->limit(10)
+                ->get();
+
+            $approvalMap = $this->latestApprovalMap($prRows->pluck('id')->map(fn ($id) => (int) $id)->all());
+
+            foreach ($prRows as $row) {
+                $status = $this->prFollowupStatus($row, $approvalMap[(int) $row->id] ?? null);
+
+                $items->push([
+                    'type' => 'pr',
+                    'id' => (int) $row->id,
+                    'number' => $row->nomor_pr ?: 'PR tanpa nomor',
+                    'title' => $row->tujuan_pengadaan ?: 'Pengadaan',
+                    'status' => $status,
+                    'badge' => 'PR',
+                    'meta' => trim(($row->portofolio ?: 'Tanpa portofolio').' • '.$this->formatCurrency($row->jumlah_pr)),
+                    'fields' => [
+                        ['label' => 'Tanggal PR', 'value' => $this->formatDate($row->tanggal_pr)],
+                        ['label' => 'TTD Kabid', 'value' => $this->formatDate($row->tgl_ttd_kabid_pr)],
+                        ['label' => 'TTD Kacab', 'value' => $this->formatDate($row->tgl_ttd_kacab_pr)],
+                        ['label' => 'Diterima Umum', 'value' => $this->formatDate($row->received_at, true)],
+                    ],
+                ]);
+            }
+
+            $ppbjRows = DB::table('ppbj')
+                ->select([
+                    'id',
+                    'ppbj_no',
+                    'tgl_ppbj',
+                    'uraian',
+                    'portofolio',
+                    'buyer',
+                    'penyedia_eksternal',
+                    'metode_pengadaan',
+                    'total_sebelum_ppn',
+                    'nilai_sp_spk',
+                    'progres',
+                    'status',
+                    'status_sla',
+                    'updated_at',
+                    'created_at',
+                ])
+                ->when($query !== '', function ($builder) use ($query) {
+                    $like = '%'.$query.'%';
+
+                    $builder->where(function ($sub) use ($like) {
+                        $sub->where('ppbj_no', 'like', $like)
+                            ->orWhere('uraian', 'like', $like)
+                            ->orWhere('portofolio', 'like', $like)
+                            ->orWhere('buyer', 'like', $like)
+                            ->orWhere('penyedia_eksternal', 'like', $like)
+                            ->orWhere('metode_pengadaan', 'like', $like);
+                    });
+                })
+                ->orderByDesc('updated_at')
+                ->orderByDesc('id')
+                ->limit(10)
+                ->get();
+
+            foreach ($ppbjRows as $row) {
+                $progress = (float) ($row->progres ?? 0);
+                $statusParts = [];
+                if ($row->status) {
+                    $statusParts[] = $row->status;
+                }
+                if ($row->status_sla) {
+                    $statusParts[] = $row->status_sla;
+                }
+                $statusParts[] = 'Progress '.number_format($progress, 0, ',', '.').'%';
+
+                $items->push([
+                    'type' => 'ppbj',
+                    'id' => (int) $row->id,
+                    'number' => $row->ppbj_no ?: 'PPBJ tanpa nomor',
+                    'title' => $row->uraian ?: 'Monitoring PPBJ',
+                    'status' => implode(' • ', array_filter($statusParts)),
+                    'badge' => 'PPBJ',
+                    'meta' => trim(($row->buyer ?: 'Buyer -').' • '.($row->penyedia_eksternal ?: 'Vendor -')),
+                    'fields' => [
+                        ['label' => 'Tanggal PPBJ', 'value' => $this->formatDate($row->tgl_ppbj)],
+                        ['label' => 'Portofolio', 'value' => $row->portofolio ?: '-'],
+                        ['label' => 'Metode', 'value' => $row->metode_pengadaan ?: '-'],
+                        ['label' => 'Nilai', 'value' => $this->formatCurrency($row->nilai_sp_spk ?: $row->total_sebelum_ppn)],
+                    ],
+                ]);
+            }
+
+            return $items
+                ->sortByDesc(fn ($item) => $item['type'] === 'pr' ? 2 : 1)
+                ->values()
+                ->take(16)
+                ->all();
+        });
+
+        return response()->json(['items' => $items]);
+    }
+
+    /**
+     * Kirim kartu follow up PR/PPBJ ke Chat Tim.
+     */
+    public function followup(Request $request)
+    {
+        $validated = $request->validate([
+            'type' => ['required', 'string', Rule::in(['pr', 'ppbj'])],
+            'id' => 'required|integer|min:1',
+        ]);
+
+        $user = Auth::user();
+        $rateKey = 'chat_followup_rate:'.$user->id.':'.date('YmdHi');
+        $rateCount = (int) Cache::get($rateKey, 0);
+
+        if ($rateCount >= 12) {
+            return response()->json(['error' => 'Terlalu banyak follow up. Coba lagi sebentar.'], 429);
+        }
+
+        Cache::put($rateKey, $rateCount + 1, 60);
+
+        $snapshot = $this->followupRecordSnapshot($validated['type'], (int) $validated['id']);
+
+        if (! $snapshot) {
+            return response()->json(['error' => 'Data follow up tidak ditemukan'], 404);
+        }
+
+        $colors = $this->colors();
+        $id = DB::table('chat_messages')->insertGetId([
+            'user_id' => $user->id,
+            'user_name' => $user->name,
+            'user_initials' => $this->initials($user->name),
+            'user_color' => $colors[$user->id % count($colors)],
+            'message' => 'Follow up '.$snapshot['label'].' '.$snapshot['number'],
+            'reply_to' => null,
+            'reply_preview' => null,
+            'reply_user' => null,
+            'mentions' => null,
+            'share_type' => 'followup_'.$validated['type'],
+            'share_id' => $validated['id'],
+            'share_data' => json_encode($snapshot, JSON_UNESCAPED_UNICODE),
+            'created_at' => now(),
+        ]);
+
+        $messages = collect([DB::table('chat_messages')->find($id)]);
+        $this->enrichMessages($messages, $user->id);
+
+        return response()->json(['message' => $messages->first()], 201);
+    }
+
+    /**
      * Kirim pesan.
      */
     public function send(Request $request)
@@ -564,17 +748,28 @@ class ChatController extends Controller
     {
         if ($type === 'pr') {
             $record = Torpr::find($id);
+            $approval = $record
+                ? DB::table('pr_receipt_approvals')
+                    ->where('torpr_id', $record->id)
+                    ->orderByDesc('id')
+                    ->first()
+                : null;
 
             return $record ? [
                 'label' => 'PR',
                 'number' => $record->nomor_pr ?: 'Tanpa nomor',
                 'title' => $record->tujuan_pengadaan ?: 'Pengadaan',
                 'fields' => [
+                    ['label' => 'Status', 'value' => $this->prFollowupStatus((object) $record->getAttributes(), $approval)],
                     ['label' => 'Portofolio', 'value' => $record->portofolio ?: '-'],
-                    ['label' => 'Nilai', 'value' => $record->jumlah_pr ? 'Rp '.number_format((float) $record->jumlah_pr, 0, ',', '.') : '-'],
+                    ['label' => 'Nilai', 'value' => $this->formatCurrency($record->jumlah_pr)],
                     ['label' => 'Tanggal', 'value' => $record->tanggal_pr?->format('d/m/Y') ?: '-'],
                 ],
             ] : null;
+        }
+
+        if ($type === 'ppbj') {
+            return $this->followupRecordSnapshot('ppbj', $id);
         }
 
         if ($type === 'spph') {
@@ -601,10 +796,140 @@ class ChatController extends Controller
             'fields' => [
                 ['label' => 'Nomor PR', 'value' => $record->nomor_pr ?: '-'],
                 ['label' => 'Vendor', 'value' => $record->nama_vendor],
-                ['label' => 'Nilai', 'value' => $record->nilai_sp ? 'Rp '.number_format((float) $record->nilai_sp, 0, ',', '.') : '-'],
+                ['label' => 'Nilai', 'value' => $this->formatCurrency($record->nilai_sp)],
                 ['label' => 'PIC', 'value' => $record->pic],
             ],
         ] : null;
+    }
+
+    private function followupRecordSnapshot(string $type, int $id): ?array
+    {
+        if ($type === 'pr') {
+            $record = DB::table('torprs')->find($id);
+
+            if (! $record) {
+                return null;
+            }
+
+            $approval = DB::table('pr_receipt_approvals')
+                ->where('torpr_id', $record->id)
+                ->orderByDesc('id')
+                ->first();
+
+            $linkedPpbj = $record->nomor_pr
+                ? DB::table('ppbj')
+                    ->where('ppbj_no', $record->nomor_pr)
+                    ->orWhere('ppbj_no', 'like', '%'.$record->nomor_pr.'%')
+                    ->orderByDesc('updated_at')
+                    ->first()
+                : null;
+
+            return [
+                'label' => 'FOLLOW UP PR',
+                'number' => $record->nomor_pr ?: 'Tanpa nomor',
+                'title' => $record->tujuan_pengadaan ?: 'Pengadaan',
+                'fields' => [
+                    ['label' => 'Status', 'value' => $this->prFollowupStatus($record, $approval)],
+                    ['label' => 'Portofolio', 'value' => $record->portofolio ?: '-'],
+                    ['label' => 'Nilai PR', 'value' => $this->formatCurrency($record->jumlah_pr)],
+                    ['label' => 'Tanggal PR', 'value' => $this->formatDate($record->tanggal_pr)],
+                    ['label' => 'TTD Kabid', 'value' => $this->formatDate($record->tgl_ttd_kabid_pr)],
+                    ['label' => 'TTD Kacab', 'value' => $this->formatDate($record->tgl_ttd_kacab_pr)],
+                    ['label' => 'Diterima Umum', 'value' => $this->formatDate($record->received_at, true)],
+                    ['label' => 'Data PPBJ', 'value' => $linkedPpbj ? (($linkedPpbj->progres ?? 0).'% • '.($linkedPpbj->buyer ?: 'Buyer -')) : 'Belum ada'],
+                ],
+            ];
+        }
+
+        $record = DB::table('ppbj')->find($id);
+
+        if (! $record) {
+            return null;
+        }
+
+        return [
+            'label' => 'FOLLOW UP PPBJ',
+            'number' => $record->ppbj_no ?: 'Tanpa nomor',
+            'title' => $record->uraian ?: 'Monitoring PPBJ',
+            'fields' => [
+                ['label' => 'Progress', 'value' => number_format((float) ($record->progres ?? 0), 0, ',', '.').'%'],
+                ['label' => 'Status SLA', 'value' => $record->status_sla ?: '-'],
+                ['label' => 'Buyer', 'value' => $record->buyer ?: '-'],
+                ['label' => 'Vendor', 'value' => $record->penyedia_eksternal ?: '-'],
+                ['label' => 'Portofolio', 'value' => $record->portofolio ?: '-'],
+                ['label' => 'Metode', 'value' => $record->metode_pengadaan ?: '-'],
+                ['label' => 'Tanggal PPBJ', 'value' => $this->formatDate($record->tgl_ppbj)],
+                ['label' => 'Nilai', 'value' => $this->formatCurrency($record->nilai_sp_spk ?: $record->total_sebelum_ppn)],
+            ],
+        ];
+    }
+
+    private function latestApprovalMap(array $torprIds): array
+    {
+        if ($torprIds === []) {
+            return [];
+        }
+
+        return DB::table('pr_receipt_approvals')
+            ->whereIn('torpr_id', $torprIds)
+            ->orderByDesc('id')
+            ->get()
+            ->unique('torpr_id')
+            ->keyBy(fn ($row) => (int) $row->torpr_id)
+            ->all();
+    }
+
+    private function prFollowupStatus(object $record, ?object $approval): string
+    {
+        $approvalStatus = strtoupper((string) ($approval->status ?? ''));
+
+        if ($approvalStatus === 'REJECTED') {
+            return 'Ditolak Umum';
+        }
+
+        if (! empty($record->received_at)) {
+            return 'Sudah diterima Umum';
+        }
+
+        if ($approvalStatus === 'APPROVED') {
+            return 'Disetujui Umum';
+        }
+
+        if ($approvalStatus === 'PENDING') {
+            return 'Menunggu approval Umum';
+        }
+
+        if (! empty($record->tgl_ttd_kacab_pr)) {
+            return 'Siap request ke Umum';
+        }
+
+        if (! empty($record->tgl_ttd_kabid_pr)) {
+            return 'Menunggu TTD Kacab';
+        }
+
+        return 'Menunggu TTD Kabid';
+    }
+
+    private function formatCurrency($value): string
+    {
+        if ($value === null || $value === '' || (float) $value === 0.0) {
+            return '-';
+        }
+
+        return 'Rp '.number_format((float) $value, 0, ',', '.');
+    }
+
+    private function formatDate($value, bool $withTime = false): string
+    {
+        if (! $value) {
+            return '-';
+        }
+
+        try {
+            return Carbon::parse($value)->format($withTime ? 'd/m/Y H:i' : 'd/m/Y');
+        } catch (\Throwable) {
+            return '-';
+        }
     }
 
     private function reactionMap(array $messageIds, int $myId): array

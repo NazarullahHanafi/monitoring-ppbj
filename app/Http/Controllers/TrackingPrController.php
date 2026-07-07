@@ -415,36 +415,36 @@ class TrackingPrController extends Controller
         $now = now();
 
         $push = function (string $level, string $title, string $message, ?Carbon $since = null) use (&$reminders, $now) {
-            $days = $since ? max(0, $since->diffInDays($now)) : null;
+            $days = $since ? $this->wholeDaysSince($since, $now) : null;
             $reminders[] = compact('level', 'title', 'message', 'days');
         };
 
-        if (!$row->tgl_ttd_kabid_pr && $row->tanggal_pr && $row->tanggal_pr->diffInDays($now) >= 2) {
+        if (!$row->tgl_ttd_kabid_pr && $row->tanggal_pr && $this->wholeDaysSince($row->tanggal_pr, $now) >= 2) {
             $push('warning', 'PR menunggu TTD Kabid', 'Tanggal PR sudah tercatat, namun tanggal TTD Kepala Bidang belum ada.', $row->tanggal_pr);
         }
 
-        if ($row->tgl_ttd_kabid_pr && !$row->tgl_ttd_kacab_pr && $row->tgl_ttd_kabid_pr->diffInDays($now) >= 2) {
+        if ($row->tgl_ttd_kabid_pr && !$row->tgl_ttd_kacab_pr && $this->wholeDaysSince($row->tgl_ttd_kabid_pr, $now) >= 2) {
             $push('warning', 'PR menunggu TTD Kacab', 'Kabid sudah tanda tangan, namun tanggal TTD Kepala Cabang belum ada.', $row->tgl_ttd_kabid_pr);
         }
 
-        if ($row->tgl_ttd_kacab_pr && !$latestApproval && $row->tgl_ttd_kacab_pr->diffInDays($now) >= 1) {
+        if ($row->tgl_ttd_kacab_pr && !$latestApproval && $this->wholeDaysSince($row->tgl_ttd_kacab_pr, $now) >= 1) {
             $push('info', 'Belum request ke Bagian Umum', 'PR sudah lengkap tanda tangan, namun belum ada request penerimaan ke Bagian Umum.', $row->tgl_ttd_kacab_pr);
         }
 
         if ($latestApproval && $latestApproval->status === 'PENDING') {
             $requestedAt = $this->parseDate($latestApproval->requested_at ?? null);
-            if ($requestedAt && $requestedAt->diffInDays($now) >= 2) {
+            if ($requestedAt && $this->wholeDaysSince($requestedAt, $now) >= 2) {
                 $push('danger', 'Request PR macet di approval Umum', 'Request sudah pending lebih dari 2 hari. Perlu follow up ke Bagian Umum.', $requestedAt);
             }
         }
 
-        if ($row->received_at && !$ppbj && $row->received_at->diffInDays($now) >= 2) {
+        if ($row->received_at && !$ppbj && $this->wholeDaysSince($row->received_at, $now) >= 2) {
             $push('warning', 'Belum masuk data PPBJ', 'PR sudah diterima Umum, namun belum ditemukan data PPBJ dengan nomor yang sama.', $row->received_at);
         }
 
         if ($ppbj && $ppbj->progres < 100) {
             $lastMove = $ppbj->updated_at ?: $ppbj->tgl_ppbj ?: $row->received_at;
-            if ($lastMove && $lastMove->diffInDays($now) >= 3) {
+            if ($lastMove && $this->wholeDaysSince($lastMove, $now) >= 3) {
                 $push('danger', 'Progress PPBJ belum bergerak', 'Data PPBJ belum selesai dan tidak berubah minimal 3 hari.', $lastMove);
             }
         }
@@ -459,6 +459,11 @@ class TrackingPrController extends Controller
         }
 
         return $reminders;
+    }
+
+    private function wholeDaysSince(Carbon $since, Carbon $now): int
+    {
+        return max(0, (int) floor($since->diffInDays($now)));
     }
 
     private function searchLike(string $keyword): ?array

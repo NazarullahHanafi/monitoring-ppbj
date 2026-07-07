@@ -165,6 +165,7 @@ class TrackingPrCreatorTest extends TestCase
             ->assertOk()
             ->assertSee('Reminder Otomatis PR')
             ->assertSee('PR menunggu TTD Kabid')
+            ->assertSee('Sudah 4 hari')
             ->assertSee('Timeline Audit Detail')
             ->assertSee('Input PR Operasional');
     }

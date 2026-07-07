@@ -156,6 +156,54 @@ class ChatHistoryEditingSharingTest extends TestCase
             ->assertForbidden();
     }
 
+    public function test_team_chat_can_search_and_send_pr_ppbj_followups(): void
+    {
+        $user = User::factory()->create(['department' => 'umum']);
+        $prId = DB::table('torprs')->insertGetId([
+            'tujuan_pengadaan' => 'Pengadaan jasa kalibrasi tahunan',
+            'portofolio' => 'CON',
+            'nomor_pr' => 'PKB/PR-26/CON/0401',
+            'tanggal_pr' => '2026-07-01',
+            'jumlah_pr' => 125000000,
+            'tgl_ttd_kabid_pr' => '2026-07-02',
+            'created_by_user_id' => $user->id,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        DB::table('ppbj')->insert([
+            'ppbj_no' => 'PKB/PR-26/CON/0401',
+            'tgl_ppbj' => '2026-07-01',
+            'uraian' => 'Monitoring pengadaan jasa kalibrasi',
+            'portofolio' => 'CON',
+            'buyer' => 'Nazar',
+            'penyedia_eksternal' => 'Vendor Kalibrasi',
+            'metode_pengadaan' => 'Penunjukan Langsung',
+            'total_sebelum_ppn' => 125000000,
+            'progres' => 45,
+            'status' => 'ACTIVE',
+            'status_sla' => 'On Progress',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->actingAs($user)
+            ->getJson('/chat/followups?q=0401')
+            ->assertOk()
+            ->assertJsonFragment(['number' => 'PKB/PR-26/CON/0401'])
+            ->assertJsonFragment(['status' => 'Menunggu TTD Kacab']);
+
+        $this->postJson('/chat/followup', ['type' => 'pr', 'id' => $prId])
+            ->assertCreated()
+            ->assertJsonPath('message.share_type', 'followup_pr')
+            ->assertJsonPath('message.share_data_parsed.label', 'FOLLOW UP PR')
+            ->assertJsonPath('message.share_data_parsed.number', 'PKB/PR-26/CON/0401');
+
+        $this->assertDatabaseHas('chat_messages', [
+            'share_type' => 'followup_pr',
+            'share_id' => $prId,
+        ]);
+    }
+
     public function test_layout_exposes_history_edit_and_share_controls(): void
     {
         $user = User::factory()->create();
@@ -169,7 +217,8 @@ class ChatHistoryEditingSharingTest extends TestCase
             ->assertSee('chat-panel.fullscreen', false)
             ->assertSee('chat-panel.minimized', false)
             ->assertSee('Muat pesan lebih lama')
-            ->assertSee('shareRecordToChat', false);
+            ->assertSee('shareRecordToChat', false)
+            ->assertSee('/@ PR');
     }
 
     private function insertMessage(User $sender, string $message, $createdAt = null): int

@@ -2169,6 +2169,200 @@
             color: #9ca3af
         }
 
+        .followup-dd {
+            position: absolute;
+            bottom: 100%;
+            left: 0;
+            right: 0;
+            margin-bottom: 6px;
+            background: #ffffff;
+            border: 1px solid rgba(14, 165, 233, .18);
+            border-radius: 16px;
+            box-shadow: 0 -12px 32px rgba(15, 23, 42, .12);
+            max-height: 320px;
+            overflow-y: auto;
+            display: none;
+            z-index: 16
+        }
+
+        .dark .followup-dd {
+            background: #0f172a;
+            border-color: rgba(125, 211, 252, .2);
+            box-shadow: 0 -12px 36px rgba(0, 0, 0, .45)
+        }
+
+        .followup-dd.open {
+            display: block;
+            animation: mentionIn .16s ease
+        }
+
+        .followup-dd-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            padding: 10px 14px 8px;
+            color: #0f172a;
+            font-size: .72rem;
+            font-weight: 900;
+            letter-spacing: .02em;
+            text-transform: uppercase;
+            border-bottom: 1px solid rgba(148, 163, 184, .16)
+        }
+
+        .dark .followup-dd-header {
+            color: #f8fafc;
+            border-bottom-color: rgba(148, 163, 184, .16)
+        }
+
+        .followup-dd-header small {
+            color: #64748b;
+            font-size: .62rem;
+            font-weight: 700;
+            text-transform: none;
+            letter-spacing: 0
+        }
+
+        .dark .followup-dd-header small {
+            color: #94a3b8
+        }
+
+        .followup-dd-item {
+            display: grid;
+            grid-template-columns: auto minmax(0, 1fr);
+            gap: 10px;
+            padding: 10px 14px;
+            cursor: pointer;
+            border-bottom: 1px solid rgba(148, 163, 184, .1);
+            transition: background .14s, transform .14s
+        }
+
+        .followup-dd-item:hover,
+        .followup-dd-item.active {
+            background: linear-gradient(135deg, rgba(37, 99, 235, .08), rgba(20, 184, 166, .08));
+            transform: translateX(2px)
+        }
+
+        .dark .followup-dd-item:hover,
+        .dark .followup-dd-item.active {
+            background: linear-gradient(135deg, rgba(59, 130, 246, .18), rgba(45, 212, 191, .12))
+        }
+
+        .followup-badge {
+            width: 38px;
+            height: 38px;
+            border-radius: 13px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #2563eb, #14b8a6);
+            color: #fff;
+            font-size: .6rem;
+            font-weight: 900;
+            box-shadow: 0 8px 18px rgba(37, 99, 235, .22)
+        }
+
+        .followup-main {
+            min-width: 0
+        }
+
+        .followup-number {
+            color: #111827;
+            font-size: .8rem;
+            font-weight: 900;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap
+        }
+
+        .dark .followup-number {
+            color: #f8fafc
+        }
+
+        .followup-title {
+            color: #475569;
+            font-size: .69rem;
+            font-weight: 650;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap
+        }
+
+        .dark .followup-title {
+            color: #cbd5e1
+        }
+
+        .followup-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+            margin-top: 5px;
+            color: #64748b;
+            font-size: .62rem;
+            line-height: 1.3
+        }
+
+        .dark .followup-meta {
+            color: #94a3b8
+        }
+
+        .followup-status {
+            display: inline-flex;
+            align-items: center;
+            max-width: 100%;
+            padding: 2px 7px;
+            border-radius: 999px;
+            background: rgba(16, 185, 129, .12);
+            color: #047857;
+            font-size: .58rem;
+            font-weight: 850;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap
+        }
+
+        .dark .followup-status {
+            background: rgba(52, 211, 153, .14);
+            color: #86efac
+        }
+
+        .followup-empty {
+            padding: 18px 14px;
+            text-align: center;
+            color: #64748b;
+            font-size: .75rem
+        }
+
+        .dark .followup-empty {
+            color: #94a3b8
+        }
+
+        .followup-btn {
+            font-size: .72rem;
+            font-weight: 900;
+            color: #0f766e;
+            cursor: pointer;
+            padding: 4px 9px;
+            border-radius: 7px;
+            border: 1.5px solid rgba(20, 184, 166, .18);
+            transition: all .15s;
+            user-select: none;
+            flex-shrink: 0;
+            background: rgba(20, 184, 166, .08)
+        }
+
+        .dark .followup-btn {
+            color: #5eead4;
+            background: rgba(20, 184, 166, .12);
+            border-color: rgba(94, 234, 212, .18)
+        }
+
+        .followup-btn:hover {
+            transform: translateY(-1px);
+            background: rgba(20, 184, 166, .16);
+            border-color: rgba(20, 184, 166, .35)
+        }
+
         .cp-char {
             font-size: .62rem;
             color: #9ca3af;
@@ -2787,6 +2981,13 @@
                 <div class="mention-dd-header">Tag seseorang</div>
                 <div id="mentionDdList"></div>
             </div>
+            <div class="followup-dd" id="followupDd">
+                <div class="followup-dd-header">
+                    <span>Follow up PR/PPBJ</span>
+                    <small>Ketik /@ lalu pilih data</small>
+                </div>
+                <div id="followupDdList"></div>
+            </div>
             <div class="cp-emoji-row" id="cpEmojiRow"></div>
             <div class="cp-input-row">
                 <textarea class="cp-textarea" id="cpInput" placeholder="Ketik pesan... (Enter kirim)" rows="1"
@@ -2891,6 +3092,7 @@
             var URL_MSGS = '/chat/messages', URL_MENTION_COUNT = '/chat/mentions/unread', URL_SEND = '/chat/send', URL_DEL = '/chat/',
                 URL_READ = '/chat/read', URL_READS = '/chat/', URL_USERS = '/chat/users', URL_SEARCH = '/chat/search',
                 URL_REACTIONS = '/chat/reactions', URL_REACT = '/chat/', URL_SHARE = '/chat/share',
+                URL_FOLLOWUPS = '/chat/followups', URL_FOLLOWUP = '/chat/followup',
                 CSRF = (document.querySelector('meta[name="csrf-token"]') || {}).content || '',
                 MY_ID = {{ auth()->id() }}, MAX_LEN = 500,
                 EMOJIS = ['\u{1F604}', '\u{1F60A}', '\u{1F44D}', '\u{1F525}', '\u2764\uFE0F', '\u{1F389}', '\u{1F602}', '\u{1F914}', '\u{1F60E}', '\u{1F4AF}', '\u{1F64F}', '\u2705'],
@@ -2901,6 +3103,7 @@
             var mentionUnread = 0;
             var draftMentions = [];
             var mentionState = { active: false, start: 0, query: '' };
+            var followupState = { active: false, start: 0, query: '', items: [], selected: 0, timer: null, loading: false };
             var activeReadPopup = null;
             var ctxMsgData = null;
             var allUsersLoaded = null;
@@ -2928,6 +3131,7 @@
                 messagesEl = document.getElementById('cpMessages'), emptyEl = document.getElementById('cpEmpty'), inp = document.getElementById('cpInput'),
                 sendBtn = document.getElementById('cpSendBtn'), charEl = document.getElementById('cpChar'), emojiRow = document.getElementById('cpEmojiRow'),
                 mentionDd = document.getElementById('mentionDd'), mentionDdList = document.getElementById('mentionDdList'),
+                followupDd = document.getElementById('followupDd'), followupDdList = document.getElementById('followupDdList'),
                 ctxMenu = document.getElementById('ctxMenu'), ctxReactions = document.getElementById('ctxReactions'),
                 searchBtn = document.getElementById('cpSearchBtn'), searchPanel = document.getElementById('cpSearchPanel'),
                 searchInput = document.getElementById('cpSearchInput'), searchClose = document.getElementById('cpSearchClose'),
@@ -3154,6 +3358,9 @@
 
             if (emojiRow) {
                 for (var ei = 0; ei < EMOJIS.length; ei++) { (function (em) { var sp = document.createElement('span'); sp.className = 'cp-eq'; sp.textContent = em; sp.addEventListener('click', function (e) { e.stopPropagation(); if (!inp) return; var s = inp.selectionStart, en = inp.selectionEnd; inp.value = inp.value.substring(0, s) + em + inp.value.substring(en); inp.selectionStart = inp.selectionEnd = s + em.length; inp.dispatchEvent(new Event('input')); inp.focus() }); emojiRow.appendChild(sp) })(EMOJIS[ei]) }
+                var followupBtn = document.createElement('span'); followupBtn.className = 'followup-btn'; followupBtn.textContent = '/@ PR'; followupBtn.title = 'Follow up cepat PR/PPBJ';
+                emojiRow.appendChild(followupBtn);
+                followupBtn.addEventListener('click', function (e) { e.stopPropagation(); startFollowupCommand(); });
                 var atBtn = document.createElement('span'); atBtn.className = 'at-btn'; atBtn.textContent = '@';
                 var atBadge = document.createElement('span'); atBadge.className = 'at-btn-badge'; atBadge.id = 'atBtnBadge'; atBadge.textContent = '0';
                 atBtn.appendChild(atBadge); emojiRow.appendChild(atBtn);
@@ -3181,6 +3388,112 @@
                 updateAtBadge(); closeMentionDd(); inp.dispatchEvent(new Event('input')); inp.focus();
             }
 
+            function findFollowupToken(value, pos) {
+                var before = value.substring(0, pos), idx = before.lastIndexOf('/@');
+                if (idx === -1) return null;
+                var prevOk = idx === 0 || /\s/.test(before.charAt(idx - 1));
+                var query = before.substring(idx + 2);
+                if (!prevOk || /\s/.test(query)) return null;
+                return { start: idx, query: query };
+            }
+
+            function startFollowupCommand() {
+                if (!inp) return;
+                var pos = inp.selectionStart || inp.value.length, val = inp.value;
+                var prefix = pos === 0 || /\s/.test(val.charAt(pos - 1)) ? '' : ' ';
+                var insert = prefix + '/@';
+                inp.value = val.substring(0, pos) + insert + val.substring(pos);
+                inp.selectionStart = inp.selectionEnd = pos + insert.length;
+                inp.dispatchEvent(new Event('input'));
+                inp.focus();
+            }
+
+            function closeFollowupDd() {
+                followupState.active = false;
+                followupState.query = '';
+                followupState.items = [];
+                followupState.selected = 0;
+                if (followupDd) followupDd.classList.remove('open');
+            }
+
+            function renderFollowupDd() {
+                if (!followupDdList) return;
+                if (followupState.loading) {
+                    followupDdList.innerHTML = '<div class="followup-empty">Mencari PR/PPBJ...</div>';
+                    return;
+                }
+                var items = followupState.items || [], html = '';
+                for (var i = 0; i < items.length; i++) {
+                    var item = items[i], active = i === followupState.selected ? ' active' : '';
+                    html += '<div class="followup-dd-item' + active + '" data-index="' + i + '">' +
+                        '<div class="followup-badge">' + eH(item.badge || item.type || 'PR') + '</div>' +
+                        '<div class="followup-main">' +
+                            '<div class="followup-number">' + eH(item.number || '-') + '</div>' +
+                            '<div class="followup-title">' + eH(item.title || 'Data pengadaan') + '</div>' +
+                            '<div class="followup-meta"><span class="followup-status">' + eH(item.status || '-') + '</span><span>' + eH(item.meta || '') + '</span></div>' +
+                        '</div>' +
+                    '</div>';
+                }
+                if (!html) html = '<div class="followup-empty">Data tidak ditemukan. Coba nomor lain, contoh: /@0401 atau /@CON.</div>';
+                followupDdList.innerHTML = html;
+            }
+
+            function fetchFollowups(query) {
+                if (!followupDdList) return;
+                clearTimeout(followupState.timer);
+                followupState.loading = true;
+                renderFollowupDd();
+                followupState.timer = setTimeout(function () {
+                    fetch(URL_FOLLOWUPS + '?q=' + encodeURIComponent(query || ''), { headers: { 'Accept': 'application/json' } })
+                        .then(function (response) { if (!response.ok) throw new Error(response.status); return response.json() })
+                        .then(function (data) {
+                            followupState.loading = false;
+                            followupState.items = data.items || [];
+                            followupState.selected = 0;
+                            renderFollowupDd();
+                        })
+                        .catch(function () {
+                            followupState.loading = false;
+                            followupState.items = [];
+                            if (followupDdList) followupDdList.innerHTML = '<div class="followup-empty">Gagal memuat PR/PPBJ. Coba lagi.</div>';
+                        });
+                }, 220);
+            }
+
+            function openFollowupDd(query) {
+                if (!followupDd) return;
+                followupState.active = true;
+                followupState.query = query || '';
+                followupDd.classList.add('open');
+                fetchFollowups(followupState.query);
+            }
+
+            function removeFollowupToken() {
+                if (!inp) return;
+                var pos = inp.selectionStart || inp.value.length, token = findFollowupToken(inp.value, pos);
+                if (!token && followupState.start !== undefined) token = { start: followupState.start, query: followupState.query || '' };
+                if (!token) return;
+                var end = token.start + 2 + (token.query || '').length;
+                inp.value = (inp.value.substring(0, token.start) + inp.value.substring(end)).trim();
+                inp.selectionStart = inp.selectionEnd = inp.value.length;
+                inp.dispatchEvent(new Event('input'));
+            }
+
+            function sendFollowupItem(item) {
+                if (!item || sending) return;
+                sending = true; rSB(); setSL(true);
+                fetch(URL_FOLLOWUP, { method: 'POST', headers: { 'X-CSRF-TOKEN': CSRF, 'Accept': 'application/json', 'Content-Type': 'application/json' }, body: JSON.stringify({ type: item.type, id: item.id }) })
+                    .then(function (response) { return response.json().then(function (body) { if (!response.ok) throw new Error(body.error || 'Gagal follow up'); return body }) })
+                    .then(function (body) {
+                        if (!body.message) throw new Error('Respons tidak valid');
+                        sE(false); if (!messagesEl.querySelector('.msg-wrap[data-msg-id="' + body.message.id + '"]')) appendMsg(body.message);
+                        chatMaxId = Math.max(chatMaxId, body.message.id); closeFollowupDd(); removeFollowupToken(); sBB();
+                        toast('Follow up dikirim ke Chat Tim', 'success');
+                    })
+                    .catch(function (error) { toast(error.message || 'Gagal mengirim follow up', 'error') })
+                    .finally(function () { sending = false; setSL(false); rSB() });
+            }
+
             function updateAtBadge() {
                 var b = document.getElementById('atBtnBadge');
                 if (!b) return; var c = draftMentions.length; b.textContent = c;
@@ -3200,15 +3513,38 @@
             }
 
             mentionDdList.addEventListener('click', function (e) { var item = e.target.closest('.mention-dd-item'); if (!item) return; e.stopPropagation(); insertMention(item.getAttribute('data-uid'), item.getAttribute('data-uname')) });
+            if (followupDdList) followupDdList.addEventListener('click', function (e) {
+                var itemEl = e.target.closest('.followup-dd-item'); if (!itemEl) return; e.stopPropagation();
+                var idx = parseInt(itemEl.getAttribute('data-index'), 10), item = followupState.items[idx];
+                sendFollowupItem(item);
+            });
 
             if (inp) {
                 inp.addEventListener('input', function () {
                     var len = this.value.length; if (charEl) { charEl.textContent = len + '/' + MAX_LEN; charEl.className = 'cp-char' + (len > 450 ? ' danger' : len > 380 ? ' warn' : '') } rSB(); this.style.height = 'auto'; this.style.height = Math.min(this.scrollHeight, 100) + 'px';
-                    var pos = this.selectionStart, text = this.value, before = text.substring(0, pos), atIdx = before.lastIndexOf('@');
-                    if (atIdx !== -1) { var afterAt = before.substring(atIdx + 1); if ((atIdx === 0 || text.charAt(atIdx - 1) === ' ') && afterAt.indexOf(' ') === -1) { mentionState.start = atIdx; mentionState.query = afterAt; if (!mentionState.active) { getAllUsers().then(function () { openMentionDd(afterAt) }) } else renderMentionDd() } else { if (mentionState.active) closeMentionDd() } } else { if (mentionState.active) closeMentionDd() }
+                    var pos = this.selectionStart, text = this.value, followToken = findFollowupToken(text, pos);
+                    if (followToken) {
+                        followupState.start = followToken.start;
+                        closeMentionDd();
+                        if (!followupState.active || followupState.query !== followToken.query) openFollowupDd(followToken.query);
+                        else renderFollowupDd();
+                    } else {
+                        if (followupState.active) closeFollowupDd();
+                        var before = text.substring(0, pos), atIdx = before.lastIndexOf('@');
+                        if (atIdx !== -1) { var afterAt = before.substring(atIdx + 1); if ((atIdx === 0 || text.charAt(atIdx - 1) === ' ') && afterAt.indexOf(' ') === -1) { mentionState.start = atIdx; mentionState.query = afterAt; if (!mentionState.active) { getAllUsers().then(function () { openMentionDd(afterAt) }) } else renderMentionDd() } else { if (mentionState.active) closeMentionDd() } } else { if (mentionState.active) closeMentionDd() }
+                    }
                     cleanDraftMentions();
                 });
-                inp.addEventListener('keydown', function (e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); e.stopPropagation(); doSend() } if (e.key === 'Escape' && mentionState.active) { e.preventDefault(); closeMentionDd() } });
+                inp.addEventListener('keydown', function (e) {
+                    if (followupState.active) {
+                        if (e.key === 'ArrowDown') { e.preventDefault(); var fdLen = (followupState.items || []).length; followupState.selected = fdLen ? Math.min(fdLen - 1, followupState.selected + 1) : 0; renderFollowupDd(); return }
+                        if (e.key === 'ArrowUp') { e.preventDefault(); followupState.selected = Math.max(0, followupState.selected - 1); renderFollowupDd(); return }
+                        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); e.stopPropagation(); sendFollowupItem((followupState.items || [])[followupState.selected]); return }
+                        if (e.key === 'Escape') { e.preventDefault(); closeFollowupDd(); return }
+                    }
+                    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); e.stopPropagation(); doSend() }
+                    if (e.key === 'Escape' && mentionState.active) { e.preventDefault(); closeMentionDd() }
+                });
             }
 
             function renderReactionsForMessage(messageId, reactions) {
@@ -3552,6 +3888,7 @@
                 if (panel) panel.classList.remove('open', 'fullscreen', 'minimized');
                 if (trigger) trigger.classList.remove('active');
                 document.body.classList.remove('chat-fullscreen-open');
+                closeMentionDd(); closeFollowupDd();
                 stopPoll(); stopReactionPoll(); toggleSearch(false); refreshMentionSummary();
                 if (typeof cPP === 'function') cPP();
                 if (activeReadPopup) { activeReadPopup.classList.remove('open'); activeReadPopup = null }
@@ -3621,6 +3958,8 @@
 
             document.addEventListener('click', function (e) {
                 if (swalActive) return;
+                if (followupState.active && panel && !e.target.closest('#cpInputWrap')) closeFollowupDd();
+                if (mentionState.active && panel && !e.target.closest('#cpInputWrap')) closeMentionDd();
                 if (chatOpen && !chatMinimized && panel && !panel.contains(e.target) && trigger && !trigger.contains(e.target) && !ctxMenu.contains(e.target)) { closeChat() }
             });
         })();
