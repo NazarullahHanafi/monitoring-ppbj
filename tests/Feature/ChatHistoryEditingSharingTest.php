@@ -87,6 +87,36 @@ class ChatHistoryEditingSharingTest extends TestCase
             ->assertForbidden();
     }
 
+    public function test_sender_can_delete_recent_message_before_six_hour_window(): void
+    {
+        $sender = User::factory()->create();
+        $messageId = $this->insertMessage($sender, 'Pesan boleh dihapus', now()->subHours(5));
+
+        $this->actingAs($sender)
+            ->deleteJson('/chat/'.$messageId)
+            ->assertOk()
+            ->assertJsonPath('deleted', $messageId);
+
+        $this->assertDatabaseMissing('chat_messages', ['id' => $messageId]);
+    }
+
+    public function test_sender_cannot_delete_message_after_six_hour_window(): void
+    {
+        $sender = User::factory()->create();
+        $messageId = $this->insertMessage($sender, 'Pesan sudah lama', now()->subHours(7));
+
+        $this->actingAs($sender)
+            ->deleteJson('/chat/'.$messageId)
+            ->assertForbidden()
+            ->assertJsonPath('error', 'Batas waktu hapus pesan 6 jam sudah berakhir');
+
+        $this->assertDatabaseHas('chat_messages', ['id' => $messageId]);
+
+        $this->getJson('/chat/messages')
+            ->assertOk()
+            ->assertJsonPath('messages.0.can_delete', false);
+    }
+
     public function test_authorized_departments_can_share_pr_spph_and_sp_snapshots(): void
     {
         $operasional = User::factory()->create(['department' => 'operasional']);

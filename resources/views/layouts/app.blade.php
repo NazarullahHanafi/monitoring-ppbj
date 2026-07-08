@@ -1579,27 +1579,27 @@
         }
 
         .read-popup {
-            position: absolute;
-            bottom: calc(100% + 6px);
-            right: 0;
-            background: #fff;
-            border: 1px solid rgba(0, 0, 0, .08);
-            border-radius: 12px;
-            box-shadow: 0 8px 24px rgba(0, 0, 0, .12);
-            padding: 10px 14px;
-            min-width: 180px;
-            max-width: 240px;
-            z-index: 20;
+            position: fixed;
+            top: 80px;
+            left: 50%;
+            width: min(340px, calc(100vw - 24px));
+            max-height: min(420px, calc(100vh - 32px));
+            overflow: hidden;
+            background: rgba(255, 255, 255, .98);
+            border: 1px solid rgba(99, 102, 241, .16);
+            border-radius: 20px;
+            box-shadow: 0 24px 55px rgba(15, 23, 42, .22);
+            z-index: 260;
             opacity: 0;
-            transform: translateY(4px) scale(.95);
+            transform: translateY(10px) scale(.96);
             pointer-events: none;
             transition: all .18s ease
         }
 
         .dark .read-popup {
-            background: #1e293b;
-            border-color: rgba(255, 255, 255, .1);
-            box-shadow: 0 8px 24px rgba(0, 0, 0, .4)
+            background: rgba(15, 23, 42, .98);
+            border-color: rgba(165, 180, 252, .22);
+            box-shadow: 0 24px 60px rgba(0, 0, 0, .55)
         }
 
         .read-popup.open {
@@ -1609,42 +1609,123 @@
         }
 
         .read-popup-title {
-            font-size: .65rem;
-            font-weight: 700;
-            color: #9ca3af;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            padding: 14px 16px 11px;
+            background: linear-gradient(135deg, rgba(99, 102, 241, .12), rgba(20, 184, 166, .1));
+            font-size: .76rem;
+            font-weight: 900;
+            color: #111827;
             text-transform: uppercase;
-            letter-spacing: .06em;
-            margin-bottom: 6px
+            letter-spacing: .06em
+        }
+
+        .dark .read-popup-title {
+            color: #f8fafc;
+            background: linear-gradient(135deg, rgba(99, 102, 241, .22), rgba(20, 184, 166, .15))
+        }
+
+        .read-popup-count {
+            padding: 3px 8px;
+            border-radius: 999px;
+            background: #ffffff;
+            color: #4f46e5;
+            font-size: .62rem;
+            font-weight: 900;
+            box-shadow: 0 4px 14px rgba(99, 102, 241, .12)
+        }
+
+        .dark .read-popup-count {
+            background: rgba(15, 23, 42, .82);
+            color: #c7d2fe
         }
 
         .read-popup-names {
-            font-size: .75rem;
-            color: #374151;
-            line-height: 1.6
+            max-height: 330px;
+            overflow-y: auto;
+            padding: 8px
         }
 
-        .dark .read-popup-names {
-            color: #d1d5db
+        .read-popup-names::-webkit-scrollbar {
+            width: 5px
+        }
+
+        .read-popup-names::-webkit-scrollbar-thumb {
+            background: rgba(148, 163, 184, .42);
+            border-radius: 999px
         }
 
         .read-popup-name {
             display: flex;
             align-items: center;
-            gap: 6px;
-            padding: 2px 0
+            gap: 10px;
+            padding: 10px;
+            border-radius: 14px;
+            background: rgba(248, 250, 252, .92);
+            border: 1px solid rgba(148, 163, 184, .16)
+        }
+
+        .read-popup-name + .read-popup-name {
+            margin-top: 7px
+        }
+
+        .dark .read-popup-name {
+            background: rgba(30, 41, 59, .82);
+            border-color: rgba(148, 163, 184, .16)
         }
 
         .read-popup-dot {
-            width: 6px;
-            height: 6px;
-            border-radius: 50%;
-            flex-shrink: 0
+            width: 34px;
+            height: 34px;
+            border-radius: 13px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            font-size: .68rem;
+            font-weight: 900;
+            flex-shrink: 0;
+            box-shadow: 0 8px 18px rgba(15, 23, 42, .14)
+        }
+
+        .read-popup-reader {
+            min-width: 0
+        }
+
+        .read-popup-reader-name {
+            color: #111827;
+            font-size: .8rem;
+            font-weight: 850;
+            line-height: 1.2
+        }
+
+        .dark .read-popup-reader-name {
+            color: #f8fafc
+        }
+
+        .read-popup-reader-time {
+            margin-top: 3px;
+            color: #64748b;
+            font-size: .66rem;
+            font-weight: 650;
+            line-height: 1.35
+        }
+
+        .dark .read-popup-reader-time {
+            color: #cbd5e1
         }
 
         .read-popup-empty {
-            font-size: .72rem;
-            color: #9ca3af;
-            font-style: italic
+            padding: 18px 16px 20px;
+            font-size: .78rem;
+            color: #64748b;
+            text-align: center
+        }
+
+        .dark .read-popup-empty {
+            color: #cbd5e1
         }
 
         .msg-del {
@@ -3585,9 +3666,17 @@
 
             function messageDataFromWrap(wrap) {
                 if (!wrap) return null;
-                var avatar = wrap.querySelector('.msg-av'), bubble = wrap.querySelector('.msg-bubble');
-                return { id: parseInt(wrap.getAttribute('data-msg-id')), isMe: wrap.classList.contains('mine'), canEdit: wrap.getAttribute('data-can-edit') === '1', preview: bubble ? bubble.textContent.substring(0, 60) : '', fullMessage: bubble ? (bubble.getAttribute('data-full-message') || bubble.textContent) : '', name: avatar ? avatar.title : '', uid: wrap.getAttribute('data-uid') || '' };
+                var avatar = wrap.querySelector('.msg-av'), bubble = wrap.querySelector('.msg-bubble'), share = wrap.querySelector('.msg-share-card');
+                var fullMessage = bubble ? (bubble.getAttribute('data-full-message') || bubble.textContent) : '';
+                var shareText = share ? share.textContent.trim().replace(/\s+/g, ' ') : '';
+                return { id: parseInt(wrap.getAttribute('data-msg-id')), isMe: wrap.classList.contains('mine'), canEdit: wrap.getAttribute('data-can-edit') === '1', canDelete: wrap.getAttribute('data-can-delete') === '1', preview: bubble ? bubble.textContent.substring(0, 60) : '', fullMessage: fullMessage, copyText: (shareText ? shareText + '\n' : '') + fullMessage, name: avatar ? avatar.title : '', uid: wrap.getAttribute('data-uid') || '' };
             }
+
+            var ctxCopyBtn = document.createElement('div');
+            ctxCopyBtn.className = 'ctx-item';
+            ctxCopyBtn.id = 'ctxCopy';
+            ctxCopyBtn.innerHTML = '<span class="ctx-icon">Copy</span>Salin Pesan';
+            if (ctxMenu) ctxMenu.insertBefore(ctxCopyBtn, document.getElementById('ctxReply'));
 
             if (ctxReactions) {
                 for (var ri = 0; ri < REACTION_EMOJIS.length; ri++) {
@@ -3595,9 +3684,23 @@
                 }
             }
 
-            function showCtx(x, y, data) { ctxMsgData = data; ctxMenu.style.display = 'block'; var r = ctxMenu.getBoundingClientRect(); if (x + r.width > window.innerWidth - 8) x = window.innerWidth - r.width - 8; if (y + r.height > window.innerHeight - 8) y -= r.height + 8; if (x < 8) x = 8; if (y < 8) y = 8; ctxMenu.style.left = x + 'px'; ctxMenu.style.top = y + 'px'; var cm = document.getElementById('ctxMention'); if (cm) cm.style.display = data.isMe ? 'none' : 'flex'; var ce = document.getElementById('ctxEdit'); if (ce) ce.style.display = data.isMe && data.canEdit ? 'flex' : 'none'; var cd = document.getElementById('ctxDelete'); if (cd) cd.style.display = data.isMe ? 'flex' : 'none' }
+            function showCtx(x, y, data) { ctxMsgData = data; ctxMenu.style.display = 'block'; var r = ctxMenu.getBoundingClientRect(); if (x + r.width > window.innerWidth - 8) x = window.innerWidth - r.width - 8; if (y + r.height > window.innerHeight - 8) y -= r.height + 8; if (x < 8) x = 8; if (y < 8) y = 8; ctxMenu.style.left = x + 'px'; ctxMenu.style.top = y + 'px'; var cm = document.getElementById('ctxMention'); if (cm) cm.style.display = data.isMe ? 'none' : 'flex'; var ce = document.getElementById('ctxEdit'); if (ce) ce.style.display = data.isMe && data.canEdit ? 'flex' : 'none'; var cd = document.getElementById('ctxDelete'); if (cd) cd.style.display = data.isMe && data.canDelete ? 'flex' : 'none' }
             function hideCtx() { ctxMenu.style.display = 'none'; ctxMsgData = null }
+            function copyChatText(text) {
+                text = (text || '').trim();
+                if (!text) { toast('Tidak ada teks untuk disalin', 'warning'); return }
+                var done = function () { toast('Pesan disalin', 'success') };
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText(text).then(done).catch(function () { fallbackCopy(text, done) });
+                } else fallbackCopy(text, done);
+            }
+            function fallbackCopy(text, done) {
+                var area = document.createElement('textarea'); area.value = text; area.style.position = 'fixed'; area.style.left = '-9999px'; document.body.appendChild(area); area.focus(); area.select();
+                try { document.execCommand('copy'); done() } catch (e) { toast('Browser tidak mengizinkan salin otomatis', 'error') }
+                document.body.removeChild(area);
+            }
             document.addEventListener('click', function (e) { if (ctxMenu.style.display === 'block' && !ctxMenu.contains(e.target)) hideCtx() });
+            ctxCopyBtn.addEventListener('click', function (e) { e.stopPropagation(); if (!ctxMsgData) return; var text = ctxMsgData.copyText || ctxMsgData.fullMessage || ctxMsgData.preview; hideCtx(); copyChatText(text) });
             document.getElementById('ctxReply').addEventListener('click', function (e) { e.stopPropagation(); if (!ctxMsgData) return; doStartReply(ctxMsgData.id, ctxMsgData.preview, ctxMsgData.name); hideCtx() });
             document.getElementById('ctxEdit').addEventListener('click', function (e) { e.stopPropagation(); if (!ctxMsgData) return; var data = ctxMsgData; hideCtx(); doEdit(data) });
             document.getElementById('ctxMention').addEventListener('click', function (e) { e.stopPropagation(); if (!ctxMsgData) return; getAllUsers().then(function () { insertMention(ctxMsgData.uid, ctxMsgData.name) }); hideCtx() });
@@ -3619,29 +3722,65 @@
                 });
             }
 
+            function readerInitials(name) {
+                var parts = String(name || '').trim().split(/\s+/);
+                if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+                return String(name || '??').substring(0, 2).toUpperCase();
+            }
+
+            function formatReadDate(value) {
+                try {
+                    var d = new Date(value);
+                    if (isNaN(d.getTime())) return '-';
+                    return d.toLocaleDateString('id-ID', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' }) + ' • ' + d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                } catch (e) { return '-' }
+            }
+
+            function positionReadPopup(popup, anchor) {
+                if (!popup || !anchor) return;
+                var ar = anchor.getBoundingClientRect(), width = Math.min(340, window.innerWidth - 24);
+                popup.style.width = width + 'px';
+                var pr = popup.getBoundingClientRect();
+                var left = Math.min(window.innerWidth - width - 12, Math.max(12, ar.right - width));
+                var top = ar.bottom + 10;
+                if (top + pr.height > window.innerHeight - 12) top = Math.max(12, ar.top - pr.height - 10);
+                popup.style.left = left + 'px';
+                popup.style.top = top + 'px';
+            }
+
+            function closeReadPopup() {
+                if (!activeReadPopup) return;
+                var popup = activeReadPopup;
+                popup.classList.remove('open');
+                activeReadPopup = null;
+                setTimeout(function () { if (popup && popup.parentNode) popup.parentNode.removeChild(popup) }, 180);
+            }
+
             function toggleReadPopup(checkEl, msgId) {
-                if (activeReadPopup) { activeReadPopup.classList.remove('open'); activeReadPopup = null; return }
-                var old = document.querySelector('.read-popup.open'); if (old) { old.classList.remove('open') }
+                if (activeReadPopup) { closeReadPopup(); return }
                 checkEl.style.opacity = '.5';
                 fetch(URL_READS + msgId + '/reads', { headers: { 'Accept': 'application/json' } })
                     .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json() })
                     .then(function (d) {
                         checkEl.style.opacity = '';
                         var pp = document.createElement('div'); pp.className = 'read-popup';
-                        if (!d.readers || !d.readers.length) {
-                            pp.innerHTML = '<div class="read-popup-title">\u{1F441} Dilihat</div><div class="read-popup-empty">Belum ada yang melihat</div>';
+                        var readers = d.readers || [];
+                        if (!readers.length) {
+                            pp.innerHTML = '<div class="read-popup-title"><span>\u{1F441} Dilihat</span><span class="read-popup-count">0</span></div><div class="read-popup-empty">Belum ada yang melihat pesan ini.</div>';
                         } else {
-                            var names = ''; for (var i = 0; i < d.readers.length; i++) {
-                                var rd = d.readers[i], rdName = rd.user_name || ('User #' + rd.user_id), c = UCLS[(rd.user_id || 0) % UCLS.length] || '#6366f1'; var rdTime = ''; try { rdTime = new Date(rd.read_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) } catch (e) { }
-                                names += '<div class="read-popup-name"><span class="read-popup-dot" style="background:' + c + '"></span><span>' + eH(rdName) + '</span><span style="margin-left:auto;font-size:.6rem;color:#9ca3af">' + rdTime + '</span></div>';
+                            var names = ''; for (var i = 0; i < readers.length; i++) {
+                                var rd = readers[i], rdName = rd.user_name || ('User #' + rd.user_id), c = UCLS[(rd.user_id || 0) % UCLS.length] || '#6366f1';
+                                names += '<div class="read-popup-name"><span class="read-popup-dot" style="background:' + c + '">' + eH(readerInitials(rdName)) + '</span><div class="read-popup-reader"><div class="read-popup-reader-name">' + eH(rdName) + '</div><div class="read-popup-reader-time">' + eH(formatReadDate(rd.read_at)) + '</div></div></div>';
                             }
-                            pp.innerHTML = '<div class="read-popup-title">\u{1F441} Dilihat ' + d.readers.length + ' orang</div><div class="read-popup-names">' + names + '</div>';
+                            pp.innerHTML = '<div class="read-popup-title"><span>\u{1F441} Dilihat oleh</span><span class="read-popup-count">' + readers.length + ' orang</span></div><div class="read-popup-names">' + names + '</div>';
                         }
-                        checkEl.parentElement.style.position = 'relative'; checkEl.parentElement.appendChild(pp);
-                        requestAnimationFrame(function () { pp.classList.add('open') }); activeReadPopup = pp;
+                        document.body.appendChild(pp);
+                        requestAnimationFrame(function () { positionReadPopup(pp, checkEl); pp.classList.add('open') });
+                        activeReadPopup = pp;
                     }).catch(function () { checkEl.style.opacity = '' });
             }
-            document.addEventListener('click', function (e) { if (activeReadPopup && !e.target.closest('.read-popup') && !e.target.closest('.msg-checks')) { activeReadPopup.classList.remove('open'); activeReadPopup = null } });
+            document.addEventListener('click', function (e) { if (activeReadPopup && !e.target.closest('.read-popup') && !e.target.closest('.msg-checks')) closeReadPopup() });
+            window.addEventListener('resize', closeReadPopup);
 
             function renderMentionText(text, mp) { var html = eH(text); if (!mp || !mp.length) return html; var hasAll = false; for (var i = 0; i < mp.length; i++) { if (mp[i].id === 'all') { hasAll = true; continue } var name = mp[i].name || ''; if (name) { var esc = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); html = html.replace(new RegExp('@' + esc, 'g'), '<span class="mention-hl">@' + eH(name) + '</span>') } } if (hasAll) html = html.replace(/@(Semua|semua)/gi, '<span class="mention-all-hl">@$1</span>'); return html }
             function amMentioned(mp) { if (!mp || !mp.length) return false; for (var i = 0; i < mp.length; i++) { if (mp[i].id === 'all') return true; if (String(mp[i].id) === String(MY_ID)) return true } return false }
@@ -3675,13 +3814,30 @@
                 var meta = wrap.querySelector('.msg-meta'), edited = wrap.querySelector('.msg-edited');
                 if (message.edited_at && meta && !edited) { edited = document.createElement('span'); edited.className = 'msg-edited'; edited.textContent = 'diedit'; meta.insertBefore(edited, meta.firstChild ? meta.firstChild.nextSibling : null) }
                 if (Object.prototype.hasOwnProperty.call(message, 'can_edit')) wrap.setAttribute('data-can-edit', message.can_edit ? '1' : '0');
+                if (Object.prototype.hasOwnProperty.call(message, 'can_delete')) wrap.setAttribute('data-can-delete', message.can_delete ? '1' : '0');
+            }
+
+            function scheduleDeleteExpiry(wrap, expiresAt) {
+                if (!wrap || !expiresAt) return;
+                var exp = new Date(expiresAt).getTime();
+                if (isNaN(exp)) return;
+                var delay = exp - Date.now();
+                if (delay <= 0) {
+                    wrap.setAttribute('data-can-delete', '0');
+                    var btn = wrap.querySelector('.msg-del'); if (btn) btn.remove();
+                    return;
+                }
+                setTimeout(function () {
+                    wrap.setAttribute('data-can-delete', '0');
+                    var btn = wrap.querySelector('.msg-del'); if (btn) btn.remove();
+                }, Math.min(delay, 2147483647));
             }
 
             function appendMsg(m, prepend) {
                 if (!messagesEl) return; var isMe = String(m.user_id) === String(MY_ID), time = ''; try { time = new Date(m.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) } catch (e) { }
                 var wr = document.createElement('div'); wr.className = 'msg-wrap' + (isMe ? ' mine' : '');
                 if (amMentioned(m.mentions_parsed) && !isMe) wr.classList.add('mentioned-me');
-                wr.setAttribute('data-msg-id', m.id); wr.setAttribute('data-uid', m.user_id || ''); wr.setAttribute('data-can-edit', m.can_edit ? '1' : '0');
+                wr.setAttribute('data-msg-id', m.id); wr.setAttribute('data-uid', m.user_id || ''); wr.setAttribute('data-can-edit', m.can_edit ? '1' : '0'); wr.setAttribute('data-can-delete', m.can_delete ? '1' : '0');
                 var av = document.createElement('div'); av.className = 'msg-av'; av.style.background = m.user_color || '#6366f1'; av.title = m.user_name || ''; av.textContent = m.user_initials || '??';
                 var bd = document.createElement('div'); bd.className = 'msg-body';
                 if (!isMe) { var sn = document.createElement('div'); sn.className = 'msg-sender'; sn.textContent = m.user_name || ''; bd.appendChild(sn) }
@@ -3693,9 +3849,9 @@
                 var reactAdd = document.createElement('button'); reactAdd.type = 'button'; reactAdd.className = 'msg-react-add'; reactAdd.title = 'Beri reaksi'; reactAdd.textContent = '\u263A'; mt.appendChild(reactAdd);
                 if (isMe) {
                     var rc = parseInt(m.read_count) || 0;
-                    if (rc > 0) { var ck = document.createElement('span'); ck.className = 'msg-checks msg-checks-read'; ck.textContent = '\u2713\u2713'; ck.setAttribute('data-check-id', m.id); mt.appendChild(ck) }
-                    else { var ck2 = document.createElement('span'); ck2.className = 'msg-checks'; ck2.textContent = '\u2713'; mt.appendChild(ck2) }
-                    var dl = document.createElement('button'); dl.type = 'button'; dl.className = 'msg-del'; dl.title = 'Hapus'; dl.textContent = '\u2715'; dl.setAttribute('data-del-id', m.id); mt.appendChild(dl);
+                    if (rc > 0) { var ck = document.createElement('span'); ck.className = 'msg-checks msg-checks-read'; ck.textContent = '\u2713\u2713'; ck.title = 'Lihat siapa yang membaca'; ck.setAttribute('aria-label', 'Lihat siapa yang membaca'); ck.setAttribute('data-check-id', m.id); mt.appendChild(ck) }
+                    else { var ck2 = document.createElement('span'); ck2.className = 'msg-checks'; ck2.textContent = '\u2713'; ck2.title = 'Terkirim. Belum ada yang membaca'; mt.appendChild(ck2) }
+                    if (m.can_delete) { var dl = document.createElement('button'); dl.type = 'button'; dl.className = 'msg-del'; dl.title = 'Hapus pesan tersedia maksimal 6 jam'; dl.textContent = '\u2715'; dl.setAttribute('data-del-id', m.id); mt.appendChild(dl); scheduleDeleteExpiry(wr, m.delete_expires_at) }
                 }
                 bd.appendChild(mt); var reactions = document.createElement('div'); reactions.className = 'msg-reactions'; bd.appendChild(reactions); wr.appendChild(av); wr.appendChild(bd);
                 if (prepend) { var firstMessage = messagesEl.querySelector('.msg-wrap'); messagesEl.insertBefore(wr, firstMessage || null) } else messagesEl.appendChild(wr);
@@ -3829,7 +3985,7 @@
             function doDelete(id) {
                 swalActive = true;
                 Swal.fire({ title: 'Hapus pesan?', text: 'Pesan akan dihapus permanen.', icon: 'warning', showCancelButton: true, confirmButtonColor: '#ef4444', cancelButtonColor: '#6b7280', confirmButtonText: 'Ya, hapus', cancelButtonText: 'Batal', allowOutsideClick: true, allowEscapeKey: true, background: document.documentElement.classList.contains('dark') ? '#1f2937' : '#fff', color: document.documentElement.classList.contains('dark') ? '#f3f4f6' : '#111827' })
-                    .then(function (r) { setTimeout(function () { swalActive = false }, 100); if (!r.isConfirmed) return; fetch(URL_DEL + id, { method: 'DELETE', headers: { 'X-CSRF-TOKEN': CSRF, 'Accept': 'application/json' } }).then(function (r) { if (!r.ok) throw 0; var el = messagesEl.querySelector('[data-msg-id="' + id + '"]'); if (el) { el.style.animation = 'msgRemove .3s ease forwards'; setTimeout(function () { el.remove(); if (!messagesEl.querySelector('[data-msg-id]')) sE(true) }, 300) } }).catch(function () { toast('Gagal menghapus', 'error') }) });
+                    .then(function (r) { setTimeout(function () { swalActive = false }, 100); if (!r.isConfirmed) return; fetch(URL_DEL + id, { method: 'DELETE', headers: { 'X-CSRF-TOKEN': CSRF, 'Accept': 'application/json' } }).then(function (response) { return response.json().catch(function () { return {} }).then(function (body) { if (!response.ok) throw new Error(body.error || 'Gagal menghapus'); return body }) }).then(function () { var el = messagesEl.querySelector('[data-msg-id="' + id + '"]'); if (el) { el.style.animation = 'msgRemove .3s ease forwards'; setTimeout(function () { el.remove(); if (!messagesEl.querySelector('[data-msg-id]')) sE(true) }, 300) } }).catch(function (error) { var el = messagesEl.querySelector('[data-msg-id="' + id + '"]'); if (el) { el.setAttribute('data-can-delete', '0'); var btn = el.querySelector('.msg-del'); if (btn) btn.remove() } toast(error.message || 'Gagal menghapus', 'error') }) });
             }
 
             function renderPanelModeButtons() {
@@ -3891,7 +4047,7 @@
                 closeMentionDd(); closeFollowupDd();
                 stopPoll(); stopReactionPoll(); toggleSearch(false); refreshMentionSummary();
                 if (typeof cPP === 'function') cPP();
-                if (activeReadPopup) { activeReadPopup.classList.remove('open'); activeReadPopup = null }
+                closeReadPopup();
                 renderPanelModeButtons(); window._chatOpen = false;
             }
 

@@ -27,6 +27,8 @@ class ChatController extends Controller
 
     private const EDIT_WINDOW_MINUTES = 15;
 
+    private const DELETE_WINDOW_HOURS = 6;
+
     private const REACTION_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
 
     private function colors(): array
@@ -623,6 +625,10 @@ class ChatController extends Controller
             return response()->json(['error' => 'Tidak bisa menghapus'], 403);
         }
 
+        if (Carbon::parse($message->created_at)->addHours(self::DELETE_WINDOW_HOURS)->isPast()) {
+            return response()->json(['error' => 'Batas waktu hapus pesan 6 jam sudah berakhir'], 403);
+        }
+
         DB::table('chat_reactions')->where('message_id', $id)->delete();
         DB::table('chat_reads')->where('message_id', $id)->delete();
         DB::table('chat_messages')->delete($id);
@@ -717,8 +723,14 @@ class ChatController extends Controller
             $row->mentions_parsed = $this->parseMentions($row->mentions ?? null);
             $row->reactions = $reactions[$row->id] ?? [];
             $row->share_data_parsed = $this->parseShareData($row->share_data ?? null);
+            $createdAt = Carbon::parse($row->created_at);
             $row->can_edit = (int) $row->user_id === $myId
-                && Carbon::parse($row->created_at)->addMinutes(self::EDIT_WINDOW_MINUTES)->isFuture();
+                && $createdAt->copy()->addMinutes(self::EDIT_WINDOW_MINUTES)->isFuture();
+            $row->can_delete = (int) $row->user_id === $myId
+                && $createdAt->copy()->addHours(self::DELETE_WINDOW_HOURS)->isFuture();
+            $row->delete_expires_at = (int) $row->user_id === $myId
+                ? $createdAt->copy()->addHours(self::DELETE_WINDOW_HOURS)->toIso8601String()
+                : null;
         }
     }
 
