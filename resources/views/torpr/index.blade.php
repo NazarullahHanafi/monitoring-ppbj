@@ -936,7 +936,12 @@
                                         @if($r->sign_token_kabid)
                                             <div class="relative group">
                                                 <button
-                                                    onclick='showQRModal({{ $r->id }}, "kabid", {{ Illuminate\Support\Js::from($r->sign_token_kabid) }}, {{ Illuminate\Support\Js::from($r->nomor_pr) }})'
+                                                    type="button"
+                                                    data-qr-trigger
+                                                    data-pr-id="{{ $r->id }}"
+                                                    data-qr-type="kabid"
+                                                    data-qr-token="{{ $r->sign_token_kabid }}"
+                                                    data-nomor-pr="{{ $r->nomor_pr }}"
                                                     class="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    {{ $r->tgl_ttd_kabid_pr ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 hover:bg-blue-200 dark:hover:bg-blue-800/50' }}
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    transition-all">
@@ -972,7 +977,12 @@
                                         @if($r->sign_token_kacab)
                                             <div class="relative group">
                                                 <button
-                                                    onclick='showQRModal({{ $r->id }}, "kacab", {{ Illuminate\Support\Js::from($r->sign_token_kacab) }}, {{ Illuminate\Support\Js::from($r->nomor_pr) }})'
+                                                    type="button"
+                                                    data-qr-trigger
+                                                    data-pr-id="{{ $r->id }}"
+                                                    data-qr-type="kacab"
+                                                    data-qr-token="{{ $r->sign_token_kacab }}"
+                                                    data-nomor-pr="{{ $r->nomor_pr }}"
                                                     class="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    {{ $r->tgl_ttd_kacab_pr ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 hover:bg-blue-200 dark:hover:bg-blue-800/50' }}
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    transition-all">
@@ -2271,36 +2281,87 @@
 
         let currentQRData = {};
 
+        const showQRWarning = (message) => {
+            if (window.Swal) {
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'QR belum bisa dibuka',
+                    text: message,
+                    confirmButtonColor: '#2563EB'
+                });
+                return;
+            }
+
+            alert(message);
+        };
+
         window.showQRModal = function (prId, type, token, nomorPr) {
-            currentQRData = { prId, type, token, nomorPr };
+            const safeType = ['kabid', 'kacab'].includes(type) ? type : '';
+            const safeToken = String(token || '').trim();
+
+            if (!safeType) {
+                showQRWarning('Jenis tanda tangan tidak valid.');
+                return;
+            }
+
+            if (!safeToken) {
+                showQRWarning('Token QR belum tersedia. Silakan generate ulang token tanda tangan.');
+                return;
+            }
+
+            currentQRData = { prId, type: safeType, token: safeToken, nomorPr };
 
             const modal = document.getElementById('qrModal');
             const title = document.getElementById('qrModalTitle');
             const subtitle = document.getElementById('qrModalSubtitle');
             const qrContainer = document.getElementById('qrCodeImage');
 
-            // Set title
-            const typeLabel = type === 'kabid' ? 'Kepala Bidang' : 'Kepala Cabang';
+            if (!modal || !title || !subtitle || !qrContainer) {
+                console.error('Elemen modal QR tidak ditemukan.');
+                showQRWarning('Komponen modal QR tidak ditemukan. Silakan refresh halaman.');
+                return;
+            }
+
+            const typeLabel = safeType === 'kabid' ? 'Kepala Bidang' : 'Kepala Cabang';
             title.textContent = `QR Code TTD ${typeLabel}`;
-            subtitle.textContent = `PR: ${nomorPr}`;
+            subtitle.textContent = `PR: ${nomorPr || '-'}`;
 
-            // Generate QR URL
-            const signUrl = `{{ url('/') }}/pr/sign/${token}/${type}`;
+            const qrApiBaseUrl = @json(url('/pr/sign-qr'));
+            const qrApiUrl = `${qrApiBaseUrl}/${encodeURIComponent(safeToken)}/${safeType}`;
 
-            // Clear previous QR
-            qrContainer.innerHTML = '';
-
-            // Generate the QR on this application so the secret token is never
-            // disclosed to a third-party QR service.
-            const qrApiUrl = `{{ url('/pr/sign-qr') }}/${encodeURIComponent(token)}/${type}`;
-            qrContainer.innerHTML = `<img src="${qrApiUrl}" alt="QR Code" class="w-48 h-48">`;
+            qrContainer.innerHTML = `
+                <img
+                    src="${qrApiUrl}"
+                    alt="QR Code ${typeLabel}"
+                    class="w-48 h-48"
+                    onerror="this.outerHTML='<div class=&quot;w-48 h-48 flex items-center justify-center rounded-xl border border-red-200 bg-red-50 p-4 text-center text-xs font-semibold text-red-700&quot;>QR gagal dimuat. Token mungkin kedaluwarsa.</div>'"
+                >
+            `;
 
             modal.classList.remove('hidden');
             modal.classList.add('flex');
         };
 
+        document.addEventListener('click', function (event) {
+            const button = event.target.closest('[data-qr-trigger]');
+            if (!button) {
+                return;
+            }
+
+            event.preventDefault();
+            event.stopPropagation();
+
+            window.showQRModal(
+                button.dataset.prId,
+                button.dataset.qrType,
+                button.dataset.qrToken,
+                button.dataset.nomorPr
+            );
+        });
+
         window.closeQRModal = function () {
             const modal = document.getElementById('qrModal');
+            if (!modal) return;
             modal.classList.add('hidden');
             modal.classList.remove('flex');
         };
