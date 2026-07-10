@@ -334,6 +334,7 @@
                             <th class="px-6 py-4 text-center font-semibold">Role</th>
                             <th class="px-6 py-4 text-center font-semibold">Department</th>
                             <th class="px-6 py-4 text-center font-semibold">Buyer Terkait</th>
+                            <th class="px-6 py-4 text-center font-semibold">Terakhir Online</th>
                             <th class="px-6 py-4 text-center font-semibold">Dibuat</th>
                             <th class="px-6 py-4 text-center font-semibold">Aksi</th>
                         </tr>
@@ -445,6 +446,38 @@
                                     @endif
                                 </td>
 
+                                {{-- Last Online --}}
+                                <td class="px-6 py-4 text-center">
+                                    @php
+                                        $lastSeenAt = !empty($user->last_seen_at) ? \Carbon\Carbon::parse($user->last_seen_at) : null;
+                                        $isOnlineNow = $lastSeenAt && $lastSeenAt->greaterThanOrEqualTo(now()->subMinutes(5));
+                                    @endphp
+
+                                    @if($lastSeenAt)
+                                        <div class="inline-flex min-w-[150px] flex-col items-center gap-1 rounded-2xl border px-3 py-2
+                                                    {{ $isOnlineNow
+                                                        ? 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-700/70 dark:bg-emerald-900/25 dark:text-emerald-100'
+                                                        : 'border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-700 dark:bg-slate-800/70 dark:text-slate-200' }}">
+                                            <span class="inline-flex items-center gap-1.5 text-xs font-extrabold">
+                                                <span class="h-2 w-2 rounded-full {{ $isOnlineNow ? 'bg-emerald-500 shadow-[0_0_0_4px_rgba(16,185,129,.15)]' : 'bg-slate-400 dark:bg-slate-500' }}"></span>
+                                                {{ $isOnlineNow ? 'Online sekarang' : $lastSeenAt->diffForHumans() }}
+                                            </span>
+                                            <span class="text-[11px] font-semibold {{ $isOnlineNow ? 'text-emerald-700 dark:text-emerald-200' : 'text-slate-500 dark:text-slate-400' }}">
+                                                {{ $lastSeenAt->format('d M Y H:i') }}
+                                            </span>
+                                        </div>
+                                    @else
+                                        <div class="inline-flex min-w-[150px] flex-col items-center gap-1 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-amber-800
+                                                    dark:border-amber-700/70 dark:bg-amber-900/25 dark:text-amber-100">
+                                            <span class="inline-flex items-center gap-1.5 text-xs font-extrabold">
+                                                <span class="h-2 w-2 rounded-full bg-amber-500"></span>
+                                                Belum pernah online
+                                            </span>
+                                            <span class="text-[11px] font-semibold text-amber-700 dark:text-amber-200">Menunggu login pertama</span>
+                                        </div>
+                                    @endif
+                                </td>
+
                                 {{-- Created At --}}
                                 <td class="px-6 py-4 text-center text-sm text-gray-500 dark:text-gray-400">
                                     {{ \Carbon\Carbon::parse($user->created_at)->format('d M Y') }}
@@ -502,7 +535,7 @@
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="7" class="text-center py-16 text-gray-500 dark:text-gray-400">
+                                <td colspan="8" class="text-center py-16 text-gray-500 dark:text-gray-400">
                                     <div class="flex flex-col items-center gap-4">
                                         <div
                                             class="w-20 h-20 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center">

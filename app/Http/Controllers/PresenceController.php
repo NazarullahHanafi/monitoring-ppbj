@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 class PresenceController extends Controller
 {
@@ -17,6 +19,7 @@ class PresenceController extends Controller
     public function heartbeat(Request $request)
     {
         $user = Auth::user();
+        $this->markLastSeen($user);
 
         // Ambil mood hari ini (jika ada)
         $mood = Cache::get(self::MOOD_PREFIX . $user->id);
@@ -124,5 +127,26 @@ class PresenceController extends Controller
             '#a855f7',
         ];
         return $colors[$id % count($colors)];
+    }
+
+    private function markLastSeen($user): void
+    {
+        if (! $user || ! isset($user->id)) {
+            return;
+        }
+
+        $throttleKey = 'presence:last_seen_update:' . $user->id;
+
+        if (! Cache::add($throttleKey, true, 60)) {
+            return;
+        }
+
+        if (! Schema::hasTable('users') || ! Schema::hasColumn('users', 'last_seen_at')) {
+            return;
+        }
+
+        DB::table('users')
+            ->where('id', $user->id)
+            ->update(['last_seen_at' => now()]);
     }
 }

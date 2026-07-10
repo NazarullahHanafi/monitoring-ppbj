@@ -24,6 +24,7 @@ class User extends Authenticatable
         'role',
         'department',
         'buyer_name',
+        'last_seen_at',
     ];
 
     public function isReadOnly(): bool
@@ -58,6 +59,7 @@ class User extends Authenticatable
     {
         return [
             'email_verified_at' => 'datetime',
+            'last_seen_at' => 'datetime',
             'password' => 'hashed',
         ];
     }
