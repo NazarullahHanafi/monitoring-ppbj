@@ -1842,7 +1842,8 @@
         <section class="search-section">
             <div class="wrap">
                 <div class="search-card sr">
-                    <form method="GET" action="{{ route('landing.track') }}" autocomplete="off">
+                    <form method="POST" action="{{ route('landing.track.secure') }}" autocomplete="off">
+                        @csrf
                         <div class="search-row">
                             <div class="search-input-wrap">
                                 <span class="search-ic"><i class="fas fa-search"></i></span>
@@ -1859,6 +1860,11 @@
                             </button>
                         </div>
                     </form>
+                    @if(session('error'))
+                        <div style="margin-top:14px;padding:12px 14px;border:1px solid rgba(248,113,113,.35);border-radius:14px;background:rgba(248,113,113,.1);color:#fca5a5;font-weight:700;font-size:.9rem">
+                            <i class="fas fa-triangle-exclamation" style="margin-right:8px"></i>{{ session('error') }}
+                        </div>
+                    @endif
                     <div class="chips-row">
                         <span class="chip-label">Contoh:</span>
                         <button type="button" onclick="searchPr('PKB/PR')" class="chip chip-c">PKB/PR</button>
@@ -1888,7 +1894,7 @@
                             </div>
                             <div style="display:grid;gap:10px">
                                 @foreach($likeResults as $item)
-                                    <a href="{{ route('landing.track', ['q' => $item['nomor']]) }}"
+                                    <a href="{{ route('landing.track.token', ['token' => $item['tracking_token'] ?? '']) }}"
                                         style="display:flex;align-items:center;justify-content:space-between;gap:14px;padding:14px 16px;border:1px solid var(--border);border-radius:14px;background:rgba(255,255,255,.035);text-decoration:none;color:var(--text)">
                                         <span style="min-width:0">
                                             <span

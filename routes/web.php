@@ -44,7 +44,13 @@ Route::middleware('guest.page_cache')->group(function () {
 
     // Track PR/PPBJ (Public - No Login Required)
     Route::get('/track', [TrackingPrController::class, 'landing'])->name('landing.track');
+    Route::get('/track/t/{token}', [TrackingPrController::class, 'landingToken'])
+        ->name('landing.track.token')
+        ->where('token', '[A-Za-z0-9\-_]+');
 });
+Route::post('/track', [TrackingPrController::class, 'secureLanding'])
+    ->name('landing.track.secure')
+    ->middleware('throttle:20,1');
 Route::post('/contact', [ContactMessageController::class, 'store'])
     ->name('landing.contact.store')
     ->middleware('throttle:5,1');

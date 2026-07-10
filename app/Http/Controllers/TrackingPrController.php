@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Log;
 
 class TrackingPrController extends Controller
@@ -21,6 +22,40 @@ class TrackingPrController extends Controller
 
     public function landing(Request $request)
     {
+        $keyword = trim((string) $request->get('q', ''));
+
+        if ($keyword !== '') {
+            return redirect()->route('landing.track.token', [
+                'token' => $this->encodeTrackingToken($keyword),
+            ]);
+        }
+
+        return view('landing.track', $this->resolveTrackingData($request));
+    }
+
+    public function secureLanding(Request $request)
+    {
+        $validated = $request->validate([
+            'q' => ['required', 'string', 'min:2', 'max:180'],
+        ]);
+
+        return redirect()->route('landing.track.token', [
+            'token' => $this->encodeTrackingToken((string) $validated['q']),
+        ]);
+    }
+
+    public function landingToken(string $token)
+    {
+        $keyword = $this->decodeTrackingToken($token);
+
+        if ($keyword === null || $keyword === '') {
+            return redirect()
+                ->route('landing.track')
+                ->with('error', 'Link tracking tidak valid. Silakan cari ulang nomor PR/PPBJ.');
+        }
+
+        $request = request()->merge(['q' => $keyword]);
+
         return view('landing.track', $this->resolveTrackingData($request));
     }
 
@@ -57,6 +92,10 @@ class TrackingPrController extends Controller
                         }
                         $likeResults = null;
                     }
+
+                    if ($likeResults) {
+                        $likeResults = $this->attachTrackingTokens($likeResults);
+                    }
                 }
             } catch (\Exception $e) {
                 Log::error('Tracking error: ' . $e->getMessage());
@@ -64,6 +103,49 @@ class TrackingPrController extends Controller
         }
 
         return compact('row', 'ppbj', 'keyword', 'sourceType', 'likeResults');
+    }
+
+    private function encodeTrackingToken(string $keyword): string
+    {
+        $keyword = trim($keyword);
+        $cipher = Crypt::encryptString($keyword);
+
+        return rtrim(strtr(base64_encode($cipher), '+/', '-_'), '=');
+    }
+
+    private function decodeTrackingToken(string $token): ?string
+    {
+        try {
+            $cipher = strtr($token, '-_', '+/');
+            $cipher .= str_repeat('=', (4 - strlen($cipher) % 4) % 4);
+
+            $decoded = base64_decode($cipher, true);
+            if (!is_string($decoded) || $decoded === '') {
+                return null;
+            }
+
+            return trim(Crypt::decryptString($decoded));
+        } catch (\Throwable $e) {
+            Log::warning('Invalid public tracking token', [
+                'ip' => request()->ip(),
+                'reason' => $e->getMessage(),
+            ]);
+
+            return null;
+        }
+    }
+
+    private function attachTrackingTokens(array $results): array
+    {
+        foreach ($results as &$item) {
+            if (!empty($item['nomor'])) {
+                $item['tracking_token'] = $this->encodeTrackingToken((string) $item['nomor']);
+            }
+        }
+
+        unset($item);
+
+        return $results;
     }
 
     private function parseDate($date): ?Carbon
