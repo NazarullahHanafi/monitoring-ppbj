@@ -579,10 +579,31 @@ class DashboardController extends Controller
     // ===================================================
     // REFRESH CACHE — via tombol di UI
     // ===================================================
-    public function refreshCache()
+    public function refreshCache(Request $request)
     {
+        $this->ensureSuperadminUmum($request);
+
         self::clearCache();
         return response()->json(['message' => 'Cache berhasil di-refresh']);
+    }
+
+    private function ensureSuperadminUmum(Request $request): void
+    {
+        $user = $request->user();
+
+        if ($user && $user->role === 'superadmin' && $user->department === 'umum') {
+            return;
+        }
+
+        Log::warning('Unauthorized dashboard cache refresh attempt', [
+            'user_id' => $user?->id,
+            'email' => $user?->email,
+            'role' => $user?->role,
+            'department' => $user?->department,
+            'ip' => $request->ip(),
+        ]);
+
+        abort(403, 'Hanya Superadmin Umum yang dapat refresh cache dashboard.');
     }
 
     // ===================================================

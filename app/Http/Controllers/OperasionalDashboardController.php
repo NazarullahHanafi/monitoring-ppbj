@@ -333,8 +333,10 @@ class OperasionalDashboardController extends Controller
      * ✅ NEW: Refresh cache endpoint (optional)
      * Can be called via AJAX or scheduled task
      */
-    public function refreshCache()
+    public function refreshCache(Request $request)
     {
+        $this->ensureSuperadminOperasional($request, 'refresh');
+
         try {
             $version = config('app.cache_version', '1');
             
@@ -413,8 +415,10 @@ class OperasionalDashboardController extends Controller
     /**
      * ✅ NEW: Clear all dashboard cache
      */
-    public function clearCache()
+    public function clearCache(Request $request)
     {
+        $this->ensureSuperadminOperasional($request, 'clear');
+
         try {
             $version = config('app.cache_version', '1');
             
@@ -435,5 +439,25 @@ class OperasionalDashboardController extends Controller
                 'message' => 'Failed to clear cache'
             ], 500);
         }
+    }
+
+    private function ensureSuperadminOperasional(Request $request, string $action): void
+    {
+        $user = $request->user();
+
+        if ($user && $user->role === 'superadmin' && $user->department === 'operasional') {
+            return;
+        }
+
+        Log::warning('Unauthorized operational dashboard cache attempt', [
+            'user_id' => $user?->id,
+            'email' => $user?->email,
+            'role' => $user?->role,
+            'department' => $user?->department,
+            'action' => $action,
+            'ip' => $request->ip(),
+        ]);
+
+        abort(403, 'Hanya Superadmin Operasional yang dapat mengelola cache dashboard operasional.');
     }
 }

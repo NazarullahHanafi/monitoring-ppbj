@@ -8,6 +8,7 @@ use App\Models\MasterPortofolio;
 use App\Models\MasterMetodePengadaan;
 use App\Models\MasterPenyediaEksternal;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
 
 class MasterDataController extends Controller
 {
@@ -47,6 +48,8 @@ class MasterDataController extends Controller
     // Fungsi untuk menambah data master
     public function addMaster(Request $request, string $type)
     {
+        $this->ensureSuperadminUmum($request, 'create', $type);
+
         $request->validate([
             'nama' => 'required|string|max:100',
         ]);
@@ -61,7 +64,7 @@ class MasterDataController extends Controller
 
             return response()->json(['message' => 'Berhasil ditambahkan', 'item' => $item]);
         } catch (\Exception $e) {
-            \Log::error('Gagal menambahkan master data', ['type' => $type, 'error' => $e->getMessage()]);
+            Log::error('Gagal menambahkan master data', ['type' => $type, 'error' => $e->getMessage()]);
             return response()->json(['message' => 'Gagal menambahkan data'], 500);
         }
     }
@@ -69,6 +72,8 @@ class MasterDataController extends Controller
     // Fungsi untuk update data master
     public function update(Request $request, string $type, int $id)
     {
+        $this->ensureSuperadminUmum($request, 'update', $type);
+
         $request->validate(['nama' => 'required|string|max:100']);
 
         $model = $this->modelByType($type);
@@ -84,6 +89,8 @@ class MasterDataController extends Controller
     // Fungsi untuk menghapus data master
     public function destroy(string $type, int $id)
     {
+        $this->ensureSuperadminUmum(request(), 'delete', $type);
+
         $model = $this->modelByType($type);
         $model::findOrFail($id)->delete();
 
@@ -91,5 +98,26 @@ class MasterDataController extends Controller
         Cache::forget($this->getCacheKey($type));
 
         return response()->json(['message' => 'Berhasil dihapus']);
+    }
+
+    private function ensureSuperadminUmum(Request $request, string $action, string $type): void
+    {
+        $user = $request->user();
+
+        if ($user && $user->role === 'superadmin' && $user->department === 'umum') {
+            return;
+        }
+
+        Log::warning('Unauthorized master data mutation attempt', [
+            'user_id' => $user?->id,
+            'email' => $user?->email,
+            'role' => $user?->role,
+            'department' => $user?->department,
+            'action' => $action,
+            'type' => $type,
+            'ip' => $request->ip(),
+        ]);
+
+        abort(403, 'Hanya Superadmin Umum yang dapat mengubah master data.');
     }
 }

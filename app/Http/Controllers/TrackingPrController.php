@@ -652,6 +652,8 @@ class TrackingPrController extends Controller
 
     public function clearCache(Request $request)
     {
+        $this->ensureSuperadminOperasional($request);
+
         $nomor = $request->get('nomor_pr');
         if (!$nomor) return response()->json(['success' => false], 400);
 
@@ -662,5 +664,24 @@ class TrackingPrController extends Controller
         }
 
         return response()->json(['success' => true, 'message' => implode(', ', array_unique($cleared))]);
+    }
+
+    private function ensureSuperadminOperasional(Request $request): void
+    {
+        $user = $request->user();
+
+        if ($user && $user->role === 'superadmin' && $user->department === 'operasional') {
+            return;
+        }
+
+        Log::warning('Unauthorized tracking cache clear attempt', [
+            'user_id' => $user?->id,
+            'email' => $user?->email,
+            'role' => $user?->role,
+            'department' => $user?->department,
+            'ip' => $request->ip(),
+        ]);
+
+        abort(403, 'Hanya Superadmin Operasional yang dapat membersihkan cache tracking.');
     }
 }

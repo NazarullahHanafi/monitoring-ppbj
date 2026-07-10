@@ -80,13 +80,21 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
         Route::get('/mentions/unread', [App\Http\Controllers\ChatController::class, 'unreadMentions'])
             ->name('mentions.unread')
             ->middleware(\App\Http\Middleware\DisableLoggingForPolling::class);
-        Route::get('/search', [App\Http\Controllers\ChatController::class, 'search'])->name('search');
-        Route::get('/followups', [App\Http\Controllers\ChatController::class, 'followups'])->name('followups');
+        Route::get('/search', [App\Http\Controllers\ChatController::class, 'search'])
+            ->name('search')
+            ->middleware('throttle:60,1');
+        Route::get('/followups', [App\Http\Controllers\ChatController::class, 'followups'])
+            ->name('followups')
+            ->middleware('throttle:60,1');
         Route::get('/reactions', [App\Http\Controllers\ChatController::class, 'reactions'])
             ->name('reactions')
             ->middleware(\App\Http\Middleware\DisableLoggingForPolling::class);
-        Route::post('/share', [App\Http\Controllers\ChatController::class, 'share'])->name('share');
-        Route::post('/followup', [App\Http\Controllers\ChatController::class, 'followup'])->name('followup');
+        Route::post('/share', [App\Http\Controllers\ChatController::class, 'share'])
+            ->name('share')
+            ->middleware('throttle:30,1');
+        Route::post('/followup', [App\Http\Controllers\ChatController::class, 'followup'])
+            ->name('followup')
+            ->middleware('throttle:30,1');
         Route::post('/{id}/reaction', [App\Http\Controllers\ChatController::class, 'react'])->name('react');
         Route::post('/send', [App\Http\Controllers\ChatController::class, 'send'])->name('send');
         Route::patch('/{id}', [App\Http\Controllers\ChatController::class, 'update'])->name('update');
@@ -116,15 +124,15 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
         });
 
         // ==== PPBJ ====
-        Route::get('/ppbj/check-ppbj-no', [PpbjController::class, 'checkPpbjNo'])->name('ppbj.checkPpbjNo');
-        Route::get('/ppbj/export', [PpbjController::class, 'export'])->name('ppbj.export');
+        Route::get('/ppbj/check-ppbj-no', [PpbjController::class, 'checkPpbjNo'])->name('ppbj.checkPpbjNo')->middleware('throttle:60,1');
+        Route::get('/ppbj/export', [PpbjController::class, 'export'])->name('ppbj.export')->middleware('throttle:10,1');
         Route::get('/ppbj/template', [PpbjController::class, 'downloadTemplate'])->name('ppbj.template');
         Route::get('/ppbj/report', [PpbjController::class, 'reportIndex'])->name('ppbj.report');
-        Route::get('/ppbj/report/data', [PpbjController::class, 'reportData'])->name('ppbj.report.data');
-        Route::get('/ppbj/report/export', [PpbjController::class, 'reportExport'])->name('ppbj.report.export');
+        Route::get('/ppbj/report/data', [PpbjController::class, 'reportData'])->name('ppbj.report.data')->middleware('throttle:60,1');
+        Route::get('/ppbj/report/export', [PpbjController::class, 'reportExport'])->name('ppbj.report.export')->middleware('throttle:10,1');
 
-        Route::post('/ppbj/import/preview', [PpbjController::class, 'previewImport'])->name('ppbj.import.preview');
-        Route::post('/ppbj/import/process', [PpbjController::class, 'processImport'])->name('ppbj.import.process');
+        Route::post('/ppbj/import/preview', [PpbjController::class, 'previewImport'])->name('ppbj.import.preview')->middleware('throttle:5,1');
+        Route::post('/ppbj/import/process', [PpbjController::class, 'processImport'])->name('ppbj.import.process')->middleware('throttle:3,1');
 
         Route::get('/ppbj', [PpbjController::class, 'index'])->name('ppbj.index');
         Route::get('/ppbj/{id}/archive', [PpbjController::class, 'archiveStatus'])->name('ppbj.archive');
@@ -153,12 +161,13 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
             ->name('dashboard.data');
 
         Route::post('/dashboard/refresh-cache', [DashboardController::class, 'refreshCache'])
+            ->middleware('throttle:5,1')
             ->name('dashboard.refresh');
 
-        Route::post('/master/{type}', [MasterDataController::class, 'addMaster']);
+        Route::post('/master/{type}', [MasterDataController::class, 'addMaster'])->middleware('throttle:20,1');
         Route::get('/master/{type}', [MasterDataController::class, 'index']);
-        Route::put('/master/{type}/{id}', [MasterDataController::class, 'update']);
-        Route::delete('/master/{type}/{id}', [MasterDataController::class, 'destroy']);
+        Route::put('/master/{type}/{id}', [MasterDataController::class, 'update'])->middleware('throttle:20,1');
+        Route::delete('/master/{type}/{id}', [MasterDataController::class, 'destroy'])->middleware('throttle:10,1');
 
         // ==== Approval PR Receipt ====
         Route::get('/approval/pr-receipts', [PrReceiptApprovalController::class, 'index'])
@@ -172,9 +181,10 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
 
         Route::get('/approval/pr-receipts/pending-count', [PrReceiptApprovalController::class, 'pendingCount'])
             ->middleware(\App\Http\Middleware\DisableLoggingForPolling::class)
+            ->middleware('throttle:120,1')
             ->name('approval.pr.pendingCount');
 
-        Route::get('/vendor/search', [VendorController::class, 'search'])->name('vendor.search');
+        Route::get('/vendor/search', [VendorController::class, 'search'])->name('vendor.search')->middleware('throttle:60,1');
         Route::resource('vendor', VendorController::class)->except(['show', 'create', 'edit']);
         Route::post('vendor/{vendor}/toggle', [VendorController::class, 'toggleActive'])->name('vendor.toggle');
 
@@ -189,7 +199,7 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
             Route::post('/', [SpphController::class, 'store'])->name('store');
 
             // ── Export ──
-            Route::get('/export', [SpphController::class, 'export'])->name('export');
+            Route::get('/export', [SpphController::class, 'export'])->name('export')->middleware('throttle:10,1');
 
             // ── Real-time (tanpa logging) ──
             Route::get('/poll', [SpphController::class, 'poll'])
@@ -202,12 +212,12 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
             Route::post('/presence/stop', [SpphController::class, 'stopPresence'])->name('presence.stop');
 
             // ── Validasi Nomor ──
-            Route::get('/check-nomor', [SpphController::class, 'checkNomor'])->name('check-nomor');
-            Route::get('/suggest-nomor', [SpphController::class, 'suggestNomor'])->name('suggest-nomor');
+            Route::get('/check-nomor', [SpphController::class, 'checkNomor'])->name('check-nomor')->middleware('throttle:60,1');
+            Route::get('/suggest-nomor', [SpphController::class, 'suggestNomor'])->name('suggest-nomor')->middleware('throttle:60,1');
 
             // ── PPBJ Dropdown ──
-            Route::get('/ppbj-options', [SpphController::class, 'getPpbjOptions'])->name('ppbj-options');
-            Route::get('/check-ppbj', [SpphController::class, 'checkPpbjStatus'])->name('check-ppbj');
+            Route::get('/ppbj-options', [SpphController::class, 'getPpbjOptions'])->name('ppbj-options')->middleware('throttle:60,1');
+            Route::get('/check-ppbj', [SpphController::class, 'checkPpbjStatus'])->name('check-ppbj')->middleware('throttle:60,1');
 
             // ── Onboarding Tutorial ──
             Route::get('/onboarding-status', function () {
@@ -271,9 +281,9 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
         Route::prefix('spph')->name('spph.')->middleware('auth')->group(function () {
             Route::put('/{spph}', [SpphController::class, 'update'])->name('update');
             Route::delete('/{spph}', [SpphController::class, 'destroy'])->name('destroy');
-            Route::get('/{spph}/cetak', [SpphController::class, 'cetakSpph'])->name('cetak');
-            Route::get('/{spph}/cetak-semua-vendor', [SpphController::class, 'cetakSemuaVendor'])->name('cetak-semua-vendor');
-            Route::get('/{spph}/items', [SpphController::class, 'getItems'])->name('items');
+            Route::get('/{spph}/cetak', [SpphController::class, 'cetakSpph'])->name('cetak')->middleware('throttle:30,1');
+            Route::get('/{spph}/cetak-semua-vendor', [SpphController::class, 'cetakSemuaVendor'])->name('cetak-semua-vendor')->middleware('throttle:30,1');
+            Route::get('/{spph}/items', [SpphController::class, 'getItems'])->name('items')->middleware('throttle:60,1');
         });
 
         // ---- SP ----
@@ -282,19 +292,19 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
             Route::post('/', [SpController::class, 'store'])->name('store');
             Route::put('/{sp}', [SpController::class, 'update'])->name('update');
             Route::delete('/{sp}', [SpController::class, 'destroy'])->name('destroy');
-            Route::get('/{sp}/items', [SpController::class, 'getItems'])->name('items');
+            Route::get('/{sp}/items', [SpController::class, 'getItems'])->name('items')->middleware('throttle:60,1');
 
             // Cetak SP
-            Route::get('/{sp}/cetak', [SpController::class, 'cetakSp'])->name('cetak');
+            Route::get('/{sp}/cetak', [SpController::class, 'cetakSp'])->name('cetak')->middleware('throttle:30,1');
 
             // Utilities
             Route::get('/poll', [SpController::class, 'poll'])
                 ->middleware(\App\Http\Middleware\DisableLoggingForPolling::class)
                 ->name('poll');
-            Route::get('/check-nomor', [SpController::class, 'checkNomor'])->name('check-nomor');
-            Route::get('/suggest-nomor', [SpController::class, 'suggestNomor'])->name('suggest-nomor');
-            Route::get('/ppbj-options', [SpController::class, 'getPpbjOptions'])->name('ppbj-options');
-            Route::get('/check-ppbj', [SpController::class, 'checkPpbjStatus'])->name('check-ppbj');
+            Route::get('/check-nomor', [SpController::class, 'checkNomor'])->name('check-nomor')->middleware('throttle:60,1');
+            Route::get('/suggest-nomor', [SpController::class, 'suggestNomor'])->name('suggest-nomor')->middleware('throttle:60,1');
+            Route::get('/ppbj-options', [SpController::class, 'getPpbjOptions'])->name('ppbj-options')->middleware('throttle:60,1');
+            Route::get('/check-ppbj', [SpController::class, 'checkPpbjStatus'])->name('check-ppbj')->middleware('throttle:60,1');
 
             Route::get('/onboarding-status', function () {
                 $id = auth()->id();
@@ -348,7 +358,7 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
                 return response()->json(['status' => 'ok', 'left' => $next]);
             })->name('onboarding.view');
 
-            Route::get('/export', [SpController::class, 'export'])->name('export');
+            Route::get('/export', [SpController::class, 'export'])->name('export')->middleware('throttle:10,1');
 
             // Presence
             Route::post('/presence/start', [SpController::class, 'startPresence'])->name('presence.start');
@@ -370,13 +380,14 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
         Route::put('/torpr/{id}', [TorprController::class, 'update'])->name('torpr.update');
 
         Route::get('/torpr/{id}/json', [TorprController::class, 'showJson'])
-            ->name('torpr.json');
+            ->name('torpr.json')
+            ->middleware('throttle:60,1');
 
         Route::post('/torpr/{id}/resubmit', [TorprController::class, 'resubmitRejectedPr'])->name('torpr.resubmit');
 
         Route::post('/torpr/{id}/request-receipt', [TorprController::class, 'requestReceipt'])
             ->name('torpr.requestReceipt');
-        Route::get('/torpr/receipt-status-bulk', [TorprController::class, 'receiptStatusBulk']);
+        Route::get('/torpr/receipt-status-bulk', [TorprController::class, 'receiptStatusBulk'])->middleware('throttle:60,1');
 
         Route::get('/torpr/{id}/receipt-status', [TorprController::class, 'receiptStatus'])
             ->name('torpr.receiptStatus');
@@ -385,39 +396,46 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
         Route::get('/tracking-pr', [TrackingPrController::class, 'index'])->name('tracking.index');
 
         Route::get('/tracking-pr/suggest', [TrackingPrController::class, 'suggest'])
-            ->name('tracking.suggest');
-        Route::get('/tracking-pr/search', [TrackingPrController::class, 'search']);
-        Route::get('/tracking-pr/history/{nomorPr}', [TrackingPrController::class, 'history']);
-        Route::get('/tracking-pr/statistics', [TrackingPrController::class, 'statistics']);
-        Route::delete('/tracking-pr/cache', [TrackingPrController::class, 'clearCache']);
+            ->name('tracking.suggest')
+            ->middleware('throttle:60,1');
+        Route::get('/tracking-pr/search', [TrackingPrController::class, 'search'])->middleware('throttle:60,1');
+        Route::get('/tracking-pr/history/{nomorPr}', [TrackingPrController::class, 'history'])->middleware('throttle:60,1');
+        Route::get('/tracking-pr/statistics', [TrackingPrController::class, 'statistics'])->middleware('throttle:60,1');
+        Route::delete('/tracking-pr/cache', [TrackingPrController::class, 'clearCache'])->middleware('throttle:10,1');
 
         Route::get('/torpr/export/full', [TorprController::class, 'exportFull'])
-            ->name('torpr.export.full');
+            ->name('torpr.export.full')
+            ->middleware('throttle:10,1');
 
         Route::get('/ops/dashboard', [OperasionalDashboardController::class, 'index'])
             ->name('ops.dashboard');
         Route::get('/ops/dashboard/data', [OperasionalDashboardController::class, 'getData'])
-            ->name('ops.dashboard.data');
+            ->name('ops.dashboard.data')
+            ->middleware('throttle:60,1');
 
         Route::post('/ops/dashboard/refresh-cache', [OperasionalDashboardController::class, 'refreshCache'])
-            ->name('ops.dashboard.refresh');
+            ->name('ops.dashboard.refresh')
+            ->middleware('throttle:5,1');
 
         Route::delete('/ops/dashboard/clear-cache', [OperasionalDashboardController::class, 'clearCache'])
-            ->name('ops.dashboard.clear');
+            ->name('ops.dashboard.clear')
+            ->middleware('throttle:5,1');
 
         Route::get('/torpr/template', [TorprController::class, 'downloadTemplate'])->name('torpr.template');
-        Route::post('/torpr/import/preview', [TorprController::class, 'previewImport'])->name('torpr.import.preview');
-        Route::post('/torpr/import/process', [TorprController::class, 'processImport'])->name('torpr.import.process');
+        Route::post('/torpr/import/preview', [TorprController::class, 'previewImport'])->name('torpr.import.preview')->middleware('throttle:5,1');
+        Route::post('/torpr/import/process', [TorprController::class, 'processImport'])->name('torpr.import.process')->middleware('throttle:3,1');
 
         // Regenerate token (requires auth - operasional only)
         Route::middleware(['auth', 'dept:operasional'])->group(function () {
             Route::post('/pr/{id}/regenerate-token/{type}', [TorprController::class, 'regenerateSignToken'])
                 ->name('pr.regenerate-token')
-                ->where('type', 'kacab|kabid');
+                ->where('type', 'kacab|kabid')
+                ->middleware('throttle:10,1');
 
             Route::get('/pr/sign-qr/{token}/{type}', [TorprController::class, 'quickSignQr'])
                 ->name('pr.quick-sign-qr')
-                ->where('type', 'kacab|kabid');
+                ->where('type', 'kacab|kabid')
+                ->middleware('throttle:30,1');
         });
 
         Route::get('/torpr/{id}/logs', [TorprController::class, 'getLogs'])->name('torpr.logs');
@@ -434,16 +452,20 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
             ->withoutMiddleware(['auth']); // Allow guest access
 
         Route::get('/quick-replies', [App\Http\Controllers\WebChatbotController::class, 'quickReplies'])
-            ->name('chatbot.web.quick');
+            ->name('chatbot.web.quick')
+            ->middleware('throttle:60,1');
 
         Route::delete('/clear', [App\Http\Controllers\WebChatbotController::class, 'clearHistory'])
-            ->name('chatbot.web.clear');
+            ->name('chatbot.web.clear')
+            ->middleware('throttle:20,1');
 
         Route::get('/greeting', [App\Http\Controllers\WebChatbotController::class, 'getGreeting'])
-            ->name('chatbot.greeting');
+            ->name('chatbot.greeting')
+            ->middleware('throttle:60,1');
 
         Route::post('/feedback', [App\Http\Controllers\FeedbackController::class, 'store'])
-            ->name('chatbot.feedback');
+            ->name('chatbot.feedback')
+            ->middleware('throttle:10,1');
 
         // ==== PR NOTIFICATIONS (Super Admin Only) ====
         Route::get('/notifications/count', [App\Http\Controllers\WebChatbotController::class, 'getNotificationCount'])
@@ -452,6 +474,7 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
 
         Route::post('/notifications/sync', [App\Http\Controllers\WebChatbotController::class, 'syncNotifications'])
             ->middleware('dept:umum')
+            ->middleware('throttle:5,1')
             ->name('chatbot.notifications.sync');
 
         // ==== ARTISAN COMMANDS (Super Admin Only) ====
