@@ -637,7 +637,7 @@ class TorprController extends Controller
     public function showJson($id)
     {
         $torpr = Torpr::select(['id', 'created_by_user_id'])->findOrFail($id);
-        $this->ensureCanManageTorpr($torpr);
+        $this->ensureCanViewTorpr($torpr);
 
         $cacheKey = "torpr_json_{$id}";
 
@@ -801,6 +801,17 @@ class TorprController extends Controller
             $isSuperadminOps || (int) $torpr->created_by_user_id === (int) $user?->id,
             403,
             'Anda hanya dapat mengubah data PR yang Anda buat.'
+        );
+    }
+
+    private function ensureCanViewTorpr(Torpr $torpr): void
+    {
+        $user = auth()->user();
+
+        abort_unless(
+            $user && $user->department === 'operasional',
+            403,
+            'Anda tidak memiliki akses untuk melihat informasi PR ini.'
         );
     }
 

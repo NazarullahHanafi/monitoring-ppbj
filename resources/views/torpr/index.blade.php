@@ -2061,7 +2061,13 @@
                     }
                 });
 
-                if (!response.ok) throw new Error('Gagal mengambil informasi PR.');
+                if (!response.ok) {
+                    let message = 'Gagal mengambil informasi PR.';
+                    if (response.status === 403) message = 'Akses ditolak untuk membuka informasi PR ini.';
+                    if (response.status === 404) message = 'Data PR tidak ditemukan atau sudah berubah.';
+                    if (response.status >= 500) message = 'Server gagal mengambil informasi PR. Silakan refresh halaman.';
+                    throw new Error(`${message} (HTTP ${response.status})`);
+                }
 
                 const data = await response.json();
 
