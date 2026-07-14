@@ -34,6 +34,8 @@ class UserController extends Controller
                 'department',
                 'buyer_name',
                 'last_seen_at',
+                'last_login_ip',
+                'last_seen_ip',
                 'created_at',
                 'updated_at'
             ]);
@@ -488,11 +490,11 @@ class UserController extends Controller
             fprintf($out, chr(0xEF) . chr(0xBB) . chr(0xBF));
 
             // Header
-            fputcsv($out, ['ID', 'Nama', 'Email', 'Role', 'Department', 'Buyer Terkait', 'Terakhir Online', 'Created At']);
+            fputcsv($out, ['ID', 'Nama', 'Email', 'Role', 'Department', 'Buyer Terkait', 'Terakhir Online', 'IP Login Terakhir', 'IP Aktif Terakhir', 'Created At']);
 
             // Query
             $query = DB::table('users')
-                ->select(['id', 'name', 'email', 'role', 'department', 'buyer_name', 'last_seen_at', 'created_at']);
+                ->select(['id', 'name', 'email', 'role', 'department', 'buyer_name', 'last_seen_at', 'last_login_ip', 'last_seen_ip', 'created_at']);
 
             // Apply filters
             if ($request->filled('department')) {
@@ -514,6 +516,8 @@ class UserController extends Controller
                         $user->department,
                         $user->buyer_name,
                         $user->last_seen_at ? \Carbon\Carbon::parse($user->last_seen_at)->format('Y-m-d H:i:s') : 'Belum pernah',
+                        $user->last_login_ip ?: '-',
+                        $user->last_seen_ip ?: '-',
                         $user->created_at,
                     ]));
                 }

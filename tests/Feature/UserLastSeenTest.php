@@ -24,6 +24,7 @@ class UserLastSeenTest extends TestCase
         ]);
 
         $this->actingAs($user)
+            ->withServerVariables(['REMOTE_ADDR' => '198.51.100.10'])
             ->postJson(route('presence.heartbeat'))
             ->assertOk()
             ->assertJsonPath('count', 1);
@@ -31,6 +32,7 @@ class UserLastSeenTest extends TestCase
         $this->assertDatabaseHas('users', [
             'id' => $user->id,
             'last_seen_at' => '2026-07-10 09:30:00',
+            'last_seen_ip' => '198.51.100.10',
         ]);
 
         Carbon::setTestNow();
@@ -64,9 +66,40 @@ class UserLastSeenTest extends TestCase
             ->get(route('users.index'))
             ->assertOk()
             ->assertSee('Terakhir Online')
+            ->assertSee('IP Login')
             ->assertSee('Online sekarang')
             ->assertSee('Belum pernah online')
             ->assertSee('Menunggu login pertama');
+
+        Carbon::setTestNow();
+    }
+
+    public function test_successful_login_records_login_ip(): void
+    {
+        Carbon::setTestNow('2026-07-10 11:00:00');
+
+        $user = User::factory()->create([
+            'email' => 'login-ip@example.test',
+            'department' => 'umum',
+            'role' => 'user',
+            'last_seen_at' => null,
+            'last_login_ip' => null,
+            'last_seen_ip' => null,
+        ]);
+
+        $this->withServerVariables(['REMOTE_ADDR' => '198.51.100.25'])
+            ->post('/login', [
+                'email' => $user->email,
+                'password' => 'password',
+            ])
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('users', [
+            'id' => $user->id,
+            'last_seen_at' => '2026-07-10 11:00:00',
+            'last_login_ip' => '198.51.100.25',
+            'last_seen_ip' => '198.51.100.25',
+        ]);
 
         Carbon::setTestNow();
     }

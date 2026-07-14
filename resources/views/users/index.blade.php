@@ -335,6 +335,7 @@
                             <th class="px-6 py-4 text-center font-semibold">Department</th>
                             <th class="px-6 py-4 text-center font-semibold">Buyer Terkait</th>
                             <th class="px-6 py-4 text-center font-semibold">Terakhir Online</th>
+                            <th class="px-6 py-4 text-center font-semibold">IP Login</th>
                             <th class="px-6 py-4 text-center font-semibold">Dibuat</th>
                             <th class="px-6 py-4 text-center font-semibold">Aksi</th>
                         </tr>
@@ -474,6 +475,56 @@
                                                 Belum pernah online
                                             </span>
                                             <span class="text-[11px] font-semibold text-amber-700 dark:text-amber-200">Menunggu login pertama</span>
+                                        </div>
+                                    @endif
+                                </td>
+
+                                {{-- Login IP --}}
+                                <td class="px-6 py-4 text-center">
+                                    @php
+                                        $loginIp = trim((string) ($user->last_login_ip ?? ''));
+                                        $seenIp = trim((string) ($user->last_seen_ip ?? ''));
+                                        $displayIp = $loginIp !== '' ? $loginIp : $seenIp;
+                                        $hasPublicIp = $displayIp !== '' && filter_var($displayIp, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE);
+                                    @endphp
+
+                                    @if($displayIp !== '')
+                                        <div class="inline-flex min-w-[170px] flex-col items-center gap-2 rounded-2xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-indigo-900
+                                                    dark:border-indigo-700/70 dark:bg-indigo-950/35 dark:text-indigo-100">
+                                            <span class="inline-flex items-center gap-1.5 font-mono text-xs font-extrabold">
+                                                <svg class="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                        d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                                                </svg>
+                                                {{ $displayIp }}
+                                            </span>
+                                            <span class="text-[10px] font-bold uppercase tracking-wide text-indigo-600 dark:text-indigo-300">
+                                                {{ $loginIp !== '' ? 'Login terakhir' : 'Aktif terakhir' }}
+                                            </span>
+                                            @if($hasPublicIp)
+                                                <a href="https://ipinfo.io/{{ rawurlencode($displayIp) }}" target="_blank" rel="noopener noreferrer"
+                                                    class="inline-flex items-center gap-1 rounded-full border border-indigo-300 bg-white px-2.5 py-1 text-[11px] font-extrabold text-indigo-700 shadow-sm transition hover:-translate-y-0.5 hover:bg-indigo-100
+                                                           dark:border-indigo-600 dark:bg-slate-900 dark:text-indigo-200 dark:hover:bg-indigo-900/40">
+                                                    <svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                            d="M17.657 16.657L13.414 20.9a2 2 0 01-2.828 0l-4.243-4.243a8 8 0 1111.314 0z" />
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                            d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                                                    </svg>
+                                                    Lacak IP
+                                                </a>
+                                            @else
+                                                <span class="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-bold text-slate-500
+                                                             dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">
+                                                    IP lokal/private
+                                                </span>
+                                            @endif
+                                        </div>
+                                    @else
+                                        <div class="inline-flex min-w-[170px] flex-col items-center gap-1 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-slate-500
+                                                    dark:border-slate-700 dark:bg-slate-800/70 dark:text-slate-400">
+                                            <span class="text-xs font-extrabold">Belum tercatat</span>
+                                            <span class="text-[11px] font-semibold">Menunggu login berikutnya</span>
                                         </div>
                                     @endif
                                 </td>

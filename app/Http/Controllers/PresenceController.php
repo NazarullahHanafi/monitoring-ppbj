@@ -141,12 +141,26 @@ class PresenceController extends Controller
             return;
         }
 
-        if (! Schema::hasTable('users') || ! Schema::hasColumn('users', 'last_seen_at')) {
+        if (! Schema::hasTable('users')) {
+            return;
+        }
+
+        $updates = [];
+
+        if (Schema::hasColumn('users', 'last_seen_at')) {
+            $updates['last_seen_at'] = now();
+        }
+
+        if (Schema::hasColumn('users', 'last_seen_ip')) {
+            $updates['last_seen_ip'] = request()->ip();
+        }
+
+        if (empty($updates)) {
             return;
         }
 
         DB::table('users')
             ->where('id', $user->id)
-            ->update(['last_seen_at' => now()]);
+            ->update($updates);
     }
 }

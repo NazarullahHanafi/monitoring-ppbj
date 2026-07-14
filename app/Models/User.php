@@ -25,6 +25,8 @@ class User extends Authenticatable
         'department',
         'buyer_name',
         'last_seen_at',
+        'last_login_ip',
+        'last_seen_ip',
     ];
 
     public function isReadOnly(): bool
