@@ -351,11 +351,11 @@ class SpController extends Controller
                 if ($lastNomor) {
                     $lastSeq = $this->extractSeq($lastNomor);
                     if ($lastSeq !== null) {
-                        $expectedSeq = $lastSeq + 1;
+                        $expectedSeq = $this->nextAvailableAutoSequence($excludeId);
                         if ($seqInput < $expectedSeq)
                             $warning = "Nomor ini ({$seqInput}) lebih kecil dari urutan berikutnya ({$expectedSeq}).";
                         elseif ($seqInput > $expectedSeq)
-                            $warning = "Nomor otomatis tidak boleh lompat. Nomor berikutnya harus " . $this->replaceSequenceInNumber($nomor, $expectedSeq) . ".";
+                            $warning = "Nomor boleh lompat, tetapi sistem otomatis berikutnya tetap akan menyarankan " . $this->replaceSequenceInNumber($nomor, $expectedSeq) . " agar celah nomor tidak hilang.";
                     }
                 }
             }
@@ -390,11 +390,13 @@ class SpController extends Controller
 
         [$year, $roman] = $this->periodFromDate($request->query('tanggal'));
 
+        $nextSeq = $this->nextAvailableAutoSequence();
         $lastNomor = $this->spModeQuery(false)->orderBy('sequence_number', 'desc')->value('nomor_sp');
-        if (!$lastNomor)
-            return ['suggestions' => [sprintf('001/PKU-%s/SP/%d', $roman, $year)], 'last' => null];
 
-        return ['suggestions' => $this->buildSuggestions($lastNomor, $year, $roman), 'last' => $lastNomor];
+        return [
+            'suggestions' => [sprintf('%03d/PKU-%s/SP/%d', $nextSeq, $roman, $year)],
+            'last' => $lastNomor,
+        ];
     }
 
     // =========================================================
@@ -552,7 +554,7 @@ class SpController extends Controller
 
             $seq = $oracleMode
                 ? ((int) $this->spModeQuery(true)->lockForUpdate()->max('sequence_number') + 1)
-                : $this->validateSequentialAutoNumber($request->nomor_sp, 'nomor_sp');
+                : ($this->extractSeq($request->nomor_sp) ?? $this->nextAvailableAutoSequence());
 
             // Hitung total dari items jika ada
             $items = $request->input('items', []);
@@ -704,7 +706,7 @@ class SpController extends Controller
 
             $seq = $oracleMode
                 ? $sp->sequence_number
-                : $this->validateSequentialAutoNumber($request->nomor_sp, 'nomor_sp', (int) $sp->sequence_number, (int) $sp->id);
+                : ($this->extractSeq($request->nomor_sp) ?? $sp->sequence_number);
 
             // Hitung total dari items jika ada
             $items = $request->input('items', []);
@@ -4771,38 +4773,36 @@ class SpController extends Controller
         }
     }
 
-    private function validateSequentialAutoNumber(string $nomor, string $field, ?int $currentSeq = null, ?int $excludeId = null): int
+    private function nextAvailableAutoSequence(?int $excludeId = null): int
     {
-        $seq = $this->extractSeq($nomor);
-
-        if ($seq === null) {
-            throw ValidationException::withMessages([
-                $field => 'Format nomor SP otomatis tidak valid. Gunakan format seperti 325/PKU-VII/SP/2026.',
-            ]);
-        }
-
-        if ($currentSeq !== null && $seq === $currentSeq) {
-            return $seq;
-        }
-
-        $lastSeq = (int) ($this->spModeQuery(false)
+        $usedSequences = $this->spModeQuery(false)
             ->when($excludeId, fn($q) => $q->where('id', '!=', $excludeId))
-            ->orderByDesc('sequence_number')
-            ->lockForUpdate()
-            ->value('sequence_number') ?? 0);
+            ->orderBy('sequence_number')
+            ->pluck('sequence_number')
+            ->map(fn($seq) => (int) $seq)
+            ->filter(fn($seq) => $seq > 0)
+            ->unique()
+            ->values();
 
-        $expectedSeq = $lastSeq + 1;
-
-        if ($seq !== $expectedSeq) {
-            $expectedNumber = $this->replaceSequenceInNumber($nomor, $expectedSeq);
-            $message = $seq > $expectedSeq
-                ? "Nomor SP otomatis tidak boleh lompat. Nomor berikutnya harus {$expectedNumber}, agar nomor {$expectedSeq} sampai " . ($seq - 1) . " tidak hilang."
-                : "Nomor SP otomatis harus mengikuti urutan terakhir. Nomor berikutnya adalah {$expectedNumber}.";
-
-            throw ValidationException::withMessages([$field => $message]);
+        if ($usedSequences->isEmpty()) {
+            return 1;
         }
 
-        return $seq;
+        $next = (int) $usedSequences->first();
+
+        foreach ($usedSequences as $seq) {
+            if ($seq < $next) {
+                continue;
+            }
+
+            if ($seq > $next) {
+                break;
+            }
+
+            $next++;
+        }
+
+        return $next;
     }
 
     private function replaceSequenceInNumber(string $nomor, int $seq): string

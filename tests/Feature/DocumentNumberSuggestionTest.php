@@ -135,7 +135,7 @@ class DocumentNumberSuggestionTest extends TestCase
         ]);
     }
 
-    public function test_auto_numbering_rejects_skipped_sequence_for_sp_and_spph(): void
+    public function test_auto_numbering_allows_skipped_sequence_but_next_suggestion_fills_gap(): void
     {
         $user = User::factory()->create([
             'department' => 'umum',
@@ -165,35 +165,45 @@ class DocumentNumberSuggestionTest extends TestCase
         $this->actingAs($user)
             ->from(route('spph.index'))
             ->post(route('spph.store'), [
-                'nomor_spph' => '500/PKU-VII/SPPH/2026',
+                'nomor_spph' => '590/PKU-VII/SPPH/2026',
                 'tanggal' => '2026-07-10',
                 'nama_vendor' => 'Vendor Test',
                 'deskripsi_pengadaan' => 'Pengadaan test',
                 'pic' => 'Nazar',
             ])
-            ->assertRedirect(route('spph.index'))
-            ->assertSessionHasErrors('nomor_spph');
+            ->assertRedirect(route('spph.index'));
 
-        $this->assertDatabaseMissing('spphs', [
-            'nomor_spph' => '500/PKU-VII/SPPH/2026',
+        $this->assertDatabaseHas('spphs', [
+            'nomor_spph' => '590/PKU-VII/SPPH/2026',
+            'sequence_number' => 590,
         ]);
+
+        $this->actingAs($user)
+            ->getJson(route('spph.suggest-nomor', ['tanggal' => '2026-07-10']))
+            ->assertOk()
+            ->assertJsonPath('suggestions.0', '325/PKU-VII/SPPH/2026');
 
         $this->actingAs($user)
             ->from(route('sp.index'))
             ->post(route('sp.store'), [
-                'nomor_sp' => '500/PKU-VII/SP/2026',
+                'nomor_sp' => '590/PKU-VII/SP/2026',
                 'tanggal_sp' => '2026-07-10',
                 'nilai_sp' => 1000000,
                 'nama_vendor' => 'Vendor Test',
                 'deskripsi_pengadaan' => 'Pengadaan test',
                 'pic' => 'Nazar',
             ])
-            ->assertRedirect(route('sp.index'))
-            ->assertSessionHasErrors('nomor_sp');
+            ->assertRedirect(route('sp.index'));
 
-        $this->assertDatabaseMissing('sps', [
-            'nomor_sp' => '500/PKU-VII/SP/2026',
+        $this->assertDatabaseHas('sps', [
+            'nomor_sp' => '590/PKU-VII/SP/2026',
+            'sequence_number' => 590,
         ]);
+
+        $this->actingAs($user)
+            ->getJson(route('sp.suggest-nomor', ['tanggal' => '2026-07-10']))
+            ->assertOk()
+            ->assertJsonPath('suggestions.0', '325/PKU-VII/SP/2026');
     }
 
     public function test_oracle_sp_mode_keeps_manual_number_before_saving(): void
