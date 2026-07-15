@@ -187,6 +187,109 @@
             color: #dbeafe !important;
         }
 
+        .secure-delete-popup {
+            width: min(92vw, 34rem) !important;
+            padding: 1.35rem 1.45rem 1.45rem !important;
+        }
+
+        .secure-delete-popup .swal2-icon {
+            margin: .75rem auto .5rem !important;
+        }
+
+        .secure-delete-popup .swal2-title {
+            padding: 0 !important;
+            margin: .65rem 0 1.15rem !important;
+            font-size: 1.55rem !important;
+            font-weight: 950 !important;
+            letter-spacing: -.03em !important;
+        }
+
+        .secure-delete-popup .swal2-html-container {
+            margin: 0 !important;
+            padding: 0 !important;
+            overflow: visible !important;
+        }
+
+        .secure-delete-popup .swal2-actions {
+            gap: .75rem !important;
+            margin-top: 1.3rem !important;
+        }
+
+        .secure-delete-popup .swal2-confirm,
+        .secure-delete-popup .swal2-cancel {
+            border-radius: .85rem !important;
+            padding: .78rem 1.2rem !important;
+            font-weight: 950 !important;
+        }
+
+        .secure-delete-stack {
+            display: grid;
+            gap: .78rem;
+            text-align: left;
+        }
+
+        .secure-delete-danger,
+        .secure-delete-warning,
+        .secure-delete-lock-preview {
+            display: block;
+            margin: 0;
+            padding: .95rem 1rem;
+            border-radius: 1rem;
+        }
+
+        .secure-delete-danger-title,
+        .secure-delete-warning-title {
+            display: flex;
+            align-items: center;
+            gap: .45rem;
+            margin-bottom: .35rem;
+            font-size: .82rem;
+            font-weight: 950;
+            line-height: 1.35;
+        }
+
+        .secure-delete-danger p,
+        .secure-delete-warning p,
+        .secure-delete-lock-preview p {
+            margin: 0;
+            font-size: .78rem;
+            font-weight: 750;
+            line-height: 1.65;
+        }
+
+        .secure-delete-input-wrap {
+            display: grid;
+            gap: .45rem;
+            margin-top: .1rem;
+        }
+
+        .secure-delete-password-label {
+            margin: 0;
+            font-size: .82rem;
+            line-height: 1.4;
+        }
+
+        .secure-delete-password-field {
+            margin: 0;
+            min-height: 3.05rem;
+            padding: .25rem .35rem .25rem .95rem;
+        }
+
+        .secure-delete-password-field input.swal2-input {
+            margin: 0 !important;
+            box-shadow: none !important;
+            width: 100% !important;
+            padding: 0 !important;
+        }
+
+        .secure-delete-toggle {
+            min-width: 4.25rem;
+        }
+
+        .dark .secure-delete-popup {
+            background: linear-gradient(180deg, #0f172a 0%, #111827 100%) !important;
+        }
+
         /* ════════════════════════════════════════════════════════════
                                                                ITEMS SECTION (SP) - dengan animasi
                                                                ════════════════════════════════════════════════════════════ */
@@ -3422,19 +3525,24 @@
                 icon: 'warning',
                 title: `Hapus ${label}?`,
                 html: `
+                    <div class="secure-delete-stack">
                     <div class="secure-delete-danger">
-                        <strong>Data: ${secureDeleteEscapeHtml(nomor)}</strong>
-                        <span>Data ${label} akan dihapus permanen. Relasi ke PPBJ akan disesuaikan bila data ini terhubung.</span>
+                        <div class="secure-delete-danger-title">⚠️ Data: ${secureDeleteEscapeHtml(nomor)}</div>
+                        <p>Data ${label} akan dihapus permanen. Relasi ke PPBJ akan disesuaikan bila data ini terhubung.</p>
                     </div>
                     <div class="secure-delete-warning">
-                        Masukkan <strong>password pembuat ${label}</strong>. Untuk data lama tanpa catatan pembuat, gunakan password user yang sedang login.
+                        <div class="secure-delete-warning-title">🔐 Verifikasi password</div>
+                        <p>Masukkan <strong>password pembuat ${label}</strong>. Untuk data lama tanpa catatan pembuat, gunakan password user yang sedang login.</p>
                     </div>
+                    <div class="secure-delete-input-wrap">
                     <label class="secure-delete-password-label" for="secureDeletePassword">Password pembuat ${label}</label>
                     <div class="secure-delete-password-field">
                         <input id="secureDeletePassword" type="password" class="swal2-input" placeholder="Masukkan password pembuat ${label}">
                         <button type="button" id="secureDeleteToggle" class="secure-delete-toggle">Lihat</button>
                     </div>
-                    <div class="secure-delete-lock-preview">Jika salah 3 kali, aksi hapus dikunci 15 menit.</div>
+                    </div>
+                    <div class="secure-delete-lock-preview"><p>Jika salah 3 kali, aksi hapus dikunci 15 menit untuk menjaga keamanan data.</p></div>
+                    </div>
                 `,
                 showCancelButton: true,
                 confirmButtonText: `Ya, Hapus ${label}`,
