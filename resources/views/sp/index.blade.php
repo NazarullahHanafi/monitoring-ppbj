@@ -3254,40 +3254,53 @@
         }
 
         function setSpModeGuardBox(box, type, title, body, actionLabel = null, actionMode = null, prefix = 'add') {
+            const dark = isDarkModeActive();
             const palettes = {
                 danger: {
-                    wrap: 'bg-red-50 dark:bg-red-950/40 border-red-200 dark:border-red-800 text-red-950 dark:text-red-50',
-                    icon: 'bg-red-600 text-white',
-                    body: 'text-red-700 dark:text-red-200',
-                    button: 'bg-red-600 hover:bg-red-700 text-white'
+                    bg: dark ? '#3f1218' : '#fff1f2',
+                    border: dark ? '#f87171' : '#fecdd3',
+                    title: dark ? '#ffffff' : '#881337',
+                    body: dark ? '#fecaca' : '#be123c',
+                    iconBg: '#dc2626',
+                    buttonBg: '#dc2626',
+                    buttonHover: '#b91c1c'
                 },
                 warning: {
-                    wrap: 'bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800 text-amber-950 dark:text-amber-50',
-                    icon: 'bg-amber-500 text-white',
-                    body: 'text-amber-800 dark:text-amber-200',
-                    button: 'bg-amber-500 hover:bg-amber-600 text-white'
+                    bg: dark ? '#3b2a08' : '#fff7ed',
+                    border: dark ? '#f59e0b' : '#fed7aa',
+                    title: dark ? '#ffffff' : '#7c2d12',
+                    body: dark ? '#fde68a' : '#9a3412',
+                    iconBg: '#f59e0b',
+                    buttonBg: '#f59e0b',
+                    buttonHover: '#d97706'
                 },
                 success: {
-                    wrap: 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 text-emerald-950 dark:text-emerald-50',
-                    icon: 'bg-emerald-600 text-white',
-                    body: 'text-emerald-700 dark:text-emerald-200',
-                    button: 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                    bg: dark ? '#0f2f25' : '#ecfdf5',
+                    border: dark ? '#34d399' : '#a7f3d0',
+                    title: dark ? '#ffffff' : '#064e3b',
+                    body: dark ? '#bbf7d0' : '#047857',
+                    iconBg: '#059669',
+                    buttonBg: '#059669',
+                    buttonHover: '#047857'
                 }
             };
             const palette = palettes[type] || palettes.warning;
             const actionHtml = actionLabel && actionMode
-                ? `<button type="button" onclick="switchSpModeWithDraft('${prefix}', '${actionMode}')" class="mt-3 inline-flex items-center gap-2 rounded-xl px-3 py-2 text-[11px] font-extrabold shadow-sm transition ${palette.button}">
+                ? `<button type="button" onclick="switchSpModeWithDraft('${prefix}', '${actionMode}')" class="mt-3 inline-flex items-center gap-2 rounded-xl px-3 py-2 text-[11px] font-extrabold shadow-sm transition text-white" style="background:${palette.buttonBg}" onmouseenter="this.style.background='${palette.buttonHover}'" onmouseleave="this.style.background='${palette.buttonBg}'">
                         <span>↗</span><span>${actionLabel}</span>
                    </button>`
                 : '';
 
-            box.className = `mt-3 rounded-2xl border p-3 shadow-sm transition-all ${palette.wrap}`;
+            box.className = 'mt-3 rounded-2xl border p-3 shadow-sm transition-all';
+            box.style.background = palette.bg;
+            box.style.borderColor = palette.border;
+            box.style.color = palette.title;
             box.innerHTML = `
                 <div class="flex gap-3">
-                    <div class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-black ${palette.icon}">${type === 'success' ? '✓' : '!'}</div>
+                    <div class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-black text-white" style="background:${palette.iconBg}">${type === 'success' ? '✓' : '!'}</div>
                     <div class="min-w-0">
-                        <div class="text-sm font-black leading-snug">${title}</div>
-                        <div class="mt-1 text-xs font-semibold leading-relaxed ${palette.body}">${body}</div>
+                        <div class="text-sm font-black leading-snug" style="color:${palette.title}">${title}</div>
+                        <div class="mt-1 text-xs font-semibold leading-relaxed" style="color:${palette.body}">${body}</div>
                         ${actionHtml}
                     </div>
                 </div>
@@ -3394,6 +3407,7 @@
 
             const value = getSpModeGuardValue(prefix);
             box.className = 'hidden mt-2 text-xs rounded-xl px-3 py-2 border';
+            box.style.cssText = '';
             box.innerHTML = '';
 
             if (!value) return true;
