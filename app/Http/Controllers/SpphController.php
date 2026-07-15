@@ -444,6 +444,18 @@ class SpphController extends Controller
     // =========================================================
     public function update(Request $request, Spph $spph)
     {
+        $currentUserId = $request->user()?->id;
+
+        if ($spph->created_by_user_id && (int) $spph->created_by_user_id !== (int) $currentUserId) {
+            $message = 'Data SPPH hanya bisa diedit oleh user pembuatnya.';
+
+            if ($request->expectsJson()) {
+                return response()->json(['message' => $message], 403);
+            }
+
+            return back()->withErrors(['edit' => $message])->withInput();
+        }
+
         $request->merge([
             'nomor_spph' => $this->normalizeNumberPeriod($request->input('nomor_spph', ''), $request->input('tanggal'), 'SPPH'),
         ]);

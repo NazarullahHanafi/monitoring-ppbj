@@ -635,6 +635,17 @@ class SpController extends Controller
     public function update(Request $request, Sp $sp)
     {
         $oracleMode = $this->isOracleMode($request);
+        $currentUserId = $request->user()?->id;
+
+        if ($sp->created_by_user_id && (int) $sp->created_by_user_id !== (int) $currentUserId) {
+            $message = 'Data SP hanya bisa diedit oleh user pembuatnya.';
+
+            if ($request->expectsJson()) {
+                return response()->json(['message' => $message], 403);
+            }
+
+            return back()->withErrors(['edit' => $message])->withInput();
+        }
 
         $request->merge([
             'nomor_sp' => $oracleMode

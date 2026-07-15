@@ -2250,6 +2250,7 @@
                     </thead>
                     <tbody id="spBody" class="divide-y divide-gray-100 dark:divide-gray-700">
                         @forelse($sps as $i => $s)
+                            @php($canEditSp = blank($s->created_by_user_id) || (int) $s->created_by_user_id === (int) auth()->id())
                             <tr class="tbl-row-hover" data-id="{{ $s->id }}"
                                 data-search="{{ strtolower($s->nomor_sp . ' ' . $s->nomor_pr . ' ' . $s->nama_vendor . ' ' . $s->deskripsi_pengadaan) }}"
                                 data-pic="{{ $s->pic }}">
@@ -2301,35 +2302,46 @@
                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                                     d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
                                             </svg></a>
-                                        <button
-                                            onclick="openEditModal(
-                                                {{ $s->id }},
-                                                {{ Js::from($s->nomor_sp) }},
-                                                {{ Js::from($s->tanggal_sp?->format('Y-m-d')) }},
-                                                {{ $s->nilai_sp ?? 0 }},
-                                                {{ Js::from($s->nomor_pr ?? '') }},
-                                                {{ $s->nilai_pr ?? 0 }},
-                                                {{ Js::from($s->nama_vendor) }},
-                                                {{ Js::from($s->deskripsi_pengadaan) }},
-                                                {{ Js::from($s->pic) }},
-                                                {{ Js::from($s->sph ?? '') }},
-                                                {{ Js::from($s->tgl_sph?->format('Y-m-d')) }},
-                                                {{ Js::from($s->promised_date?->format('Y-m-d')) }},
-                                                {{ Js::from($s->rfq ?? '') }},
-                                                {{ Js::from($s->nomor_pemenang ?? '') }},
-                                                {{ Js::from($s->tanggal_pemenang?->format('Y-m-d')) }},
-                                                {{ Js::from($s->awal_kontrak?->format('Y-m-d')) }},
-                                                {{ Js::from($s->akhir_kontrak?->format('Y-m-d')) }},
-                                                {{ Js::from($s->bidang_ip_itu ?? '') }},
-                                                {{ Js::from($s->penandatangan_sci ?? '') }},
-                                                {{ Js::from($s->jabatan_sci ?? '') }}
-                                            )"
-                                            class="p-1.5 rounded-lg text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/30 transition-colors"
-                                            title="Edit"><svg class="w-4 h-4" fill="none" stroke="currentColor"
-                                                viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                    d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                                            </svg></button>
+                                        @if($canEditSp)
+                                            <button
+                                                onclick="openEditModal(
+                                                    {{ $s->id }},
+                                                    {{ Js::from($s->nomor_sp) }},
+                                                    {{ Js::from($s->tanggal_sp?->format('Y-m-d')) }},
+                                                    {{ $s->nilai_sp ?? 0 }},
+                                                    {{ Js::from($s->nomor_pr ?? '') }},
+                                                    {{ $s->nilai_pr ?? 0 }},
+                                                    {{ Js::from($s->nama_vendor) }},
+                                                    {{ Js::from($s->deskripsi_pengadaan) }},
+                                                    {{ Js::from($s->pic) }},
+                                                    {{ Js::from($s->sph ?? '') }},
+                                                    {{ Js::from($s->tgl_sph?->format('Y-m-d')) }},
+                                                    {{ Js::from($s->promised_date?->format('Y-m-d')) }},
+                                                    {{ Js::from($s->rfq ?? '') }},
+                                                    {{ Js::from($s->nomor_pemenang ?? '') }},
+                                                    {{ Js::from($s->tanggal_pemenang?->format('Y-m-d')) }},
+                                                    {{ Js::from($s->awal_kontrak?->format('Y-m-d')) }},
+                                                    {{ Js::from($s->akhir_kontrak?->format('Y-m-d')) }},
+                                                    {{ Js::from($s->bidang_ip_itu ?? '') }},
+                                                    {{ Js::from($s->penandatangan_sci ?? '') }},
+                                                    {{ Js::from($s->jabatan_sci ?? '') }}
+                                                )"
+                                                class="p-1.5 rounded-lg text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/30 transition-colors"
+                                                title="Edit"><svg class="w-4 h-4" fill="none" stroke="currentColor"
+                                                    viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                        d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                                </svg></button>
+                                        @else
+                                            <span
+                                                class="p-1.5 rounded-lg text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-800/80 cursor-not-allowed"
+                                                title="Edit hanya bisa dilakukan oleh pembuat SP">
+                                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                        d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                                                </svg>
+                                            </span>
+                                        @endif
                                         <button type="button"
                                             onclick="secureDeleteRecord('SP', @js($s->nomor_sp ?? ('SP-' . $s->id)), @js(route('sp.destroy', $s)))"
                                             class="p-1.5 rounded-lg text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors"

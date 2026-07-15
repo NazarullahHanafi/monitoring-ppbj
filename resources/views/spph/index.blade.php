@@ -2423,7 +2423,10 @@
                     </thead>
                     <tbody id="spphBody" class="divide-y divide-gray-100 dark:divide-gray-700">
                         @forelse($spphs as $i => $s)
-                            @php($vendorList = $s->print_vendor_names)
+                            @php
+                                $vendorList = $s->print_vendor_names;
+                                $canEditSpph = blank($s->created_by_user_id) || (int) $s->created_by_user_id === (int) auth()->id();
+                            @endphp
                             <tr class="tbl-row-hover" data-id="{{ $s->id }}" data-pic="{{ $s->pic }}"
                                 data-search="{{ strtolower($s->nomor_spph . ' ' . $s->nomor_pr . ' ' . implode(' ', $vendorList) . ' ' . $s->deskripsi_pengadaan) }}">
                                 <td class="px-4 py-3 text-gray-400 text-xs font-mono">{{ $spphs->firstItem() + $i }}</td>
@@ -2489,15 +2492,26 @@
                                                 @endforeach
                                             </select>
                                         @endif
-                                        <button
-                                            onclick="openEditModal({{ $s->id }}, @js($s->nomor_spph), @js($s->tanggal?->format('Y-m-d')), @js($s->nomor_pr ?? ''), @js($vendorList), @js($s->deskripsi_pengadaan), @js($s->pic))"
-                                            class="p-1.5 rounded-lg text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/30 transition-colors"
-                                            title="Edit">
-                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                    d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                                            </svg>
-                                        </button>
+                                        @if($canEditSpph)
+                                            <button
+                                                onclick="openEditModal({{ $s->id }}, @js($s->nomor_spph), @js($s->tanggal?->format('Y-m-d')), @js($s->nomor_pr ?? ''), @js($vendorList), @js($s->deskripsi_pengadaan), @js($s->pic))"
+                                                class="p-1.5 rounded-lg text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/30 transition-colors"
+                                                title="Edit">
+                                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                        d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                                </svg>
+                                            </button>
+                                        @else
+                                            <span
+                                                class="p-1.5 rounded-lg text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-800/80 cursor-not-allowed"
+                                                title="Edit hanya bisa dilakukan oleh pembuat SPPH">
+                                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                        d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                                                </svg>
+                                            </span>
+                                        @endif
                                         <button type="button"
                                             onclick="secureDeleteRecord('SPPH', @js($s->nomor_spph ?? ('SPPH-' . $s->id)), @js(route('spph.destroy', $s)))"
                                             class="p-1.5 rounded-lg text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors"
