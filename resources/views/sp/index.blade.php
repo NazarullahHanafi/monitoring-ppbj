@@ -2936,6 +2936,8 @@
         const PPBJ_OPTIONS_URL = '{{ route('sp.ppbj-options') }}';
         const PPBJ_CHECK_URL = '{{ route('sp.check-ppbj') }}';
         const ORACLE_MODE_SP = {{ $oracleMode ? 'true' : 'false' }};
+        const SP_AUTO_URL = @json($normalSpUrl);
+        const SP_ORACLE_URL = @json($oracleSpUrl);
 
         let lastIdSp = {{ $sps->count() > 0 ? $sps->max('id') : 0 }};
         let pollTimer = null, checkTimer = null, searchTimer = null, presenceTimer = null, heartbeatTimer = null, modalOpen = false;
@@ -3244,6 +3246,195 @@
         // NOMOR CHECK
         // ═══════════════════════════════════════
         function setStatus(inputEl, statusEl, state, msg) { inputEl.classList.remove('nomor-input-ok', 'nomor-input-error', 'nomor-input-warn'); statusEl.innerHTML = ''; if (!msg) return; const i = { ok: '✅', duplicate: '❌', warn: '⚠️', checking: '🔄' }, c = { ok: 'nomor-status-ok', duplicate: 'nomor-status-error', warn: 'nomor-status-warn', checking: 'text-gray-400' }, b = { ok: 'nomor-input-ok', duplicate: 'nomor-input-error', warn: 'nomor-input-warn' }; if (b[state]) inputEl.classList.add(b[state]); statusEl.innerHTML = `<span class="${c[state] || ''}">${i[state] || ''} ${msg}</span>`; }
+
+        const SP_MODE_DRAFT_KEY = 'simonpr_sp_mode_switch_draft';
+
+        function isDarkModeActive() {
+            return document.documentElement.classList.contains('dark');
+        }
+
+        function setSpModeGuardBox(box, type, title, body, actionLabel = null, actionMode = null, prefix = 'add') {
+            const palettes = {
+                danger: {
+                    wrap: 'bg-red-50 dark:bg-red-950/40 border-red-200 dark:border-red-800 text-red-950 dark:text-red-50',
+                    icon: 'bg-red-600 text-white',
+                    body: 'text-red-700 dark:text-red-200',
+                    button: 'bg-red-600 hover:bg-red-700 text-white'
+                },
+                warning: {
+                    wrap: 'bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800 text-amber-950 dark:text-amber-50',
+                    icon: 'bg-amber-500 text-white',
+                    body: 'text-amber-800 dark:text-amber-200',
+                    button: 'bg-amber-500 hover:bg-amber-600 text-white'
+                },
+                success: {
+                    wrap: 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 text-emerald-950 dark:text-emerald-50',
+                    icon: 'bg-emerald-600 text-white',
+                    body: 'text-emerald-700 dark:text-emerald-200',
+                    button: 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                }
+            };
+            const palette = palettes[type] || palettes.warning;
+            const actionHtml = actionLabel && actionMode
+                ? `<button type="button" onclick="switchSpModeWithDraft('${prefix}', '${actionMode}')" class="mt-3 inline-flex items-center gap-2 rounded-xl px-3 py-2 text-[11px] font-extrabold shadow-sm transition ${palette.button}">
+                        <span>↗</span><span>${actionLabel}</span>
+                   </button>`
+                : '';
+
+            box.className = `mt-3 rounded-2xl border p-3 shadow-sm transition-all ${palette.wrap}`;
+            box.innerHTML = `
+                <div class="flex gap-3">
+                    <div class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-black ${palette.icon}">${type === 'success' ? '✓' : '!'}</div>
+                    <div class="min-w-0">
+                        <div class="text-sm font-black leading-snug">${title}</div>
+                        <div class="mt-1 text-xs font-semibold leading-relaxed ${palette.body}">${body}</div>
+                        ${actionHtml}
+                    </div>
+                </div>
+            `;
+        }
+
+        function collectSpModeDraft(prefix) {
+            const isEdit = prefix === 'edit';
+            const val = id => document.getElementById(id)?.value || '';
+            const selected = selector => $(selector).val() || '';
+
+            return {
+                expiresAt: Date.now() + (10 * 60 * 1000),
+                nomor_pr: val(isEdit ? 'editNomorPrFinal' : 'nomorPrFinal') || val(isEdit ? 'editNomorPrManual' : 'nomorPrManual'),
+                ppbj_id: selected(isEdit ? '#editPpbjSelect' : '#ppbjSelect'),
+                tanggal_sp: val(isEdit ? 'editTanggalSp' : 'tanggalSpInput'),
+                nilai_sp: val(isEdit ? 'editNilaiSp' : 'nilaiSpInput'),
+                nilai_pr: val(isEdit ? 'editNilaiPr' : 'nilaiPrInput'),
+                deskripsi: val(isEdit ? 'editDeskripsiSp' : 'addDeskripsi'),
+                sph: val(isEdit ? 'editSph' : 'addSph'),
+                tgl_sph: val(isEdit ? 'editTglSph' : 'addTglSph'),
+                promised_date: val(isEdit ? 'editPromisedDate' : 'addPromisedDate'),
+                rfq: val(isEdit ? 'editRfq' : 'addRfq'),
+                nomor_pemenang: val(isEdit ? 'editNomorPemenang' : 'addNomorPemenang'),
+                tanggal_pemenang: val(isEdit ? 'editTanggalPemenang' : 'addTanggalPemenang'),
+                awal_kontrak: val(isEdit ? 'editAwalKontrak' : 'addAwalKontrak'),
+                akhir_kontrak: val(isEdit ? 'editAkhirKontrak' : 'addAkhirKontrak'),
+                bidang_ip_itu: val(isEdit ? 'editBidangIpItu' : 'addBidangIpItu'),
+                penandatangan_sci: val(isEdit ? 'editPenandatanganSci' : 'addPenandatanganSci'),
+                jabatan_sci: val(isEdit ? 'editJabatanSci' : 'addJabatanSci')
+            };
+        }
+
+        function switchSpModeWithDraft(prefix, mode) {
+            try {
+                sessionStorage.setItem(SP_MODE_DRAFT_KEY, JSON.stringify(collectSpModeDraft(prefix)));
+            } catch (err) {
+                console.warn('[SP] gagal menyimpan draft pindah mode:', err);
+            }
+            window.location.href = mode === 'oracle' ? SP_ORACLE_URL : SP_AUTO_URL;
+        }
+
+        function restoreSpModeDraftToAdd() {
+            let draft = null;
+            try {
+                const raw = sessionStorage.getItem(SP_MODE_DRAFT_KEY);
+                if (!raw) return;
+                draft = JSON.parse(raw);
+                sessionStorage.removeItem(SP_MODE_DRAFT_KEY);
+            } catch (err) {
+                sessionStorage.removeItem(SP_MODE_DRAFT_KEY);
+                return;
+            }
+
+            if (!draft || !draft.expiresAt || draft.expiresAt < Date.now()) return;
+            const set = (id, value) => {
+                const el = document.getElementById(id);
+                if (el && value !== undefined && value !== null && value !== '') el.value = value;
+            };
+
+            set('tanggalSpInput', draft.tanggal_sp);
+            set('nilaiSpInput', draft.nilai_sp);
+            set('nilaiPrInput', draft.nilai_pr);
+            set('addDeskripsi', draft.deskripsi);
+            set('addSph', draft.sph);
+            set('addTglSph', draft.tgl_sph);
+            set('addPromisedDate', draft.promised_date);
+            set('addRfq', draft.rfq);
+            set('addNomorPemenang', draft.nomor_pemenang);
+            set('addTanggalPemenang', draft.tanggal_pemenang);
+            set('addAwalKontrak', draft.awal_kontrak);
+            set('addAkhirKontrak', draft.akhir_kontrak);
+            set('addBidangIpItu', draft.bidang_ip_itu);
+            set('addPenandatanganSci', draft.penandatangan_sci);
+            set('addJabatanSci', draft.jabatan_sci);
+
+            if (draft.ppbj_id) {
+                setPrMode('ppbj');
+                $('#ppbjSelect').val(draft.ppbj_id).trigger('change');
+            } else if (draft.nomor_pr) {
+                setPrMode('manual');
+                $('#nomorPrManual').val(draft.nomor_pr);
+                $('#nomorPrFinal').val(draft.nomor_pr);
+            }
+
+            updateJampelPreview('add');
+            updateSpModeGuard('add');
+            Swal.fire({
+                toast: true,
+                position: 'top-end',
+                icon: 'info',
+                title: 'Draft dipulihkan setelah pindah mode',
+                showConfirmButton: false,
+                timer: 2600,
+                timerProgressBar: true,
+                background: isDarkModeActive() ? '#111827' : '#ffffff',
+                color: isDarkModeActive() ? '#f9fafb' : '#111827'
+            });
+        }
+
+        updateSpModeGuard = function (prefix) {
+            const box = document.getElementById(prefix === 'edit' ? 'editModeGuardSp' : 'addModeGuardSp');
+            if (!box) return true;
+
+            const value = getSpModeGuardValue(prefix);
+            box.className = 'hidden mt-2 text-xs rounded-xl px-3 py-2 border';
+            box.innerHTML = '';
+
+            if (!value) return true;
+
+            if (ORACLE_MODE_SP && value <= 50000000) {
+                setSpModeGuardBox(
+                    box,
+                    'danger',
+                    'Nilai belum sesuai untuk Mode Oracle ERP',
+                    'Mode Oracle dipakai untuk SP di atas Rp50.000.000. Jika nilai ini memang di bawah batas tersebut, pindahkan ke mode SP Otomatis agar penomoran tetap rapi.',
+                    'Kembali ke SP Otomatis',
+                    'auto',
+                    prefix
+                );
+                return false;
+            }
+
+            if (!ORACLE_MODE_SP && value > 50000000) {
+                setSpModeGuardBox(
+                    box,
+                    'warning',
+                    'Nilai masuk kategori Oracle ERP',
+                    'SP di atas Rp50.000.000 sebaiknya memakai nomor dari Oracle ERP. Klik tombol di bawah untuk pindah mode tanpa kehilangan draft yang sudah diisi.',
+                    'Pindah ke Mode Oracle',
+                    'oracle',
+                    prefix
+                );
+                return false;
+            }
+
+            if (ORACLE_MODE_SP) {
+                setSpModeGuardBox(
+                    box,
+                    'success',
+                    'Nilai sesuai untuk Mode Oracle ERP',
+                    'Nomor SP dapat diketik manual sesuai nomor yang diterbitkan dari Oracle. Data tetap masuk ke daftar Oracle dan tidak bercampur dengan SP Otomatis.'
+                );
+            }
+
+            return true;
+        };
 
         function getSuggestionUrlSp() { const url = new URL(SUGGEST_URL_SP, window.location.origin); const tanggal = document.getElementById('tanggalSpInput')?.value; if (tanggal) url.searchParams.set('tanggal', tanggal); return url.toString(); }
         async function loadSuggestionsSp() { const box = document.getElementById('suggBoxSp'); try { const r = await fetch(getSuggestionUrlSp()); const d = await r.json(); box.innerHTML = d.last ? `<span class="text-xs text-gray-400 dark:text-gray-500 mr-1">Terakhir: <span class="font-mono font-semibold">${d.last}</span> →</span>` : `<span class="text-xs text-gray-400 mr-1">Saran:</span>`; d.suggestions.forEach(s => { const p = document.createElement('span'); p.className = 'suggest-pill'; p.innerHTML = `✨ ${s}`; p.onclick = () => { document.getElementById('nomorSpInput').value = s; document.getElementById('nomorSpInput').dispatchEvent(new Event('input')); }; box.appendChild(p); }); } catch { box.innerHTML = '<span class="text-xs text-gray-400">Tidak bisa memuat saran</span>'; } }
@@ -4047,6 +4238,7 @@
                 $('#ppbjInfo').addClass('hidden');
                 $('#ppbjStatus').html('');
                 $('#nomorPrFinal').val('');
+                restoreSpModeDraftToAdd();
             });
 
             // Vendor toggle
