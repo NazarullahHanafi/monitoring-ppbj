@@ -158,6 +158,60 @@ class DocumentNumberSuggestionTest extends TestCase
         $this->assertDatabaseHas('sps', [
             'nomor_sp' => 'ORACLE/SP/ERP/2026/00077',
             'nama_vendor' => 'Vendor Oracle',
+            'numbering_mode' => 'oracle',
+        ]);
+    }
+
+    public function test_oracle_sp_mode_rejects_value_under_or_equal_50_million(): void
+    {
+        $user = User::factory()->create([
+            'department' => 'umum',
+            'role' => 'superadmin',
+            'name' => 'Nazar',
+        ]);
+
+        $this->actingAs($user)
+            ->from(route('sp.index', ['mode' => 'oracle']))
+            ->post(route('sp.store'), [
+                'oracle_mode' => '1',
+                'nomor_sp' => 'ORACLE/SP/ERP/2026/00040',
+                'tanggal_sp' => '2026-07-10',
+                'nilai_sp' => '40000000',
+                'nama_vendor' => 'Vendor Oracle',
+                'deskripsi_pengadaan' => 'Pengadaan kurang dari batas Oracle',
+                'pic' => 'Nazar',
+            ])
+            ->assertRedirect(route('sp.index', ['mode' => 'oracle']))
+            ->assertSessionHasErrors('nilai_sp');
+
+        $this->assertDatabaseMissing('sps', [
+            'nomor_sp' => 'ORACLE/SP/ERP/2026/00040',
+        ]);
+    }
+
+    public function test_auto_sp_mode_rejects_value_above_50_million(): void
+    {
+        $user = User::factory()->create([
+            'department' => 'umum',
+            'role' => 'superadmin',
+            'name' => 'Nazar',
+        ]);
+
+        $this->actingAs($user)
+            ->from(route('sp.index'))
+            ->post(route('sp.store'), [
+                'nomor_sp' => '022/PKU-VII/SP/2026',
+                'tanggal_sp' => '2026-07-10',
+                'nilai_sp' => '60000000',
+                'nama_vendor' => 'Vendor Auto',
+                'deskripsi_pengadaan' => 'Pengadaan harus masuk Oracle',
+                'pic' => 'Nazar',
+            ])
+            ->assertRedirect(route('sp.index'))
+            ->assertSessionHasErrors('nilai_sp');
+
+        $this->assertDatabaseMissing('sps', [
+            'nomor_sp' => '022/PKU-VII/SP/2026',
         ]);
     }
 }

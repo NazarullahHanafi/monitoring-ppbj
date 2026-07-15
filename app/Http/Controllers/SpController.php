@@ -45,7 +45,7 @@ class SpController extends Controller
         $vendors = Cache::remember('vendors:active', 3600, fn() => Vendor::active()->orderBy('nama_vendor')->get());
         $pics = Cache::remember('pics:umum', 3600, fn() => User::where('department', 'umum')->orderBy('name')->pluck('name'));
         $satuans = Cache::remember('satuans:all', 3600, fn() => Satuan::orderBy('nama_satuan')->pluck('nama_satuan')->toArray());
-        $lastNomor = Cache::remember('sp:last_nomor', 300, fn() => Sp::orderBy('sequence_number', 'desc')->value('nomor_sp'));
+        $lastNomor = Cache::remember('sp:last_nomor:' . ($oracleMode ? 'oracle' : 'auto'), 300, fn() => $this->spModeQuery($oracleMode)->orderBy('sequence_number', 'desc')->value('nomor_sp'));
         $bidangIpItus = SpMasterOption::active()
             ->where('type', 'bidang_ip_itu')
             ->orderBy('nama')
@@ -61,7 +61,7 @@ class SpController extends Controller
             ->orderBy('nama')
             ->pluck('nama');
 
-        $baseQuery = Sp::when($search, fn($q) => $q->where(function ($q2) use ($search) {
+        $baseQuery = $this->spModeQuery($oracleMode)->when($search, fn($q) => $q->where(function ($q2) use ($search) {
             $q2->where('nomor_sp', 'like', "%{$search}%")
                 ->orWhere('nomor_pr', 'like', "%{$search}%")
                 ->orWhere('nama_vendor', 'like', "%{$search}%")
@@ -69,8 +69,7 @@ class SpController extends Controller
         }))
             ->when($pic, fn($q) => $q->where('pic', $pic))
             ->when($dari, fn($q) => $q->where('tanggal_sp', '>=', $dari))
-            ->when($sampai, fn($q) => $q->where('tanggal_sp', '<=', $sampai))
-            ->when($oracleMode, fn($q) => $q->where('nilai_sp', '>', 50000000));
+            ->when($sampai, fn($q) => $q->where('tanggal_sp', '<=', $sampai));
 
         $stats = (clone $baseQuery)->selectRaw('
             COUNT(*) as total_count,
@@ -176,8 +175,9 @@ class SpController extends Controller
         $pic = $request->get('pic', '');
         $dari = $request->get('dari', '');
         $sampai = $request->get('sampai', '');
+        $oracleMode = $this->isOracleMode($request);
 
-        $data = Sp::when($search, fn($q) => $q->where(function ($q2) use ($search) {
+        $data = $this->spModeQuery($oracleMode)->when($search, fn($q) => $q->where(function ($q2) use ($search) {
             $q2->where('nomor_sp', 'like', "%{$search}%")
                 ->orWhere('nomor_pr', 'like', "%{$search}%")
                 ->orWhere('nama_vendor', 'like', "%{$search}%")
@@ -344,7 +344,8 @@ class SpController extends Controller
             $warning = null;
 
             if ($seqInput !== null) {
-                $lastNomor = Sp::when($excludeId, fn($q) => $q->where('id', '!=', $excludeId))
+                $lastNomor = $this->spModeQuery(false)
+                    ->when($excludeId, fn($q) => $q->where('id', '!=', $excludeId))
                     ->orderBy('sequence_number', 'desc')->value('nomor_sp');
 
                 if ($lastNomor) {
@@ -388,7 +389,7 @@ class SpController extends Controller
 
         [$year, $roman] = $this->periodFromDate($request->query('tanggal'));
 
-        $lastNomor = Sp::orderBy('sequence_number', 'desc')->value('nomor_sp');
+        $lastNomor = $this->spModeQuery(false)->orderBy('sequence_number', 'desc')->value('nomor_sp');
         if (!$lastNomor)
             return ['suggestions' => [sprintf('001/PKU-%s/SP/%d', $roman, $year)], 'last' => null];
 
@@ -412,6 +413,10 @@ class SpController extends Controller
                 'deskripsi_pengadaan',
                 'pic',
             ])
+            ->where(function ($query) {
+                $query->whereNull('numbering_mode')
+                    ->orWhere('numbering_mode', 'auto');
+            })
             ->where('id', '>', $lastId)
             ->orderBy('id')
             ->limit(50)
@@ -499,6 +504,8 @@ class SpController extends Controller
             'items.*.tgl_pemenuhan' => 'nullable|date',
         ]);
 
+        $this->validateSpModeValue($request, $oracleMode);
+
         if (!$oracleMode) {
             $this->validateNumberPeriod($request->nomor_sp, $request->tanggal_sp, 'SP', 'nomor_sp');
         }
@@ -543,8 +550,8 @@ class SpController extends Controller
             }
 
             $seq = $oracleMode
-                ? ((int) Sp::lockForUpdate()->max('sequence_number') + 1)
-                : ($this->extractSeq($request->nomor_sp) ?? ((int) Sp::lockForUpdate()->max('sequence_number') + 1));
+                ? ((int) $this->spModeQuery(true)->lockForUpdate()->max('sequence_number') + 1)
+                : ($this->extractSeq($request->nomor_sp) ?? ((int) $this->spModeQuery(false)->lockForUpdate()->max('sequence_number') + 1));
 
             // Hitung total dari items jika ada
             $items = $request->input('items', []);
@@ -559,6 +566,7 @@ class SpController extends Controller
             $sp = Sp::create([
                 'nomor_sp' => $request->nomor_sp,
                 'sequence_number' => $seq,
+                'numbering_mode' => $oracleMode ? 'oracle' : 'auto',
                 'tanggal_sp' => $request->tanggal_sp ?: null,
                 'nilai_sp' => $nilaiSp,
                 'nomor_pr' => $nomorPr,
@@ -596,6 +604,8 @@ class SpController extends Controller
             }
 
             Cache::forget('sp:last_nomor');
+            Cache::forget('sp:last_nomor:auto');
+            Cache::forget('sp:last_nomor:oracle');
             Cache::forget('sp:suggest');
 
             return redirect()
@@ -652,6 +662,8 @@ class SpController extends Controller
             'items.*.tgl_pemenuhan' => 'nullable|date',
         ]);
 
+        $this->validateSpModeValue($request, $oracleMode);
+
         if (!$oracleMode) {
             $this->validateNumberPeriod($request->nomor_sp, $request->tanggal_sp, 'SP', 'nomor_sp');
         }
@@ -704,6 +716,7 @@ class SpController extends Controller
             $sp->update([
                 'nomor_sp' => $request->nomor_sp,
                 'sequence_number' => $seq,
+                'numbering_mode' => $oracleMode ? 'oracle' : 'auto',
                 'tanggal_sp' => $request->tanggal_sp ?: null,
                 'nilai_sp' => $nilaiSp,
                 'nomor_pr' => $nomorPr,
@@ -759,6 +772,8 @@ class SpController extends Controller
             }
 
             Cache::forget('sp:last_nomor');
+            Cache::forget('sp:last_nomor:auto');
+            Cache::forget('sp:last_nomor:oracle');
             Cache::forget('sp:suggest');
 
             return redirect()
@@ -797,6 +812,8 @@ class SpController extends Controller
 
             $sp->delete();
             Cache::forget('sp:last_nomor');
+            Cache::forget('sp:last_nomor:auto');
+            Cache::forget('sp:last_nomor:oracle');
             Cache::forget('sp:suggest');
         });
 
@@ -4716,6 +4733,39 @@ class SpController extends Controller
         return $request->boolean('oracle_mode')
             || $request->boolean('oracle')
             || $request->query('mode') === 'oracle';
+    }
+
+    private function spModeQuery(bool $oracleMode)
+    {
+        $query = Sp::query();
+
+        if ($oracleMode) {
+            return $query->where('numbering_mode', 'oracle');
+        }
+
+        return $query->where(function ($query) {
+            $query->whereNull('numbering_mode')
+                ->orWhere('numbering_mode', 'auto');
+        });
+    }
+
+    private function validateSpModeValue(Request $request, bool $oracleMode): void
+    {
+        $inputValue = (float) ($request->input('nilai_sp') ?: 0);
+        $itemsTotal = $this->calculateItemsTotal($request->input('items', []));
+        $finalValue = $inputValue > 0 ? $inputValue : $itemsTotal;
+
+        if ($oracleMode && $finalValue <= 50000000) {
+            throw ValidationException::withMessages([
+                'nilai_sp' => 'Nilai SP harus di atas Rp50.000.000 karena Anda berada di mode Oracle ERP.',
+            ]);
+        }
+
+        if (!$oracleMode && $finalValue > 50000000) {
+            throw ValidationException::withMessages([
+                'nilai_sp' => 'Nilai SP di atas Rp50.000.000 harus dibuat melalui mode Oracle ERP agar tidak tercampur dengan penomoran SP otomatis.',
+            ]);
+        }
     }
 
     private function extractSeq(string $nomor): ?int

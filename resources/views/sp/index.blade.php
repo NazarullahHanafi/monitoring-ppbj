@@ -1975,7 +1975,7 @@
                                         <span
                                             class="badge-sp inline-flex items-center px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800"
                                             title="Klik untuk salin">{{ $s->nomor_sp }}</span>
-                                        @if((float) $s->nilai_sp > 50000000)
+                                        @if(($s->numbering_mode ?? 'auto') === 'oracle')
                                             <span class="inline-flex items-center gap-1 rounded-full bg-gray-900 text-white dark:bg-amber-400 dark:text-gray-950 px-2 py-0.5 text-[10px] font-bold">
                                                 🕶️ Oracle &gt;50jt
                                             </span>
@@ -2129,6 +2129,7 @@
                             (Rp)</label>
                         <input type="text" name="nilai_sp" id="nilaiSpInput" inputmode="numeric" placeholder="0"
                             class="rupiah-input w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm">
+                        <div id="addModeGuardSp" class="hidden mt-2 text-xs rounded-xl px-3 py-2 border"></div>
                     </div>
                 </div>
 
@@ -2408,6 +2409,7 @@
                     <div><label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Nilai SP
                             (Rp)</label><input type="text" name="nilai_sp" id="editNilaiSp" inputmode="numeric"
                             class="rupiah-input w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-amber-500 text-sm">
+                        <div id="editModeGuardSp" class="hidden mt-2 text-xs rounded-xl px-3 py-2 border"></div>
                     </div>
                 </div>
                 {{-- NOMOR PR EDIT --}}
@@ -3140,7 +3142,7 @@
         // ═══════════════════════════════════════
         // FILTER HELPERS
         // ═══════════════════════════════════════
-        function getFilterParams() { const p = new URLSearchParams(); const q = document.getElementById('searchInput').value.trim(); const pic = document.getElementById('filterPic').value; const d = document.getElementById('dariInput').value; const s = document.getElementById('sampaiInput').value; if (q) p.set('search', q); if (pic) p.set('pic', pic); if (d) p.set('dari', d); if (s) p.set('sampai', s); return p.toString(); }
+        function getFilterParams() { const p = new URLSearchParams(); const q = document.getElementById('searchInput').value.trim(); const pic = document.getElementById('filterPic').value; const d = document.getElementById('dariInput').value; const s = document.getElementById('sampaiInput').value; if (q) p.set('search', q); if (pic) p.set('pic', pic); if (d) p.set('dari', d); if (s) p.set('sampai', s); if (ORACLE_MODE_SP) p.set('mode', 'oracle'); return p.toString(); }
         function doSearch() { const qs = getFilterParams(); window.location.href = qs ? `/sp?${qs}` : '/sp'; }
         function doExport() { const qs = getFilterParams(); window.location.href = qs ? `/sp/export?${qs}` : '/sp/export'; }
         function clearSearch() { document.getElementById('searchInput').value = ''; doSearch(); }
@@ -3193,6 +3195,49 @@
             if (!preview) return;
             const jampel = calculateJampelFromNilaiSpInput(inputId);
             preview.value = jampel > 0 ? 'Rp ' + number_format_dots(jampel) : '';
+        }
+
+        function getSpModeGuardValue(prefix) {
+            const inputId = prefix === 'edit' ? 'editNilaiSp' : 'nilaiSpInput';
+            const rowsId = prefix === 'edit' ? 'editRows' : 'addRows';
+            const inputValue = parseFloat(stripRupiah(document.getElementById(inputId)?.value || '0')) || 0;
+            if (inputValue > 0) return inputValue;
+
+            let itemsTotal = 0;
+            document.getElementById(rowsId)?.querySelectorAll('.subtotal-value').forEach(el => {
+                itemsTotal += parseFloat(el.textContent.replace(/[^\d]/g, '')) || 0;
+            });
+            return itemsTotal;
+        }
+
+        function updateSpModeGuard(prefix) {
+            const box = document.getElementById(prefix === 'edit' ? 'editModeGuardSp' : 'addModeGuardSp');
+            if (!box) return true;
+
+            const value = getSpModeGuardValue(prefix);
+            box.className = 'hidden mt-2 text-xs rounded-xl px-3 py-2 border';
+            box.innerHTML = '';
+
+            if (!value) return true;
+
+            if (ORACLE_MODE_SP && value <= 50000000) {
+                box.className = 'mt-2 text-xs rounded-xl px-3 py-2 border bg-red-50 dark:bg-red-900/25 border-red-200 dark:border-red-700 text-red-700 dark:text-red-200 font-semibold';
+                box.innerHTML = '⚠️ Nilai SP harus di atas Rp50.000.000 karena Anda berada di mode Oracle ERP.';
+                return false;
+            }
+
+            if (!ORACLE_MODE_SP && value > 50000000) {
+                box.className = 'mt-2 text-xs rounded-xl px-3 py-2 border bg-amber-50 dark:bg-amber-900/25 border-amber-200 dark:border-amber-700 text-amber-800 dark:text-amber-200 font-semibold';
+                box.innerHTML = '🕶️ Nilai SP di atas Rp50.000.000 harus dibuat lewat mode Oracle ERP agar tidak tercampur dengan penomoran otomatis.';
+                return false;
+            }
+
+            if (ORACLE_MODE_SP) {
+                box.className = 'mt-2 text-xs rounded-xl px-3 py-2 border bg-emerald-50 dark:bg-emerald-900/25 border-emerald-200 dark:border-emerald-700 text-emerald-700 dark:text-emerald-200 font-semibold';
+                box.innerHTML = '✅ Nilai sesuai untuk mode Oracle ERP.';
+            }
+
+            return true;
         }
 
         // ═══════════════════════════════════════
@@ -3313,6 +3358,7 @@
             document.getElementById('editPenandatanganSci').value = penandatanganSci || '';
             document.getElementById('editJabatanSci').value = jabatanSci || '';
             updateJampelPreview('edit');
+            updateSpModeGuard('edit');
             document.getElementById('editDeskripsiBadge').classList.add('hidden');
             document.getElementById('editDeskripsiBadge').innerHTML = '';
             document.getElementById('editNilaiPrBadge').classList.add('hidden');
@@ -3816,6 +3862,7 @@
             }
 
             if (countEl) countEl.textContent = `${itemCount} item${itemCount !== 1 ? 's' : ''}`;
+            updateSpModeGuard(mode);
         }
 
         function addRow(mode, item = null) {
@@ -3961,8 +4008,8 @@
             initRupiahInput('editNilaiSp');
             initRupiahInput('editNilaiPr');
 
-            $('#nilaiSpInput').on('input paste', () => setTimeout(() => updateJampelPreview('add'), 0));
-            $('#editNilaiSp').on('input paste', () => setTimeout(() => updateJampelPreview('edit'), 0));
+            $('#nilaiSpInput').on('input paste', () => setTimeout(() => { updateJampelPreview('add'); updateSpModeGuard('add'); }, 0));
+            $('#editNilaiSp').on('input paste', () => setTimeout(() => { updateJampelPreview('edit'); updateSpModeGuard('edit'); }, 0));
 
             // Tombol Tambah
             document.querySelector('button[onclick="openModal(\'addModal\')"]').addEventListener('click', () => {
@@ -3986,6 +4033,7 @@
                 document.getElementById('addRows').innerHTML = '';
                 document.getElementById('addSubtotalDisplay').style.display = 'none';
                 document.getElementById('addItemCount').textContent = '0 item';
+                $('#addModeGuardSp').addClass('hidden').html('');
                 addRow('add');
                 for (let k in rtSavedSel) { if (k.startsWith('rt-add-')) delete rtSavedSel[k]; }
                 for (let k in sizeDebounce) { if (k.startsWith('rt-add-')) { clearTimeout(sizeDebounce[k]); delete sizeDebounce[k]; } }
@@ -4021,6 +4069,17 @@
                     return;
                 }
                 updatePrFinalValue();
+                if (!updateSpModeGuard('add')) {
+                    e.preventDefault();
+                    Swal.fire({
+                        title: 'Mode penomoran tidak sesuai',
+                        text: ORACLE_MODE_SP ? 'Nilai SP harus di atas Rp50.000.000 karena Anda berada di mode Oracle ERP.' : 'Nilai SP di atas Rp50.000.000 harus dibuat melalui mode Oracle ERP.',
+                        icon: 'warning',
+                        background: document.documentElement.classList.contains('dark') ? '#1f2937' : '#fff',
+                        color: document.documentElement.classList.contains('dark') ? '#f3f4f6' : '#111827'
+                    });
+                    return;
+                }
                 document.getElementById('nilaiSpInput').value = stripRupiah(document.getElementById('nilaiSpInput').value);
                 document.getElementById('nilaiPrInput').value = stripRupiah(document.getElementById('nilaiPrInput').value);
 
@@ -4056,6 +4115,17 @@
                 }
 
                 updateEditPrFinalValue();
+                if (!updateSpModeGuard('edit')) {
+                    e.preventDefault();
+                    Swal.fire({
+                        title: 'Mode penomoran tidak sesuai',
+                        text: ORACLE_MODE_SP ? 'Nilai SP harus di atas Rp50.000.000 karena Anda berada di mode Oracle ERP.' : 'Nilai SP di atas Rp50.000.000 harus dibuat melalui mode Oracle ERP.',
+                        icon: 'warning',
+                        background: document.documentElement.classList.contains('dark') ? '#1f2937' : '#fff',
+                        color: document.documentElement.classList.contains('dark') ? '#f3f4f6' : '#111827'
+                    });
+                    return;
+                }
                 document.getElementById('editNilaiSp').value = stripRupiah(document.getElementById('editNilaiSp').value);
                 document.getElementById('editNilaiPr').value = stripRupiah(document.getElementById('editNilaiPr').value);
 

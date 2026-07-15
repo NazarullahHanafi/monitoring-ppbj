@@ -9,6 +9,7 @@ class Sp extends Model
     protected $fillable = [
         'nomor_sp',
         'sequence_number',
+        'numbering_mode',
         'tanggal_sp',
         'nilai_sp',
         'nomor_pr',
@@ -61,6 +62,10 @@ class Sp extends Model
     public static function generateNomor(int $year, string $roman): array
     {
         $lastSeq = self::whereYear('created_at', $year)
+            ->where(function ($query) {
+                $query->whereNull('numbering_mode')
+                    ->orWhere('numbering_mode', 'auto');
+            })
             ->lockForUpdate()
             ->max('sequence_number') ?? 0;
 
@@ -73,7 +78,12 @@ class Sp extends Model
     public static function previewNextNomor(?string $tanggal = null): string
     {
         [$year, $roman] = self::periodFromDate($tanggal);
-        $lastSeq = self::whereYear('created_at', $year)->max('sequence_number') ?? 0;
+        $lastSeq = self::whereYear('created_at', $year)
+            ->where(function ($query) {
+                $query->whereNull('numbering_mode')
+                    ->orWhere('numbering_mode', 'auto');
+            })
+            ->max('sequence_number') ?? 0;
         $nextSeq = $lastSeq + 1;
 
         return sprintf('%03d/PKU-%s/SP/%d', $nextSeq, $roman, $year);

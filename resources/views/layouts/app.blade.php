@@ -3675,7 +3675,7 @@
             var ctxCopyBtn = document.createElement('div');
             ctxCopyBtn.className = 'ctx-item';
             ctxCopyBtn.id = 'ctxCopy';
-            ctxCopyBtn.innerHTML = '<span class="ctx-icon">Copy</span>Salin Pesan';
+            ctxCopyBtn.innerHTML = '<span class="ctx-icon">Salin Pesan</span>';
             if (ctxMenu) ctxMenu.insertBefore(ctxCopyBtn, document.getElementById('ctxReply'));
 
             if (ctxReactions) {
