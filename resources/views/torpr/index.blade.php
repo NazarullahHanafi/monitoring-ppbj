@@ -411,6 +411,65 @@
             color: #94a3b8 !important;
         }
 
+        .torpr-delete-danger,
+        .torpr-delete-warning {
+            border-radius: .9rem;
+            padding: .85rem;
+            font-size: .82rem;
+            font-weight: 700;
+            line-height: 1.65;
+            text-align: left;
+        }
+
+        .torpr-delete-danger {
+            background: #fff1f2;
+            border: 1px solid #fca5a5;
+            color: #991b1b;
+        }
+
+        .torpr-delete-danger-title {
+            color: #7f1d1d;
+            font-weight: 900;
+            margin-bottom: .25rem;
+        }
+
+        .torpr-delete-warning {
+            background: #fffbeb;
+            border: 1px solid #fbbf24;
+            color: #92400e;
+        }
+
+        .torpr-delete-warning strong {
+            color: #78350f;
+            font-weight: 900;
+        }
+
+        html.dark .torpr-delete-danger,
+        .dark .torpr-delete-danger {
+            background: #7f1d1d !important;
+            border-color: #f87171 !important;
+            color: #ffffff !important;
+            box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .08);
+        }
+
+        html.dark .torpr-delete-danger-title,
+        .dark .torpr-delete-danger-title {
+            color: #ffffff !important;
+        }
+
+        html.dark .torpr-delete-warning,
+        .dark .torpr-delete-warning {
+            background: #78350f !important;
+            border-color: #fbbf24 !important;
+            color: #fff7ed !important;
+            box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .08);
+        }
+
+        html.dark .torpr-delete-warning strong,
+        .dark .torpr-delete-warning strong {
+            color: #ffffff !important;
+        }
+
         .torpr-info-timeline {
             position: relative;
         }
@@ -3726,14 +3785,14 @@
                     title: 'Hapus draft PR?',
                     html: `
                         <div class="text-left space-y-3">
-                            <div class="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800 dark:border-red-700 dark:bg-red-950/90 dark:text-red-50">
-                                <div class="font-black text-red-900 dark:text-red-50">Data: ${escapeHtml(nomorPr || ('PR-' + id))}</div>
-                                <div class="mt-1 text-xs font-semibold leading-relaxed text-red-700 dark:text-red-100">
+                            <div class="torpr-delete-danger">
+                                <div class="torpr-delete-danger-title">Data: ${escapeHtml(nomorPr || ('PR-' + id))}</div>
+                                <div>
                                     Hapus hanya bisa untuk PR yang belum pernah diajukan ke Umum.
                                     Jika sudah pernah request, sistem akan menolak agar riwayat audit tetap aman.
                                 </div>
                             </div>
-                            <div class="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-semibold leading-relaxed text-amber-800 dark:border-amber-700 dark:bg-amber-950/90 dark:text-amber-50">
+                            <div class="torpr-delete-warning">
                                 Masukkan <strong>password user pembuat PR</strong>. Jika user lain ingin menghapus,
                                 user tersebut tetap harus mengetahui password pembuat PR.
                             </div>
