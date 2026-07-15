@@ -93,4 +93,72 @@ class SpSpphEditOwnershipTest extends TestCase
             'nama_vendor' => 'Vendor Asli',
         ]);
     }
+
+    public function test_sp_without_creator_is_locked_from_editing(): void
+    {
+        $user = User::factory()->create([
+            'role' => 'superadmin',
+            'department' => 'umum',
+        ]);
+
+        $sp = Sp::create([
+            'nomor_sp' => '902/PKU-VII/SP/2026',
+            'sequence_number' => 902,
+            'tanggal_sp' => '2026-07-15',
+            'nilai_sp' => 10000000,
+            'nama_vendor' => 'Vendor Legacy',
+            'deskripsi_pengadaan' => 'Pengadaan legacy',
+            'pic' => 'Legacy',
+        ]);
+
+        $this->actingAs($user)
+            ->putJson(route('sp.update', $sp), [
+                'nomor_sp' => '902/PKU-VII/SP/2026',
+                'tanggal_sp' => '2026-07-15',
+                'nilai_sp' => 12000000,
+                'nama_vendor' => 'Vendor Legacy Diubah',
+                'deskripsi_pengadaan' => 'Pengadaan legacy diubah',
+                'pic' => 'Legacy',
+            ])
+            ->assertForbidden();
+
+        $this->assertDatabaseHas('sps', [
+            'id' => $sp->id,
+            'nama_vendor' => 'Vendor Legacy',
+        ]);
+    }
+
+    public function test_spph_without_creator_is_locked_from_editing(): void
+    {
+        $user = User::factory()->create([
+            'role' => 'superadmin',
+            'department' => 'umum',
+        ]);
+
+        $spph = Spph::create([
+            'nomor_spph' => '902/PKU-VII/SPPH/2026',
+            'sequence_number' => 902,
+            'tanggal' => '2026-07-15',
+            'nama_vendor' => 'Vendor Legacy',
+            'vendor_names' => ['Vendor Legacy'],
+            'deskripsi_pengadaan' => 'Pengadaan legacy',
+            'pic' => 'Legacy',
+        ]);
+
+        $this->actingAs($user)
+            ->putJson(route('spph.update', $spph), [
+                'nomor_spph' => '902/PKU-VII/SPPH/2026',
+                'tanggal' => '2026-07-15',
+                'nama_vendor' => 'Vendor Legacy Diubah',
+                'vendor_names' => ['Vendor Legacy Diubah'],
+                'deskripsi_pengadaan' => 'Pengadaan legacy diubah',
+                'pic' => 'Legacy',
+            ])
+            ->assertForbidden();
+
+        $this->assertDatabaseHas('spphs', [
+            'id' => $spph->id,
+            'nama_vendor' => 'Vendor Legacy',
+        ]);
+    }
 }

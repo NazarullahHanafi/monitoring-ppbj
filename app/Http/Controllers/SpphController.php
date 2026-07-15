@@ -446,7 +446,7 @@ class SpphController extends Controller
     {
         $currentUserId = $request->user()?->id;
 
-        if ($spph->created_by_user_id && (int) $spph->created_by_user_id !== (int) $currentUserId) {
+        if ((int) $spph->created_by_user_id !== (int) $currentUserId) {
             $message = 'Data SPPH hanya bisa diedit oleh user pembuatnya.';
 
             if ($request->expectsJson()) {
