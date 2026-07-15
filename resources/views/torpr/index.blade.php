@@ -859,7 +859,7 @@
                                         Log
                                     </button>
                                     <button type="button" onclick="shareRecordToChat('pr', {{ $r->id }})"
-                                        class="inline-flex items-center gap-1 px-2 py-1 rounded bg-indigo-600 text-white hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-400 text-xs font-bold transition-all active:scale-95"
+                                        class="inline-flex items-center gap-1 px-2 py-1 rounded bg-indigo-600 dark:text-white hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-400 text-xs font-bold transition-all active:scale-95"
                                         title="Kirim follow up cepat PR ini ke Chat Tim">
                                         <span aria-hidden="true">💬</span>
                                         Follow Up
