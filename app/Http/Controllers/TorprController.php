@@ -673,12 +673,14 @@ class TorprController extends Controller
         $lockKey = "torpr_delete_password_lock:{$torpr->id}:{$creator->id}:{$user->id}:" . sha1((string) $request->ip());
 
         if ($lockedUntil = Cache::get($lockKey)) {
-            $retryAfter = max(1, now()->diffInSeconds(Carbon::parse($lockedUntil), false));
+            $lockedUntilAt = Carbon::parse($lockedUntil);
+            $retryAfter = (int) ceil(max(1, now()->diffInSeconds($lockedUntilAt, false)));
 
             return response()->json([
                 'message' => 'Terlalu banyak percobaan password salah. Silakan coba lagi sekitar ' . ceil($retryAfter / 60) . ' menit lagi.',
                 'locked' => true,
                 'retry_after' => $retryAfter,
+                'locked_until' => $lockedUntilAt->toIso8601String(),
             ], 429);
         }
 
@@ -699,13 +701,14 @@ class TorprController extends Controller
 
             if ($attempts >= 3) {
                 $lockedUntil = now()->addMinutes(15);
-                Cache::put($lockKey, $lockedUntil->toDateTimeString(), $lockedUntil);
+                Cache::put($lockKey, $lockedUntil->toIso8601String(), $lockedUntil);
                 Cache::forget($attemptKey);
 
                 return response()->json([
                     'message' => 'Password salah 3 kali. Aksi hapus dikunci selama 15 menit.',
                     'locked' => true,
                     'retry_after' => 15 * 60,
+                    'locked_until' => $lockedUntil->toIso8601String(),
                 ], 429);
             }
 

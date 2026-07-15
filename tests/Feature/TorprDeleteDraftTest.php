@@ -125,12 +125,14 @@ class TorprDeleteDraftTest extends TestCase
         $this->actingAs($otherUser)
             ->deleteJson(route('torpr.destroy', $torpr->id), ['creator_password' => 'WrongAgain'])
             ->assertStatus(429)
-            ->assertJsonPath('locked', true);
+            ->assertJsonPath('locked', true)
+            ->assertJsonStructure(['locked_until', 'retry_after']);
 
         $this->actingAs($otherUser)
             ->deleteJson(route('torpr.destroy', $torpr->id), ['creator_password' => 'CreatorPass!234'])
             ->assertStatus(429)
-            ->assertJsonPath('locked', true);
+            ->assertJsonPath('locked', true)
+            ->assertJsonStructure(['locked_until', 'retry_after']);
 
         $this->assertDatabaseHas('torprs', [
             'id' => $torpr->id,

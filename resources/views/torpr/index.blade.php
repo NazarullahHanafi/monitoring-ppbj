@@ -4008,10 +4008,10 @@
                 }).format(date);
             }
 
-            function showTorprDeleteLockCountdown(message, retryAfter) {
+            function showTorprDeleteLockCountdown(message, retryAfter, lockedUntil = null) {
                 let remainingSeconds = Math.max(1, Math.ceil(Number(retryAfter) || (15 * 60)));
                 let timer = null;
-                const canRetryAt = new Date(Date.now() + (remainingSeconds * 1000));
+                const canRetryAt = lockedUntil ? new Date(lockedUntil) : new Date(Date.now() + (remainingSeconds * 1000));
 
                 Swal.fire({
                     icon: 'error',
@@ -4077,9 +4077,6 @@
                                 Masukkan <strong>password user pembuat PR</strong>. Jika user lain ingin menghapus,
                                 user tersebut tetap harus mengetahui password pembuat PR.
                             </div>
-                            <div class="torpr-time-pill">
-                                Waktu verifikasi: ${escapeHtml(formatTorprFullDateTime())} WIB
-                            </div>
                             <div class="torpr-lock-preview">
                                 <div class="torpr-lock-preview-row">
                                     <span>⏱️</span>
@@ -4087,7 +4084,7 @@
                                 </div>
                                 <div class="torpr-lock-preview-row">
                                     <span>🔓</span>
-                                    <span>Jika terkunci sekarang, bisa dicoba lagi sekitar <strong>${escapeHtml(formatTorprFullDateTime(new Date(Date.now() + (15 * 60 * 1000))))} WIB</strong>.</span>
+                                    <span>Jam akses ulang yang pasti akan muncul setelah tombol hapus benar-benar terkunci.</span>
                                 </div>
                             </div>
                             <div class="torpr-password-wrap">
@@ -4160,6 +4157,7 @@
                                     locked: true,
                                     message: data.message || 'Aksi hapus dikunci sementara karena terlalu banyak percobaan.',
                                     retry_after: data.retry_after || (15 * 60),
+                                    locked_until: data.locked_until || null,
                                 };
                             }
 
@@ -4182,7 +4180,7 @@
                 if (result.dismiss) return;
 
                 if (result.value?.locked) {
-                    showTorprDeleteLockCountdown(result.value.message, result.value.retry_after);
+                    showTorprDeleteLockCountdown(result.value.message, result.value.retry_after, result.value.locked_until);
                     return;
                 }
 
