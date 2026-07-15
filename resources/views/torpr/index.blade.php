@@ -319,6 +319,98 @@
             color: #ffffff !important;
         }
 
+        /* ===== TORPR COMPACT ACTIONS & ALERT CONTRAST ===== */
+        .torpr-action-stack {
+            gap: .35rem;
+        }
+
+        .torpr-action-row {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: .35rem;
+            flex-wrap: wrap;
+        }
+
+        .torpr-action-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: .25rem;
+            min-height: 1.85rem;
+            padding: .38rem .58rem;
+            border-radius: .62rem;
+            font-size: .68rem;
+            line-height: 1;
+            font-weight: 800;
+            white-space: nowrap;
+            transition: transform .15s ease, box-shadow .15s ease, filter .15s ease;
+        }
+
+        .torpr-action-btn:hover {
+            transform: translateY(-1px);
+            filter: brightness(1.03);
+        }
+
+        .torpr-action-btn:active {
+            transform: scale(.96);
+        }
+
+        .torpr-action-btn svg {
+            width: .82rem;
+            height: .82rem;
+        }
+
+        .torpr-action-btn.is-disabled {
+            cursor: not-allowed;
+            opacity: .75;
+            transform: none;
+            filter: none;
+        }
+
+        .torpr-delete-popup {
+            border: 1px solid rgba(226, 232, 240, .9) !important;
+            box-shadow: 0 28px 80px rgba(15, 23, 42, .28) !important;
+        }
+
+        .dark .torpr-delete-popup {
+            background: #0f172a !important;
+            color: #f8fafc !important;
+            border-color: rgba(71, 85, 105, .95) !important;
+            box-shadow: 0 28px 80px rgba(0, 0, 0, .65) !important;
+        }
+
+        .torpr-delete-popup .swal2-title,
+        .torpr-delete-popup .swal2-html-container,
+        .torpr-delete-popup .swal2-input-label {
+            color: #0f172a !important;
+        }
+
+        .dark .torpr-delete-popup .swal2-title,
+        .dark .torpr-delete-popup .swal2-html-container,
+        .dark .torpr-delete-popup .swal2-input-label {
+            color: #f8fafc !important;
+        }
+
+        .torpr-delete-popup .swal2-input {
+            height: 2.7rem !important;
+            border-radius: .8rem !important;
+            border: 1px solid #cbd5e1 !important;
+            background: #ffffff !important;
+            color: #0f172a !important;
+            box-shadow: none !important;
+        }
+
+        .dark .torpr-delete-popup .swal2-input {
+            background: #1e293b !important;
+            border-color: #475569 !important;
+            color: #ffffff !important;
+        }
+
+        .dark .torpr-delete-popup .swal2-input::placeholder {
+            color: #94a3b8 !important;
+        }
+
         .torpr-info-timeline {
             position: relative;
         }
@@ -849,7 +941,7 @@
 
                             {{-- Action --}}
                             <td class="px-4 py-3 text-center">
-                                <div class="flex flex-col gap-2 items-center">
+                                <div class="torpr-action-stack flex flex-col items-center">
                                     <button type="button" onclick="showLogModal({{ $r->id }})"
                                         class="inline-flex items-center gap-1 px-2 py-1 rounded bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 text-xs font-medium transition-all">
                                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -865,17 +957,21 @@
                                         Follow Up
                                     </button>
                                     @if(!$locked && (auth()->user()->role === 'superadmin' || (int) $r->created_by_user_id === (int) auth()->id()))
-                                        <div class="inline-flex gap-2">
+                                        <div class="torpr-action-row">
                                             <button type="button" onclick="openEditForm({{ $r->id }})"
-                                                class="inline-flex items-center px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold transition-all active:scale-95">
+                                                class="torpr-action-btn bg-amber-500 text-white shadow-sm shadow-amber-500/20 hover:bg-amber-600 dark:bg-amber-500 dark:text-white dark:hover:bg-amber-400">
+                                                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                        d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
+                                                </svg>
                                                 Edit
                                             </button>
 
                                             <button type="button"
                                                 onclick="deleteTorprDraft({{ $r->id }}, @js($r->nomor_pr ?? ('PR-' . $r->id)))"
                                                 title="Hapus hanya tersedia sebelum PR diajukan ke Umum. Wajib memakai password pembuat PR."
-                                                class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-white text-xs font-semibold transition-all active:scale-95 shadow-sm shadow-red-500/20">
-                                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                class="torpr-action-btn bg-red-600 text-white shadow-sm shadow-red-500/20 hover:bg-red-700 dark:bg-red-600 dark:text-white dark:hover:bg-red-500">
+                                                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                                         d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M9 7h6m2 0H7m3-3h4a1 1 0 011 1v2H9V5a1 1 0 011-1z" />
                                                 </svg>
@@ -886,12 +982,12 @@
                                                 @if($isRequestIncomplete)
                                                     <button type="button" disabled
                                                         title="Wajib dilengkapi: {{ $missingRequestText }}"
-                                                        class="inline-flex cursor-not-allowed items-center px-3 py-1.5 rounded-lg bg-gray-300 text-gray-500 text-xs font-semibold opacity-80 dark:bg-gray-700 dark:text-gray-400">
+                                                        class="torpr-action-btn is-disabled bg-slate-200 text-slate-500 dark:bg-slate-700 dark:text-slate-300">
                                                         Lengkapi Data
                                                     </button>
                                                 @else
                                                     <button type="button" onclick="requestReceipt({{ $r->id }})"
-                                                        class="inline-flex items-center px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold transition-all active:scale-95">
+                                                        class="torpr-action-btn bg-blue-600 text-white shadow-sm shadow-blue-500/20 hover:bg-blue-700 dark:bg-blue-500 dark:text-white dark:hover:bg-blue-400">
                                                         Request Umum
                                                     </button>
                                                 @endif
@@ -918,7 +1014,7 @@
                                                         @if($isRequestIncomplete)
                                                             <button type="button" disabled
                                                                 title="Wajib dilengkapi: {{ $missingRequestText }}"
-                                                                class="inline-flex cursor-not-allowed items-center gap-1 px-3 py-1.5 rounded-lg bg-gray-300 text-gray-500 text-xs font-semibold opacity-80 dark:bg-gray-700 dark:text-gray-400 mt-2">
+                                                                class="torpr-action-btn is-disabled mt-2 bg-slate-200 text-slate-500 dark:bg-slate-700 dark:text-slate-300">
                                                                 Lengkapi Data
                                                             </button>
                                                         @else
@@ -3630,14 +3726,14 @@
                     title: 'Hapus draft PR?',
                     html: `
                         <div class="text-left space-y-3">
-                            <div class="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800 dark:border-red-800/70 dark:bg-red-950/40 dark:text-red-100">
-                                <div class="font-bold">Data: ${escapeHtml(nomorPr || ('PR-' + id))}</div>
-                                <div class="mt-1 text-xs leading-relaxed text-red-700 dark:text-red-200">
+                            <div class="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800 dark:border-red-700 dark:bg-red-950/90 dark:text-red-50">
+                                <div class="font-black text-red-900 dark:text-red-50">Data: ${escapeHtml(nomorPr || ('PR-' + id))}</div>
+                                <div class="mt-1 text-xs font-semibold leading-relaxed text-red-700 dark:text-red-100">
                                     Hapus hanya bisa untuk PR yang belum pernah diajukan ke Umum.
                                     Jika sudah pernah request, sistem akan menolak agar riwayat audit tetap aman.
                                 </div>
                             </div>
-                            <div class="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-relaxed text-amber-800 dark:border-amber-800/70 dark:bg-amber-950/40 dark:text-amber-100">
+                            <div class="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-semibold leading-relaxed text-amber-800 dark:border-amber-700 dark:bg-amber-950/90 dark:text-amber-50">
                                 Masukkan <strong>password user pembuat PR</strong>. Jika user lain ingin menghapus,
                                 user tersebut tetap harus mengetahui password pembuat PR.
                             </div>
@@ -3656,9 +3752,9 @@
                     confirmButtonColor: '#dc2626',
                     cancelButtonColor: '#64748b',
                     customClass: {
-                        popup: 'dark:bg-gray-900 dark:text-white',
-                        title: 'dark:text-white',
-                        htmlContainer: 'dark:text-gray-100',
+                        popup: 'torpr-delete-popup',
+                        title: 'torpr-delete-title',
+                        htmlContainer: 'torpr-delete-html',
                         input: 'dark:bg-gray-800 dark:text-white dark:border-gray-700',
                     },
                     preConfirm: (password) => {
