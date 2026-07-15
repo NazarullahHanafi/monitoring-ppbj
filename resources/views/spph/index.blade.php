@@ -2425,7 +2425,7 @@
                         @forelse($spphs as $i => $s)
                             @php
                                 $vendorList = $s->print_vendor_names;
-                                $canEditSpph = filled($s->created_by_user_id) && (int) $s->created_by_user_id === (int) auth()->id();
+                                $canEditSpph = (filled($s->created_by_user_id) && (int) $s->created_by_user_id === (int) auth()->id()) || auth()->user()?->matchesOwnerLabel($s->pic);
                             @endphp
                             <tr class="tbl-row-hover" data-id="{{ $s->id }}" data-pic="{{ $s->pic }}"
                                 data-search="{{ strtolower($s->nomor_spph . ' ' . $s->nomor_pr . ' ' . implode(' ', $vendorList) . ' ' . $s->deskripsi_pengadaan) }}">
@@ -2505,7 +2505,7 @@
                                         @else
                                             <span
                                                 class="p-1.5 rounded-lg text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-800/80 cursor-not-allowed"
-                                                title="{{ blank($s->created_by_user_id) ? 'Data lama belum memiliki pembuat, edit dikunci demi keamanan' : 'Edit hanya bisa dilakukan oleh pembuat SPPH' }}">
+                                                title="Edit hanya bisa dilakukan oleh pembuat SPPH atau user yang cocok dengan PIC">
                                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                                         d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />

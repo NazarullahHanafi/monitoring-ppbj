@@ -444,9 +444,10 @@ class SpphController extends Controller
     // =========================================================
     public function update(Request $request, Spph $spph)
     {
-        $currentUserId = $request->user()?->id;
+        $currentUser = $request->user();
+        $currentUserId = $currentUser?->id;
 
-        if ((int) $spph->created_by_user_id !== (int) $currentUserId) {
+        if ((int) $spph->created_by_user_id !== (int) $currentUserId && !$currentUser?->matchesOwnerLabel($spph->pic)) {
             $message = 'Data SPPH hanya bisa diedit oleh user pembuatnya.';
 
             if ($request->expectsJson()) {

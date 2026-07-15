@@ -128,6 +128,42 @@ class SpSpphEditOwnershipTest extends TestCase
         ]);
     }
 
+    public function test_sp_can_be_edited_when_pic_matches_logged_in_user(): void
+    {
+        $user = User::factory()->create([
+            'name' => 'Nazar',
+            'email' => 'nazar.test@example.com',
+            'role' => 'superadmin',
+            'department' => 'umum',
+        ]);
+
+        $sp = Sp::create([
+            'nomor_sp' => '903/PKU-VII/SP/2026',
+            'sequence_number' => 903,
+            'tanggal_sp' => '2026-07-15',
+            'nilai_sp' => 10000000,
+            'nama_vendor' => 'Vendor Lama',
+            'deskripsi_pengadaan' => 'Pengadaan lama',
+            'pic' => 'Nazar',
+        ]);
+
+        $this->actingAs($user)
+            ->put(route('sp.update', $sp), [
+                'nomor_sp' => '903/PKU-VII/SP/2026',
+                'tanggal_sp' => '2026-07-15',
+                'nilai_sp' => 12000000,
+                'nama_vendor' => 'Vendor PIC Match',
+                'deskripsi_pengadaan' => 'Pengadaan PIC match',
+                'pic' => 'Nazar',
+            ])
+            ->assertRedirect(route('sp.index'));
+
+        $this->assertDatabaseHas('sps', [
+            'id' => $sp->id,
+            'nama_vendor' => 'Vendor PIC Match',
+        ]);
+    }
+
     public function test_spph_without_creator_is_locked_from_editing(): void
     {
         $user = User::factory()->create([
@@ -159,6 +195,43 @@ class SpSpphEditOwnershipTest extends TestCase
         $this->assertDatabaseHas('spphs', [
             'id' => $spph->id,
             'nama_vendor' => 'Vendor Legacy',
+        ]);
+    }
+
+    public function test_spph_can_be_edited_when_pic_matches_logged_in_user(): void
+    {
+        $user = User::factory()->create([
+            'name' => 'Putri',
+            'buyer_name' => 'Pb',
+            'email' => 'putri.test@example.com',
+            'role' => 'superadmin',
+            'department' => 'umum',
+        ]);
+
+        $spph = Spph::create([
+            'nomor_spph' => '903/PKU-VII/SPPH/2026',
+            'sequence_number' => 903,
+            'tanggal' => '2026-07-15',
+            'nama_vendor' => 'Vendor Lama',
+            'vendor_names' => ['Vendor Lama'],
+            'deskripsi_pengadaan' => 'Pengadaan lama',
+            'pic' => 'Pb',
+        ]);
+
+        $this->actingAs($user)
+            ->put(route('spph.update', $spph), [
+                'nomor_spph' => '903/PKU-VII/SPPH/2026',
+                'tanggal' => '2026-07-15',
+                'nama_vendor' => 'Vendor PIC Match',
+                'vendor_names' => ['Vendor PIC Match'],
+                'deskripsi_pengadaan' => 'Pengadaan PIC match',
+                'pic' => 'Pb',
+            ])
+            ->assertRedirect(route('spph.index'));
+
+        $this->assertDatabaseHas('spphs', [
+            'id' => $spph->id,
+            'nama_vendor' => 'Vendor PIC Match',
         ]);
     }
 }

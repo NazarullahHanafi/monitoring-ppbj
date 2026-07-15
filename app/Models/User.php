@@ -42,6 +42,56 @@ class User extends Authenticatable
         return $email !== '' && in_array($email, $ownerEmails, true);
     }
 
+    public function ownerIdentityKeys(): array
+    {
+        return collect([
+            $this->name,
+            $this->buyer_name,
+            strtok((string) $this->email, '@'),
+        ])
+            ->map(fn ($value) => self::normalizeOwnerLabel($value))
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    public function matchesOwnerLabel(mixed $label): bool
+    {
+        $labelKey = self::normalizeOwnerLabel($label);
+
+        if ($labelKey === '') {
+            return false;
+        }
+
+        foreach ($this->ownerIdentityKeys() as $identityKey) {
+            if ($labelKey === $identityKey) {
+                return true;
+            }
+
+            if (strlen($labelKey) >= 3 && str_contains($identityKey, $labelKey)) {
+                return true;
+            }
+
+            if (strlen($identityKey) >= 3 && str_contains($labelKey, $identityKey)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public static function normalizeOwnerLabel(mixed $value): string
+    {
+        $value = trim(mb_strtolower((string) $value));
+
+        if ($value === '') {
+            return '';
+        }
+
+        return preg_replace('/[^a-z0-9]+/u', '', $value) ?: '';
+    }
+
     /**
      * The attributes that should be hidden for serialization.
      *
