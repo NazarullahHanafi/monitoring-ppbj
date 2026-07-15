@@ -319,39 +319,6 @@
             color: #ffffff !important;
         }
 
-        .torpr-control-card {
-            position: relative;
-            overflow: hidden;
-        }
-
-        .torpr-control-card::before {
-            content: '';
-            position: absolute;
-            inset: 0;
-            background:
-                radial-gradient(circle at 12% 10%, rgba(59, 130, 246, .18), transparent 32%),
-                radial-gradient(circle at 88% 20%, rgba(16, 185, 129, .16), transparent 30%);
-            pointer-events: none;
-        }
-
-        .torpr-kanban-card {
-            min-height: 148px;
-            transition: transform .22s ease, box-shadow .22s ease, border-color .22s ease;
-        }
-
-        .torpr-kanban-card:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 16px 42px rgba(15, 23, 42, .14);
-        }
-
-        .dark .torpr-kanban-card:hover {
-            box-shadow: 0 18px 48px rgba(0, 0, 0, .35);
-        }
-
-        .torpr-health-ring {
-            background: conic-gradient(var(--health-color) calc(var(--health-score) * 1%), rgba(148, 163, 184, .25) 0);
-        }
-
         .torpr-info-timeline {
             position: relative;
         }
@@ -440,117 +407,6 @@
 
     @php
         $selectedPortofolios = array_values(array_filter(array_map('trim', (array) request('portofolio', []))));
-
-        $stageMeta = [
-            'draft' => ['label' => 'Draft/Input', 'icon' => '📝', 'tone' => 'from-slate-500 to-slate-700', 'ring' => 'border-slate-200 dark:border-slate-700'],
-            'kabid' => ['label' => 'TTD Kabid', 'icon' => '✍️', 'tone' => 'from-amber-500 to-orange-600', 'ring' => 'border-amber-200 dark:border-amber-700/70'],
-            'kacab' => ['label' => 'TTD Kacab', 'icon' => '🏢', 'tone' => 'from-orange-500 to-rose-600', 'ring' => 'border-orange-200 dark:border-orange-700/70'],
-            'ready' => ['label' => 'Siap Request', 'icon' => '🚀', 'tone' => 'from-sky-500 to-blue-600', 'ring' => 'border-sky-200 dark:border-sky-700/70'],
-            'pending' => ['label' => 'Pending Umum', 'icon' => '⏳', 'tone' => 'from-yellow-500 to-amber-600', 'ring' => 'border-yellow-200 dark:border-yellow-700/70'],
-            'approved' => ['label' => 'Diterima Umum', 'icon' => '✅', 'tone' => 'from-emerald-500 to-teal-600', 'ring' => 'border-emerald-200 dark:border-emerald-700/70'],
-            'rejected' => ['label' => 'Ditolak', 'icon' => '⛔', 'tone' => 'from-red-500 to-rose-700', 'ring' => 'border-red-200 dark:border-red-700/70'],
-        ];
-
-        $stageCounts = array_fill_keys(array_keys($stageMeta), 0);
-        $stageSamples = array_fill_keys(array_keys($stageMeta), []);
-        $healthMap = [];
-        $stageMap = [];
-        $attentionRows = [];
-
-        $detectStage = function ($r) {
-            $receipt = strtoupper((string) ($r->approval_status ?? ''));
-            if ($receipt === 'REJECTED') return 'rejected';
-            if ($receipt === 'APPROVED' || !empty($r->received_at)) return 'approved';
-            if ($receipt === 'PENDING') return 'pending';
-
-            $basicMissing = empty(trim((string) ($r->tujuan_pengadaan ?? '')))
-                || empty(trim((string) ($r->portofolio ?? '')))
-                || empty(trim((string) ($r->nomor_pr ?? '')))
-                || empty($r->tanggal_pr)
-                || empty($r->jumlah_pr)
-                || (float) $r->jumlah_pr <= 0;
-
-            if ($basicMissing) return 'draft';
-            if (empty($r->tgl_ttd_kabid_pr)) return 'kabid';
-            if (empty($r->tgl_ttd_kacab_pr)) return 'kacab';
-
-            return 'ready';
-        };
-
-        $calcHealth = function ($r) {
-            $score = 100;
-            $issues = [];
-            $receipt = strtoupper((string) ($r->approval_status ?? ''));
-
-            $checks = [
-                'Tujuan belum diisi' => empty(trim((string) ($r->tujuan_pengadaan ?? ''))),
-                'Portofolio belum diisi' => empty(trim((string) ($r->portofolio ?? ''))),
-                'Nomor PR belum diisi' => empty(trim((string) ($r->nomor_pr ?? ''))),
-                'Tanggal PR belum diisi' => empty($r->tanggal_pr),
-                'Nilai PR belum valid' => empty($r->jumlah_pr) || (float) $r->jumlah_pr <= 0,
-                'TTD Kabid belum ada' => empty($r->tgl_ttd_kabid_pr),
-                'TTD Kacab belum ada' => empty($r->tgl_ttd_kacab_pr),
-            ];
-
-            foreach ($checks as $label => $bad) {
-                if ($bad) {
-                    $score -= str_contains($label, 'TTD') ? 12 : 8;
-                    $issues[] = $label;
-                }
-            }
-
-            if ($receipt === 'PENDING') {
-                $requestedAt = !empty($r->approval_requested_at) ? \Carbon\Carbon::parse($r->approval_requested_at) : null;
-                if ($requestedAt && $requestedAt->diffInDays(now()) >= 2) {
-                    $score -= 18;
-                    $issues[] = 'Pending Umum lebih dari 2 hari';
-                } else {
-                    $score -= 4;
-                }
-            }
-
-            if ($receipt === 'REJECTED') {
-                $score -= 25;
-                $issues[] = 'PR ditolak dan perlu perbaikan';
-            }
-
-            if ($receipt === 'APPROVED' || !empty($r->received_at)) {
-                $score = max($score, 92);
-            }
-
-            $score = max(0, min(100, $score));
-            $label = $score >= 85 ? 'Sehat' : ($score >= 65 ? 'Perlu Follow Up' : 'Kritis');
-            $color = $score >= 85 ? '#10b981' : ($score >= 65 ? '#f59e0b' : '#ef4444');
-            $tone = $score >= 85
-                ? 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-700/70 dark:bg-emerald-900/25 dark:text-emerald-100'
-                : ($score >= 65
-                    ? 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-700/70 dark:bg-amber-900/25 dark:text-amber-100'
-                    : 'border-red-200 bg-red-50 text-red-800 dark:border-red-700/70 dark:bg-red-900/25 dark:text-red-100');
-
-            return compact('score', 'label', 'color', 'tone', 'issues');
-        };
-
-        foreach ($rows as $insightRow) {
-            $stage = $detectStage($insightRow);
-            $health = $calcHealth($insightRow);
-            $stageMap[$insightRow->id] = $stage;
-            $healthMap[$insightRow->id] = $health;
-            $stageCounts[$stage] = ($stageCounts[$stage] ?? 0) + 1;
-
-            if (count($stageSamples[$stage]) < 3) {
-                $stageSamples[$stage][] = $insightRow->nomor_pr ?: ('PR #' . $insightRow->id);
-            }
-
-            if ($health['score'] < 85 && count($attentionRows) < 4) {
-                $attentionRows[] = [
-                    'id' => $insightRow->id,
-                    'nomor' => $insightRow->nomor_pr ?: ('PR #' . $insightRow->id),
-                    'score' => $health['score'],
-                    'label' => $health['label'],
-                    'issue' => $health['issues'][0] ?? 'Perlu dicek',
-                ];
-            }
-        }
     @endphp
 
     {{-- Filter Form --}}
@@ -806,106 +662,6 @@
             </div>
         @endif
     </form>
-
-    {{-- PR Control Tower --}}
-    <div class="torpr-control-card mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
-        <div class="relative z-10 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-            <div>
-                <div class="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-extrabold uppercase tracking-wide text-blue-700 dark:border-blue-700/70 dark:bg-blue-900/25 dark:text-blue-200">
-                    <span>🛰️</span> PR Control Tower
-                </div>
-                <h2 class="mt-3 text-xl font-black tracking-tight text-slate-950 dark:text-white">Health Score & Pipeline PR</h2>
-                <p class="mt-1 max-w-2xl text-sm font-medium text-slate-600 dark:text-slate-300">
-                    Ringkasan otomatis dari data yang sedang tampil. Cocok untuk cepat melihat PR sehat, PR perlu follow up, dan posisi PR di alur operasional.
-                </p>
-            </div>
-
-            <div class="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:min-w-[520px]">
-                @php
-                    $healthyCount = collect($healthMap)->where('score', '>=', 85)->count();
-                    $followCount = collect($healthMap)->filter(fn($h) => $h['score'] >= 65 && $h['score'] < 85)->count();
-                    $criticalCount = collect($healthMap)->where('score', '<', 65)->count();
-                @endphp
-                <div class="rounded-2xl border border-emerald-200 bg-emerald-50 p-3 dark:border-emerald-700/70 dark:bg-emerald-900/25">
-                    <p class="text-xs font-extrabold uppercase tracking-wide text-emerald-700 dark:text-emerald-200">Sehat</p>
-                    <p class="mt-1 text-2xl font-black text-emerald-900 dark:text-emerald-100">{{ $healthyCount }}</p>
-                </div>
-                <div class="rounded-2xl border border-amber-200 bg-amber-50 p-3 dark:border-amber-700/70 dark:bg-amber-900/25">
-                    <p class="text-xs font-extrabold uppercase tracking-wide text-amber-700 dark:text-amber-200">Follow Up</p>
-                    <p class="mt-1 text-2xl font-black text-amber-900 dark:text-amber-100">{{ $followCount }}</p>
-                </div>
-                <div class="rounded-2xl border border-red-200 bg-red-50 p-3 dark:border-red-700/70 dark:bg-red-900/25">
-                    <p class="text-xs font-extrabold uppercase tracking-wide text-red-700 dark:text-red-200">Kritis</p>
-                    <p class="mt-1 text-2xl font-black text-red-900 dark:text-red-100">{{ $criticalCount }}</p>
-                </div>
-                <div class="rounded-2xl border border-blue-200 bg-blue-50 p-3 dark:border-blue-700/70 dark:bg-blue-900/25">
-                    <p class="text-xs font-extrabold uppercase tracking-wide text-blue-700 dark:text-blue-200">Data Tampil</p>
-                    <p class="mt-1 text-2xl font-black text-blue-900 dark:text-blue-100">{{ $rows->count() }}</p>
-                </div>
-            </div>
-        </div>
-
-        @if(!empty($attentionRows))
-            <div class="relative z-10 mt-4 rounded-2xl border border-amber-200 bg-amber-50/70 p-4 dark:border-amber-700/70 dark:bg-amber-900/20">
-                <div class="mb-3 flex items-center justify-between gap-3">
-                    <div>
-                        <p class="text-sm font-black text-amber-900 dark:text-amber-100">PR perlu perhatian</p>
-                        <p class="text-xs font-semibold text-amber-700 dark:text-amber-200">Klik Follow Up untuk mengirim ringkasan ke Chat Tim.</p>
-                    </div>
-                </div>
-                <div class="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
-                    @foreach($attentionRows as $item)
-                        <div class="rounded-xl border border-white/70 bg-white p-3 shadow-sm dark:border-slate-700 dark:bg-slate-950/70">
-                            <div class="flex items-start justify-between gap-2">
-                                <div class="min-w-0">
-                                    <p class="truncate font-mono text-xs font-black text-slate-900 dark:text-white">{{ $item['nomor'] }}</p>
-                                    <p class="mt-1 text-[11px] font-bold text-slate-500 dark:text-slate-400">{{ $item['issue'] }}</p>
-                                </div>
-                                <span class="rounded-full bg-amber-100 px-2 py-1 text-[11px] font-black text-amber-700 dark:bg-amber-900/40 dark:text-amber-200">{{ $item['score'] }}</span>
-                            </div>
-                            <button type="button" onclick="shareRecordToChat('pr', {{ $item['id'] }})"
-                                class="mt-3 inline-flex w-full items-center justify-center gap-1 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-black text-white transition hover:bg-indigo-700 active:scale-95">
-                                💬 Follow Up
-                            </button>
-                        </div>
-                    @endforeach
-                </div>
-            </div>
-        @endif
-    </div>
-
-    {{-- Kanban Pipeline --}}
-    <div class="mb-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-7">
-        @foreach($stageMeta as $key => $meta)
-            <div class="torpr-kanban-card rounded-2xl border {{ $meta['ring'] }} bg-white p-4 shadow-sm dark:bg-slate-900">
-                <div class="flex items-start justify-between gap-3">
-                    <div class="min-w-0">
-                        <div class="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br {{ $meta['tone'] }} text-lg text-white shadow-lg">
-                            {{ $meta['icon'] }}
-                        </div>
-                        <p class="mt-3 text-sm font-black text-slate-950 dark:text-white">{{ $meta['label'] }}</p>
-                        <p class="mt-1 text-xs font-semibold text-slate-500 dark:text-slate-400">{{ $stageCounts[$key] ?? 0 }} PR di halaman ini</p>
-                    </div>
-                    <span class="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-black text-slate-700 dark:bg-slate-800 dark:text-slate-200">
-                        {{ $stageCounts[$key] ?? 0 }}
-                    </span>
-                </div>
-
-                <div class="mt-3 space-y-1.5">
-                    @forelse($stageSamples[$key] ?? [] as $sample)
-                        <div class="truncate rounded-lg bg-slate-50 px-2.5 py-1.5 font-mono text-[11px] font-bold text-slate-600 dark:bg-slate-950 dark:text-slate-300" title="{{ $sample }}">
-                            {{ $sample }}
-                        </div>
-                    @empty
-                        <div class="rounded-lg border border-dashed border-slate-200 px-2.5 py-2 text-center text-[11px] font-bold text-slate-400 dark:border-slate-700 dark:text-slate-500">
-                            Kosong
-                        </div>
-                    @endforelse
-                </div>
-            </div>
-        @endforeach
-    </div>
-
     {{-- Table --}}
     <div
         class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden animate-scale-in">
@@ -937,11 +693,10 @@
 
         {{-- Table Content --}}
         <div class="overflow-x-auto">
-            <table class="min-w-[1380px] w-full text-sm table-fixed">
+            <table class="min-w-[1260px] w-full text-sm table-fixed">
                 <thead class="bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
                     <tr class="text-gray-700 dark:text-white">
                         <th class="px-4 py-3 text-left">Nomor PR</th>
-                        <th class="px-4 py-3 text-center">Health</th>
                         <th class="px-4 py-3 text-left">Tujuan</th>
                         <th class="px-4 py-3 text-left">Portofolio</th>
                         <th class="px-4 py-3 text-right">Harga PR</th>
@@ -958,9 +713,6 @@
                         @php
                             // ✅ Data sudah FLAT dari Query Builder
                             $receipt = $r->approval_status ?? ($r->received_at ? 'APPROVED' : null);
-                            $health = $healthMap[$r->id] ?? ['score' => 0, 'label' => 'Kritis', 'color' => '#ef4444', 'tone' => 'border-red-200 bg-red-50 text-red-800 dark:border-red-700/70 dark:bg-red-900/25 dark:text-red-100', 'issues' => []];
-                            $stage = $stageMap[$r->id] ?? 'draft';
-
                             $badge = match ($receipt) {
                                 'APPROVED' => 'bg-green-600',
                                 'REJECTED' => 'bg-red-600',
@@ -1023,23 +775,6 @@
 
                                     <span class="font-mono font-semibold text-gray-900 dark:text-white">
                                         {{ $r->nomor_pr ?? '—' }}
-                                    </span>
-                                </div>
-                            </td>
-
-                            {{-- Health Score --}}
-                            <td class="px-4 py-3 text-center">
-                                <div class="inline-flex min-w-[118px] items-center justify-center gap-2 rounded-2xl border px-3 py-2 {{ $health['tone'] }}"
-                                    title="{{ !empty($health['issues']) ? implode(', ', $health['issues']) : 'Data PR sehat' }}">
-                                    <span class="torpr-health-ring inline-flex h-9 w-9 items-center justify-center rounded-full p-[3px]"
-                                        style="--health-score: {{ $health['score'] }}; --health-color: {{ $health['color'] }};">
-                                        <span class="flex h-full w-full items-center justify-center rounded-full bg-white text-[11px] font-black dark:bg-slate-950">
-                                            {{ $health['score'] }}
-                                        </span>
-                                    </span>
-                                    <span class="text-left">
-                                        <span class="block text-xs font-black leading-tight">{{ $health['label'] }}</span>
-                                        <span class="block text-[10px] font-bold opacity-75">{{ $stageMeta[$stage]['label'] ?? 'Draft' }}</span>
                                     </span>
                                 </div>
                             </td>
