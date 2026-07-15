@@ -604,6 +604,34 @@
             padding: .4rem .75rem;
         }
 
+        .torpr-lock-preview {
+            margin-top: .5rem;
+            border-radius: .9rem;
+            background: #f8fafc;
+            border: 1px solid #cbd5e1;
+            color: #334155;
+            font-size: .76rem;
+            font-weight: 800;
+            line-height: 1.55;
+            padding: .7rem .85rem;
+            text-align: left;
+        }
+
+        .torpr-lock-preview strong {
+            color: #0f172a;
+            font-weight: 950;
+        }
+
+        .torpr-lock-preview-row {
+            display: flex;
+            align-items: flex-start;
+            gap: .45rem;
+        }
+
+        .torpr-lock-preview-row + .torpr-lock-preview-row {
+            margin-top: .35rem;
+        }
+
         .torpr-lock-caption {
             color: #475569;
             font-size: .82rem;
@@ -625,6 +653,18 @@
             background: #172554 !important;
             border-color: #3b82f6 !important;
             color: #dbeafe !important;
+        }
+
+        html.dark .torpr-lock-preview,
+        .dark .torpr-lock-preview {
+            background: #1e293b !important;
+            border-color: #475569 !important;
+            color: #e2e8f0 !important;
+        }
+
+        html.dark .torpr-lock-preview strong,
+        .dark .torpr-lock-preview strong {
+            color: #ffffff !important;
         }
 
         html.dark .torpr-lock-caption,
@@ -4039,6 +4079,16 @@
                             </div>
                             <div class="torpr-time-pill">
                                 Waktu verifikasi: ${escapeHtml(formatTorprFullDateTime())} WIB
+                            </div>
+                            <div class="torpr-lock-preview">
+                                <div class="torpr-lock-preview-row">
+                                    <span>⏱️</span>
+                                    <span>Jika password salah 3 kali, tombol hapus dikunci selama <strong>${formatTorprLockTime(15 * 60)}</strong>.</span>
+                                </div>
+                                <div class="torpr-lock-preview-row">
+                                    <span>🔓</span>
+                                    <span>Jika terkunci sekarang, bisa dicoba lagi sekitar <strong>${escapeHtml(formatTorprFullDateTime(new Date(Date.now() + (15 * 60 * 1000))))} WIB</strong>.</span>
+                                </div>
                             </div>
                             <div class="torpr-password-wrap">
                                 <label for="torprCreatorPassword" class="torpr-password-label">Password pembuat PR</label>
