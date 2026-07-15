@@ -134,4 +134,30 @@ class DocumentNumberSuggestionTest extends TestCase
             'nomor_sp' => '021/PKU-VII/SP/2026',
         ]);
     }
+
+    public function test_oracle_sp_mode_keeps_manual_number_before_saving(): void
+    {
+        $user = User::factory()->create([
+            'department' => 'umum',
+            'role' => 'superadmin',
+            'name' => 'Nazar',
+        ]);
+
+        $this->actingAs($user)
+            ->post(route('sp.store'), [
+                'oracle_mode' => '1',
+                'nomor_sp' => 'ORACLE/SP/ERP/2026/00077',
+                'tanggal_sp' => '2026-07-10',
+                'nilai_sp' => '60000000',
+                'nama_vendor' => 'Vendor Oracle',
+                'deskripsi_pengadaan' => 'Pengadaan di atas 50 juta',
+                'pic' => 'Nazar',
+            ])
+            ->assertRedirect(route('sp.index', ['mode' => 'oracle']));
+
+        $this->assertDatabaseHas('sps', [
+            'nomor_sp' => 'ORACLE/SP/ERP/2026/00077',
+            'nama_vendor' => 'Vendor Oracle',
+        ]);
+    }
 }

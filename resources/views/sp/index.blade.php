@@ -2,6 +2,12 @@
 
 @section('title', 'Penomoran SP')
 
+@php
+    $oracleMode = (bool) ($oracleMode ?? request('mode') === 'oracle');
+    $normalSpUrl = route('sp.index', request()->except(['mode', 'oracle', 'oracle_mode', 'page']));
+    $oracleSpUrl = route('sp.index', array_merge(request()->except(['page', 'oracle', 'oracle_mode']), ['mode' => 'oracle']));
+@endphp
+
 @push('styles')
     <style>
         /* ════════════════════════════════════════════════════════════
@@ -1688,9 +1694,11 @@
                     <div>
                         <div class="flex items-center gap-3 mb-1">
                             <span class="text-3xl">📝</span>
-                            <h1 class="text-2xl font-bold tracking-tight">Penomoran SP</h1>
+                            <h1 class="text-2xl font-bold tracking-tight">{{ $oracleMode ? 'Penomoran SP Oracle' : 'Penomoran SP' }}</h1>
                         </div>
-                        <p class="text-blue-100 text-sm">Surat Pesanan</p>
+                        <p class="text-blue-100 text-sm">
+                            {{ $oracleMode ? 'Surat Pesanan nilai di atas Rp50 juta — nomor dari ERP Oracle' : 'Surat Pesanan' }}
+                        </p>
                         <div class="flex items-center gap-2 mt-3 flex-wrap">
                             <span class="text-xs bg-white/20 rounded-full px-3 py-1 font-medium">Total: <span
                                     id="totalCount">{{ $sps->total() }}</span> Data</span>
@@ -1700,9 +1708,27 @@
                             @endif
                             <span class="flex items-center text-xs bg-green-400/20 rounded-full px-3 py-1"><span
                                     class="live-dot"></span> Live</span>
+                            @if($oracleMode)
+                                <span class="text-xs bg-gray-950/50 rounded-full px-3 py-1 font-semibold border border-white/20">Oracle manual</span>
+                            @endif
                         </div>
                     </div>
                     <div class="flex items-center gap-2.5 shrink-0">
+                        @if($oracleMode)
+                            <a href="{{ $normalSpUrl }}"
+                                class="flex items-center gap-2 bg-white/15 hover:bg-white/25 text-white font-semibold px-4 py-3 rounded-xl transition-all backdrop-blur-sm border border-white/30 whitespace-nowrap"
+                                title="Kembali ke penomoran SP otomatis">
+                                <span>↩</span>
+                                <span class="text-sm">SP Otomatis</span>
+                            </a>
+                        @else
+                            <a href="{{ $oracleSpUrl }}"
+                                class="flex items-center gap-2 bg-gray-950/70 hover:bg-gray-950 text-white font-semibold px-4 py-3 rounded-xl transition-all backdrop-blur-sm border border-white/20 whitespace-nowrap shadow-lg shadow-black/20"
+                                title="Masuk mode SP Oracle untuk pengadaan di atas Rp50 juta">
+                                <span>🕶️</span>
+                                <span class="text-sm">Oracle &gt;50 Juta</span>
+                            </a>
+                        @endif
                         <a href="{{ route('satuan.index') }}"
                             class="flex items-center gap-2 bg-white/20 hover:bg-white/30 text-white font-semibold px-4 py-3 rounded-xl transition-all backdrop-blur-sm border border-white/30 whitespace-nowrap"
                             title="Master Satuan">
@@ -1729,12 +1755,28 @@
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
                                     d="M12 4v16m8-8H4" />
                             </svg>
-                            Tambah SP
+                            {{ $oracleMode ? 'Tambah SP Oracle' : 'Tambah SP' }}
                         </button>
                     </div>
                 </div>
             </div>
         </div>
+
+        @if($oracleMode)
+            <div class="rounded-2xl border border-amber-200 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 p-4 shadow-sm">
+                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                    <div>
+                        <p class="text-sm font-bold text-amber-900 dark:text-amber-100">Mode Oracle ERP aktif</p>
+                        <p class="text-xs text-amber-800 dark:text-amber-200 mt-1">
+                            Khusus SP bernilai di atas Rp50 juta. Nomor SP diketik manual sesuai nomor dari Oracle; field, item, vendor, PR/PPBJ, dan cetak SP tetap sama.
+                        </p>
+                    </div>
+                    <span class="inline-flex items-center justify-center rounded-xl bg-gray-950 text-white px-4 py-2 text-xs font-bold shadow-sm">
+                        Manual numbering
+                    </span>
+                </div>
+            </div>
+        @endif
 
         {{-- PRESENCE --}}
         <div id="presenceBar" class="hidden transition-all duration-300">
@@ -1928,9 +1970,18 @@
                                 data-search="{{ strtolower($s->nomor_sp . ' ' . $s->nomor_pr . ' ' . $s->nama_vendor . ' ' . $s->deskripsi_pengadaan) }}"
                                 data-pic="{{ $s->pic }}">
                                 <td class="px-3 py-3 text-gray-400 text-xs font-mono">{{ $sps->firstItem() + $i }}</td>
-                                <td class="px-3 py-3"><span
-                                        class="badge-sp inline-flex items-center px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800"
-                                        title="Klik untuk salin">{{ $s->nomor_sp }}</span></td>
+                                <td class="px-3 py-3">
+                                    <div class="flex flex-col items-start gap-1">
+                                        <span
+                                            class="badge-sp inline-flex items-center px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800"
+                                            title="Klik untuk salin">{{ $s->nomor_sp }}</span>
+                                        @if((float) $s->nilai_sp > 50000000)
+                                            <span class="inline-flex items-center gap-1 rounded-full bg-gray-900 text-white dark:bg-amber-400 dark:text-gray-950 px-2 py-0.5 text-[10px] font-bold">
+                                                🕶️ Oracle &gt;50jt
+                                            </span>
+                                        @endif
+                                    </div>
+                                </td>
                                 <td class="px-3 py-3 text-gray-600 dark:text-gray-300 whitespace-nowrap text-xs">
                                     {{ $s->tanggal_sp?->format('d/m/Y') ?? '-' }}
                                 </td>
@@ -2039,19 +2090,32 @@
          <div class="modal-overlay absolute inset-0"></div>
         <div class="relative bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-xl max-h-[90vh] overflow-y-auto">
             <div class="sp-header-gradient px-6 py-4 rounded-t-2xl">
-                <h2 class="text-white font-bold text-lg">Tambah SP Baru</h2>
+                <h2 class="text-white font-bold text-lg">{{ $oracleMode ? 'Tambah SP Oracle' : 'Tambah SP Baru' }}</h2>
             </div>
             <form method="POST" action="{{ route('sp.store') }}" class="p-6 space-y-4" id="addFormSp">
                 @csrf
+                <input type="hidden" name="oracle_mode" value="{{ $oracleMode ? 1 : 0 }}">
                 <div>
                     <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Nomor SP <span
                             class="text-red-500">*</span></label>
-                    <div id="suggBoxSp" class="flex flex-wrap gap-1.5 mb-2 min-h-[24px]"><span
-                            class="text-xs text-gray-400 italic">Memuat saran...</span></div>
-                    <input type="text" name="nomor_sp" id="nomorSpInput" placeholder="cth: 149/PKU-III/SP/2026"
+                    <div id="suggBoxSp" class="flex flex-wrap gap-1.5 mb-2 min-h-[24px]">
+                        @if($oracleMode)
+                            <span class="text-xs text-amber-700 dark:text-amber-300 font-semibold bg-amber-100 dark:bg-amber-900/40 border border-amber-200 dark:border-amber-700 rounded-full px-3 py-1">
+                                Mode Oracle: nomor SP diketik manual dari ERP
+                            </span>
+                        @else
+                            <span class="text-xs text-gray-400 italic">Memuat saran...</span>
+                        @endif
+                    </div>
+                    <input type="text" name="nomor_sp" id="nomorSpInput" placeholder="{{ $oracleMode ? 'Ketik nomor SP dari Oracle ERP...' : 'cth: 149/PKU-III/SP/2026' }}"
                         autocomplete="off" required
                         class="w-full px-4 py-2.5 rounded-xl border-2 border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none font-mono text-sm">
                     <div id="nomorStatusSp" class="mt-1.5 text-xs min-h-[18px] flex items-center gap-1.5"></div>
+                    @if($oracleMode)
+                        <p class="mt-2 text-xs text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-700/60 border border-gray-200 dark:border-gray-600 rounded-xl px-3 py-2">
+                            Peringatan: pastikan nomor sudah sesuai dari Oracle karena sistem tidak membuat nomor otomatis pada mode ini.
+                        </p>
+                    @endif
                 </div>
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
@@ -2323,12 +2387,18 @@
             <form method="POST" id="editFormSp" class="p-6 space-y-4">
                 @csrf @method('PUT')
                 <input type="hidden" id="editIdSp" value="">
+                <input type="hidden" name="oracle_mode" value="{{ $oracleMode ? 1 : 0 }}">
                 <div>
                     <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Nomor SP <span
                             class="text-red-500">*</span></label>
                     <input type="text" name="nomor_sp" id="editNomorSp" autocomplete="off" required
                         class="w-full px-4 py-2.5 rounded-xl border-2 border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none font-mono text-sm">
                     <div id="editNomorStatusSp" class="mt-1.5 text-xs min-h-[18px] flex items-center gap-1.5"></div>
+                    @if($oracleMode)
+                        <p class="mt-2 text-xs text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-700/60 border border-gray-200 dark:border-gray-600 rounded-xl px-3 py-2">
+                            Mode Oracle aktif: nomor SP manual tidak akan disesuaikan otomatis berdasarkan bulan tanggal SP.
+                        </p>
+                    @endif
                 </div>
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div><label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Tanggal
@@ -2863,12 +2933,13 @@
         const PRESENCE_STOP = '{{ route('sp.presence.stop') }}';
         const PPBJ_OPTIONS_URL = '{{ route('sp.ppbj-options') }}';
         const PPBJ_CHECK_URL = '{{ route('sp.check-ppbj') }}';
+        const ORACLE_MODE_SP = {{ $oracleMode ? 'true' : 'false' }};
 
         let lastIdSp = {{ $sps->count() > 0 ? $sps->max('id') : 0 }};
         let pollTimer = null, checkTimer = null, searchTimer = null, presenceTimer = null, heartbeatTimer = null, modalOpen = false;
         let currentPrMode = 'ppbj', currentEditPrMode = 'ppbj';
         const IS_FIRST_PAGE = {{ $sps->onFirstPage() ? 'true' : 'false' }};
-        const HAS_FILTER = {{ ($search ?? '') || ($pic ?? '') || ($dari ?? '') || ($sampai ?? '') ? 'true' : 'false' }};
+        const HAS_FILTER = {{ ($search ?? '') || ($pic ?? '') || ($dari ?? '') || ($sampai ?? '') || $oracleMode ? 'true' : 'false' }};
 
         // ── FIX BUG 2: Flag untuk mencegah change handler PPBJ menimpa field saat load edit ──
         let _suppressEditPpbjChange = false;
@@ -3132,6 +3203,41 @@
         function getSuggestionUrlSp() { const url = new URL(SUGGEST_URL_SP, window.location.origin); const tanggal = document.getElementById('tanggalSpInput')?.value; if (tanggal) url.searchParams.set('tanggal', tanggal); return url.toString(); }
         async function loadSuggestionsSp() { const box = document.getElementById('suggBoxSp'); try { const r = await fetch(getSuggestionUrlSp()); const d = await r.json(); box.innerHTML = d.last ? `<span class="text-xs text-gray-400 dark:text-gray-500 mr-1">Terakhir: <span class="font-mono font-semibold">${d.last}</span> →</span>` : `<span class="text-xs text-gray-400 mr-1">Saran:</span>`; d.suggestions.forEach(s => { const p = document.createElement('span'); p.className = 'suggest-pill'; p.innerHTML = `✨ ${s}`; p.onclick = () => { document.getElementById('nomorSpInput').value = s; document.getElementById('nomorSpInput').dispatchEvent(new Event('input')); }; box.appendChild(p); }); } catch { box.innerHTML = '<span class="text-xs text-gray-400">Tidak bisa memuat saran</span>'; } }
 
+        getSuggestionUrlSp = function () {
+            const url = new URL(SUGGEST_URL_SP, window.location.origin);
+            const tanggal = document.getElementById('tanggalSpInput')?.value;
+            if (tanggal) url.searchParams.set('tanggal', tanggal);
+            if (ORACLE_MODE_SP) url.searchParams.set('oracle_mode', '1');
+            return url.toString();
+        };
+
+        loadSuggestionsSp = async function () {
+            const box = document.getElementById('suggBoxSp');
+            if (!box) return;
+            if (ORACLE_MODE_SP) {
+                box.innerHTML = `<span class="text-xs text-amber-700 dark:text-amber-300 font-semibold bg-amber-100 dark:bg-amber-900/40 border border-amber-200 dark:border-amber-700 rounded-full px-3 py-1">Mode Oracle: nomor SP diketik manual dari ERP</span>`;
+                return;
+            }
+
+            try {
+                const r = await fetch(getSuggestionUrlSp());
+                const d = await r.json();
+                box.innerHTML = d.last ? `<span class="text-xs text-gray-400 dark:text-gray-500 mr-1">Terakhir: <span class="font-mono font-semibold">${d.last}</span> →</span>` : `<span class="text-xs text-gray-400 mr-1">Saran:</span>`;
+                d.suggestions.forEach(s => {
+                    const p = document.createElement('span');
+                    p.className = 'suggest-pill';
+                    p.innerHTML = `✨ ${s}`;
+                    p.onclick = () => {
+                        document.getElementById('nomorSpInput').value = s;
+                        document.getElementById('nomorSpInput').dispatchEvent(new Event('input'));
+                    };
+                    box.appendChild(p);
+                });
+            } catch {
+                box.innerHTML = '<span class="text-xs text-gray-400">Tidak bisa memuat saran</span>';
+            }
+        };
+
         function attachNomorCheck(inputId, statusId, getExcludeId, dateInputId = null) {
             const input = document.getElementById(inputId), status = document.getElementById(statusId);
             const runCheck = () => {
@@ -3144,6 +3250,7 @@
                         const url = new URL(CHECK_URL_SP, window.location.origin);
                         url.searchParams.set('nomor', v);
                         url.searchParams.set('exclude_id', getExcludeId());
+                        if (ORACLE_MODE_SP) url.searchParams.set('oracle_mode', '1');
                         const tanggal = dateInputId ? document.getElementById(dateInputId)?.value : '';
                         if (tanggal) url.searchParams.set('tanggal', tanggal);
                         const r = await fetch(url.toString());

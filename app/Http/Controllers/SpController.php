@@ -40,6 +40,7 @@ class SpController extends Controller
         $pic = $request->get('pic', '');
         $dari = $request->get('dari', '');
         $sampai = $request->get('sampai', '');
+        $oracleMode = $this->isOracleMode($request);
 
         $vendors = Cache::remember('vendors:active', 3600, fn() => Vendor::active()->orderBy('nama_vendor')->get());
         $pics = Cache::remember('pics:umum', 3600, fn() => User::where('department', 'umum')->orderBy('name')->pluck('name'));
@@ -68,7 +69,8 @@ class SpController extends Controller
         }))
             ->when($pic, fn($q) => $q->where('pic', $pic))
             ->when($dari, fn($q) => $q->where('tanggal_sp', '>=', $dari))
-            ->when($sampai, fn($q) => $q->where('tanggal_sp', '<=', $sampai));
+            ->when($sampai, fn($q) => $q->where('tanggal_sp', '<=', $sampai))
+            ->when($oracleMode, fn($q) => $q->where('nilai_sp', '>', 50000000));
 
         $stats = (clone $baseQuery)->selectRaw('
             COUNT(*) as total_count,
@@ -80,7 +82,7 @@ class SpController extends Controller
             ->paginate(25)
             ->withQueryString();
 
-        return view('sp.index', compact('vendors', 'pics', 'satuans', 'sps', 'lastNomor', 'search', 'pic', 'dari', 'sampai', 'stats', 'bidangIpItus', 'penandatanganScis', 'jabatanScis'));
+        return view('sp.index', compact('vendors', 'pics', 'satuans', 'sps', 'lastNomor', 'search', 'pic', 'dari', 'sampai', 'stats', 'bidangIpItus', 'penandatanganScis', 'jabatanScis', 'oracleMode'));
     }
 
     // =========================================================
@@ -315,15 +317,18 @@ class SpController extends Controller
     public function checkNomor(Request $request)
     {
         $originalNomor = trim($request->get('nomor', ''));
-        $nomor = $this->normalizeNumberPeriod($originalNomor, $request->get('tanggal'), 'SP');
+        $oracleMode = $this->isOracleMode($request);
+        $nomor = $oracleMode
+            ? $originalNomor
+            : $this->normalizeNumberPeriod($originalNomor, $request->get('tanggal'), 'SP');
         $excludeId = (int) $request->get('exclude_id', 0);
         $tanggal = $request->get('tanggal');
 
         if (!$nomor)
             return response()->json(['status' => 'empty']);
 
-        $cacheKey = 'sp:check:' . md5($originalNomor . ':' . $nomor . ':' . $excludeId . ':' . $tanggal);
-        return Cache::remember($cacheKey, 30, function () use ($nomor, $originalNomor, $excludeId, $tanggal) {
+        $cacheKey = 'sp:check:' . md5($originalNomor . ':' . $nomor . ':' . $excludeId . ':' . $tanggal . ':' . (int) $oracleMode);
+        return Cache::remember($cacheKey, 30, function () use ($nomor, $originalNomor, $excludeId, $oracleMode) {
             $exists = Sp::where('nomor_sp', $nomor)
                 ->when($excludeId, fn($q) => $q->where('id', '!=', $excludeId))
                 ->exists();
@@ -335,7 +340,7 @@ class SpController extends Controller
                     'normalized_nomor' => $nomor !== $originalNomor ? $nomor : null,
                 ];
 
-            $seqInput = $this->extractSeq($nomor);
+            $seqInput = $oracleMode ? null : $this->extractSeq($nomor);
             $warning = null;
 
             if ($seqInput !== null) {
@@ -353,8 +358,10 @@ class SpController extends Controller
                 }
             }
 
-            if ($nomor !== $originalNomor) {
+            if (!$oracleMode && $nomor !== $originalNomor) {
                 $warning = "Nomor otomatis disesuaikan dengan tanggal dokumen menjadi {$nomor}.";
+            } elseif ($oracleMode) {
+                $warning = 'Mode Oracle ERP: nomor SP diketik manual dan hanya dicek duplikasi.';
             }
 
             return [
@@ -370,6 +377,15 @@ class SpController extends Controller
     // =========================================================
     public function suggestNomor(Request $request)
     {
+        if ($this->isOracleMode($request)) {
+            return [
+                'suggestions' => [],
+                'last' => null,
+                'manual' => true,
+                'message' => 'Mode Oracle ERP: nomor SP diketik manual dari sistem Oracle.',
+            ];
+        }
+
         [$year, $roman] = $this->periodFromDate($request->query('tanggal'));
 
         $lastNomor = Sp::orderBy('sequence_number', 'desc')->value('nomor_sp');
@@ -444,8 +460,12 @@ class SpController extends Controller
     // =========================================================
     public function store(Request $request)
     {
+        $oracleMode = $this->isOracleMode($request);
+
         $request->merge([
-            'nomor_sp' => $this->normalizeNumberPeriod($request->input('nomor_sp', ''), $request->input('tanggal_sp'), 'SP'),
+            'nomor_sp' => $oracleMode
+                ? trim($request->input('nomor_sp', ''))
+                : $this->normalizeNumberPeriod($request->input('nomor_sp', ''), $request->input('tanggal_sp'), 'SP'),
             'nilai_sp' => $this->moneyToNullableFloat($request->input('nilai_sp')),
             'nilai_pr' => $this->moneyToNullableFloat($request->input('nilai_pr')),
         ]);
@@ -479,7 +499,9 @@ class SpController extends Controller
             'items.*.tgl_pemenuhan' => 'nullable|date',
         ]);
 
-        $this->validateNumberPeriod($request->nomor_sp, $request->tanggal_sp, 'SP', 'nomor_sp');
+        if (!$oracleMode) {
+            $this->validateNumberPeriod($request->nomor_sp, $request->tanggal_sp, 'SP', 'nomor_sp');
+        }
 
         $nomorPr = $request->nomor_pr ?: null;
 
@@ -496,7 +518,7 @@ class SpController extends Controller
         }
 
         try {
-            return DB::transaction(function () use ($request, $nomorPr) {
+            return DB::transaction(function () use ($request, $nomorPr, $oracleMode) {
             $ppbjRecord = null;
 
             if ($nomorPr) {
@@ -520,7 +542,9 @@ class SpController extends Controller
                 Cache::forget('vendors:active');
             }
 
-            $seq = $this->extractSeq($request->nomor_sp) ?? ((int) Sp::lockForUpdate()->max('sequence_number') + 1);
+            $seq = $oracleMode
+                ? ((int) Sp::lockForUpdate()->max('sequence_number') + 1)
+                : ($this->extractSeq($request->nomor_sp) ?? ((int) Sp::lockForUpdate()->max('sequence_number') + 1));
 
             // Hitung total dari items jika ada
             $items = $request->input('items', []);
@@ -574,7 +598,9 @@ class SpController extends Controller
             Cache::forget('sp:last_nomor');
             Cache::forget('sp:suggest');
 
-            return redirect()->route('sp.index')->with('success', 'Data SP berhasil disimpan!');
+            return redirect()
+                ->route('sp.index', $oracleMode ? ['mode' => 'oracle'] : [])
+                ->with('success', $oracleMode ? 'Data SP Oracle berhasil disimpan!' : 'Data SP berhasil disimpan!');
             });
         } catch (QueryException $e) {
             return back()
@@ -588,8 +614,12 @@ class SpController extends Controller
     // =========================================================
     public function update(Request $request, Sp $sp)
     {
+        $oracleMode = $this->isOracleMode($request);
+
         $request->merge([
-            'nomor_sp' => $this->normalizeNumberPeriod($request->input('nomor_sp', ''), $request->input('tanggal_sp'), 'SP'),
+            'nomor_sp' => $oracleMode
+                ? trim($request->input('nomor_sp', ''))
+                : $this->normalizeNumberPeriod($request->input('nomor_sp', ''), $request->input('tanggal_sp'), 'SP'),
             'nilai_sp' => $this->moneyToNullableFloat($request->input('nilai_sp')),
             'nilai_pr' => $this->moneyToNullableFloat($request->input('nilai_pr')),
         ]);
@@ -622,7 +652,9 @@ class SpController extends Controller
             'items.*.tgl_pemenuhan' => 'nullable|date',
         ]);
 
-        $this->validateNumberPeriod($request->nomor_sp, $request->tanggal_sp, 'SP', 'nomor_sp');
+        if (!$oracleMode) {
+            $this->validateNumberPeriod($request->nomor_sp, $request->tanggal_sp, 'SP', 'nomor_sp');
+        }
 
         $nomorPr = $request->nomor_pr ?: null;
         $oldNomorPr = $sp->nomor_pr;
@@ -640,7 +672,7 @@ class SpController extends Controller
         }
 
         try {
-            return DB::transaction(function () use ($request, $sp, $nomorPr, $oldNomorPr) {
+            return DB::transaction(function () use ($request, $sp, $nomorPr, $oldNomorPr, $oracleMode) {
             $newPpbj = null;
 
             if ($nomorPr) {
@@ -657,7 +689,7 @@ class SpController extends Controller
                 }
             }
 
-            $seq = $this->extractSeq($request->nomor_sp) ?? $sp->sequence_number;
+            $seq = $oracleMode ? $sp->sequence_number : ($this->extractSeq($request->nomor_sp) ?? $sp->sequence_number);
 
             // Hitung total dari items jika ada
             $items = $request->input('items', []);
@@ -729,7 +761,9 @@ class SpController extends Controller
             Cache::forget('sp:last_nomor');
             Cache::forget('sp:suggest');
 
-            return redirect()->route('sp.index')->with('success', 'Data SP berhasil diperbarui!');
+            return redirect()
+                ->route('sp.index', $oracleMode ? ['mode' => 'oracle'] : [])
+                ->with('success', $oracleMode ? 'Data SP Oracle berhasil diperbarui!' : 'Data SP berhasil diperbarui!');
             });
         } catch (QueryException $e) {
             return back()
@@ -4677,6 +4711,13 @@ class SpController extends Controller
     // =========================================================
     // PRIVATE: Extract sequence number
     // =========================================================
+    private function isOracleMode(Request $request): bool
+    {
+        return $request->boolean('oracle_mode')
+            || $request->boolean('oracle')
+            || $request->query('mode') === 'oracle';
+    }
+
     private function extractSeq(string $nomor): ?int
     {
         if (preg_match('/^(\d+)\/PKU-/', $nomor, $m))
