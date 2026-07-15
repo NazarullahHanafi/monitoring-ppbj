@@ -1763,17 +1763,21 @@
         </div>
 
         @if($oracleMode)
-            <div class="rounded-2xl border border-amber-200 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 p-4 shadow-sm">
-                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                    <div>
-                        <p class="text-sm font-bold text-amber-900 dark:text-amber-100">Mode Oracle ERP aktif</p>
-                        <p class="text-xs text-amber-800 dark:text-amber-200 mt-1">
+            <div class="rounded-2xl border p-4 shadow-sm"
+                style="background: {{ $oracleMode ? 'linear-gradient(135deg, #3b2a08, #111827)' : '#fff7ed' }}; border-color: #f59e0b;">
+                <div class="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4">
+                    <div class="min-w-0">
+                        <p class="text-sm font-black" style="color:#ffffff;">Mode Oracle ERP aktif</p>
+                        <p class="text-xs mt-1 leading-relaxed" style="color:#fde68a;">
                             Khusus SP bernilai di atas Rp50 juta. Nomor SP diketik manual sesuai nomor dari Oracle; field, item, vendor, PR/PPBJ, dan cetak SP tetap sama.
                         </p>
                     </div>
-                    <span class="inline-flex items-center justify-center rounded-xl bg-gray-950 text-white px-4 py-2 text-xs font-bold shadow-sm">
-                        Manual numbering
-                    </span>
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 shrink-0">
+                        <span class="inline-flex items-center justify-center rounded-xl px-3 py-2 text-[11px] font-black shadow-sm" style="background:#f59e0b;color:#111827;">Manual numbering</span>
+                        <span class="inline-flex items-center justify-center rounded-xl px-3 py-2 text-[11px] font-black border" style="background:#1f2937;color:#ffffff;border-color:#f59e0b;">Nilai &gt; Rp50 Juta</span>
+                        <span class="inline-flex items-center justify-center rounded-xl px-3 py-2 text-[11px] font-black border" style="background:#1f2937;color:#ffffff;border-color:#f59e0b;">Pisah dari SP Otomatis</span>
+                        <span class="inline-flex items-center justify-center rounded-xl px-3 py-2 text-[11px] font-black border" style="background:#1f2937;color:#ffffff;border-color:#f59e0b;">Siap Audit</span>
+                    </div>
                 </div>
             </div>
         @endif
@@ -2132,6 +2136,11 @@
                         <div id="addModeGuardSp" class="hidden mt-2 text-xs rounded-xl px-3 py-2 border"></div>
                     </div>
                 </div>
+                @if($oracleMode)
+                    <div id="addOracleChecklist" class="rounded-2xl border p-3 shadow-sm"
+                        style="background:#111827;border-color:#f59e0b;color:#ffffff;">
+                    </div>
+                @endif
 
                 {{-- NOMOR PR DENGAN PPBJ DROPDOWN --}}
                 <div>
@@ -2412,6 +2421,11 @@
                         <div id="editModeGuardSp" class="hidden mt-2 text-xs rounded-xl px-3 py-2 border"></div>
                     </div>
                 </div>
+                @if($oracleMode)
+                    <div id="editOracleChecklist" class="rounded-2xl border p-3 shadow-sm"
+                        style="background:#111827;border-color:#f59e0b;color:#ffffff;">
+                    </div>
+                @endif
                 {{-- NOMOR PR EDIT --}}
                 <div>
                     <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Nomor PR <span
@@ -3410,7 +3424,10 @@
             box.style.cssText = '';
             box.innerHTML = '';
 
-            if (!value) return true;
+            if (!value) {
+                updateOracleReadinessChecklist(prefix);
+                return true;
+            }
 
             if (ORACLE_MODE_SP && value <= 50000000) {
                 setSpModeGuardBox(
@@ -3422,6 +3439,7 @@
                     'auto',
                     prefix
                 );
+                updateOracleReadinessChecklist(prefix);
                 return false;
             }
 
@@ -3435,6 +3453,7 @@
                     'oracle',
                     prefix
                 );
+                updateOracleReadinessChecklist(prefix);
                 return false;
             }
 
@@ -3447,8 +3466,67 @@
                 );
             }
 
+            updateOracleReadinessChecklist(prefix);
             return true;
         };
+
+        function getOracleReadiness(prefix) {
+            const isEdit = prefix === 'edit';
+            const formSelector = isEdit ? '#editFormSp' : '#addFormSp';
+            const nomorSp = document.getElementById(isEdit ? 'editNomorSp' : 'nomorSpInput')?.value?.trim() || '';
+            const nilaiSp = getSpModeGuardValue(prefix);
+            const nomorPr = document.getElementById(isEdit ? 'editNomorPrFinal' : 'nomorPrFinal')?.value?.trim() || '';
+            const vendor = isEdit ? $('#editVendorSp').val() : $('#vendorSelectSp').val();
+            const pic = isEdit ? $('#editPicSp').val() : $('.pic-select-sp').val();
+            const itemReady = Array.from(document.querySelectorAll(`${isEdit ? '#editRows' : '#addRows'} .rt-editor`))
+                .some(editor => (editor.textContent || '').trim().length > 0);
+
+            return [
+                { label: 'Nomor SP Oracle sudah diisi manual', ok: nomorSp.length > 0 },
+                { label: 'Nilai SP di atas Rp50.000.000', ok: nilaiSp > 50000000 },
+                { label: 'Nomor PR/PPBJ sudah terhubung atau diisi', ok: nomorPr.length > 0 },
+                { label: 'Vendor dan PIC sudah dipilih', ok: !!vendor && vendor !== '__tambah__' && !!pic },
+                { label: 'Minimal 1 item barang/jasa sudah ditulis', ok: itemReady }
+            ];
+        }
+
+        function updateOracleReadinessChecklist(prefix) {
+            if (!ORACLE_MODE_SP) return;
+            const box = document.getElementById(prefix === 'edit' ? 'editOracleChecklist' : 'addOracleChecklist');
+            if (!box) return;
+
+            const items = getOracleReadiness(prefix);
+            const readyCount = items.filter(item => item.ok).length;
+            const total = items.length;
+            const allReady = readyCount === total;
+
+            box.style.background = isDarkModeActive() ? '#111827' : '#fff7ed';
+            box.style.borderColor = allReady ? '#34d399' : '#f59e0b';
+            box.style.color = isDarkModeActive() ? '#ffffff' : '#111827';
+            box.innerHTML = `
+                <div class="flex items-start justify-between gap-3">
+                    <div>
+                        <div class="text-sm font-black" style="color:${isDarkModeActive() ? '#ffffff' : '#111827'}">Checklist Kesiapan Oracle</div>
+                        <div class="mt-1 text-xs font-semibold" style="color:${isDarkModeActive() ? '#fde68a' : '#92400e'}">
+                            ${readyCount}/${total} syarat siap. Checklist ini membantu mencegah nomor Oracle salah mode sebelum disimpan.
+                        </div>
+                    </div>
+                    <span class="shrink-0 rounded-full px-3 py-1 text-[11px] font-black" style="background:${allReady ? '#10b981' : '#f59e0b'};color:${allReady ? '#ffffff' : '#111827'}">
+                        ${allReady ? 'Siap simpan' : 'Perlu cek'}
+                    </span>
+                </div>
+                <div class="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    ${items.map(item => `
+                        <div class="flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-bold"
+                            style="background:${item.ok ? (isDarkModeActive() ? '#064e3b' : '#ecfdf5') : (isDarkModeActive() ? '#1f2937' : '#ffffff')};border-color:${item.ok ? '#34d399' : '#f59e0b'};color:${item.ok ? (isDarkModeActive() ? '#d1fae5' : '#065f46') : (isDarkModeActive() ? '#fef3c7' : '#92400e')}">
+                            <span class="inline-flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-black"
+                                style="background:${item.ok ? '#10b981' : '#f59e0b'};color:${item.ok ? '#ffffff' : '#111827'}">${item.ok ? '✓' : '!'}</span>
+                            <span>${item.label}</span>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        }
 
         function getSuggestionUrlSp() { const url = new URL(SUGGEST_URL_SP, window.location.origin); const tanggal = document.getElementById('tanggalSpInput')?.value; if (tanggal) url.searchParams.set('tanggal', tanggal); return url.toString(); }
         async function loadSuggestionsSp() { const box = document.getElementById('suggBoxSp'); try { const r = await fetch(getSuggestionUrlSp()); const d = await r.json(); box.innerHTML = d.last ? `<span class="text-xs text-gray-400 dark:text-gray-500 mr-1">Terakhir: <span class="font-mono font-semibold">${d.last}</span> →</span>` : `<span class="text-xs text-gray-400 mr-1">Saran:</span>`; d.suggestions.forEach(s => { const p = document.createElement('span'); p.className = 'suggest-pill'; p.innerHTML = `✨ ${s}`; p.onclick = () => { document.getElementById('nomorSpInput').value = s; document.getElementById('nomorSpInput').dispatchEvent(new Event('input')); }; box.appendChild(p); }); } catch { box.innerHTML = '<span class="text-xs text-gray-400">Tidak bisa memuat saran</span>'; } }
@@ -3619,6 +3697,7 @@
             document.getElementById('editNomorSp').dispatchEvent(new Event('input'));
             openModal('editModal');
             loadEditItems(id);
+            setTimeout(() => updateOracleReadinessChecklist('edit'), 150);
         }
 
         // ── Helper: reset state PPBJ tanpa menyentuh field deskripsi/nilaiPr ──
@@ -4096,7 +4175,8 @@
                                                     ${buildRtToolbar(edId)}
                                                     <div class="rt-editor" contenteditable="true" id="${edId}"
                                                          data-ph="Ketik nama barang / jasa..."
-                                                         onfocus="rtSaveSel('${edId}')"></div>
+                                                         onfocus="rtSaveSel('${edId}')"
+                                                         oninput="updateOracleReadinessChecklist('${mode}')"></div>
                                                     <input type="hidden" name="items[${idx}][nama_barang]" id="hid-${edId}">
                                                 </div>
 
@@ -4215,6 +4295,15 @@
 
             $('#nilaiSpInput').on('input paste', () => setTimeout(() => { updateJampelPreview('add'); updateSpModeGuard('add'); }, 0));
             $('#editNilaiSp').on('input paste', () => setTimeout(() => { updateJampelPreview('edit'); updateSpModeGuard('edit'); }, 0));
+            $('#addFormSp').on('input change', 'input, select, textarea', () => setTimeout(() => updateOracleReadinessChecklist('add'), 0));
+            $('#editFormSp').on('input change', 'input, select, textarea', () => setTimeout(() => updateOracleReadinessChecklist('edit'), 0));
+            $('#vendorSelectSp, .pic-select-sp, #editVendorSp, #editPicSp, #ppbjSelect, #editPpbjSelect')
+                .on('change select2:select select2:clear', () => {
+                    setTimeout(() => {
+                        updateOracleReadinessChecklist('add');
+                        updateOracleReadinessChecklist('edit');
+                    }, 0);
+                });
 
             // Tombol Tambah
             document.querySelector('button[onclick="openModal(\'addModal\')"]').addEventListener('click', () => {
@@ -4253,6 +4342,7 @@
                 $('#ppbjStatus').html('');
                 $('#nomorPrFinal').val('');
                 restoreSpModeDraftToAdd();
+                updateOracleReadinessChecklist('add');
             });
 
             // Vendor toggle
