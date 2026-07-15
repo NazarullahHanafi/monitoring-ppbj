@@ -206,6 +206,88 @@ class DocumentNumberSuggestionTest extends TestCase
             ->assertJsonPath('suggestions.0', '325/PKU-VII/SP/2026');
     }
 
+    public function test_auto_numbering_continues_active_sequence_ignores_old_gaps_and_resets_next_year(): void
+    {
+        $user = User::factory()->create([
+            'department' => 'umum',
+            'role' => 'superadmin',
+            'name' => 'Nazar',
+        ]);
+
+        foreach (array_merge([1, 2], range(5, 30)) as $seq) {
+            Spph::create([
+                'nomor_spph' => sprintf('%03d/PKU-VII/SPPH/2026', $seq),
+                'sequence_number' => $seq,
+                'tanggal' => '2026-07-10',
+                'nama_vendor' => 'Vendor Test',
+                'deskripsi_pengadaan' => 'Pengadaan test',
+                'pic' => 'Nazar',
+            ]);
+
+            Sp::create([
+                'nomor_sp' => sprintf('%03d/PKU-VII/SP/2026', $seq),
+                'sequence_number' => $seq,
+                'tanggal_sp' => '2026-07-10',
+                'nilai_sp' => 1000000,
+                'nama_vendor' => 'Vendor Test',
+                'deskripsi_pengadaan' => 'Pengadaan test',
+                'pic' => 'Nazar',
+            ]);
+        }
+
+        $this->actingAs($user)
+            ->getJson(route('spph.suggest-nomor', ['tanggal' => '2026-07-10']))
+            ->assertOk()
+            ->assertJsonPath('suggestions.0', '031/PKU-VII/SPPH/2026');
+
+        $this->actingAs($user)
+            ->getJson(route('sp.suggest-nomor', ['tanggal' => '2026-07-10']))
+            ->assertOk()
+            ->assertJsonPath('suggestions.0', '031/PKU-VII/SP/2026');
+
+        Spph::create([
+            'nomor_spph' => '040/PKU-VII/SPPH/2026',
+            'sequence_number' => 40,
+            'tanggal' => '2026-07-10',
+            'nama_vendor' => 'Vendor Test',
+            'deskripsi_pengadaan' => 'Pengadaan test',
+            'pic' => 'Nazar',
+        ]);
+
+        Sp::create([
+            'nomor_sp' => '040/PKU-VII/SP/2026',
+            'sequence_number' => 40,
+            'tanggal_sp' => '2026-07-10',
+            'nilai_sp' => 1000000,
+            'nama_vendor' => 'Vendor Test',
+            'deskripsi_pengadaan' => 'Pengadaan test',
+            'pic' => 'Nazar',
+        ]);
+
+        $this->actingAs($user)
+            ->getJson(route('spph.suggest-nomor', ['tanggal' => '2026-07-10']))
+            ->assertOk()
+            ->assertJsonPath('suggestions.0', '031/PKU-VII/SPPH/2026');
+
+        $this->actingAs($user)
+            ->getJson(route('sp.suggest-nomor', ['tanggal' => '2026-07-10']))
+            ->assertOk()
+            ->assertJsonPath('suggestions.0', '031/PKU-VII/SP/2026');
+
+        $this->assertSame('031/PKU-VII/SPPH/2026', Spph::previewNextNomor('2026-07-10'));
+        $this->assertSame('031/PKU-VII/SP/2026', Sp::previewNextNomor('2026-07-10'));
+
+        $this->actingAs($user)
+            ->getJson(route('spph.suggest-nomor', ['tanggal' => '2027-01-10']))
+            ->assertOk()
+            ->assertJsonPath('suggestions.0', '001/PKU-I/SPPH/2027');
+
+        $this->actingAs($user)
+            ->getJson(route('sp.suggest-nomor', ['tanggal' => '2027-01-10']))
+            ->assertOk()
+            ->assertJsonPath('suggestions.0', '001/PKU-I/SP/2027');
+    }
+
     public function test_oracle_sp_mode_keeps_manual_number_before_saving(): void
     {
         $user = User::factory()->create([

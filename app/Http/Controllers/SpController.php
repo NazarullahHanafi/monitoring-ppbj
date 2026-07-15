@@ -328,7 +328,7 @@ class SpController extends Controller
             return response()->json(['status' => 'empty']);
 
         $cacheKey = 'sp:check:' . md5($originalNomor . ':' . $nomor . ':' . $excludeId . ':' . $tanggal . ':' . (int) $oracleMode);
-        return Cache::remember($cacheKey, 30, function () use ($nomor, $originalNomor, $excludeId, $oracleMode) {
+        return Cache::remember($cacheKey, 30, function () use ($nomor, $originalNomor, $excludeId, $oracleMode, $tanggal) {
             $exists = Sp::where('nomor_sp', $nomor)
                 ->when($excludeId, fn($q) => $q->where('id', '!=', $excludeId))
                 ->exists();
@@ -351,7 +351,8 @@ class SpController extends Controller
                 if ($lastNomor) {
                     $lastSeq = $this->extractSeq($lastNomor);
                     if ($lastSeq !== null) {
-                        $expectedSeq = $this->nextAvailableAutoSequence($excludeId);
+                        [$year] = $this->periodFromDate($tanggal);
+                        $expectedSeq = $this->nextAvailableAutoSequence($excludeId, $year);
                         if ($seqInput < $expectedSeq)
                             $warning = "Nomor ini ({$seqInput}) lebih kecil dari urutan berikutnya ({$expectedSeq}).";
                         elseif ($seqInput > $expectedSeq)
@@ -390,8 +391,11 @@ class SpController extends Controller
 
         [$year, $roman] = $this->periodFromDate($request->query('tanggal'));
 
-        $nextSeq = $this->nextAvailableAutoSequence();
-        $lastNomor = $this->spModeQuery(false)->orderBy('sequence_number', 'desc')->value('nomor_sp');
+        $nextSeq = $this->nextAvailableAutoSequence(null, $year);
+        $lastNomor = $this->spModeQuery(false)
+            ->where('nomor_sp', 'like', "%/SP/{$year}")
+            ->orderBy('sequence_number', 'desc')
+            ->value('nomor_sp');
 
         return [
             'suggestions' => [sprintf('%03d/PKU-%s/SP/%d', $nextSeq, $roman, $year)],
@@ -554,7 +558,7 @@ class SpController extends Controller
 
             $seq = $oracleMode
                 ? ((int) $this->spModeQuery(true)->lockForUpdate()->max('sequence_number') + 1)
-                : ($this->extractSeq($request->nomor_sp) ?? $this->nextAvailableAutoSequence());
+                : ($this->extractSeq($request->nomor_sp) ?? $this->nextAvailableAutoSequence(null, (int) ($this->numberPeriodFromNomor($request->nomor_sp, 'SP')['year'] ?? now()->year)));
 
             // Hitung total dari items jika ada
             $items = $request->input('items', []);
@@ -4773,10 +4777,13 @@ class SpController extends Controller
         }
     }
 
-    private function nextAvailableAutoSequence(?int $excludeId = null): int
+    private function nextAvailableAutoSequence(?int $excludeId = null, ?int $year = null): int
     {
+        $year ??= now()->year;
+
         $usedSequences = $this->spModeQuery(false)
             ->when($excludeId, fn($q) => $q->where('id', '!=', $excludeId))
+            ->where('nomor_sp', 'like', "%/SP/{$year}")
             ->orderBy('sequence_number')
             ->pluck('sequence_number')
             ->map(fn($seq) => (int) $seq)
@@ -4784,25 +4791,48 @@ class SpController extends Controller
             ->unique()
             ->values();
 
+        return $this->nextSequenceFromActiveRun($usedSequences);
+    }
+
+    private function nextSequenceFromActiveRun($usedSequences): int
+    {
+        $usedSequences = collect($usedSequences)->sort()->unique()->values();
+
         if ($usedSequences->isEmpty()) {
             return 1;
         }
 
-        $next = (int) $usedSequences->first();
+        $runs = [];
+        $start = (int) $usedSequences->first();
+        $end = $start;
 
-        foreach ($usedSequences as $seq) {
-            if ($seq < $next) {
+        foreach ($usedSequences->slice(1) as $seq) {
+            $seq = (int) $seq;
+
+            if ($seq === $end + 1) {
+                $end = $seq;
                 continue;
             }
 
-            if ($seq > $next) {
-                break;
-            }
-
-            $next++;
+            $runs[] = ['start' => $start, 'end' => $end, 'length' => $end - $start + 1];
+            $start = $end = $seq;
         }
 
-        return $next;
+        $runs[] = ['start' => $start, 'end' => $end, 'length' => $end - $start + 1];
+
+        $activeIndex = count($runs) - 1;
+        $lastRun = $runs[$activeIndex];
+
+        if ($activeIndex > 0 && $lastRun['length'] <= 25) {
+            for ($i = $activeIndex - 1; $i >= 0; $i--) {
+                if ($runs[$i]['length'] >= 2 || $i === 0) {
+                    $activeIndex = $i;
+                    break;
+                }
+            }
+        }
+
+        return $runs[$activeIndex]['end'] + 1;
     }
 
     private function replaceSequenceInNumber(string $nomor, int $seq): string

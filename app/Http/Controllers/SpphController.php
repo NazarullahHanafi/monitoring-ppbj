@@ -268,7 +268,8 @@ class SpphController extends Controller
                 if ($lastNomor) {
                     $lastSeq = $this->extractSeq($lastNomor);
                     if ($lastSeq !== null) {
-                        $expectedSeq = $this->nextAvailableSequence($excludeId);
+                        [$year] = $this->periodFromDate($tanggal);
+                        $expectedSeq = $this->nextAvailableSequence($excludeId, $year);
                         if ($seqInput < $expectedSeq)
                             $warning = "Nomor ini ({$seqInput}) lebih kecil dari urutan berikutnya ({$expectedSeq}).";
                         elseif ($seqInput > $expectedSeq)
@@ -296,8 +297,10 @@ class SpphController extends Controller
     {
         [$year, $roman] = $this->periodFromDate($request->query('tanggal'));
 
-        $nextSeq = $this->nextAvailableSequence();
-        $lastNomor = Spph::orderBy('sequence_number', 'desc')->value('nomor_spph');
+        $nextSeq = $this->nextAvailableSequence(null, $year);
+        $lastNomor = Spph::where('nomor_spph', 'like', "%/SPPH/{$year}")
+            ->orderBy('sequence_number', 'desc')
+            ->value('nomor_spph');
 
         return [
             'suggestions' => [sprintf('%03d/PKU-%s/SPPH/%d', $nextSeq, $roman, $year)],
@@ -398,7 +401,7 @@ class SpphController extends Controller
             $vendorNames = $this->resolveVendorNames($request);
             $vendorName = $vendorNames[0];
 
-            $seq = $this->extractSeq($request->nomor_spph) ?? $this->nextAvailableSequence();
+            $seq = $this->extractSeq($request->nomor_spph) ?? $this->nextAvailableSequence(null, (int) ($this->numberPeriodFromNomor($request->nomor_spph, 'SPPH')['year'] ?? now()->year));
             $spph = Spph::create([
                 'nomor_spph' => $request->nomor_spph,
                 'sequence_number' => $seq,
@@ -1783,9 +1786,12 @@ XML;
         }
     }
 
-    private function nextAvailableSequence(?int $excludeId = null): int
+    private function nextAvailableSequence(?int $excludeId = null, ?int $year = null): int
     {
+        $year ??= now()->year;
+
         $usedSequences = Spph::when($excludeId, fn($q) => $q->where('id', '!=', $excludeId))
+            ->where('nomor_spph', 'like', "%/SPPH/{$year}")
             ->orderBy('sequence_number')
             ->pluck('sequence_number')
             ->map(fn($seq) => (int) $seq)
@@ -1793,25 +1799,48 @@ XML;
             ->unique()
             ->values();
 
+        return $this->nextSequenceFromActiveRun($usedSequences);
+    }
+
+    private function nextSequenceFromActiveRun($usedSequences): int
+    {
+        $usedSequences = collect($usedSequences)->sort()->unique()->values();
+
         if ($usedSequences->isEmpty()) {
             return 1;
         }
 
-        $next = (int) $usedSequences->first();
+        $runs = [];
+        $start = (int) $usedSequences->first();
+        $end = $start;
 
-        foreach ($usedSequences as $seq) {
-            if ($seq < $next) {
+        foreach ($usedSequences->slice(1) as $seq) {
+            $seq = (int) $seq;
+
+            if ($seq === $end + 1) {
+                $end = $seq;
                 continue;
             }
 
-            if ($seq > $next) {
-                break;
-            }
-
-            $next++;
+            $runs[] = ['start' => $start, 'end' => $end, 'length' => $end - $start + 1];
+            $start = $end = $seq;
         }
 
-        return $next;
+        $runs[] = ['start' => $start, 'end' => $end, 'length' => $end - $start + 1];
+
+        $activeIndex = count($runs) - 1;
+        $lastRun = $runs[$activeIndex];
+
+        if ($activeIndex > 0 && $lastRun['length'] <= 25) {
+            for ($i = $activeIndex - 1; $i >= 0; $i--) {
+                if ($runs[$i]['length'] >= 2 || $i === 0) {
+                    $activeIndex = $i;
+                    break;
+                }
+            }
+        }
+
+        return $runs[$activeIndex]['end'] + 1;
     }
 
     private function replaceSequenceInNumber(string $nomor, int $seq): string

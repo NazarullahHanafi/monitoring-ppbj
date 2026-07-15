@@ -61,15 +61,7 @@ class Sp extends Model
 
     public static function generateNomor(int $year, string $roman): array
     {
-        $lastSeq = self::whereYear('created_at', $year)
-            ->where(function ($query) {
-                $query->whereNull('numbering_mode')
-                    ->orWhere('numbering_mode', 'auto');
-            })
-            ->lockForUpdate()
-            ->max('sequence_number') ?? 0;
-
-        $nextSeq = $lastSeq + 1;
+        $nextSeq = self::nextAvailableSequence($year, true);
         $nomor = sprintf('%03d/PKU-%s/SP/%d', $nextSeq, $roman, $year);
 
         return ['sequence' => $nextSeq, 'nomor' => $nomor];
@@ -78,15 +70,72 @@ class Sp extends Model
     public static function previewNextNomor(?string $tanggal = null): string
     {
         [$year, $roman] = self::periodFromDate($tanggal);
-        $lastSeq = self::whereYear('created_at', $year)
+        $nextSeq = self::nextAvailableSequence($year);
+
+        return sprintf('%03d/PKU-%s/SP/%d', $nextSeq, $roman, $year);
+    }
+
+    private static function nextAvailableSequence(int $year, bool $lock = false): int
+    {
+        $query = self::where('nomor_sp', 'like', "%/SP/{$year}")
             ->where(function ($query) {
                 $query->whereNull('numbering_mode')
                     ->orWhere('numbering_mode', 'auto');
             })
-            ->max('sequence_number') ?? 0;
-        $nextSeq = $lastSeq + 1;
+            ->orderBy('sequence_number');
 
-        return sprintf('%03d/PKU-%s/SP/%d', $nextSeq, $roman, $year);
+        if ($lock) {
+            $query->lockForUpdate();
+        }
+
+        $usedSequences = $query->pluck('sequence_number')
+            ->map(fn($seq) => (int) $seq)
+            ->filter(fn($seq) => $seq > 0)
+            ->unique()
+            ->values();
+
+        return self::nextSequenceFromActiveRun($usedSequences);
+    }
+
+    private static function nextSequenceFromActiveRun($usedSequences): int
+    {
+        $usedSequences = collect($usedSequences)->sort()->unique()->values();
+
+        if ($usedSequences->isEmpty()) {
+            return 1;
+        }
+
+        $runs = [];
+        $start = (int) $usedSequences->first();
+        $end = $start;
+
+        foreach ($usedSequences->slice(1) as $seq) {
+            $seq = (int) $seq;
+
+            if ($seq === $end + 1) {
+                $end = $seq;
+                continue;
+            }
+
+            $runs[] = ['start' => $start, 'end' => $end, 'length' => $end - $start + 1];
+            $start = $end = $seq;
+        }
+
+        $runs[] = ['start' => $start, 'end' => $end, 'length' => $end - $start + 1];
+
+        $activeIndex = count($runs) - 1;
+        $lastRun = $runs[$activeIndex];
+
+        if ($activeIndex > 0 && $lastRun['length'] <= 25) {
+            for ($i = $activeIndex - 1; $i >= 0; $i--) {
+                if ($runs[$i]['length'] >= 2 || $i === 0) {
+                    $activeIndex = $i;
+                    break;
+                }
+            }
+        }
+
+        return $runs[$activeIndex]['end'] + 1;
     }
 
     private static function periodFromDate(?string $tanggal): array
