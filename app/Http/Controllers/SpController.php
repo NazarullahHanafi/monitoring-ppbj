@@ -351,10 +351,11 @@ class SpController extends Controller
                 if ($lastNomor) {
                     $lastSeq = $this->extractSeq($lastNomor);
                     if ($lastSeq !== null) {
-                        if ($seqInput < $lastSeq + 1)
-                            $warning = "Nomor ini ({$seqInput}) lebih kecil dari urutan terakhir ({$lastSeq}).";
-                        elseif ($seqInput > $lastSeq + 1)
-                            $warning = "Ada lompatan nomor!";
+                        $expectedSeq = $lastSeq + 1;
+                        if ($seqInput < $expectedSeq)
+                            $warning = "Nomor ini ({$seqInput}) lebih kecil dari urutan berikutnya ({$expectedSeq}).";
+                        elseif ($seqInput > $expectedSeq)
+                            $warning = "Nomor otomatis tidak boleh lompat. Nomor berikutnya harus " . $this->replaceSequenceInNumber($nomor, $expectedSeq) . ".";
                     }
                 }
             }
@@ -551,7 +552,7 @@ class SpController extends Controller
 
             $seq = $oracleMode
                 ? ((int) $this->spModeQuery(true)->lockForUpdate()->max('sequence_number') + 1)
-                : ($this->extractSeq($request->nomor_sp) ?? ((int) $this->spModeQuery(false)->lockForUpdate()->max('sequence_number') + 1));
+                : $this->validateSequentialAutoNumber($request->nomor_sp, 'nomor_sp');
 
             // Hitung total dari items jika ada
             $items = $request->input('items', []);
@@ -701,7 +702,9 @@ class SpController extends Controller
                 }
             }
 
-            $seq = $oracleMode ? $sp->sequence_number : ($this->extractSeq($request->nomor_sp) ?? $sp->sequence_number);
+            $seq = $oracleMode
+                ? $sp->sequence_number
+                : $this->validateSequentialAutoNumber($request->nomor_sp, 'nomor_sp', (int) $sp->sequence_number, (int) $sp->id);
 
             // Hitung total dari items jika ada
             $items = $request->input('items', []);
@@ -4766,6 +4769,47 @@ class SpController extends Controller
                 'nilai_sp' => 'Nilai SP di atas Rp50.000.000 harus dibuat melalui mode Oracle ERP agar tidak tercampur dengan penomoran SP otomatis.',
             ]);
         }
+    }
+
+    private function validateSequentialAutoNumber(string $nomor, string $field, ?int $currentSeq = null, ?int $excludeId = null): int
+    {
+        $seq = $this->extractSeq($nomor);
+
+        if ($seq === null) {
+            throw ValidationException::withMessages([
+                $field => 'Format nomor SP otomatis tidak valid. Gunakan format seperti 325/PKU-VII/SP/2026.',
+            ]);
+        }
+
+        if ($currentSeq !== null && $seq === $currentSeq) {
+            return $seq;
+        }
+
+        $lastSeq = (int) ($this->spModeQuery(false)
+            ->when($excludeId, fn($q) => $q->where('id', '!=', $excludeId))
+            ->orderByDesc('sequence_number')
+            ->lockForUpdate()
+            ->value('sequence_number') ?? 0);
+
+        $expectedSeq = $lastSeq + 1;
+
+        if ($seq !== $expectedSeq) {
+            $expectedNumber = $this->replaceSequenceInNumber($nomor, $expectedSeq);
+            $message = $seq > $expectedSeq
+                ? "Nomor SP otomatis tidak boleh lompat. Nomor berikutnya harus {$expectedNumber}, agar nomor {$expectedSeq} sampai " . ($seq - 1) . " tidak hilang."
+                : "Nomor SP otomatis harus mengikuti urutan terakhir. Nomor berikutnya adalah {$expectedNumber}.";
+
+            throw ValidationException::withMessages([$field => $message]);
+        }
+
+        return $seq;
+    }
+
+    private function replaceSequenceInNumber(string $nomor, int $seq): string
+    {
+        $formattedSeq = str_pad((string) $seq, 3, '0', STR_PAD_LEFT);
+
+        return preg_replace('/^\d+/', $formattedSeq, trim($nomor)) ?: trim($nomor);
     }
 
     private function extractSeq(string $nomor): ?int

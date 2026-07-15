@@ -268,10 +268,11 @@ class SpphController extends Controller
                 if ($lastNomor) {
                     $lastSeq = $this->extractSeq($lastNomor);
                     if ($lastSeq !== null) {
-                        if ($seqInput < $lastSeq + 1)
-                            $warning = "Nomor ini ({$seqInput}) lebih kecil dari urutan terakhir ({$lastSeq}).";
-                        elseif ($seqInput > $lastSeq + 1)
-                            $warning = "Ada lompatan nomor!";
+                        $expectedSeq = $lastSeq + 1;
+                        if ($seqInput < $expectedSeq)
+                            $warning = "Nomor ini ({$seqInput}) lebih kecil dari urutan berikutnya ({$expectedSeq}).";
+                        elseif ($seqInput > $expectedSeq)
+                            $warning = "Nomor otomatis tidak boleh lompat. Nomor berikutnya harus " . $this->replaceSequenceInNumber($nomor, $expectedSeq) . ".";
                     }
                 }
             }
@@ -395,7 +396,7 @@ class SpphController extends Controller
             $vendorNames = $this->resolveVendorNames($request);
             $vendorName = $vendorNames[0];
 
-            $seq = $this->extractSeq($request->nomor_spph) ?? ((int) Spph::lockForUpdate()->max('sequence_number') + 1);
+            $seq = $this->validateSequentialAutoNumber($request->nomor_spph, 'nomor_spph');
             $spph = Spph::create([
                 'nomor_spph' => $request->nomor_spph,
                 'sequence_number' => $seq,
@@ -495,7 +496,7 @@ class SpphController extends Controller
 
             $vendorNames = $this->resolveVendorNames($request);
             $vendorName = $vendorNames[0];
-            $seq = $this->extractSeq($request->nomor_spph) ?? $spph->sequence_number;
+            $seq = $this->validateSequentialAutoNumber($request->nomor_spph, 'nomor_spph', (int) $spph->sequence_number, (int) $spph->id);
 
             $spph->update([
                 'nomor_spph' => $request->nomor_spph,
@@ -1778,6 +1779,46 @@ XML;
         if ($warning) {
             throw ValidationException::withMessages([$field => $warning]);
         }
+    }
+
+    private function validateSequentialAutoNumber(string $nomor, string $field, ?int $currentSeq = null, ?int $excludeId = null): int
+    {
+        $seq = $this->extractSeq($nomor);
+
+        if ($seq === null) {
+            throw ValidationException::withMessages([
+                $field => 'Format nomor SPPH otomatis tidak valid. Gunakan format seperti 325/PKU-VII/SPPH/2026.',
+            ]);
+        }
+
+        if ($currentSeq !== null && $seq === $currentSeq) {
+            return $seq;
+        }
+
+        $lastSeq = (int) (Spph::when($excludeId, fn($q) => $q->where('id', '!=', $excludeId))
+            ->orderByDesc('sequence_number')
+            ->lockForUpdate()
+            ->value('sequence_number') ?? 0);
+
+        $expectedSeq = $lastSeq + 1;
+
+        if ($seq !== $expectedSeq) {
+            $expectedNumber = $this->replaceSequenceInNumber($nomor, $expectedSeq);
+            $message = $seq > $expectedSeq
+                ? "Nomor SPPH otomatis tidak boleh lompat. Nomor berikutnya harus {$expectedNumber}, agar nomor {$expectedSeq} sampai " . ($seq - 1) . " tidak hilang."
+                : "Nomor SPPH otomatis harus mengikuti urutan terakhir. Nomor berikutnya adalah {$expectedNumber}.";
+
+            throw ValidationException::withMessages([$field => $message]);
+        }
+
+        return $seq;
+    }
+
+    private function replaceSequenceInNumber(string $nomor, int $seq): string
+    {
+        $formattedSeq = str_pad((string) $seq, 3, '0', STR_PAD_LEFT);
+
+        return preg_replace('/^\d+/', $formattedSeq, trim($nomor)) ?: trim($nomor);
     }
 
     // =========================================================

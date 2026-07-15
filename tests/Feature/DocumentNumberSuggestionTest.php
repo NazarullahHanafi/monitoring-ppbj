@@ -108,7 +108,7 @@ class DocumentNumberSuggestionTest extends TestCase
 
         $this->actingAs($user)
             ->post(route('spph.store'), [
-                'nomor_spph' => '011/PKU-VI/SPPH/2026',
+                'nomor_spph' => '001/PKU-VI/SPPH/2026',
                 'tanggal' => '2026-07-10',
                 'nama_vendor' => 'Vendor Test',
                 'deskripsi_pengadaan' => 'Pengadaan test',
@@ -117,12 +117,12 @@ class DocumentNumberSuggestionTest extends TestCase
             ->assertRedirect(route('spph.index'));
 
         $this->assertDatabaseHas('spphs', [
-            'nomor_spph' => '011/PKU-VII/SPPH/2026',
+            'nomor_spph' => '001/PKU-VII/SPPH/2026',
         ]);
 
         $this->actingAs($user)
             ->post(route('sp.store'), [
-                'nomor_sp' => '021/PKU-VI/SP/2026',
+                'nomor_sp' => '001/PKU-VI/SP/2026',
                 'tanggal_sp' => '2026-07-10',
                 'nama_vendor' => 'Vendor Test',
                 'deskripsi_pengadaan' => 'Pengadaan test',
@@ -131,7 +131,68 @@ class DocumentNumberSuggestionTest extends TestCase
             ->assertRedirect(route('sp.index'));
 
         $this->assertDatabaseHas('sps', [
-            'nomor_sp' => '021/PKU-VII/SP/2026',
+            'nomor_sp' => '001/PKU-VII/SP/2026',
+        ]);
+    }
+
+    public function test_auto_numbering_rejects_skipped_sequence_for_sp_and_spph(): void
+    {
+        $user = User::factory()->create([
+            'department' => 'umum',
+            'role' => 'superadmin',
+            'name' => 'Nazar',
+        ]);
+
+        Spph::create([
+            'nomor_spph' => '324/PKU-VII/SPPH/2026',
+            'sequence_number' => 324,
+            'tanggal' => '2026-07-10',
+            'nama_vendor' => 'Vendor Test',
+            'deskripsi_pengadaan' => 'Pengadaan test',
+            'pic' => 'Nazar',
+        ]);
+
+        Sp::create([
+            'nomor_sp' => '324/PKU-VII/SP/2026',
+            'sequence_number' => 324,
+            'tanggal_sp' => '2026-07-10',
+            'nilai_sp' => 1000000,
+            'nama_vendor' => 'Vendor Test',
+            'deskripsi_pengadaan' => 'Pengadaan test',
+            'pic' => 'Nazar',
+        ]);
+
+        $this->actingAs($user)
+            ->from(route('spph.index'))
+            ->post(route('spph.store'), [
+                'nomor_spph' => '500/PKU-VII/SPPH/2026',
+                'tanggal' => '2026-07-10',
+                'nama_vendor' => 'Vendor Test',
+                'deskripsi_pengadaan' => 'Pengadaan test',
+                'pic' => 'Nazar',
+            ])
+            ->assertRedirect(route('spph.index'))
+            ->assertSessionHasErrors('nomor_spph');
+
+        $this->assertDatabaseMissing('spphs', [
+            'nomor_spph' => '500/PKU-VII/SPPH/2026',
+        ]);
+
+        $this->actingAs($user)
+            ->from(route('sp.index'))
+            ->post(route('sp.store'), [
+                'nomor_sp' => '500/PKU-VII/SP/2026',
+                'tanggal_sp' => '2026-07-10',
+                'nilai_sp' => 1000000,
+                'nama_vendor' => 'Vendor Test',
+                'deskripsi_pengadaan' => 'Pengadaan test',
+                'pic' => 'Nazar',
+            ])
+            ->assertRedirect(route('sp.index'))
+            ->assertSessionHasErrors('nomor_sp');
+
+        $this->assertDatabaseMissing('sps', [
+            'nomor_sp' => '500/PKU-VII/SP/2026',
         ]);
     }
 
