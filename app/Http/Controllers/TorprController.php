@@ -669,19 +669,54 @@ class TorprController extends Controller
             ], 422);
         }
 
+        $attemptKey = "torpr_delete_password_attempts:{$torpr->id}:{$creator->id}:{$user->id}:" . sha1((string) $request->ip());
+        $lockKey = "torpr_delete_password_lock:{$torpr->id}:{$creator->id}:{$user->id}:" . sha1((string) $request->ip());
+
+        if ($lockedUntil = Cache::get($lockKey)) {
+            $retryAfter = max(1, now()->diffInSeconds(Carbon::parse($lockedUntil), false));
+
+            return response()->json([
+                'message' => 'Terlalu banyak percobaan password salah. Silakan coba lagi sekitar ' . ceil($retryAfter / 60) . ' menit lagi.',
+                'locked' => true,
+                'retry_after' => $retryAfter,
+            ], 429);
+        }
+
         if (!Hash::check((string) $request->creator_password, (string) $creator->password)) {
+            $attempts = ((int) Cache::get($attemptKey, 0)) + 1;
+            $remainingAttempts = max(0, 3 - $attempts);
+
+            Cache::put($attemptKey, $attempts, now()->addMinutes(15));
+
             Log::warning('TORPR delete rejected due invalid creator password', [
                 'torpr_id' => $torpr->id,
                 'nomor_pr' => $torpr->nomor_pr,
                 'attempted_by_user_id' => $user->id,
                 'creator_user_id' => $creator->id,
+                'attempts' => $attempts,
                 'ip' => $request->ip(),
             ]);
 
+            if ($attempts >= 3) {
+                $lockedUntil = now()->addMinutes(15);
+                Cache::put($lockKey, $lockedUntil->toDateTimeString(), $lockedUntil);
+                Cache::forget($attemptKey);
+
+                return response()->json([
+                    'message' => 'Password salah 3 kali. Aksi hapus dikunci selama 15 menit.',
+                    'locked' => true,
+                    'retry_after' => 15 * 60,
+                ], 429);
+            }
+
             return response()->json([
-                'message' => 'Password pembuat PR tidak sesuai. Data tidak dihapus.',
+                'message' => 'Password pembuat PR tidak sesuai. Sisa percobaan: ' . $remainingAttempts . '.',
+                'attempts_remaining' => $remainingAttempts,
             ], 422);
         }
+
+        Cache::forget($attemptKey);
+        Cache::forget($lockKey);
 
         $oldNomorPr = $torpr->nomor_pr;
         $description = "Draft PR dihapus: " . ($torpr->nomor_pr ?: 'PR-' . $torpr->id);

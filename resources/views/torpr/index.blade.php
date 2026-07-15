@@ -470,6 +470,109 @@
             color: #ffffff !important;
         }
 
+        .torpr-password-wrap {
+            margin-top: .65rem;
+            text-align: left;
+        }
+
+        .torpr-password-label {
+            display: block;
+            margin-bottom: .45rem;
+            color: #0f172a;
+            font-size: .9rem;
+            font-weight: 800;
+        }
+
+        .torpr-password-field {
+            display: flex;
+            align-items: center;
+            gap: .45rem;
+            border: 1px solid #cbd5e1;
+            border-radius: .85rem;
+            background: #ffffff;
+            padding: .2rem .25rem .2rem .75rem;
+        }
+
+        .torpr-password-field input {
+            flex: 1;
+            min-width: 0;
+            border: 0;
+            outline: none;
+            background: transparent;
+            color: #0f172a;
+            font-size: .95rem;
+            font-weight: 700;
+            height: 2.35rem;
+        }
+
+        .torpr-password-field input::placeholder {
+            color: #94a3b8;
+            font-weight: 600;
+        }
+
+        .torpr-password-toggle {
+            border: 0;
+            border-radius: .65rem;
+            background: #e0f2fe;
+            color: #075985;
+            cursor: pointer;
+            font-size: .78rem;
+            font-weight: 900;
+            padding: .55rem .7rem;
+            transition: .18s ease;
+        }
+
+        .torpr-password-toggle:hover {
+            background: #bae6fd;
+            transform: translateY(-1px);
+        }
+
+        .torpr-password-help {
+            margin-top: .45rem;
+            color: #64748b;
+            font-size: .72rem;
+            font-weight: 700;
+            line-height: 1.45;
+        }
+
+        html.dark .torpr-password-label,
+        .dark .torpr-password-label {
+            color: #f8fafc !important;
+        }
+
+        html.dark .torpr-password-field,
+        .dark .torpr-password-field {
+            background: #1e293b !important;
+            border-color: #64748b !important;
+            box-shadow: 0 0 0 1px rgba(148, 163, 184, .12);
+        }
+
+        html.dark .torpr-password-field input,
+        .dark .torpr-password-field input {
+            color: #ffffff !important;
+        }
+
+        html.dark .torpr-password-field input::placeholder,
+        .dark .torpr-password-field input::placeholder {
+            color: #cbd5e1 !important;
+        }
+
+        html.dark .torpr-password-toggle,
+        .dark .torpr-password-toggle {
+            background: #2563eb !important;
+            color: #ffffff !important;
+        }
+
+        html.dark .torpr-password-toggle:hover,
+        .dark .torpr-password-toggle:hover {
+            background: #1d4ed8 !important;
+        }
+
+        html.dark .torpr-password-help,
+        .dark .torpr-password-help {
+            color: #cbd5e1 !important;
+        }
+
         .torpr-info-timeline {
             position: relative;
         }
@@ -3796,93 +3899,123 @@
                                 Masukkan <strong>password user pembuat PR</strong>. Jika user lain ingin menghapus,
                                 user tersebut tetap harus mengetahui password pembuat PR.
                             </div>
+                            <div class="torpr-password-wrap">
+                                <label for="torprCreatorPassword" class="torpr-password-label">Password pembuat PR</label>
+                                <div class="torpr-password-field">
+                                    <input
+                                        id="torprCreatorPassword"
+                                        type="password"
+                                        placeholder="Masukkan password pembuat PR"
+                                        autocomplete="current-password"
+                                        autocapitalize="off"
+                                    >
+                                    <button type="button" id="toggleTorprPassword" class="torpr-password-toggle">Lihat</button>
+                                </div>
+                                <div class="torpr-password-help">
+                                    Jika salah 3 kali, aksi hapus akan dikunci 15 menit demi keamanan data.
+                                </div>
+                            </div>
                         </div>
                     `,
-                    input: 'password',
-                    inputLabel: 'Password pembuat PR',
-                    inputPlaceholder: 'Masukkan password pembuat PR',
-                    inputAttributes: {
-                        autocapitalize: 'off',
-                        autocomplete: 'current-password',
-                    },
                     showCancelButton: true,
                     confirmButtonText: 'Ya, Hapus Draft',
                     cancelButtonText: 'Batal',
                     confirmButtonColor: '#dc2626',
                     cancelButtonColor: '#64748b',
+                    showLoaderOnConfirm: true,
+                    allowOutsideClick: () => !Swal.isLoading(),
                     customClass: {
                         popup: 'torpr-delete-popup',
                         title: 'torpr-delete-title',
                         htmlContainer: 'torpr-delete-html',
-                        input: 'dark:bg-gray-800 dark:text-white dark:border-gray-700',
                     },
-                    preConfirm: (password) => {
+                    didOpen: () => {
+                        const input = document.getElementById('torprCreatorPassword');
+                        const toggle = document.getElementById('toggleTorprPassword');
+
+                        input?.focus();
+                        toggle?.addEventListener('click', () => {
+                            const isPassword = input.type === 'password';
+                            input.type = isPassword ? 'text' : 'password';
+                            toggle.textContent = isPassword ? 'Sembunyi' : 'Lihat';
+                        });
+                    },
+                    preConfirm: async () => {
+                        const password = document.getElementById('torprCreatorPassword')?.value || '';
+
                         if (!password || !password.trim()) {
                             Swal.showValidationMessage('Password pembuat PR wajib diisi.');
                             return false;
                         }
-                        return password;
+
+                        try {
+                            const response = await fetch(`/torpr/${id}`, {
+                                method: 'DELETE',
+                                headers: {
+                                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                                    'Content-Type': 'application/json',
+                                    'Accept': 'application/json',
+                                    'X-Requested-With': 'XMLHttpRequest',
+                                },
+                                body: JSON.stringify({
+                                    creator_password: password,
+                                }),
+                            });
+
+                            const data = await response.json().catch(() => ({}));
+
+                            if (response.status === 429 || data.locked) {
+                                return {
+                                    locked: true,
+                                    message: data.message || 'Aksi hapus dikunci sementara karena terlalu banyak percobaan.',
+                                };
+                            }
+
+                            if (!response.ok) {
+                                Swal.showValidationMessage(data.message || 'Gagal menghapus draft PR.');
+                                return false;
+                            }
+
+                            return {
+                                ok: true,
+                                message: data.message || 'Draft PR berhasil dihapus.',
+                            };
+                        } catch (error) {
+                            Swal.showValidationMessage(error.message || 'Koneksi gagal. Coba lagi.');
+                            return false;
+                        }
                     }
                 });
 
                 if (result.dismiss) return;
 
-                try {
-                    Swal.fire({
-                        title: 'Menghapus draft...',
-                        html: '<div class="animate-spin rounded-full h-12 w-12 border-4 border-red-500 border-t-transparent mx-auto"></div>',
-                        showConfirmButton: false,
-                        allowOutsideClick: false,
-                        customClass: {
-                            popup: 'dark:bg-gray-900 dark:text-white',
-                            title: 'dark:text-white',
-                            htmlContainer: 'dark:text-gray-100',
-                        },
-                    });
-
-                    const response = await fetch(`/torpr/${id}`, {
-                        method: 'DELETE',
-                        headers: {
-                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
-                            'Content-Type': 'application/json',
-                            'Accept': 'application/json',
-                            'X-Requested-With': 'XMLHttpRequest',
-                        },
-                        body: JSON.stringify({
-                            creator_password: result.value,
-                        }),
-                    });
-
-                    const data = await response.json().catch(() => ({}));
-
-                    if (!response.ok) {
-                        throw new Error(data.message || 'Gagal menghapus draft PR.');
-                    }
-
-                    Swal.fire({
-                        icon: 'success',
-                        title: 'Draft terhapus',
-                        text: data.message || 'Draft PR berhasil dihapus.',
-                        timer: 1400,
-                        showConfirmButton: false,
-                        customClass: {
-                            popup: 'dark:bg-gray-900 dark:text-white',
-                            title: 'dark:text-white',
-                        },
-                    }).then(() => location.reload());
-                } catch (error) {
+                if (result.value?.locked) {
                     Swal.fire({
                         icon: 'error',
-                        title: 'Gagal menghapus',
-                        text: error.message || 'Gagal menghapus draft PR.',
+                        title: 'Aksi dikunci 15 menit',
+                        text: result.value.message || 'Password salah 3 kali. Silakan coba lagi nanti.',
                         confirmButtonColor: '#dc2626',
                         customClass: {
-                            popup: 'dark:bg-gray-900 dark:text-white',
-                            title: 'dark:text-white',
-                            htmlContainer: 'dark:text-gray-100',
+                            popup: 'torpr-delete-popup',
+                            title: 'torpr-delete-title',
+                            htmlContainer: 'torpr-delete-html',
                         },
                     });
+                    return;
                 }
+
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Draft terhapus',
+                    text: result.value?.message || 'Draft PR berhasil dihapus.',
+                    timer: 1400,
+                    showConfirmButton: false,
+                    customClass: {
+                        popup: 'torpr-delete-popup',
+                        title: 'torpr-delete-title',
+                        htmlContainer: 'torpr-delete-html',
+                    },
+                }).then(() => location.reload());
             }
 
             window.requestReceipt = async function (id) {

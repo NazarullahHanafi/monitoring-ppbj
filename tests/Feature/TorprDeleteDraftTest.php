@@ -6,6 +6,7 @@ use App\Models\PrReceiptApproval;
 use App\Models\Torpr;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Hash;
 use Tests\TestCase;
 
@@ -80,7 +81,56 @@ class TorprDeleteDraftTest extends TestCase
                 'creator_password' => 'WrongPassword',
             ])
             ->assertStatus(422)
-            ->assertJsonPath('message', 'Password pembuat PR tidak sesuai. Data tidak dihapus.');
+            ->assertJsonPath('attempts_remaining', 2);
+
+        $this->assertDatabaseHas('torprs', [
+            'id' => $torpr->id,
+        ]);
+    }
+
+    public function test_delete_draft_locks_for_15_minutes_after_three_wrong_passwords(): void
+    {
+        Cache::flush();
+
+        $creator = User::factory()->create([
+            'department' => 'operasional',
+            'role' => 'user',
+            'password' => Hash::make('CreatorPass!234'),
+        ]);
+
+        $otherUser = User::factory()->create([
+            'department' => 'operasional',
+            'role' => 'user',
+        ]);
+
+        $torpr = Torpr::create([
+            'created_by_user_id' => $creator->id,
+            'nomor_pr' => 'PKB/PR-26/CON/0994',
+            'tujuan_pengadaan' => 'Draft lock password',
+            'portofolio' => 'IT - FERS',
+            'tanggal_pr' => now(),
+            'jumlah_pr' => 1500000,
+        ]);
+
+        $this->actingAs($otherUser)
+            ->deleteJson(route('torpr.destroy', $torpr->id), ['creator_password' => 'WrongPassword'])
+            ->assertStatus(422)
+            ->assertJsonPath('attempts_remaining', 2);
+
+        $this->actingAs($otherUser)
+            ->deleteJson(route('torpr.destroy', $torpr->id), ['creator_password' => 'StillWrong'])
+            ->assertStatus(422)
+            ->assertJsonPath('attempts_remaining', 1);
+
+        $this->actingAs($otherUser)
+            ->deleteJson(route('torpr.destroy', $torpr->id), ['creator_password' => 'WrongAgain'])
+            ->assertStatus(429)
+            ->assertJsonPath('locked', true);
+
+        $this->actingAs($otherUser)
+            ->deleteJson(route('torpr.destroy', $torpr->id), ['creator_password' => 'CreatorPass!234'])
+            ->assertStatus(429)
+            ->assertJsonPath('locked', true);
 
         $this->assertDatabaseHas('torprs', [
             'id' => $torpr->id,
