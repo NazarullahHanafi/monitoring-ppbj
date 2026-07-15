@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Torpr;
 use App\Models\User;
+use App\Models\PrReceiptApproval;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -32,11 +33,41 @@ class TorprInfoAccessTest extends TestCase
             'jumlah_pr' => 1500000,
         ]);
 
+        PrReceiptApproval::create([
+            'torpr_id' => $torpr->id,
+            'requested_by_user_id' => $creator->id,
+            'requested_name' => 'Eli Operasional',
+            'requested_at' => now(),
+            'status' => 'PENDING',
+        ]);
+
         $this->actingAs($viewer)
             ->getJson(route('torpr.json', $torpr->id))
             ->assertOk()
             ->assertJsonPath('nomor_pr', 'PKB/PR-26/CON/0442')
-            ->assertJsonPath('portofolio', 'IT - FERS');
+            ->assertJsonPath('portofolio', 'IT - FERS')
+            ->assertJsonPath('latest_approval.status', 'PENDING')
+            ->assertJsonPath('latest_approval.requested_name', 'Eli Operasional')
+            ->assertJsonStructure([
+                'id',
+                'nomor_pr',
+                'created_at',
+                'updated_at',
+                'received_at',
+                'signed_by_kabid_name',
+                'signed_by_kacab_name',
+                'latest_approval' => [
+                    'status',
+                    'requested_at',
+                    'requested_name',
+                    'approved_at',
+                    'approved_by_name',
+                    'rejected_at',
+                    'rejected_by_name',
+                    'rejected_reason',
+                    'updated_at',
+                ],
+            ]);
     }
 
     public function test_umum_user_cannot_view_operasional_torpr_info(): void

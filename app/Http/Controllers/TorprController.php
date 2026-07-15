@@ -46,6 +46,9 @@ class TorprController extends Controller
                 'torprs.signed_by_kacab_name',
                 'pra.id as approval_id',
                 'pra.status as approval_status',
+                'pra.requested_at as approval_requested_at',
+                'pra.approved_at as approval_approved_at',
+                'pra.rejected_at as approval_rejected_at',
                 'pra.rejected_reason',
                 'pra.approved_by_user_id',
                 'u1.name as approved_by_name',
@@ -246,7 +249,7 @@ class TorprController extends Controller
             $this->logActivity($torpr, 'resubmitted', "PR Diajukan ulang dengan catatan: {$request->resubmit_notes}");
 
             // ✅ INVALIDATE CACHE
-            Cache::forget("torpr_json_{$id}");
+            $this->forgetTorprJsonCache((int) $id);
 
             return response()->json([
                 'ok' => true,
@@ -430,7 +433,7 @@ class TorprController extends Controller
             $column . '_expires_at' => null,
         ]);
 
-        Cache::forget("torpr_json_{$torpr->id}");
+        $this->forgetTorprJsonCache((int) $torpr->id);
         $this->forgetTrackingCache($torpr);
 
         \App\Models\ActivityLog::create([
@@ -629,7 +632,7 @@ class TorprController extends Controller
             $this->logActivity($torpr, 'updated', "Data PR diperbarui", $changes);
         }
 
-        Cache::forget("torpr_json_{$id}");
+        $this->forgetTorprJsonCache((int) $id);
 
         return response()->json(['ok' => true, 'message' => 'Data berhasil diupdate']);
     }
@@ -639,7 +642,7 @@ class TorprController extends Controller
         $torpr = Torpr::select(['id', 'created_by_user_id'])->findOrFail($id);
         $this->ensureCanViewTorpr($torpr);
 
-        $cacheKey = "torpr_json_{$id}";
+        $cacheKey = "torpr_json_{$id}_v2";
 
         $data = Cache::remember($cacheKey, 300, function () use ($id) {
             $torpr = Torpr::select([
@@ -650,8 +653,31 @@ class TorprController extends Controller
                 'tanggal_pr',
                 'jumlah_pr',
                 'tgl_ttd_kabid_pr',
-                'tgl_ttd_kacab_pr'
+                'tgl_ttd_kacab_pr',
+                'received_at',
+                'signed_by_kabid_name',
+                'signed_by_kacab_name',
+                'created_at',
+                'updated_at',
             ])->findOrFail($id);
+
+            $latestApproval = DB::table('pr_receipt_approvals as pra')
+                ->leftJoin('users as approved_user', 'pra.approved_by_user_id', '=', 'approved_user.id')
+                ->leftJoin('users as rejected_user', 'pra.rejected_by_user_id', '=', 'rejected_user.id')
+                ->select([
+                    'pra.status',
+                    'pra.requested_at',
+                    'pra.requested_name',
+                    'pra.approved_at',
+                    'approved_user.name as approved_by_name',
+                    'pra.rejected_at',
+                    'rejected_user.name as rejected_by_name',
+                    'pra.rejected_reason',
+                    'pra.updated_at',
+                ])
+                ->where('pra.torpr_id', $torpr->id)
+                ->orderByDesc('pra.id')
+                ->first();
 
             return [
                 'id' => $torpr->id,
@@ -662,6 +688,22 @@ class TorprController extends Controller
                 'jumlah_pr' => $torpr->jumlah_pr,
                 'tgl_ttd_kabid_pr' => $this->fmtDateTimeLocal($torpr->tgl_ttd_kabid_pr),
                 'tgl_ttd_kacab_pr' => $this->fmtDateTimeLocal($torpr->tgl_ttd_kacab_pr),
+                'received_at' => $this->fmtDateTimeLocal($torpr->received_at),
+                'created_at' => $this->fmtDateTimeLocal($torpr->created_at),
+                'updated_at' => $this->fmtDateTimeLocal($torpr->updated_at),
+                'signed_by_kabid_name' => $torpr->signed_by_kabid_name,
+                'signed_by_kacab_name' => $torpr->signed_by_kacab_name,
+                'latest_approval' => $latestApproval ? [
+                    'status' => $latestApproval->status,
+                    'requested_at' => $this->fmtDateTimeLocal($latestApproval->requested_at),
+                    'requested_name' => $latestApproval->requested_name,
+                    'approved_at' => $this->fmtDateTimeLocal($latestApproval->approved_at),
+                    'approved_by_name' => $latestApproval->approved_by_name,
+                    'rejected_at' => $this->fmtDateTimeLocal($latestApproval->rejected_at),
+                    'rejected_by_name' => $latestApproval->rejected_by_name,
+                    'rejected_reason' => $latestApproval->rejected_reason,
+                    'updated_at' => $this->fmtDateTimeLocal($latestApproval->updated_at),
+                ] : null,
             ];
         });
 
@@ -751,7 +793,7 @@ class TorprController extends Controller
             ]);
         }
 
-        Cache::forget("torpr_json_{$id}");
+        $this->forgetTorprJsonCache((int) $id);
 
         return response()->json([
             'ok' => true,
@@ -802,6 +844,12 @@ class TorprController extends Controller
             403,
             'Anda hanya dapat mengubah data PR yang Anda buat.'
         );
+    }
+
+    private function forgetTorprJsonCache(int $id): void
+    {
+        Cache::forget("torpr_json_{$id}");
+        Cache::forget("torpr_json_{$id}_v2");
     }
 
     private function ensureCanViewTorpr(Torpr $torpr): void

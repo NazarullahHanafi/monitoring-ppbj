@@ -126,6 +126,7 @@ class PrReceiptApprovalController extends Controller
 
                         // reset cache count karena status berubah
                         Cache::forget(self::CACHE_KEY_PENDING_COUNT);
+                        $this->forgetTorprInfoCache((int) $torpr->id);
 
                         return [
                             'type' => 'warning',
@@ -138,6 +139,7 @@ class PrReceiptApprovalController extends Controller
                 } catch (QueryException $e) {
                     // fallback kalau race-condition unique
                     Cache::forget(self::CACHE_KEY_PENDING_COUNT);
+                    $this->forgetTorprInfoCache((int) $torpr->id);
 
                     return [
                         'type' => 'warning',
@@ -147,6 +149,7 @@ class PrReceiptApprovalController extends Controller
 
                 // reset cache count karena status berubah
                 Cache::forget(self::CACHE_KEY_PENDING_COUNT);
+                $this->forgetTorprInfoCache((int) $torpr->id);
 
                 return [
                     'type' => 'success',
@@ -261,7 +264,14 @@ class PrReceiptApprovalController extends Controller
 
         // reset cache count karena status berubah
         Cache::forget(self::CACHE_KEY_PENDING_COUNT);
+        $this->forgetTorprInfoCache((int) $appr->torpr_id);
 
         return back()->with('success', 'Request ditolak.');
+    }
+
+    private function forgetTorprInfoCache(int $torprId): void
+    {
+        Cache::forget("torpr_json_{$torprId}");
+        Cache::forget("torpr_json_{$torprId}_v2");
     }
 }

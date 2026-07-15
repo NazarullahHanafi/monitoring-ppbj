@@ -319,6 +319,76 @@
             color: #ffffff !important;
         }
 
+        .torpr-control-card {
+            position: relative;
+            overflow: hidden;
+        }
+
+        .torpr-control-card::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background:
+                radial-gradient(circle at 12% 10%, rgba(59, 130, 246, .18), transparent 32%),
+                radial-gradient(circle at 88% 20%, rgba(16, 185, 129, .16), transparent 30%);
+            pointer-events: none;
+        }
+
+        .torpr-kanban-card {
+            min-height: 148px;
+            transition: transform .22s ease, box-shadow .22s ease, border-color .22s ease;
+        }
+
+        .torpr-kanban-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 16px 42px rgba(15, 23, 42, .14);
+        }
+
+        .dark .torpr-kanban-card:hover {
+            box-shadow: 0 18px 48px rgba(0, 0, 0, .35);
+        }
+
+        .torpr-health-ring {
+            background: conic-gradient(var(--health-color) calc(var(--health-score) * 1%), rgba(148, 163, 184, .25) 0);
+        }
+
+        .torpr-info-timeline {
+            position: relative;
+        }
+
+        .torpr-info-timeline::before {
+            content: '';
+            position: absolute;
+            left: 13px;
+            top: 18px;
+            bottom: 18px;
+            width: 2px;
+            background: linear-gradient(180deg, #3b82f6, #10b981, #f59e0b);
+            opacity: .38;
+        }
+
+        .torpr-info-step {
+            position: relative;
+            padding-left: 42px;
+        }
+
+        .torpr-info-dot {
+            position: absolute;
+            left: 0;
+            top: 2px;
+            width: 28px;
+            height: 28px;
+            border-radius: 999px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 10px 22px rgba(15, 23, 42, .15);
+        }
+
+        .dark .torpr-info-dot {
+            box-shadow: 0 10px 22px rgba(0, 0, 0, .38);
+        }
+
     </style>
 @endpush
 
@@ -370,6 +440,117 @@
 
     @php
         $selectedPortofolios = array_values(array_filter(array_map('trim', (array) request('portofolio', []))));
+
+        $stageMeta = [
+            'draft' => ['label' => 'Draft/Input', 'icon' => '📝', 'tone' => 'from-slate-500 to-slate-700', 'ring' => 'border-slate-200 dark:border-slate-700'],
+            'kabid' => ['label' => 'TTD Kabid', 'icon' => '✍️', 'tone' => 'from-amber-500 to-orange-600', 'ring' => 'border-amber-200 dark:border-amber-700/70'],
+            'kacab' => ['label' => 'TTD Kacab', 'icon' => '🏢', 'tone' => 'from-orange-500 to-rose-600', 'ring' => 'border-orange-200 dark:border-orange-700/70'],
+            'ready' => ['label' => 'Siap Request', 'icon' => '🚀', 'tone' => 'from-sky-500 to-blue-600', 'ring' => 'border-sky-200 dark:border-sky-700/70'],
+            'pending' => ['label' => 'Pending Umum', 'icon' => '⏳', 'tone' => 'from-yellow-500 to-amber-600', 'ring' => 'border-yellow-200 dark:border-yellow-700/70'],
+            'approved' => ['label' => 'Diterima Umum', 'icon' => '✅', 'tone' => 'from-emerald-500 to-teal-600', 'ring' => 'border-emerald-200 dark:border-emerald-700/70'],
+            'rejected' => ['label' => 'Ditolak', 'icon' => '⛔', 'tone' => 'from-red-500 to-rose-700', 'ring' => 'border-red-200 dark:border-red-700/70'],
+        ];
+
+        $stageCounts = array_fill_keys(array_keys($stageMeta), 0);
+        $stageSamples = array_fill_keys(array_keys($stageMeta), []);
+        $healthMap = [];
+        $stageMap = [];
+        $attentionRows = [];
+
+        $detectStage = function ($r) {
+            $receipt = strtoupper((string) ($r->approval_status ?? ''));
+            if ($receipt === 'REJECTED') return 'rejected';
+            if ($receipt === 'APPROVED' || !empty($r->received_at)) return 'approved';
+            if ($receipt === 'PENDING') return 'pending';
+
+            $basicMissing = empty(trim((string) ($r->tujuan_pengadaan ?? '')))
+                || empty(trim((string) ($r->portofolio ?? '')))
+                || empty(trim((string) ($r->nomor_pr ?? '')))
+                || empty($r->tanggal_pr)
+                || empty($r->jumlah_pr)
+                || (float) $r->jumlah_pr <= 0;
+
+            if ($basicMissing) return 'draft';
+            if (empty($r->tgl_ttd_kabid_pr)) return 'kabid';
+            if (empty($r->tgl_ttd_kacab_pr)) return 'kacab';
+
+            return 'ready';
+        };
+
+        $calcHealth = function ($r) {
+            $score = 100;
+            $issues = [];
+            $receipt = strtoupper((string) ($r->approval_status ?? ''));
+
+            $checks = [
+                'Tujuan belum diisi' => empty(trim((string) ($r->tujuan_pengadaan ?? ''))),
+                'Portofolio belum diisi' => empty(trim((string) ($r->portofolio ?? ''))),
+                'Nomor PR belum diisi' => empty(trim((string) ($r->nomor_pr ?? ''))),
+                'Tanggal PR belum diisi' => empty($r->tanggal_pr),
+                'Nilai PR belum valid' => empty($r->jumlah_pr) || (float) $r->jumlah_pr <= 0,
+                'TTD Kabid belum ada' => empty($r->tgl_ttd_kabid_pr),
+                'TTD Kacab belum ada' => empty($r->tgl_ttd_kacab_pr),
+            ];
+
+            foreach ($checks as $label => $bad) {
+                if ($bad) {
+                    $score -= str_contains($label, 'TTD') ? 12 : 8;
+                    $issues[] = $label;
+                }
+            }
+
+            if ($receipt === 'PENDING') {
+                $requestedAt = !empty($r->approval_requested_at) ? \Carbon\Carbon::parse($r->approval_requested_at) : null;
+                if ($requestedAt && $requestedAt->diffInDays(now()) >= 2) {
+                    $score -= 18;
+                    $issues[] = 'Pending Umum lebih dari 2 hari';
+                } else {
+                    $score -= 4;
+                }
+            }
+
+            if ($receipt === 'REJECTED') {
+                $score -= 25;
+                $issues[] = 'PR ditolak dan perlu perbaikan';
+            }
+
+            if ($receipt === 'APPROVED' || !empty($r->received_at)) {
+                $score = max($score, 92);
+            }
+
+            $score = max(0, min(100, $score));
+            $label = $score >= 85 ? 'Sehat' : ($score >= 65 ? 'Perlu Follow Up' : 'Kritis');
+            $color = $score >= 85 ? '#10b981' : ($score >= 65 ? '#f59e0b' : '#ef4444');
+            $tone = $score >= 85
+                ? 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-700/70 dark:bg-emerald-900/25 dark:text-emerald-100'
+                : ($score >= 65
+                    ? 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-700/70 dark:bg-amber-900/25 dark:text-amber-100'
+                    : 'border-red-200 bg-red-50 text-red-800 dark:border-red-700/70 dark:bg-red-900/25 dark:text-red-100');
+
+            return compact('score', 'label', 'color', 'tone', 'issues');
+        };
+
+        foreach ($rows as $insightRow) {
+            $stage = $detectStage($insightRow);
+            $health = $calcHealth($insightRow);
+            $stageMap[$insightRow->id] = $stage;
+            $healthMap[$insightRow->id] = $health;
+            $stageCounts[$stage] = ($stageCounts[$stage] ?? 0) + 1;
+
+            if (count($stageSamples[$stage]) < 3) {
+                $stageSamples[$stage][] = $insightRow->nomor_pr ?: ('PR #' . $insightRow->id);
+            }
+
+            if ($health['score'] < 85 && count($attentionRows) < 4) {
+                $attentionRows[] = [
+                    'id' => $insightRow->id,
+                    'nomor' => $insightRow->nomor_pr ?: ('PR #' . $insightRow->id),
+                    'score' => $health['score'],
+                    'label' => $health['label'],
+                    'issue' => $health['issues'][0] ?? 'Perlu dicek',
+                ];
+            }
+        }
     @endphp
 
     {{-- Filter Form --}}
@@ -626,6 +807,105 @@
         @endif
     </form>
 
+    {{-- PR Control Tower --}}
+    <div class="torpr-control-card mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+        <div class="relative z-10 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+                <div class="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-extrabold uppercase tracking-wide text-blue-700 dark:border-blue-700/70 dark:bg-blue-900/25 dark:text-blue-200">
+                    <span>🛰️</span> PR Control Tower
+                </div>
+                <h2 class="mt-3 text-xl font-black tracking-tight text-slate-950 dark:text-white">Health Score & Pipeline PR</h2>
+                <p class="mt-1 max-w-2xl text-sm font-medium text-slate-600 dark:text-slate-300">
+                    Ringkasan otomatis dari data yang sedang tampil. Cocok untuk cepat melihat PR sehat, PR perlu follow up, dan posisi PR di alur operasional.
+                </p>
+            </div>
+
+            <div class="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:min-w-[520px]">
+                @php
+                    $healthyCount = collect($healthMap)->where('score', '>=', 85)->count();
+                    $followCount = collect($healthMap)->filter(fn($h) => $h['score'] >= 65 && $h['score'] < 85)->count();
+                    $criticalCount = collect($healthMap)->where('score', '<', 65)->count();
+                @endphp
+                <div class="rounded-2xl border border-emerald-200 bg-emerald-50 p-3 dark:border-emerald-700/70 dark:bg-emerald-900/25">
+                    <p class="text-xs font-extrabold uppercase tracking-wide text-emerald-700 dark:text-emerald-200">Sehat</p>
+                    <p class="mt-1 text-2xl font-black text-emerald-900 dark:text-emerald-100">{{ $healthyCount }}</p>
+                </div>
+                <div class="rounded-2xl border border-amber-200 bg-amber-50 p-3 dark:border-amber-700/70 dark:bg-amber-900/25">
+                    <p class="text-xs font-extrabold uppercase tracking-wide text-amber-700 dark:text-amber-200">Follow Up</p>
+                    <p class="mt-1 text-2xl font-black text-amber-900 dark:text-amber-100">{{ $followCount }}</p>
+                </div>
+                <div class="rounded-2xl border border-red-200 bg-red-50 p-3 dark:border-red-700/70 dark:bg-red-900/25">
+                    <p class="text-xs font-extrabold uppercase tracking-wide text-red-700 dark:text-red-200">Kritis</p>
+                    <p class="mt-1 text-2xl font-black text-red-900 dark:text-red-100">{{ $criticalCount }}</p>
+                </div>
+                <div class="rounded-2xl border border-blue-200 bg-blue-50 p-3 dark:border-blue-700/70 dark:bg-blue-900/25">
+                    <p class="text-xs font-extrabold uppercase tracking-wide text-blue-700 dark:text-blue-200">Data Tampil</p>
+                    <p class="mt-1 text-2xl font-black text-blue-900 dark:text-blue-100">{{ $rows->count() }}</p>
+                </div>
+            </div>
+        </div>
+
+        @if(!empty($attentionRows))
+            <div class="relative z-10 mt-4 rounded-2xl border border-amber-200 bg-amber-50/70 p-4 dark:border-amber-700/70 dark:bg-amber-900/20">
+                <div class="mb-3 flex items-center justify-between gap-3">
+                    <div>
+                        <p class="text-sm font-black text-amber-900 dark:text-amber-100">PR perlu perhatian</p>
+                        <p class="text-xs font-semibold text-amber-700 dark:text-amber-200">Klik Follow Up untuk mengirim ringkasan ke Chat Tim.</p>
+                    </div>
+                </div>
+                <div class="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+                    @foreach($attentionRows as $item)
+                        <div class="rounded-xl border border-white/70 bg-white p-3 shadow-sm dark:border-slate-700 dark:bg-slate-950/70">
+                            <div class="flex items-start justify-between gap-2">
+                                <div class="min-w-0">
+                                    <p class="truncate font-mono text-xs font-black text-slate-900 dark:text-white">{{ $item['nomor'] }}</p>
+                                    <p class="mt-1 text-[11px] font-bold text-slate-500 dark:text-slate-400">{{ $item['issue'] }}</p>
+                                </div>
+                                <span class="rounded-full bg-amber-100 px-2 py-1 text-[11px] font-black text-amber-700 dark:bg-amber-900/40 dark:text-amber-200">{{ $item['score'] }}</span>
+                            </div>
+                            <button type="button" onclick="shareRecordToChat('pr', {{ $item['id'] }})"
+                                class="mt-3 inline-flex w-full items-center justify-center gap-1 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-black text-white transition hover:bg-indigo-700 active:scale-95">
+                                💬 Follow Up
+                            </button>
+                        </div>
+                    @endforeach
+                </div>
+            </div>
+        @endif
+    </div>
+
+    {{-- Kanban Pipeline --}}
+    <div class="mb-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-7">
+        @foreach($stageMeta as $key => $meta)
+            <div class="torpr-kanban-card rounded-2xl border {{ $meta['ring'] }} bg-white p-4 shadow-sm dark:bg-slate-900">
+                <div class="flex items-start justify-between gap-3">
+                    <div class="min-w-0">
+                        <div class="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br {{ $meta['tone'] }} text-lg text-white shadow-lg">
+                            {{ $meta['icon'] }}
+                        </div>
+                        <p class="mt-3 text-sm font-black text-slate-950 dark:text-white">{{ $meta['label'] }}</p>
+                        <p class="mt-1 text-xs font-semibold text-slate-500 dark:text-slate-400">{{ $stageCounts[$key] ?? 0 }} PR di halaman ini</p>
+                    </div>
+                    <span class="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-black text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                        {{ $stageCounts[$key] ?? 0 }}
+                    </span>
+                </div>
+
+                <div class="mt-3 space-y-1.5">
+                    @forelse($stageSamples[$key] ?? [] as $sample)
+                        <div class="truncate rounded-lg bg-slate-50 px-2.5 py-1.5 font-mono text-[11px] font-bold text-slate-600 dark:bg-slate-950 dark:text-slate-300" title="{{ $sample }}">
+                            {{ $sample }}
+                        </div>
+                    @empty
+                        <div class="rounded-lg border border-dashed border-slate-200 px-2.5 py-2 text-center text-[11px] font-bold text-slate-400 dark:border-slate-700 dark:text-slate-500">
+                            Kosong
+                        </div>
+                    @endforelse
+                </div>
+            </div>
+        @endforeach
+    </div>
+
     {{-- Table --}}
     <div
         class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden animate-scale-in">
@@ -657,10 +937,11 @@
 
         {{-- Table Content --}}
         <div class="overflow-x-auto">
-            <table class="min-w-[1260px] w-full text-sm table-fixed">
+            <table class="min-w-[1380px] w-full text-sm table-fixed">
                 <thead class="bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
                     <tr class="text-gray-700 dark:text-white">
                         <th class="px-4 py-3 text-left">Nomor PR</th>
+                        <th class="px-4 py-3 text-center">Health</th>
                         <th class="px-4 py-3 text-left">Tujuan</th>
                         <th class="px-4 py-3 text-left">Portofolio</th>
                         <th class="px-4 py-3 text-right">Harga PR</th>
@@ -677,6 +958,8 @@
                         @php
                             // ✅ Data sudah FLAT dari Query Builder
                             $receipt = $r->approval_status ?? ($r->received_at ? 'APPROVED' : null);
+                            $health = $healthMap[$r->id] ?? ['score' => 0, 'label' => 'Kritis', 'color' => '#ef4444', 'tone' => 'border-red-200 bg-red-50 text-red-800 dark:border-red-700/70 dark:bg-red-900/25 dark:text-red-100', 'issues' => []];
+                            $stage = $stageMap[$r->id] ?? 'draft';
 
                             $badge = match ($receipt) {
                                 'APPROVED' => 'bg-green-600',
@@ -740,6 +1023,23 @@
 
                                     <span class="font-mono font-semibold text-gray-900 dark:text-white">
                                         {{ $r->nomor_pr ?? '—' }}
+                                    </span>
+                                </div>
+                            </td>
+
+                            {{-- Health Score --}}
+                            <td class="px-4 py-3 text-center">
+                                <div class="inline-flex min-w-[118px] items-center justify-center gap-2 rounded-2xl border px-3 py-2 {{ $health['tone'] }}"
+                                    title="{{ !empty($health['issues']) ? implode(', ', $health['issues']) : 'Data PR sehat' }}">
+                                    <span class="torpr-health-ring inline-flex h-9 w-9 items-center justify-center rounded-full p-[3px]"
+                                        style="--health-score: {{ $health['score'] }}; --health-color: {{ $health['color'] }};">
+                                        <span class="flex h-full w-full items-center justify-center rounded-full bg-white text-[11px] font-black dark:bg-slate-950">
+                                            {{ $health['score'] }}
+                                        </span>
+                                    </span>
+                                    <span class="text-left">
+                                        <span class="block text-xs font-black leading-tight">{{ $health['label'] }}</span>
+                                        <span class="block text-[10px] font-bold opacity-75">{{ $stageMeta[$stage]['label'] ?? 'Draft' }}</span>
                                     </span>
                                 </div>
                             </td>
@@ -824,10 +1124,10 @@
                                         Log
                                     </button>
                                     <button type="button" onclick="shareRecordToChat('pr', {{ $r->id }})"
-                                        class="inline-flex items-center gap-1 px-2 py-1 rounded bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 text-xs font-medium transition-all"
-                                        title="Bagikan ringkasan PR ke Chat Tim">
+                                        class="inline-flex items-center gap-1 px-2 py-1 rounded bg-indigo-600 text-white hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-400 text-xs font-bold transition-all active:scale-95"
+                                        title="Kirim follow up cepat PR ini ke Chat Tim">
                                         <span aria-hidden="true">💬</span>
-                                        Bagikan
+                                        Follow Up
                                     </button>
                                     @if(!$locked && (auth()->user()->role === 'superadmin' || (int) $r->created_by_user_id === (int) auth()->id()))
                                         <div class="inline-flex gap-2">
@@ -1161,6 +1461,32 @@
                                 <span id="infoKacabBadge"
                                     class="inline-flex w-fit items-center rounded-full px-3 py-1 text-xs font-bold">—</span>
                                 <span id="infoKacabMeta" class="text-xs text-gray-500 dark:text-gray-400">—</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div
+                        class="rounded-2xl border border-slate-200 bg-slate-50 p-4 shadow-sm dark:border-slate-700 dark:bg-slate-950/70">
+                        <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                            <div>
+                                <p class="text-xs font-black uppercase tracking-wide text-blue-600 dark:text-blue-300">
+                                    Timeline Audit Detail
+                                </p>
+                                <h3 class="mt-1 text-sm font-black text-slate-950 dark:text-white">
+                                    Jejak proses PR sampai diterima Umum
+                                </h3>
+                                <p class="mt-1 text-xs font-semibold text-slate-500 dark:text-slate-400">
+                                    Arsip sengaja tidak ditampilkan di sini agar timeline fokus ke proses PR.
+                                </p>
+                            </div>
+                            <span id="infoTimelineCount"
+                                class="inline-flex w-fit items-center rounded-full bg-white px-3 py-1 text-xs font-black text-slate-600 ring-1 ring-slate-200 dark:bg-slate-900 dark:text-slate-300 dark:ring-slate-700">
+                                0 tahap
+                            </span>
+                        </div>
+                        <div id="infoTimeline" class="torpr-info-timeline mt-4 space-y-4">
+                            <div class="rounded-xl border border-dashed border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">
+                                Timeline akan muncul setelah data dimuat.
                             </div>
                         </div>
                     </div>
@@ -1784,6 +2110,15 @@
     <script>
         const canAccessKacab = {{ auth()->user()->role === 'superadmin' && auth()->user()->department === 'operasional' ? 'true' : 'false' }};
 
+        function escapeHtml(str) {
+            return String(str ?? '').replace(/[&<>"']/g, (m) => ({
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#039;'
+            }[m]));
+        }
 
         function initTorprSelect2() {
             if (!window.jQuery || !$.fn.select2) return;
@@ -2019,6 +2354,113 @@
             }
         }
 
+        function renderInfoTimeline(events = []) {
+            const wrapper = document.getElementById('infoTimeline');
+            const counter = document.getElementById('infoTimelineCount');
+            if (!wrapper) return;
+
+            if (!events.length) {
+                wrapper.innerHTML = `
+                    <div class="rounded-xl border border-dashed border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">
+                        Timeline akan muncul setelah data dimuat.
+                    </div>
+                `;
+                if (counter) counter.textContent = '0 tahap';
+                return;
+            }
+
+            const doneCount = events.filter((event) => event.done).length;
+            if (counter) counter.textContent = `${doneCount}/${events.length} tahap`;
+
+            wrapper.innerHTML = events.map((event) => {
+                const tone = event.done
+                    ? (event.type === 'danger'
+                        ? 'bg-red-500 text-white ring-red-100 dark:ring-red-900/40'
+                        : event.type === 'warning'
+                            ? 'bg-amber-500 text-white ring-amber-100 dark:ring-amber-900/40'
+                            : 'bg-emerald-500 text-white ring-emerald-100 dark:ring-emerald-900/40')
+                    : 'bg-white text-slate-400 ring-slate-200 dark:bg-slate-900 dark:text-slate-500 dark:ring-slate-700';
+
+                const titleColor = event.done
+                    ? 'text-slate-950 dark:text-white'
+                    : 'text-slate-500 dark:text-slate-400';
+
+                return `
+                    <div class="torpr-info-step relative flex gap-3">
+                        <div class="torpr-info-dot ${tone}">${event.icon || (event.done ? '✓' : '•')}</div>
+                        <div class="min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+                            <div class="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                                <p class="text-sm font-black ${titleColor}">${escapeHtml(event.title || '-')}</p>
+                                <span class="text-[11px] font-bold text-slate-500 dark:text-slate-400">${escapeHtml(event.time || 'Belum ada waktu')}</span>
+                            </div>
+                            <p class="mt-1 text-xs font-semibold leading-relaxed text-slate-600 dark:text-slate-300">${escapeHtml(event.description || '-')}</p>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function buildInfoTimeline(data, receiptStatus, receiptSub) {
+            const approval = data?.latest_approval || {};
+            const approvalStatus = String(approval.status || receiptStatus || '').toUpperCase();
+            const isRejected = approvalStatus.includes('REJECTED');
+            const isApproved = approvalStatus.includes('APPROVED') || !!data?.received_at;
+            const isPending = approvalStatus.includes('PENDING');
+
+            const kabidName = data?.signed_by_kabid_name || 'Kabid';
+            const kacabName = data?.signed_by_kacab_name || 'Kacab';
+
+            return [
+                {
+                    done: !!(data?.created_at || data?.tanggal_pr),
+                    icon: '1',
+                    title: 'PR dibuat / dicatat',
+                    time: formatInfoDate(data?.created_at || data?.tanggal_pr),
+                    description: data?.nomor_pr ? `Nomor PR: ${data.nomor_pr}` : 'Nomor PR belum tersedia.',
+                },
+                {
+                    done: !!data?.tgl_ttd_kabid_pr,
+                    icon: '2',
+                    title: 'Tanda tangan Kepala Bidang',
+                    time: formatInfoDate(data?.tgl_ttd_kabid_pr),
+                    description: data?.tgl_ttd_kabid_pr
+                        ? `Ditandatangani oleh ${kabidName}.`
+                        : 'Masih menunggu tanda tangan Kepala Bidang.',
+                },
+                {
+                    done: !!data?.tgl_ttd_kacab_pr,
+                    icon: '3',
+                    title: 'Tanda tangan Kepala Cabang',
+                    time: formatInfoDate(data?.tgl_ttd_kacab_pr),
+                    description: data?.tgl_ttd_kacab_pr
+                        ? `Ditandatangani oleh ${kacabName}.`
+                        : 'Masih menunggu tanda tangan Kepala Cabang.',
+                },
+                {
+                    done: !!approval.requested_at,
+                    icon: '4',
+                    title: 'Request penerimaan ke Umum',
+                    time: formatInfoDate(approval.requested_at),
+                    description: approval.requested_name
+                        ? `Diajukan oleh ${approval.requested_name}.`
+                        : 'Belum ada request penerimaan ke Umum.',
+                    type: isPending ? 'warning' : undefined,
+                },
+                {
+                    done: isApproved || isRejected,
+                    icon: isRejected ? '!' : '5',
+                    title: isRejected ? 'Request ditolak Umum' : 'PR diterima Umum',
+                    time: formatInfoDate(data?.received_at || approval.approved_at || approval.rejected_at),
+                    description: isRejected
+                        ? `Alasan: ${approval.rejected_reason || 'Tidak ada alasan yang dicatat.'}`
+                        : (isApproved
+                            ? `Status: ${receiptSub || 'PR sudah dikonfirmasi diterima Umum.'}`
+                            : 'Menunggu review dan konfirmasi dari Umum.'),
+                    type: isRejected ? 'danger' : (isPending ? 'warning' : undefined),
+                },
+            ];
+        }
+
         window.openInfoPrModal = async function (id) {
             const modal = document.getElementById('infoPrModal');
             const card = document.getElementById('infoPrCard');
@@ -2047,6 +2489,7 @@
             setReceiptInfo('—', '—');
             setSignInfo('Kabid', false, '', '');
             setSignInfo('Kacab', false, '', '');
+            renderInfoTimeline([]);
 
             const receiptStatus = row?.querySelector('[data-receipt-badge]')?.textContent?.trim() || '—';
             const receiptSub = row?.querySelector('[data-receipt-sub]')?.textContent?.trim() || '—';
@@ -2082,6 +2525,7 @@
                 setReceiptInfo(receiptStatus, receiptSub);
                 setSignInfo('Kabid', signedKabid || !!data.tgl_ttd_kabid_pr, row?.dataset?.nameKabid || '', row?.dataset?.dateKabid || formatInfoDate(data.tgl_ttd_kabid_pr));
                 setSignInfo('Kacab', signedKacab || !!data.tgl_ttd_kacab_pr, row?.dataset?.nameKacab || '', row?.dataset?.dateKacab || formatInfoDate(data.tgl_ttd_kacab_pr));
+                renderInfoTimeline(buildInfoTimeline(data, receiptStatus, receiptSub));
             } catch (error) {
                 Swal.fire({
                     icon: 'error',
