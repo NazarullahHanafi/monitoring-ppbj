@@ -573,6 +573,43 @@
             color: #cbd5e1 !important;
         }
 
+        .torpr-lock-countdown {
+            margin: .85rem auto .25rem;
+            width: fit-content;
+            min-width: 9.5rem;
+            border-radius: 1rem;
+            background: linear-gradient(135deg, #fee2e2, #ffedd5);
+            border: 1px solid #fca5a5;
+            color: #7f1d1d;
+            font-size: 1.65rem;
+            font-weight: 950;
+            letter-spacing: .08em;
+            padding: .75rem 1.1rem;
+            text-align: center;
+            box-shadow: 0 14px 35px rgba(239, 68, 68, .18);
+        }
+
+        .torpr-lock-caption {
+            color: #475569;
+            font-size: .82rem;
+            font-weight: 700;
+            line-height: 1.55;
+            text-align: center;
+        }
+
+        html.dark .torpr-lock-countdown,
+        .dark .torpr-lock-countdown {
+            background: linear-gradient(135deg, #7f1d1d, #9a3412) !important;
+            border-color: #fb7185 !important;
+            color: #ffffff !important;
+            box-shadow: 0 14px 35px rgba(248, 113, 113, .2);
+        }
+
+        html.dark .torpr-lock-caption,
+        .dark .torpr-lock-caption {
+            color: #e2e8f0 !important;
+        }
+
         .torpr-info-timeline {
             position: relative;
         }
@@ -3882,6 +3919,62 @@
                 submitTorpr(id ? `/torpr/${id}` : '/torpr', id ? 'PUT' : 'POST', payload);
             });
 
+            function formatTorprLockTime(seconds) {
+                const safeSeconds = Math.max(0, Number(seconds) || 0);
+                const minutes = Math.floor(safeSeconds / 60);
+                const remainSeconds = safeSeconds % 60;
+
+                return `${String(minutes).padStart(2, '0')}:${String(remainSeconds).padStart(2, '0')}`;
+            }
+
+            function showTorprDeleteLockCountdown(message, retryAfter) {
+                let remainingSeconds = Math.max(1, Number(retryAfter) || (15 * 60));
+                let timer = null;
+
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Aksi dikunci sementara',
+                    html: `
+                        <div class="torpr-lock-caption">
+                            ${escapeHtml(message || 'Password salah 3 kali. Silakan coba lagi setelah waktu tunggu selesai.')}
+                        </div>
+                        <div id="torprLockCountdown" class="torpr-lock-countdown">${formatTorprLockTime(remainingSeconds)}</div>
+                        <div class="torpr-lock-caption">
+                            Waktu tersisa sebelum tombol hapus bisa dicoba lagi.
+                        </div>
+                    `,
+                    confirmButtonText: 'Saya mengerti',
+                    confirmButtonColor: '#dc2626',
+                    customClass: {
+                        popup: 'torpr-delete-popup',
+                        title: 'torpr-delete-title',
+                        htmlContainer: 'torpr-delete-html',
+                    },
+                    didOpen: () => {
+                        const countdownEl = document.getElementById('torprLockCountdown');
+                        timer = setInterval(() => {
+                            remainingSeconds = Math.max(0, remainingSeconds - 1);
+                            if (countdownEl) {
+                                countdownEl.textContent = formatTorprLockTime(remainingSeconds);
+                            }
+
+                            if (remainingSeconds <= 0) {
+                                clearInterval(timer);
+                                timer = null;
+                                if (countdownEl) {
+                                    countdownEl.textContent = '00:00';
+                                }
+                            }
+                        }, 1000);
+                    },
+                    willClose: () => {
+                        if (timer) {
+                            clearInterval(timer);
+                        }
+                    }
+                });
+            }
+
             window.deleteTorprDraft = async function (id, nomorPr) {
                 const result = await Swal.fire({
                     icon: 'warning',
@@ -3968,6 +4061,7 @@
                                 return {
                                     locked: true,
                                     message: data.message || 'Aksi hapus dikunci sementara karena terlalu banyak percobaan.',
+                                    retry_after: data.retry_after || (15 * 60),
                                 };
                             }
 
@@ -3990,17 +4084,7 @@
                 if (result.dismiss) return;
 
                 if (result.value?.locked) {
-                    Swal.fire({
-                        icon: 'error',
-                        title: 'Aksi dikunci 15 menit',
-                        text: result.value.message || 'Password salah 3 kali. Silakan coba lagi nanti.',
-                        confirmButtonColor: '#dc2626',
-                        customClass: {
-                            popup: 'torpr-delete-popup',
-                            title: 'torpr-delete-title',
-                            htmlContainer: 'torpr-delete-html',
-                        },
-                    });
+                    showTorprDeleteLockCountdown(result.value.message, result.value.retry_after);
                     return;
                 }
 
