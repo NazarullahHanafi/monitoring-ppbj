@@ -15,6 +15,7 @@ use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use App\Services\NotificationService;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Hash;
 use App\Models\User;
 use App\Models\MasterPortofolio;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
@@ -635,6 +636,86 @@ class TorprController extends Controller
         $this->forgetTorprJsonCache((int) $id);
 
         return response()->json(['ok' => true, 'message' => 'Data berhasil diupdate']);
+    }
+
+    public function destroy(Request $request, $id)
+    {
+        $request->validate([
+            'creator_password' => ['required', 'string', 'min:1', 'max:255'],
+        ], [
+            'creator_password.required' => 'Password pembuat PR wajib diisi untuk menghapus data.',
+        ]);
+
+        $torpr = Torpr::with(['createdBy', 'latestReceiptApproval'])->findOrFail($id);
+
+        $user = $request->user();
+        abort_unless(
+            $user && $user->department === 'operasional',
+            403,
+            'Hanya user operasional yang dapat menghapus draft PR.'
+        );
+
+        if ($torpr->latestReceiptApproval || $torpr->received_at) {
+            return response()->json([
+                'message' => 'PR tidak bisa dihapus karena sudah pernah diajukan ke Umum. Gunakan alur pembatalan/status agar riwayat audit tetap aman.',
+            ], 422);
+        }
+
+        $creator = $torpr->createdBy;
+
+        if (!$creator) {
+            return response()->json([
+                'message' => 'Pembuat PR tidak ditemukan, sehingga password pembuat tidak bisa diverifikasi.',
+            ], 422);
+        }
+
+        if (!Hash::check((string) $request->creator_password, (string) $creator->password)) {
+            Log::warning('TORPR delete rejected due invalid creator password', [
+                'torpr_id' => $torpr->id,
+                'nomor_pr' => $torpr->nomor_pr,
+                'attempted_by_user_id' => $user->id,
+                'creator_user_id' => $creator->id,
+                'ip' => $request->ip(),
+            ]);
+
+            return response()->json([
+                'message' => 'Password pembuat PR tidak sesuai. Data tidak dihapus.',
+            ], 422);
+        }
+
+        $oldNomorPr = $torpr->nomor_pr;
+        $description = "Draft PR dihapus: " . ($torpr->nomor_pr ?: 'PR-' . $torpr->id);
+
+        DB::transaction(function () use ($torpr, $user, $creator, $description, $request) {
+            \App\Models\ActivityLog::create([
+                'user_id' => $user->id,
+                'model_type' => Torpr::class,
+                'model_id' => $torpr->id,
+                'action' => 'deleted',
+                'description' => $description,
+                'changes' => [
+                    'nomor_pr' => $torpr->nomor_pr,
+                    'tujuan_pengadaan' => $torpr->tujuan_pengadaan,
+                    'deleted_by' => $user->email,
+                    'creator_email' => $creator->email,
+                    'ip' => $request->ip(),
+                ],
+            ]);
+
+            $torpr->delete();
+        });
+
+        $this->forgetTorprJsonCache((int) $id);
+        if ($oldNomorPr) {
+            foreach (['_v8', '_v9', '_v10'] as $version) {
+                Cache::forget('tracking_pr_' . md5(strtolower($oldNomorPr)) . $version);
+            }
+        }
+
+        return response()->json([
+            'ok' => true,
+            'message' => 'Draft PR berhasil dihapus.',
+        ]);
     }
 
     public function showJson($id)

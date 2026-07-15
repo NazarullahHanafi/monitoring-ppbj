@@ -384,6 +384,9 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
         Route::get('/torpr', [TorprController::class, 'index'])->name('torpr.index');
         Route::post('/torpr', [TorprController::class, 'store'])->name('torpr.store');
         Route::put('/torpr/{id}', [TorprController::class, 'update'])->name('torpr.update');
+        Route::delete('/torpr/{id}', [TorprController::class, 'destroy'])
+            ->name('torpr.destroy')
+            ->middleware('throttle:10,1');
 
         Route::get('/torpr/{id}/json', [TorprController::class, 'showJson'])
             ->name('torpr.json')

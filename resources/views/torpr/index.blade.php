@@ -871,6 +871,17 @@
                                                 Edit
                                             </button>
 
+                                            <button type="button"
+                                                onclick="deleteTorprDraft({{ $r->id }}, @js($r->nomor_pr ?? ('PR-' . $r->id)))"
+                                                title="Hapus hanya tersedia sebelum PR diajukan ke Umum. Wajib memakai password pembuat PR."
+                                                class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-white text-xs font-semibold transition-all active:scale-95 shadow-sm shadow-red-500/20">
+                                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M9 7h6m2 0H7m3-3h4a1 1 0 011 1v2H9V5a1 1 0 011-1z" />
+                                                </svg>
+                                                Hapus
+                                            </button>
+
                                             @if($canRequestUmum)
                                                 @if($isRequestIncomplete)
                                                     <button type="button" disabled
@@ -3612,6 +3623,112 @@
 
                 submitTorpr(id ? `/torpr/${id}` : '/torpr', id ? 'PUT' : 'POST', payload);
             });
+
+            window.deleteTorprDraft = async function (id, nomorPr) {
+                const result = await Swal.fire({
+                    icon: 'warning',
+                    title: 'Hapus draft PR?',
+                    html: `
+                        <div class="text-left space-y-3">
+                            <div class="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800 dark:border-red-800/70 dark:bg-red-950/40 dark:text-red-100">
+                                <div class="font-bold">Data: ${escapeHtml(nomorPr || ('PR-' + id))}</div>
+                                <div class="mt-1 text-xs leading-relaxed text-red-700 dark:text-red-200">
+                                    Hapus hanya bisa untuk PR yang belum pernah diajukan ke Umum.
+                                    Jika sudah pernah request, sistem akan menolak agar riwayat audit tetap aman.
+                                </div>
+                            </div>
+                            <div class="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-relaxed text-amber-800 dark:border-amber-800/70 dark:bg-amber-950/40 dark:text-amber-100">
+                                Masukkan <strong>password user pembuat PR</strong>. Jika user lain ingin menghapus,
+                                user tersebut tetap harus mengetahui password pembuat PR.
+                            </div>
+                        </div>
+                    `,
+                    input: 'password',
+                    inputLabel: 'Password pembuat PR',
+                    inputPlaceholder: 'Masukkan password pembuat PR',
+                    inputAttributes: {
+                        autocapitalize: 'off',
+                        autocomplete: 'current-password',
+                    },
+                    showCancelButton: true,
+                    confirmButtonText: 'Ya, Hapus Draft',
+                    cancelButtonText: 'Batal',
+                    confirmButtonColor: '#dc2626',
+                    cancelButtonColor: '#64748b',
+                    customClass: {
+                        popup: 'dark:bg-gray-900 dark:text-white',
+                        title: 'dark:text-white',
+                        htmlContainer: 'dark:text-gray-100',
+                        input: 'dark:bg-gray-800 dark:text-white dark:border-gray-700',
+                    },
+                    preConfirm: (password) => {
+                        if (!password || !password.trim()) {
+                            Swal.showValidationMessage('Password pembuat PR wajib diisi.');
+                            return false;
+                        }
+                        return password;
+                    }
+                });
+
+                if (result.dismiss) return;
+
+                try {
+                    Swal.fire({
+                        title: 'Menghapus draft...',
+                        html: '<div class="animate-spin rounded-full h-12 w-12 border-4 border-red-500 border-t-transparent mx-auto"></div>',
+                        showConfirmButton: false,
+                        allowOutsideClick: false,
+                        customClass: {
+                            popup: 'dark:bg-gray-900 dark:text-white',
+                            title: 'dark:text-white',
+                            htmlContainer: 'dark:text-gray-100',
+                        },
+                    });
+
+                    const response = await fetch(`/torpr/${id}`, {
+                        method: 'DELETE',
+                        headers: {
+                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                            'Content-Type': 'application/json',
+                            'Accept': 'application/json',
+                            'X-Requested-With': 'XMLHttpRequest',
+                        },
+                        body: JSON.stringify({
+                            creator_password: result.value,
+                        }),
+                    });
+
+                    const data = await response.json().catch(() => ({}));
+
+                    if (!response.ok) {
+                        throw new Error(data.message || 'Gagal menghapus draft PR.');
+                    }
+
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Draft terhapus',
+                        text: data.message || 'Draft PR berhasil dihapus.',
+                        timer: 1400,
+                        showConfirmButton: false,
+                        customClass: {
+                            popup: 'dark:bg-gray-900 dark:text-white',
+                            title: 'dark:text-white',
+                        },
+                    }).then(() => location.reload());
+                } catch (error) {
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Gagal menghapus',
+                        text: error.message || 'Gagal menghapus draft PR.',
+                        confirmButtonColor: '#dc2626',
+                        customClass: {
+                            popup: 'dark:bg-gray-900 dark:text-white',
+                            title: 'dark:text-white',
+                            htmlContainer: 'dark:text-gray-100',
+                        },
+                    });
+                }
+            }
 
             window.requestReceipt = async function (id) {
 
