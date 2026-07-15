@@ -4,11 +4,12 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
+use App\Models\User;
 
 class Spph extends Model
 {
     protected $fillable = [
-        'nomor_spph', 'sequence_number', 'tanggal',
+        'nomor_spph', 'sequence_number', 'created_by_user_id', 'tanggal',
         'nomor_pr', 'nama_vendor', 'vendor_names', 'deskripsi_pengadaan', 'pic',
     ];
 
@@ -120,5 +121,10 @@ class Spph extends Model
     public function items()
     {
         return $this->hasMany(\App\Models\SpphItem::class, 'spph_id')->orderBy('urutan');
+    }
+
+    public function createdBy()
+    {
+        return $this->belongsTo(User::class, 'created_by_user_id');
     }
 }

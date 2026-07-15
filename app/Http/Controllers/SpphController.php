@@ -11,6 +11,8 @@ use App\Models\Ppbj;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Carbon;
 use Illuminate\Database\QueryException;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -405,6 +407,7 @@ class SpphController extends Controller
             $spph = Spph::create([
                 'nomor_spph' => $request->nomor_spph,
                 'sequence_number' => $seq,
+                'created_by_user_id' => auth()->id(),
                 'tanggal' => $request->tanggal,
                 'nomor_pr' => $nomorPr,
                 'nama_vendor' => $vendorName,
@@ -553,9 +556,85 @@ class SpphController extends Controller
     // =========================================================
     // DESTROY
     // =========================================================
-    public function destroy(Spph $spph)
+    public function destroy(Request $request, Spph $spph)
     {
-        DB::transaction(function () use ($spph) {
+        $request->validate([
+            'creator_password' => ['required', 'string', 'min:1', 'max:255'],
+        ], [
+            'creator_password.required' => 'Password pembuat SPPH wajib diisi untuk menghapus data.',
+        ]);
+
+        $user = $request->user();
+        $spph->loadMissing('createdBy');
+        $verifier = $spph->createdBy ?: $user;
+
+        if (!$verifier) {
+            return response()->json([
+                'message' => 'User verifikasi tidak ditemukan, sehingga password tidak bisa dicek.',
+            ], 422);
+        }
+
+        $currentUserId = $user?->id ?: 'guest';
+        $ipHash = sha1((string) $request->ip());
+        $attemptKey = "spph_delete_password_attempts:{$spph->id}:{$verifier->id}:{$currentUserId}:{$ipHash}";
+        $lockKey = "spph_delete_password_lock:{$spph->id}:{$verifier->id}:{$currentUserId}:{$ipHash}";
+
+        if ($lockedUntil = Cache::get($lockKey)) {
+            $lockedUntilAt = Carbon::parse($lockedUntil);
+            $retryAfter = (int) ceil(max(1, now()->diffInSeconds($lockedUntilAt, false)));
+
+            return response()->json([
+                'message' => 'Terlalu banyak percobaan password salah. Silakan coba lagi sekitar ' . ceil($retryAfter / 60) . ' menit lagi.',
+                'locked' => true,
+                'retry_after' => $retryAfter,
+                'locked_until' => $lockedUntilAt->toIso8601String(),
+            ], 429);
+        }
+
+        if (!Hash::check((string) $request->creator_password, (string) $verifier->password)) {
+            $attempts = ((int) Cache::get($attemptKey, 0)) + 1;
+            $remainingAttempts = max(0, 3 - $attempts);
+            Cache::put($attemptKey, $attempts, now()->addMinutes(15));
+
+            if ($attempts >= 3) {
+                $lockedUntil = now()->addMinutes(15);
+                Cache::put($lockKey, $lockedUntil->toIso8601String(), $lockedUntil);
+                Cache::forget($attemptKey);
+
+                return response()->json([
+                    'message' => 'Password salah 3 kali. Aksi hapus SPPH dikunci selama 15 menit.',
+                    'locked' => true,
+                    'retry_after' => 15 * 60,
+                    'locked_until' => $lockedUntil->toIso8601String(),
+                ], 429);
+            }
+
+            return response()->json([
+                'message' => 'Password pembuat SPPH tidak sesuai. Sisa percobaan: ' . $remainingAttempts . '.',
+                'attempts_remaining' => $remainingAttempts,
+            ], 422);
+        }
+
+        Cache::forget($attemptKey);
+        Cache::forget($lockKey);
+
+        DB::transaction(function () use ($spph, $user, $verifier, $request) {
+            \App\Models\ActivityLog::create([
+                'user_id' => $user?->id,
+                'model_type' => Spph::class,
+                'model_id' => $spph->id,
+                'action' => 'deleted',
+                'description' => 'SPPH dihapus: ' . ($spph->nomor_spph ?: 'SPPH-' . $spph->id),
+                'changes' => [
+                    'nomor_spph' => $spph->nomor_spph,
+                    'nomor_pr' => $spph->nomor_pr,
+                    'vendor' => $spph->nama_vendor,
+                    'deleted_by' => $user?->email,
+                    'verifier_email' => $verifier->email,
+                    'ip' => $request->ip(),
+                ],
+            ]);
+
             if ($spph->nomor_pr) {
                 $ppbj = Ppbj::where('ppbj_no', $spph->nomor_pr)
                     ->where('spph_rfq_1', $spph->nomor_spph)->first();
@@ -573,7 +652,10 @@ class SpphController extends Controller
             Cache::forget('spph:suggest');
         });
 
-        return redirect()->route('spph.index')->with('success', 'Data SPPH berhasil dihapus!');
+        return response()->json([
+            'ok' => true,
+            'message' => 'Data SPPH berhasil dihapus.',
+        ]);
     }
 
     // =========================================================

@@ -4,6 +4,183 @@
 
 @push('styles')
     <style>
+        .secure-delete-popup {
+            border: 1px solid rgba(226, 232, 240, .9) !important;
+            border-radius: 1rem !important;
+            box-shadow: 0 28px 80px rgba(15, 23, 42, .28) !important;
+        }
+
+        .dark .secure-delete-popup {
+            background: #0f172a !important;
+            color: #f8fafc !important;
+            border-color: rgba(71, 85, 105, .95) !important;
+        }
+
+        .secure-delete-popup .swal2-title,
+        .secure-delete-popup .swal2-html-container {
+            color: #0f172a !important;
+        }
+
+        .dark .secure-delete-popup .swal2-title,
+        .dark .secure-delete-popup .swal2-html-container {
+            color: #f8fafc !important;
+        }
+
+        .secure-delete-danger,
+        .secure-delete-warning,
+        .secure-delete-lock-preview {
+            border-radius: .9rem;
+            padding: .8rem .9rem;
+            font-size: .78rem;
+            font-weight: 800;
+            line-height: 1.6;
+            text-align: left;
+        }
+
+        .secure-delete-danger {
+            background: #fff1f2;
+            border: 1px solid #fca5a5;
+            color: #991b1b;
+        }
+
+        .secure-delete-danger-title {
+            color: #7f1d1d;
+            font-weight: 950;
+            margin-bottom: .25rem;
+        }
+
+        .secure-delete-warning {
+            background: #fffbeb;
+            border: 1px solid #fbbf24;
+            color: #92400e;
+        }
+
+        .secure-delete-lock-preview {
+            background: #f8fafc;
+            border: 1px solid #cbd5e1;
+            color: #334155;
+        }
+
+        .secure-delete-lock-preview strong {
+            color: #0f172a;
+            font-weight: 950;
+        }
+
+        .secure-delete-password-label {
+            display: block;
+            margin: .65rem 0 .45rem;
+            color: #0f172a;
+            font-size: .88rem;
+            font-weight: 900;
+            text-align: left;
+        }
+
+        .secure-delete-password-field {
+            display: flex;
+            align-items: center;
+            gap: .45rem;
+            border: 1px solid #cbd5e1;
+            border-radius: .85rem;
+            background: #fff;
+            padding: .2rem .25rem .2rem .75rem;
+        }
+
+        .secure-delete-password-field input {
+            flex: 1;
+            min-width: 0;
+            height: 2.35rem;
+            border: 0;
+            outline: 0;
+            background: transparent;
+            color: #0f172a;
+            font-size: .95rem;
+            font-weight: 800;
+        }
+
+        .secure-delete-toggle {
+            border: 0;
+            border-radius: .65rem;
+            background: #e0f2fe;
+            color: #075985;
+            cursor: pointer;
+            font-size: .76rem;
+            font-weight: 950;
+            padding: .55rem .7rem;
+        }
+
+        .secure-delete-countdown {
+            margin: .85rem auto .25rem;
+            width: fit-content;
+            min-width: 11.5rem;
+            border-radius: 1rem;
+            background: linear-gradient(135deg, #fee2e2, #ffedd5);
+            border: 1px solid #fca5a5;
+            color: #7f1d1d;
+            font-size: 1.5rem;
+            font-weight: 950;
+            letter-spacing: .08em;
+            padding: .75rem 1.1rem;
+            text-align: center;
+        }
+
+        .secure-delete-time-pill {
+            display: inline-flex;
+            margin-top: .35rem;
+            border-radius: 999px;
+            background: #eff6ff;
+            border: 1px solid #bfdbfe;
+            color: #1e3a8a;
+            font-size: .74rem;
+            font-weight: 950;
+            padding: .4rem .75rem;
+        }
+
+        .dark .secure-delete-danger {
+            background: #7f1d1d !important;
+            border-color: #f87171 !important;
+            color: #fff !important;
+        }
+
+        .dark .secure-delete-danger-title,
+        .dark .secure-delete-lock-preview strong {
+            color: #fff !important;
+        }
+
+        .dark .secure-delete-warning {
+            background: #78350f !important;
+            border-color: #fbbf24 !important;
+            color: #fff7ed !important;
+        }
+
+        .dark .secure-delete-lock-preview,
+        .dark .secure-delete-password-field {
+            background: #1e293b !important;
+            border-color: #475569 !important;
+            color: #e2e8f0 !important;
+        }
+
+        .dark .secure-delete-password-label,
+        .dark .secure-delete-password-field input {
+            color: #fff !important;
+        }
+
+        .dark .secure-delete-toggle {
+            background: #2563eb !important;
+            color: #fff !important;
+        }
+
+        .dark .secure-delete-countdown {
+            background: linear-gradient(135deg, #7f1d1d, #9a3412) !important;
+            border-color: #fb7185 !important;
+            color: #fff !important;
+        }
+
+        .dark .secure-delete-time-pill {
+            background: #172554 !important;
+            border-color: #3b82f6 !important;
+            color: #dbeafe !important;
+        }
+
         /* ── Sticky Add Button di dalam modal ── */
         .items-section {
             position: relative;
@@ -2218,18 +2395,15 @@
                                                     d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                                             </svg>
                                         </button>
-                                        <form method="POST" action="{{ route('spph.destroy', $s) }}"
-                                            onsubmit="return confirmDelete(event)">
-                                            @csrf @method('DELETE')
-                                            <button type="submit"
-                                                class="p-1.5 rounded-lg text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors"
-                                                title="Hapus">
-                                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                                </svg>
-                                            </button>
-                                        </form>
+                                        <button type="button"
+                                            onclick="secureDeleteRecord('SPPH', @js($s->nomor_spph ?? ('SPPH-' . $s->id)), @js(route('spph.destroy', $s)))"
+                                            class="p-1.5 rounded-lg text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors"
+                                            title="Hapus SPPH dengan password pembuat">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                            </svg>
+                                        </button>
                                     </div>
                                 </td>
                             </tr>
@@ -3240,10 +3414,157 @@
             } catch { document.getElementById('editRows').innerHTML = '<p class="text-red-500 text-xs p-2">Gagal memuat data barang.</p>'; }
         }
 
-        function confirmDelete(e) {
-            e.preventDefault();
-            Swal.fire({ title: 'Hapus SPPH?', text: 'Data akan dihapus permanen!', icon: 'warning', showCancelButton: true, confirmButtonColor: '#ef4444', cancelButtonColor: '#6b7280', confirmButtonText: 'Hapus!', cancelButtonText: 'Batal', background: document.documentElement.classList.contains('dark') ? '#1f2937' : '#fff', color: document.documentElement.classList.contains('dark') ? '#f3f4f6' : '#111827' }).then(r => { if (r.isConfirmed) e.target.closest('form').submit(); });
-            return false;
+        function secureDeletePad(value) {
+            return String(Math.max(0, Math.floor(Number(value) || 0))).padStart(2, '0');
+        }
+
+        function secureDeleteFormatDuration(seconds) {
+            const safe = Math.max(0, Math.ceil(Number(seconds) || 0));
+            return `${secureDeletePad(safe / 3600)}:${secureDeletePad((safe % 3600) / 60)}:${secureDeletePad(safe % 60)}`;
+        }
+
+        function secureDeleteFormatDateTime(date) {
+            return new Intl.DateTimeFormat('id-ID', {
+                weekday: 'long',
+                day: '2-digit',
+                month: 'long',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: false,
+                timeZone: 'Asia/Jakarta'
+            }).format(date).replace(/\./g, ':');
+        }
+
+        function secureDeleteEscapeHtml(value) {
+            return String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+        }
+
+        function showSecureDeleteLockCountdown(message, retryAfter, lockedUntil = null) {
+            const targetTime = lockedUntil ? new Date(lockedUntil).getTime() : Date.now() + (Number(retryAfter || 900) * 1000);
+
+            Swal.fire({
+                icon: 'error',
+                title: 'Aksi dikunci sementara',
+                html: `
+                    <p class="text-sm leading-relaxed mb-4">${secureDeleteEscapeHtml(message || 'Terlalu banyak percobaan password salah.')}</p>
+                    <div id="secureDeleteCountdown" class="secure-delete-countdown">00:15:00</div>
+                    <p class="mt-3 text-xs font-semibold opacity-90">Waktu tersisa sebelum tombol hapus bisa dicoba lagi.</p>
+                    <div id="secureDeleteUnlockAt" class="secure-delete-time-pill mt-3"></div>
+                `,
+                confirmButtonText: 'Saya mengerti',
+                confirmButtonColor: '#ef4444',
+                customClass: { popup: 'secure-delete-popup' },
+                didOpen: () => {
+                    const countdown = document.getElementById('secureDeleteCountdown');
+                    const unlockAt = document.getElementById('secureDeleteUnlockAt');
+                    const render = () => {
+                        const remaining = Math.max(0, Math.ceil((targetTime - Date.now()) / 1000));
+                        if (countdown) countdown.textContent = secureDeleteFormatDuration(remaining);
+                        if (unlockAt) unlockAt.textContent = `Bisa dicoba lagi: ${secureDeleteFormatDateTime(new Date(targetTime))} WIB`;
+                    };
+                    render();
+                    const timer = setInterval(render, 1000);
+                    Swal.getPopup().dataset.secureDeleteTimer = timer;
+                },
+                willClose: () => {
+                    const timer = Swal.getPopup()?.dataset?.secureDeleteTimer;
+                    if (timer) clearInterval(Number(timer));
+                }
+            });
+        }
+
+        async function secureDeleteRecord(label, nomor, url) {
+            const csrf = document.querySelector('meta[name="csrf-token"]')?.content || '{{ csrf_token() }}';
+
+            const result = await Swal.fire({
+                icon: 'warning',
+                title: `Hapus ${label}?`,
+                html: `
+                    <div class="secure-delete-danger">
+                        <strong>Data: ${secureDeleteEscapeHtml(nomor)}</strong>
+                        <span>Data ${label} akan dihapus permanen. Relasi ke PPBJ akan disesuaikan bila data ini terhubung.</span>
+                    </div>
+                    <div class="secure-delete-warning">
+                        Masukkan <strong>password pembuat ${label}</strong>. Untuk data lama tanpa catatan pembuat, gunakan password user yang sedang login.
+                    </div>
+                    <label class="secure-delete-password-label" for="secureDeletePassword">Password pembuat ${label}</label>
+                    <div class="secure-delete-password-field">
+                        <input id="secureDeletePassword" type="password" class="swal2-input" placeholder="Masukkan password pembuat ${label}">
+                        <button type="button" id="secureDeleteToggle" class="secure-delete-toggle">Lihat</button>
+                    </div>
+                    <div class="secure-delete-lock-preview">Jika salah 3 kali, aksi hapus dikunci 15 menit.</div>
+                `,
+                showCancelButton: true,
+                confirmButtonText: `Ya, Hapus ${label}`,
+                cancelButtonText: 'Batal',
+                confirmButtonColor: '#ef4444',
+                cancelButtonColor: '#64748b',
+                focusConfirm: false,
+                customClass: { popup: 'secure-delete-popup' },
+                didOpen: () => {
+                    const input = document.getElementById('secureDeletePassword');
+                    const toggle = document.getElementById('secureDeleteToggle');
+                    input?.focus();
+                    toggle?.addEventListener('click', () => {
+                        input.type = input.type === 'password' ? 'text' : 'password';
+                        toggle.textContent = input.type === 'password' ? 'Lihat' : 'Sembunyikan';
+                    });
+                },
+                preConfirm: async () => {
+                    const password = document.getElementById('secureDeletePassword')?.value || '';
+                    if (!password.trim()) {
+                        Swal.showValidationMessage('Password wajib diisi.');
+                        return false;
+                    }
+
+                    try {
+                        const response = await fetch(url, {
+                            method: 'DELETE',
+                            headers: {
+                                'X-CSRF-TOKEN': csrf,
+                                'Accept': 'application/json',
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({ creator_password: password })
+                        });
+                        const data = await response.json().catch(() => ({}));
+
+                        if (response.status === 429 && data.locked) {
+                            return { locked: true, data };
+                        }
+
+                        if (!response.ok) {
+                            Swal.showValidationMessage(data.message || `Gagal menghapus ${label}.`);
+                            return false;
+                        }
+
+                        return { ok: true, data };
+                    } catch (error) {
+                        Swal.showValidationMessage(`Gagal menghapus ${label}. Periksa koneksi lalu coba lagi.`);
+                        return false;
+                    }
+                },
+                allowOutsideClick: () => !Swal.isLoading()
+            });
+
+            if (!result.isConfirmed || !result.value) return;
+
+            if (result.value.locked) {
+                showSecureDeleteLockCountdown(result.value.data.message, result.value.data.retry_after, result.value.data.locked_until);
+                return;
+            }
+
+            await Swal.fire({
+                icon: 'success',
+                title: `${label} dihapus`,
+                text: result.value.data?.message || `Data ${label} berhasil dihapus.`,
+                timer: 1400,
+                showConfirmButton: false,
+                customClass: { popup: 'secure-delete-popup' }
+            });
+            window.location.reload();
         }
 
         // ════════════════════════════════════════════════════════════

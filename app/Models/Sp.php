@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use App\Models\User;
 
 class Sp extends Model
 {
@@ -10,6 +11,7 @@ class Sp extends Model
         'nomor_sp',
         'sequence_number',
         'numbering_mode',
+        'created_by_user_id',
         'tanggal_sp',
         'nilai_sp',
         'nomor_pr',
@@ -154,5 +156,10 @@ class Sp extends Model
     public function items()
     {
         return $this->hasMany(SpItem::class)->orderBy('urutan');
+    }
+
+    public function createdBy()
+    {
+        return $this->belongsTo(User::class, 'created_by_user_id');
     }
 }

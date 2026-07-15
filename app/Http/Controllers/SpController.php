@@ -13,6 +13,8 @@ use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Carbon;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Str;
 use App\Traits\HasPresence;
@@ -574,6 +576,7 @@ class SpController extends Controller
                 'nomor_sp' => $request->nomor_sp,
                 'sequence_number' => $seq,
                 'numbering_mode' => $oracleMode ? 'oracle' : 'auto',
+                'created_by_user_id' => auth()->id(),
                 'tanggal_sp' => $request->tanggal_sp ?: null,
                 'nilai_sp' => $nilaiSp,
                 'nomor_pr' => $nomorPr,
@@ -799,9 +802,85 @@ class SpController extends Controller
     // =========================================================
     // DESTROY
     // =========================================================
-    public function destroy(Sp $sp)
+    public function destroy(Request $request, Sp $sp)
     {
-        DB::transaction(function () use ($sp) {
+        $request->validate([
+            'creator_password' => ['required', 'string', 'min:1', 'max:255'],
+        ], [
+            'creator_password.required' => 'Password pembuat SP wajib diisi untuk menghapus data.',
+        ]);
+
+        $user = $request->user();
+        $sp->loadMissing('createdBy');
+        $verifier = $sp->createdBy ?: $user;
+
+        if (!$verifier) {
+            return response()->json([
+                'message' => 'User verifikasi tidak ditemukan, sehingga password tidak bisa dicek.',
+            ], 422);
+        }
+
+        $currentUserId = $user?->id ?: 'guest';
+        $ipHash = sha1((string) $request->ip());
+        $attemptKey = "sp_delete_password_attempts:{$sp->id}:{$verifier->id}:{$currentUserId}:{$ipHash}";
+        $lockKey = "sp_delete_password_lock:{$sp->id}:{$verifier->id}:{$currentUserId}:{$ipHash}";
+
+        if ($lockedUntil = Cache::get($lockKey)) {
+            $lockedUntilAt = Carbon::parse($lockedUntil);
+            $retryAfter = (int) ceil(max(1, now()->diffInSeconds($lockedUntilAt, false)));
+
+            return response()->json([
+                'message' => 'Terlalu banyak percobaan password salah. Silakan coba lagi sekitar ' . ceil($retryAfter / 60) . ' menit lagi.',
+                'locked' => true,
+                'retry_after' => $retryAfter,
+                'locked_until' => $lockedUntilAt->toIso8601String(),
+            ], 429);
+        }
+
+        if (!Hash::check((string) $request->creator_password, (string) $verifier->password)) {
+            $attempts = ((int) Cache::get($attemptKey, 0)) + 1;
+            $remainingAttempts = max(0, 3 - $attempts);
+            Cache::put($attemptKey, $attempts, now()->addMinutes(15));
+
+            if ($attempts >= 3) {
+                $lockedUntil = now()->addMinutes(15);
+                Cache::put($lockKey, $lockedUntil->toIso8601String(), $lockedUntil);
+                Cache::forget($attemptKey);
+
+                return response()->json([
+                    'message' => 'Password salah 3 kali. Aksi hapus SP dikunci selama 15 menit.',
+                    'locked' => true,
+                    'retry_after' => 15 * 60,
+                    'locked_until' => $lockedUntil->toIso8601String(),
+                ], 429);
+            }
+
+            return response()->json([
+                'message' => 'Password pembuat SP tidak sesuai. Sisa percobaan: ' . $remainingAttempts . '.',
+                'attempts_remaining' => $remainingAttempts,
+            ], 422);
+        }
+
+        Cache::forget($attemptKey);
+        Cache::forget($lockKey);
+
+        DB::transaction(function () use ($sp, $user, $verifier, $request) {
+            \App\Models\ActivityLog::create([
+                'user_id' => $user?->id,
+                'model_type' => Sp::class,
+                'model_id' => $sp->id,
+                'action' => 'deleted',
+                'description' => 'SP dihapus: ' . ($sp->nomor_sp ?: 'SP-' . $sp->id),
+                'changes' => [
+                    'nomor_sp' => $sp->nomor_sp,
+                    'nomor_pr' => $sp->nomor_pr,
+                    'nilai_sp' => $sp->nilai_sp,
+                    'deleted_by' => $user?->email,
+                    'verifier_email' => $verifier->email,
+                    'ip' => $request->ip(),
+                ],
+            ]);
+
             if ($sp->nomor_pr) {
                 $ppbj = Ppbj::where('ppbj_no', $sp->nomor_pr)
                     ->where('awarding_sp', $sp->nomor_sp)
@@ -826,7 +905,10 @@ class SpController extends Controller
             Cache::forget('sp:suggest');
         });
 
-        return redirect()->route('sp.index')->with('success', 'Data SP berhasil dihapus!');
+        return response()->json([
+            'ok' => true,
+            'message' => 'Data SP berhasil dihapus.',
+        ]);
     }
 
     // =========================================================
