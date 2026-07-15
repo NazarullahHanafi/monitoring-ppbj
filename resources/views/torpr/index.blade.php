@@ -576,7 +576,7 @@
         .torpr-lock-countdown {
             margin: .85rem auto .25rem;
             width: fit-content;
-            min-width: 9.5rem;
+            min-width: 11.5rem;
             border-radius: 1rem;
             background: linear-gradient(135deg, #fee2e2, #ffedd5);
             border: 1px solid #fca5a5;
@@ -587,6 +587,21 @@
             padding: .75rem 1.1rem;
             text-align: center;
             box-shadow: 0 14px 35px rgba(239, 68, 68, .18);
+        }
+
+        .torpr-time-pill {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: .35rem;
+            margin-top: .35rem;
+            border-radius: 999px;
+            background: #eff6ff;
+            border: 1px solid #bfdbfe;
+            color: #1e3a8a;
+            font-size: .76rem;
+            font-weight: 900;
+            padding: .4rem .75rem;
         }
 
         .torpr-lock-caption {
@@ -603,6 +618,13 @@
             border-color: #fb7185 !important;
             color: #ffffff !important;
             box-shadow: 0 14px 35px rgba(248, 113, 113, .2);
+        }
+
+        html.dark .torpr-time-pill,
+        .dark .torpr-time-pill {
+            background: #172554 !important;
+            border-color: #3b82f6 !important;
+            color: #dbeafe !important;
         }
 
         html.dark .torpr-lock-caption,
@@ -3919,17 +3941,37 @@
                 submitTorpr(id ? `/torpr/${id}` : '/torpr', id ? 'PUT' : 'POST', payload);
             });
 
+            function padTorprTime(value) {
+                return String(Math.max(0, Math.floor(Number(value) || 0))).padStart(2, '0');
+            }
+
             function formatTorprLockTime(seconds) {
-                const safeSeconds = Math.max(0, Number(seconds) || 0);
-                const minutes = Math.floor(safeSeconds / 60);
+                const safeSeconds = Math.max(0, Math.ceil(Number(seconds) || 0));
+                const hours = Math.floor(safeSeconds / 3600);
+                const minutes = Math.floor((safeSeconds % 3600) / 60);
                 const remainSeconds = safeSeconds % 60;
 
-                return `${String(minutes).padStart(2, '0')}:${String(remainSeconds).padStart(2, '0')}`;
+                return `${padTorprTime(hours)}:${padTorprTime(minutes)}:${padTorprTime(remainSeconds)}`;
+            }
+
+            function formatTorprFullDateTime(date = new Date()) {
+                return new Intl.DateTimeFormat('id-ID', {
+                    weekday: 'long',
+                    day: '2-digit',
+                    month: 'long',
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                    hour12: false,
+                    timeZone: 'Asia/Jakarta',
+                }).format(date);
             }
 
             function showTorprDeleteLockCountdown(message, retryAfter) {
-                let remainingSeconds = Math.max(1, Number(retryAfter) || (15 * 60));
+                let remainingSeconds = Math.max(1, Math.ceil(Number(retryAfter) || (15 * 60)));
                 let timer = null;
+                const canRetryAt = new Date(Date.now() + (remainingSeconds * 1000));
 
                 Swal.fire({
                     icon: 'error',
@@ -3941,6 +3983,9 @@
                         <div id="torprLockCountdown" class="torpr-lock-countdown">${formatTorprLockTime(remainingSeconds)}</div>
                         <div class="torpr-lock-caption">
                             Waktu tersisa sebelum tombol hapus bisa dicoba lagi.
+                        </div>
+                        <div class="torpr-time-pill">
+                            Bisa dicoba lagi: ${escapeHtml(formatTorprFullDateTime(canRetryAt))} WIB
                         </div>
                     `,
                     confirmButtonText: 'Saya mengerti',
@@ -3991,6 +4036,9 @@
                             <div class="torpr-delete-warning">
                                 Masukkan <strong>password user pembuat PR</strong>. Jika user lain ingin menghapus,
                                 user tersebut tetap harus mengetahui password pembuat PR.
+                            </div>
+                            <div class="torpr-time-pill">
+                                Waktu verifikasi: ${escapeHtml(formatTorprFullDateTime())} WIB
                             </div>
                             <div class="torpr-password-wrap">
                                 <label for="torprCreatorPassword" class="torpr-password-label">Password pembuat PR</label>
