@@ -2503,14 +2503,16 @@
                                                 </svg>
                                             </button>
                                         @else
-                                            <span
-                                                class="p-1.5 rounded-lg text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-800/80 cursor-not-allowed"
-                                                title="Edit hanya bisa dilakukan oleh pembuat SPPH atau user yang cocok dengan PIC">
+                                            <button type="button"
+                                                onclick="showLockedEditInfo('SPPH', @js($s->nomor_spph ?? ('SPPH-' . $s->id)), @js($s->pic ?? '-'))"
+                                                class="p-1.5 rounded-lg text-slate-400 bg-slate-100 hover:bg-slate-200 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100 shadow-sm transition-colors"
+                                                title="Edit hanya bisa dilakukan oleh pembuat SPPH atau user yang cocok dengan PIC"
+                                                aria-label="Info edit terkunci">
                                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                                         d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                                                 </svg>
-                                            </span>
+                                            </button>
                                         @endif
                                         <button type="button"
                                             onclick="secureDeleteRecord('SPPH', @js($s->nomor_spph ?? ('SPPH-' . $s->id)), @js(route('spph.destroy', $s)))"
@@ -3588,6 +3590,36 @@
                 willClose: () => {
                     const timer = Swal.getPopup()?.dataset?.secureDeleteTimer;
                     if (timer) clearInterval(Number(timer));
+                }
+            });
+        }
+
+        function showLockedEditInfo(label, nomor, pic) {
+            Swal.fire({
+                icon: 'info',
+                title: `Edit ${label} terkunci`,
+                html: `
+                    <div class="text-left space-y-3">
+                        <div class="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-blue-900">
+                            <div class="text-xs font-bold uppercase tracking-wide text-blue-600">Data</div>
+                            <div class="mt-1 font-semibold">${secureDeleteEscapeHtml(nomor || '-')}</div>
+                        </div>
+                        <div class="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-amber-900">
+                            <div class="text-xs font-bold uppercase tracking-wide text-amber-600">PIC / Pemilik data</div>
+                            <div class="mt-1 font-semibold">${secureDeleteEscapeHtml(pic || '-')}</div>
+                        </div>
+                        <p class="text-sm leading-relaxed text-slate-600">
+                            Untuk menjaga audit trail, edit hanya bisa dilakukan oleh pembuat data
+                            atau user yang identitasnya cocok dengan PIC. Jika perlu perubahan,
+                            follow up ke PIC/pembuat data agar riwayat tetap aman.
+                        </p>
+                    </div>
+                `,
+                confirmButtonText: 'Mengerti',
+                confirmButtonColor: '#2563eb',
+                customClass: {
+                    popup: 'rounded-3xl',
+                    confirmButton: 'rounded-xl px-5 py-2.5 font-bold'
                 }
             });
         }
