@@ -2335,13 +2335,10 @@
                                         @else
                                             <button type="button"
                                                 onclick="showLockedEditInfo('SP', @js($s->nomor_sp ?? ('SP-' . $s->id)), @js($s->pic ?? '-'))"
-                                                class="p-1.5 rounded-lg text-slate-400 bg-slate-100 hover:bg-slate-200 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100 shadow-sm transition-colors"
+                                                class="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 text-slate-500 hover:bg-slate-200 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-100 shadow-sm transition-colors"
                                                 title="Edit hanya bisa dilakukan oleh pembuat SP atau user yang cocok dengan PIC"
                                                 aria-label="Info edit terkunci">
-                                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                        d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                                                </svg>
+                                                <span class="text-[13px] leading-none" aria-hidden="true">🔒</span>
                                             </button>
                                         @endif
                                         <button type="button"
@@ -3532,19 +3529,23 @@
             });
         }
 
-        function showLockedEditInfo(label, nomor, pic) {
-            Swal.fire({
+        async function showLockedEditInfo(label, nomor, pic) {
+            const safeNomor = nomor || '-';
+            const safePic = pic || '-';
+            const followUpText = `Mohon bantuan update ${label} ${safeNomor}. Data ini terkunci karena hanya pembuat/PIC (${safePic}) yang bisa melakukan edit demi menjaga audit trail.`;
+
+            const result = await Swal.fire({
                 icon: 'info',
                 title: `Edit ${label} terkunci`,
                 html: `
                     <div class="text-left space-y-3">
                         <div class="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-blue-900">
                             <div class="text-xs font-bold uppercase tracking-wide text-blue-600">Data</div>
-                            <div class="mt-1 font-semibold">${secureDeleteEscapeHtml(nomor || '-')}</div>
+                            <div class="mt-1 font-semibold">${secureDeleteEscapeHtml(safeNomor)}</div>
                         </div>
                         <div class="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-amber-900">
                             <div class="text-xs font-bold uppercase tracking-wide text-amber-600">PIC / Pemilik data</div>
-                            <div class="mt-1 font-semibold">${secureDeleteEscapeHtml(pic || '-')}</div>
+                            <div class="mt-1 font-semibold">${secureDeleteEscapeHtml(safePic)}</div>
                         </div>
                         <p class="text-sm leading-relaxed text-slate-600">
                             Untuk menjaga audit trail, edit hanya bisa dilakukan oleh pembuat data
@@ -3554,12 +3555,28 @@
                     </div>
                 `,
                 confirmButtonText: 'Mengerti',
+                showDenyButton: true,
+                denyButtonText: 'Copy info follow up',
                 confirmButtonColor: '#2563eb',
+                denyButtonColor: '#0f172a',
                 customClass: {
                     popup: 'rounded-3xl',
-                    confirmButton: 'rounded-xl px-5 py-2.5 font-bold'
+                    confirmButton: 'rounded-xl px-5 py-2.5 font-bold',
+                    denyButton: 'rounded-xl px-5 py-2.5 font-bold'
                 }
             });
+
+            if (result.isDenied) {
+                await navigator.clipboard.writeText(followUpText);
+                Swal.fire({
+                    toast: true,
+                    position: 'top-end',
+                    icon: 'success',
+                    title: 'Info follow up disalin',
+                    showConfirmButton: false,
+                    timer: 1800
+                });
+            }
         }
 
         async function secureDeleteRecord(label, nomor, url) {
