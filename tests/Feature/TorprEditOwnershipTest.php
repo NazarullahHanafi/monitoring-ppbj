@@ -126,4 +126,38 @@ class TorprEditOwnershipTest extends TestCase
             'tujuan_pengadaan' => 'Diedit langsung oleh superadmin',
         ]);
     }
+
+    public function test_edit_request_requires_reason(): void
+    {
+        $creator = User::factory()->create([
+            'department' => 'operasional',
+            'role' => 'user',
+        ]);
+
+        $requester = User::factory()->create([
+            'department' => 'operasional',
+            'role' => 'user',
+        ]);
+
+        $torpr = Torpr::create([
+            'created_by_user_id' => $creator->id,
+            'nomor_pr' => 'PKB/PR-26/CON/0991',
+            'tujuan_pengadaan' => 'Draft yang perlu alasan request',
+            'portofolio' => 'IT - FERS',
+            'tanggal_pr' => now(),
+            'jumlah_pr' => 1500000,
+        ]);
+
+        $this->actingAs($requester)
+            ->postJson(route('torpr.requestEdit', $torpr->id), [
+                'reason' => '',
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('reason');
+
+        $this->assertDatabaseMissing('torpr_edit_requests', [
+            'torpr_id' => $torpr->id,
+            'requester_user_id' => $requester->id,
+        ]);
+    }
 }

@@ -442,6 +442,22 @@
             box-shadow: 0 16px 34px rgba(15, 23, 42, .16);
         }
 
+        .torpr-request-count-badge {
+            display: inline-flex;
+            min-width: 1.35rem;
+            height: 1.35rem;
+            align-items: center;
+            justify-content: center;
+            border-radius: 999px;
+            background: #dc2626;
+            color: #ffffff;
+            padding: 0 .38rem;
+            font-size: .72rem;
+            font-weight: 950;
+            line-height: 1;
+            box-shadow: 0 10px 18px rgba(220, 38, 38, .28);
+        }
+
         html.dark .torpr-request-center-button,
         .dark .torpr-request-center-button {
             background: #1e293b !important;
@@ -452,6 +468,12 @@
         html.dark .torpr-request-center-button:hover,
         .dark .torpr-request-center-button:hover {
             background: #334155 !important;
+        }
+
+        html.dark .torpr-request-count-badge,
+        .dark .torpr-request-count-badge {
+            background: #ef4444 !important;
+            color: #ffffff !important;
         }
 
         .torpr-edit-request-card {
@@ -482,6 +504,14 @@
             font-size: .8rem;
             line-height: 1.6;
             font-weight: 650;
+        }
+
+        .torpr-edit-request-help {
+            margin: .25rem 0 .55rem;
+            color: #475569;
+            font-size: .76rem;
+            font-weight: 800;
+            line-height: 1.55;
         }
 
         .torpr-edit-request-reason {
@@ -519,6 +549,11 @@
             background: #0f172a !important;
             border-color: #475569 !important;
             color: #f8fafc !important;
+        }
+
+        html.dark .torpr-edit-request-help,
+        .dark .torpr-edit-request-help {
+            color: #cbd5e1 !important;
         }
 
         html.dark .torpr-edit-request-reason,
@@ -1084,11 +1119,11 @@
 
         <div class="flex flex-col sm:flex-row gap-2 sm:items-center">
             <button type="button" onclick="openTorprEditRequestCenter()"
-                class="torpr-request-center-button group relative active:scale-95">
+                class="torpr-request-center-button group active:scale-95">
                 <span class="text-lg">🔐</span>
                 <span>Req Edit</span>
                 @if(($incomingEditRequests->count() + $outgoingEditRequests->where('status', 'pending')->count()) > 0)
-                    <span class="absolute -right-2 -top-2 inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-red-600 px-1.5 text-xs font-black text-white shadow-lg">
+                    <span class="torpr-request-count-badge" aria-label="Jumlah request edit aktif">
                         {{ $incomingEditRequests->count() + $outgoingEditRequests->where('status', 'pending')->count() }}
                     </span>
                 @endif
@@ -4454,8 +4489,11 @@
                             </div>
                         </div>
                         <div class="torpr-edit-request-template">
-                            <strong>Alasan request edit</strong><br>
-                            <textarea id="torprEditRequestReason" class="torpr-edit-request-reason" maxlength="500" placeholder="Contoh: Mohon izin edit karena nilai PR perlu disesuaikan dengan dokumen terbaru."></textarea>
+                            <strong>Alasan request edit <span class="text-red-500">*</span></strong><br>
+                            <p class="torpr-edit-request-help">
+                                Wajib diisi minimal 10 karakter agar pembuat PR tahu bagian mana yang perlu dibuka untuk diedit.
+                            </p>
+                            <textarea id="torprEditRequestReason" class="torpr-edit-request-reason" minlength="10" maxlength="500" placeholder="Contoh: Mohon izin edit karena nilai PR perlu disesuaikan dengan dokumen terbaru."></textarea>
                         </div>
                     `,
                     showCancelButton: true,
@@ -4472,6 +4510,10 @@
                     },
                     preConfirm: async () => {
                         const reason = document.getElementById('torprEditRequestReason')?.value?.trim() || '';
+                        if (reason.length < 10) {
+                            Swal.showValidationMessage('Alasan request edit wajib diisi minimal 10 karakter.');
+                            return false;
+                        }
 
                         try {
                             const response = await fetch(`/torpr/${id}/request-edit`, {
@@ -4488,7 +4530,10 @@
                             const data = await response.json().catch(() => ({}));
 
                             if (!response.ok) {
-                                Swal.showValidationMessage(data.message || 'Request edit gagal dikirim.');
+                                const firstError = data.errors
+                                    ? Object.values(data.errors).flat()[0]
+                                    : null;
+                                Swal.showValidationMessage(firstError || data.message || 'Request edit gagal dikirim.');
                                 return false;
                             }
 

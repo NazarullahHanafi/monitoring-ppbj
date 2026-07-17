@@ -245,7 +245,11 @@ class TorprController extends Controller
     public function requestEditAccess(Request $request, $id)
     {
         $request->validate([
-            'reason' => ['nullable', 'string', 'max:500'],
+            'reason' => ['required', 'string', 'min:10', 'max:500'],
+        ], [
+            'reason.required' => 'Alasan request edit wajib diisi.',
+            'reason.min' => 'Alasan request edit minimal 10 karakter.',
+            'reason.max' => 'Alasan request edit maksimal 500 karakter.',
         ]);
 
         $user = $request->user();
@@ -299,7 +303,7 @@ class TorprController extends Controller
             'requester_user_id' => $user->id,
             'owner_user_id' => $torpr->created_by_user_id,
             'status' => 'pending',
-            'reason' => $request->input('reason') ?: 'Request edit data PR.',
+            'reason' => $request->input('reason'),
         ]);
 
         $this->logActivity($torpr, 'edit_requested', "Request edit dikirim oleh {$user->name}", [
