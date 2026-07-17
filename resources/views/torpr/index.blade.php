@@ -378,7 +378,80 @@
         }
 
         .torpr-action-btn.is-locked {
-            border: 1px solid rgba(148, 163, 184, .42);
+            background: #334155 !important;
+            border: 1px solid rgba(148, 163, 184, .58) !important;
+            color: #ffffff !important;
+            box-shadow: 0 10px 22px rgba(51, 65, 85, .18);
+        }
+
+        .torpr-action-btn.is-locked:hover {
+            background: #1e293b !important;
+            color: #ffffff !important;
+        }
+
+        .torpr-action-btn.is-pending {
+            background: #fef3c7 !important;
+            border: 1px solid #f59e0b !important;
+            color: #92400e !important;
+        }
+
+        .torpr-action-btn.is-pending:hover {
+            background: #fde68a !important;
+            color: #78350f !important;
+        }
+
+        html.dark .torpr-action-btn.is-locked,
+        .dark .torpr-action-btn.is-locked {
+            background: #f8fafc !important;
+            border-color: #e2e8f0 !important;
+            color: #0f172a !important;
+        }
+
+        html.dark .torpr-action-btn.is-locked:hover,
+        .dark .torpr-action-btn.is-locked:hover {
+            background: #e2e8f0 !important;
+            color: #020617 !important;
+        }
+
+        html.dark .torpr-action-btn.is-pending,
+        .dark .torpr-action-btn.is-pending {
+            background: #78350f !important;
+            border-color: #fbbf24 !important;
+            color: #fff7ed !important;
+        }
+
+        .torpr-request-center-button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: .55rem;
+            min-height: 2.65rem;
+            border-radius: .75rem;
+            border: 1px solid #cbd5e1;
+            background: #ffffff;
+            color: #0f172a;
+            padding: .55rem 1rem;
+            font-weight: 900;
+            box-shadow: 0 12px 28px rgba(15, 23, 42, .1);
+            transition: transform .15s ease, background .15s ease, box-shadow .15s ease;
+        }
+
+        .torpr-request-center-button:hover {
+            background: #f8fafc;
+            transform: translateY(-1px);
+            box-shadow: 0 16px 34px rgba(15, 23, 42, .16);
+        }
+
+        html.dark .torpr-request-center-button,
+        .dark .torpr-request-center-button {
+            background: #1e293b !important;
+            border-color: #475569 !important;
+            color: #ffffff !important;
+        }
+
+        html.dark .torpr-request-center-button:hover,
+        .dark .torpr-request-center-button:hover {
+            background: #334155 !important;
         }
 
         .torpr-edit-request-card {
@@ -474,6 +547,179 @@
             background: #111827 !important;
             border-color: #334155 !important;
             color: #f8fafc !important;
+        }
+
+        .torpr-request-center-note {
+            border-radius: 1.1rem;
+            border: 1px solid #bfdbfe;
+            background: #dbeafe;
+            color: #172554;
+            padding: .95rem;
+            font-size: .86rem;
+            font-weight: 800;
+            line-height: 1.65;
+        }
+
+        .torpr-request-center-title {
+            margin-bottom: .55rem;
+            color: #0f172a;
+            font-size: .9rem;
+            font-weight: 950;
+        }
+
+        .torpr-request-center-empty {
+            border-radius: 1rem;
+            border: 1px solid #cbd5e1;
+            background: #f8fafc;
+            color: #334155;
+            padding: .95rem;
+            font-size: .86rem;
+            font-weight: 800;
+        }
+
+        .torpr-request-center-pr {
+            color: #0f172a;
+            font-weight: 950;
+        }
+
+        .torpr-request-center-sub {
+            margin-top: .25rem;
+            color: #475569;
+            font-size: .78rem;
+            font-weight: 800;
+        }
+
+        .torpr-request-center-meta {
+            margin-top: .65rem;
+            color: #334155;
+            font-size: .75rem;
+            line-height: 1.55;
+            font-weight: 800;
+        }
+
+        .torpr-request-center-reason {
+            margin-top: .7rem;
+            border-radius: .85rem;
+            border: 1px solid #bfdbfe;
+            background: #eff6ff;
+            color: #1e3a8a;
+            padding: .75rem;
+            font-size: .78rem;
+            font-weight: 800;
+            line-height: 1.55;
+        }
+
+        .torpr-request-center-actions {
+            display: flex;
+            flex-shrink: 0;
+            gap: .5rem;
+        }
+
+        .torpr-request-center-actions button {
+            border-radius: .75rem;
+            padding: .55rem .85rem;
+            color: #ffffff;
+            font-size: .75rem;
+            font-weight: 950;
+            transition: transform .15s ease, filter .15s ease;
+        }
+
+        .torpr-request-center-actions button:hover {
+            transform: translateY(-1px);
+            filter: brightness(1.04);
+        }
+
+        .torpr-request-center-approve {
+            background: #16a34a;
+        }
+
+        .torpr-request-center-reject {
+            background: #dc2626;
+        }
+
+        .torpr-request-status {
+            display: inline-flex;
+            height: fit-content;
+            align-items: center;
+            border-radius: 999px;
+            padding: .35rem .8rem;
+            font-size: .72rem;
+            font-weight: 950;
+            text-transform: uppercase;
+        }
+
+        .torpr-request-status.is-approved {
+            background: #dcfce7;
+            color: #166534;
+            border: 1px solid #bbf7d0;
+        }
+
+        .torpr-request-status.is-rejected {
+            background: #fee2e2;
+            color: #991b1b;
+            border: 1px solid #fecaca;
+        }
+
+        .torpr-request-status.is-pending {
+            background: #fef3c7;
+            color: #92400e;
+            border: 1px solid #fde68a;
+        }
+
+        html.dark .torpr-request-center-note,
+        .dark .torpr-request-center-note {
+            background: #172554 !important;
+            border-color: #60a5fa !important;
+            color: #dbeafe !important;
+        }
+
+        html.dark .torpr-request-center-title,
+        .dark .torpr-request-center-title,
+        html.dark .torpr-request-center-pr,
+        .dark .torpr-request-center-pr {
+            color: #ffffff !important;
+        }
+
+        html.dark .torpr-request-center-empty,
+        .dark .torpr-request-center-empty {
+            background: #0f172a !important;
+            border-color: #334155 !important;
+            color: #e2e8f0 !important;
+        }
+
+        html.dark .torpr-request-center-sub,
+        .dark .torpr-request-center-sub,
+        html.dark .torpr-request-center-meta,
+        .dark .torpr-request-center-meta {
+            color: #cbd5e1 !important;
+        }
+
+        html.dark .torpr-request-center-reason,
+        .dark .torpr-request-center-reason {
+            background: #172554 !important;
+            border-color: #3b82f6 !important;
+            color: #eff6ff !important;
+        }
+
+        html.dark .torpr-request-status.is-approved,
+        .dark .torpr-request-status.is-approved {
+            background: #064e3b !important;
+            color: #d1fae5 !important;
+            border-color: #10b981 !important;
+        }
+
+        html.dark .torpr-request-status.is-rejected,
+        .dark .torpr-request-status.is-rejected {
+            background: #7f1d1d !important;
+            color: #fee2e2 !important;
+            border-color: #ef4444 !important;
+        }
+
+        html.dark .torpr-request-status.is-pending,
+        .dark .torpr-request-status.is-pending {
+            background: #78350f !important;
+            color: #fff7ed !important;
+            border-color: #f59e0b !important;
         }
 
         .torpr-delete-popup {
@@ -838,11 +1084,7 @@
 
         <div class="flex flex-col sm:flex-row gap-2 sm:items-center">
             <button type="button" onclick="openTorprEditRequestCenter()"
-                class="group relative inline-flex items-center gap-2 rounded-lg
-                                                                                                                                                                                                                                                                                                              bg-white text-slate-800 ring-1 ring-slate-200
-                                                                                                                                                                                                                                                                                                              hover:bg-slate-50 hover:shadow-md
-                                                                                                                                                                                                                                                                                                              dark:bg-slate-800 dark:text-white dark:ring-slate-700 dark:hover:bg-slate-700
-                                                                                                                                                                                                                                                                                                              px-4 py-2 font-semibold transition-all active:scale-95">
+                class="torpr-request-center-button group relative active:scale-95">
                 <span class="text-lg">🔐</span>
                 <span>Req Edit</span>
                 @if(($incomingEditRequests->count() + $outgoingEditRequests->where('status', 'pending')->count()) > 0)
@@ -1364,7 +1606,7 @@
                                             @elseif($hasPendingEditRequest)
                                                 <button type="button" onclick="openTorprEditRequestCenter()"
                                                     title="Request edit untuk PR ini masih menunggu pembuat PR."
-                                                    class="torpr-action-btn is-locked bg-blue-100 text-blue-800 ring-1 ring-blue-200 hover:bg-blue-200 dark:bg-blue-900/50 dark:text-blue-100 dark:ring-blue-500/50 dark:hover:bg-blue-800">
+                                                    class="torpr-action-btn is-pending">
                                                     <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                                             d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -1375,7 +1617,7 @@
                                                 <button type="button"
                                                     onclick="requestTorprEditAccess({{ $r->id }}, @js($r->nomor_pr ?? ('PR-' . $r->id)), @js($creatorName), @js($creatorContact))"
                                                     title="Edit terkunci. Request izin edit ke pembuat PR."
-                                                    class="torpr-action-btn is-locked bg-slate-700 text-white shadow-sm shadow-slate-500/20 hover:bg-slate-800 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-100">
+                                                    class="torpr-action-btn is-locked">
                                                     <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                                             d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2h-1V8a5 5 0 10-10 0v3H6a2 2 0 00-2 2v6a2 2 0 002 2zm3-10V8a3 3 0 116 0v3" />
@@ -4274,9 +4516,9 @@
             }
 
             function statusBadgeClass(status) {
-                if (status === 'approved') return 'bg-emerald-100 text-emerald-800 ring-emerald-200 dark:bg-emerald-900/50 dark:text-emerald-100 dark:ring-emerald-600/50';
-                if (status === 'rejected') return 'bg-red-100 text-red-800 ring-red-200 dark:bg-red-900/50 dark:text-red-100 dark:ring-red-600/50';
-                return 'bg-amber-100 text-amber-800 ring-amber-200 dark:bg-amber-900/50 dark:text-amber-100 dark:ring-amber-600/50';
+                if (status === 'approved') return 'is-approved';
+                if (status === 'rejected') return 'is-rejected';
+                return 'is-pending';
             }
 
             window.reviewTorprEditRequest = async function (id, decision) {
@@ -4340,62 +4582,62 @@
                 const incomingHtml = torprIncomingEditRequests.length
                     ? torprIncomingEditRequests.map(req => `
                         <div class="torpr-request-center-row">
-                            <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                            <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                                 <div>
-                                    <div class="font-black text-slate-950 dark:text-white">${escapeHtml(req.nomor_pr)}</div>
-                                    <div class="mt-1 text-xs font-bold text-slate-600 dark:text-slate-300">${escapeHtml(req.tujuan)}</div>
-                                    <div class="mt-2 text-xs text-slate-700 dark:text-slate-200">
+                                    <div class="torpr-request-center-pr">${escapeHtml(req.nomor_pr)}</div>
+                                    <div class="torpr-request-center-sub">${escapeHtml(req.tujuan)}</div>
+                                    <div class="torpr-request-center-meta">
                                         Requester: <strong>${escapeHtml(req.requester)}</strong> (${escapeHtml(req.email)})<br>
                                         Masuk: ${escapeHtml(req.created_at)}
                                     </div>
-                                    <div class="mt-2 rounded-xl bg-blue-50 p-3 text-xs font-bold text-blue-900 ring-1 ring-blue-100 dark:bg-blue-950/60 dark:text-blue-100 dark:ring-blue-700/50">
+                                    <div class="torpr-request-center-reason">
                                         ${escapeHtml(req.reason)}
                                     </div>
                                 </div>
-                                <div class="flex shrink-0 gap-2">
-                                    <button type="button" onclick="reviewTorprEditRequest(${req.id}, 'approve')" class="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-black text-white hover:bg-emerald-700">Setujui</button>
-                                    <button type="button" onclick="reviewTorprEditRequest(${req.id}, 'reject')" class="rounded-lg bg-red-600 px-3 py-2 text-xs font-black text-white hover:bg-red-700">Tolak</button>
+                                <div class="torpr-request-center-actions">
+                                    <button type="button" onclick="reviewTorprEditRequest(${req.id}, 'approve')" class="torpr-request-center-approve">Setujui</button>
+                                    <button type="button" onclick="reviewTorprEditRequest(${req.id}, 'reject')" class="torpr-request-center-reject">Tolak</button>
                                 </div>
                             </div>
                         </div>
                     `).join('')
-                    : '<div class="rounded-xl bg-slate-50 p-4 text-sm font-bold text-slate-600 ring-1 ring-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:ring-slate-700">Belum ada request edit masuk.</div>';
+                    : '<div class="torpr-request-center-empty">Belum ada request edit masuk.</div>';
 
                 const outgoingHtml = torprOutgoingEditRequests.length
                     ? torprOutgoingEditRequests.map(req => `
                         <div class="torpr-request-center-row">
-                            <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                            <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                                 <div>
-                                    <div class="font-black text-slate-950 dark:text-white">${escapeHtml(req.nomor_pr)}</div>
-                                    <div class="mt-1 text-xs font-bold text-slate-600 dark:text-slate-300">${escapeHtml(req.tujuan)}</div>
-                                    <div class="mt-2 text-xs text-slate-700 dark:text-slate-200">
+                                    <div class="torpr-request-center-pr">${escapeHtml(req.nomor_pr)}</div>
+                                    <div class="torpr-request-center-sub">${escapeHtml(req.tujuan)}</div>
+                                    <div class="torpr-request-center-meta">
                                         Pembuat: <strong>${escapeHtml(req.owner)}</strong><br>
                                         Request: ${escapeHtml(req.created_at)}
                                         ${req.reviewed_at ? `<br>Diproses: ${escapeHtml(req.reviewed_at)}` : ''}
                                         ${req.expires_at ? `<br>Izin aktif sampai: ${escapeHtml(req.expires_at)}` : ''}
                                     </div>
-                                    <div class="mt-2 text-xs font-bold text-slate-700 dark:text-slate-200">Alasan: ${escapeHtml(req.reason)}</div>
-                                    ${req.review_note && req.review_note !== '-' ? `<div class="mt-1 text-xs font-bold text-slate-700 dark:text-slate-200">Catatan: ${escapeHtml(req.review_note)}</div>` : ''}
+                                    <div class="torpr-request-center-reason">Alasan: ${escapeHtml(req.reason)}</div>
+                                    ${req.review_note && req.review_note !== '-' ? `<div class="torpr-request-center-meta">Catatan: ${escapeHtml(req.review_note)}</div>` : ''}
                                 </div>
-                                <span class="inline-flex h-fit items-center rounded-full px-3 py-1 text-xs font-black uppercase ring-1 ${statusBadgeClass(req.status)}">${escapeHtml(req.status)}</span>
+                                <span class="torpr-request-status ${statusBadgeClass(req.status)}">${escapeHtml(req.status)}</span>
                             </div>
                         </div>
                     `).join('')
-                    : '<div class="rounded-xl bg-slate-50 p-4 text-sm font-bold text-slate-600 ring-1 ring-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:ring-slate-700">Belum ada riwayat request edit keluar.</div>';
+                    : '<div class="torpr-request-center-empty">Belum ada riwayat request edit keluar.</div>';
 
                 Swal.fire({
                     title: '🔐 Pusat Req Edit TORPR',
                     html: `
                         <div class="space-y-5 text-left">
-                            <div class="rounded-2xl bg-indigo-50 p-4 text-sm font-bold text-indigo-950 ring-1 ring-indigo-100 dark:bg-indigo-950/60 dark:text-indigo-100 dark:ring-indigo-700/50">
+                            <div class="torpr-request-center-note">
                                 Izin edit bersifat spesifik per PR dan aktif 24 jam setelah disetujui. Untuk PR lain, user harus request lagi.
                             </div>
                             <div>
-                                <div class="mb-2 text-sm font-black text-slate-950 dark:text-white">Request Masuk untuk Data Saya</div>
+                                <div class="torpr-request-center-title">Request Masuk untuk Data Saya</div>
                                 <div class="space-y-3">${incomingHtml}</div>
                             </div>
                             <div>
-                                <div class="mb-2 text-sm font-black text-slate-950 dark:text-white">Riwayat Request Saya</div>
+                                <div class="torpr-request-center-title">Riwayat Request Saya</div>
                                 <div class="space-y-3">${outgoingHtml}</div>
                             </div>
                         </div>
