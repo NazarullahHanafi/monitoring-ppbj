@@ -92,4 +92,38 @@ class TorprEditOwnershipTest extends TestCase
             'tujuan_pengadaan' => 'Sudah diedit dengan izin',
         ]);
     }
+
+    public function test_operasional_superadmin_can_edit_without_requesting_creator_permission(): void
+    {
+        $creator = User::factory()->create([
+            'department' => 'operasional',
+            'role' => 'user',
+        ]);
+
+        $superadmin = User::factory()->create([
+            'department' => 'operasional',
+            'role' => 'superadmin',
+        ]);
+
+        $torpr = Torpr::create([
+            'created_by_user_id' => $creator->id,
+            'nomor_pr' => 'PKB/PR-26/CON/0990',
+            'tujuan_pengadaan' => 'Draft milik user biasa',
+            'portofolio' => 'IT - FERS',
+            'tanggal_pr' => now(),
+            'jumlah_pr' => 1500000,
+        ]);
+
+        $this->actingAs($superadmin)
+            ->putJson(route('torpr.update', $torpr->id), [
+                'tujuan_pengadaan' => 'Diedit langsung oleh superadmin',
+            ])
+            ->assertOk()
+            ->assertJsonPath('ok', true);
+
+        $this->assertDatabaseHas('torprs', [
+            'id' => $torpr->id,
+            'tujuan_pengadaan' => 'Diedit langsung oleh superadmin',
+        ]);
+    }
 }

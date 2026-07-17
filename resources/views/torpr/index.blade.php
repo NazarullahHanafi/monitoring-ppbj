@@ -1454,6 +1454,7 @@
                             $canRequestUmum = auth()->check()
                                 && auth()->user()->department === 'operasional'
                                 && auth()->user()->role === 'superadmin';
+                            $isSuperadminOps = $canRequestUmum;
 
                             // ✅ Semua field wajib lengkap dulu sebelum Request Umum
                             $missingRequestFields = [];
@@ -1594,14 +1595,14 @@
                                     </button>
                                     @if(!$locked)
                                         <div class="torpr-action-row">
-                                            @if($isCreator || $hasApprovedEditAccess)
+                                            @if($isSuperadminOps || $isCreator || $hasApprovedEditAccess)
                                                 <button type="button" onclick="openEditForm({{ $r->id }})"
                                                     class="torpr-action-btn bg-amber-500 text-white shadow-sm shadow-amber-500/20 hover:bg-amber-600 dark:bg-amber-500 dark:text-white dark:hover:bg-amber-400">
                                                     <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                                             d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
                                                     </svg>
-                                                    {{ $isCreator ? 'Edit' : 'Edit Izin' }}
+                                                    {{ $isSuperadminOps ? 'Edit' : ($isCreator ? 'Edit' : 'Edit Izin') }}
                                                 </button>
                                             @elseif($hasPendingEditRequest)
                                                 <button type="button" onclick="openTorprEditRequestCenter()"

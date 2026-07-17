@@ -1120,6 +1120,10 @@ class TorprController extends Controller
     private function ensureCanManageTorpr(Torpr $torpr): void
     {
         $user = auth()->user();
+        $isSuperadminOps = $user
+            && $user->department === 'operasional'
+            && $user->role === 'superadmin';
+
         $isCreator = $user
             && $user->department === 'operasional'
             && (int) $torpr->created_by_user_id === (int) $user->id;
@@ -1134,7 +1138,7 @@ class TorprController extends Controller
                 ->exists();
 
         abort_unless(
-            $isCreator || $hasApprovedEditRequest,
+            $isSuperadminOps || $isCreator || $hasApprovedEditRequest,
             403,
             'Edit PR terkunci. Silakan request izin edit ke pembuat PR terlebih dahulu.'
         );
