@@ -160,4 +160,47 @@ class TorprEditOwnershipTest extends TestCase
             'requester_user_id' => $requester->id,
         ]);
     }
+
+    public function test_rejecting_edit_request_requires_rejection_reason(): void
+    {
+        $creator = User::factory()->create([
+            'department' => 'operasional',
+            'role' => 'user',
+        ]);
+
+        $requester = User::factory()->create([
+            'department' => 'operasional',
+            'role' => 'user',
+        ]);
+
+        $torpr = Torpr::create([
+            'created_by_user_id' => $creator->id,
+            'nomor_pr' => 'PKB/PR-26/CON/0992',
+            'tujuan_pengadaan' => 'Draft request edit yang ditolak',
+            'portofolio' => 'IT - FERS',
+            'tanggal_pr' => now(),
+            'jumlah_pr' => 1500000,
+        ]);
+
+        $editRequest = TorprEditRequest::create([
+            'torpr_id' => $torpr->id,
+            'requester_user_id' => $requester->id,
+            'owner_user_id' => $creator->id,
+            'status' => 'pending',
+            'reason' => 'Mohon izin edit nilai PR.',
+        ]);
+
+        $this->actingAs($creator)
+            ->patchJson(route('torpr.editRequests.review', $editRequest->id), [
+                'decision' => 'reject',
+                'review_note' => '',
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('review_note');
+
+        $this->assertDatabaseHas('torpr_edit_requests', [
+            'id' => $editRequest->id,
+            'status' => 'pending',
+        ]);
+    }
 }

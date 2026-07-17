@@ -326,6 +326,15 @@ class TorprController extends Controller
             'review_note' => ['nullable', 'string', 'max:500'],
         ]);
 
+        if (($data['decision'] ?? null) === 'reject' && mb_strlen(trim((string) ($data['review_note'] ?? ''))) < 10) {
+            return response()->json([
+                'message' => 'Alasan penolakan wajib diisi minimal 10 karakter.',
+                'errors' => [
+                    'review_note' => ['Alasan penolakan wajib diisi minimal 10 karakter.'],
+                ],
+            ], 422);
+        }
+
         $user = $request->user();
         abort_unless($user && $user->department === 'operasional', 403);
 

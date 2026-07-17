@@ -4574,7 +4574,13 @@
                     input: 'textarea',
                     inputPlaceholder: decision === 'approve'
                         ? 'Catatan opsional untuk requester...'
-                        : 'Alasan penolakan opsional...',
+                        : 'Wajib isi alasan penolakan minimal 10 karakter...',
+                    inputLabel: decision === 'approve'
+                        ? 'Catatan persetujuan (opsional)'
+                        : 'Alasan penolakan (wajib)',
+                    inputAttributes: decision === 'reject'
+                        ? { minlength: 10, maxlength: 500 }
+                        : { maxlength: 500 },
                     showCancelButton: true,
                     confirmButtonText: decision === 'approve' ? 'Setujui 24 Jam' : 'Tolak',
                     cancelButtonText: 'Batal',
@@ -4586,6 +4592,12 @@
                         htmlContainer: 'torpr-delete-html',
                     },
                     preConfirm: async (review_note) => {
+                        const cleanNote = (review_note || '').trim();
+                        if (decision === 'reject' && cleanNote.length < 10) {
+                            Swal.showValidationMessage('Alasan penolakan wajib diisi minimal 10 karakter.');
+                            return false;
+                        }
+
                         try {
                             const response = await fetch(`/torpr-edit-requests/${id}`, {
                                 method: 'PATCH',
@@ -4595,13 +4607,16 @@
                                     'Accept': 'application/json',
                                     'X-Requested-With': 'XMLHttpRequest',
                                 },
-                                body: JSON.stringify({ decision, review_note }),
+                                body: JSON.stringify({ decision, review_note: cleanNote }),
                             });
 
                             const data = await response.json().catch(() => ({}));
 
                             if (!response.ok) {
-                                Swal.showValidationMessage(data.message || 'Gagal memproses request.');
+                                const firstError = data.errors
+                                    ? Object.values(data.errors).flat()[0]
+                                    : null;
+                                Swal.showValidationMessage(firstError || data.message || 'Gagal memproses request.');
                                 return false;
                             }
 
