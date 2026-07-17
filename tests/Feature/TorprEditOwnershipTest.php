@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Torpr;
+use App\Models\TorprEditRequest;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -44,6 +45,51 @@ class TorprEditOwnershipTest extends TestCase
         $this->assertDatabaseHas('torprs', [
             'id' => $torpr->id,
             'tujuan_pengadaan' => 'Draft milik creator',
+        ]);
+    }
+
+    public function test_approved_edit_request_allows_requester_to_edit_only_that_pr(): void
+    {
+        $creator = User::factory()->create([
+            'department' => 'operasional',
+            'role' => 'user',
+        ]);
+
+        $requester = User::factory()->create([
+            'department' => 'operasional',
+            'role' => 'user',
+        ]);
+
+        $torpr = Torpr::create([
+            'created_by_user_id' => $creator->id,
+            'nomor_pr' => 'PKB/PR-26/CON/0989',
+            'tujuan_pengadaan' => 'Draft dengan izin edit',
+            'portofolio' => 'IT - FERS',
+            'tanggal_pr' => now(),
+            'jumlah_pr' => 1500000,
+        ]);
+
+        TorprEditRequest::create([
+            'torpr_id' => $torpr->id,
+            'requester_user_id' => $requester->id,
+            'owner_user_id' => $creator->id,
+            'status' => 'approved',
+            'reason' => 'Perlu koreksi nilai',
+            'reviewed_by_user_id' => $creator->id,
+            'reviewed_at' => now(),
+            'expires_at' => now()->addHours(24),
+        ]);
+
+        $this->actingAs($requester)
+            ->putJson(route('torpr.update', $torpr->id), [
+                'tujuan_pengadaan' => 'Sudah diedit dengan izin',
+            ])
+            ->assertOk()
+            ->assertJsonPath('ok', true);
+
+        $this->assertDatabaseHas('torprs', [
+            'id' => $torpr->id,
+            'tujuan_pengadaan' => 'Sudah diedit dengan izin',
         ]);
     }
 }

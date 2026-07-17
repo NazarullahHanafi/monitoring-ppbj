@@ -393,6 +393,12 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
             ->middleware('throttle:60,1');
 
         Route::post('/torpr/{id}/resubmit', [TorprController::class, 'resubmitRejectedPr'])->name('torpr.resubmit');
+        Route::post('/torpr/{id}/request-edit', [TorprController::class, 'requestEditAccess'])
+            ->name('torpr.requestEdit')
+            ->middleware('throttle:10,1');
+        Route::patch('/torpr-edit-requests/{id}', [TorprController::class, 'reviewEditAccess'])
+            ->name('torpr.editRequests.review')
+            ->middleware('throttle:20,1');
 
         Route::post('/torpr/{id}/request-receipt', [TorprController::class, 'requestReceipt'])
             ->name('torpr.requestReceipt');

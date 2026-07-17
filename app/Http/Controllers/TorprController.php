@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Torpr;
+use App\Models\TorprEditRequest;
 use App\Models\PrReceiptApproval;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -195,13 +196,175 @@ class TorprController extends Controller
 
         $rows = $query->paginate($perPage)->withQueryString();
         $isHeavy = $rows->count() > 40;
+        $rowIds = collect($rows->items())->pluck('id')->filter()->values();
+
+        $editAccessRequests = TorprEditRequest::with(['requester:id,name,email', 'owner:id,name,email'])
+            ->where('requester_user_id', auth()->id())
+            ->whereIn('torpr_id', $rowIds)
+            ->whereIn('status', ['pending', 'approved'])
+            ->where(function ($q) {
+                $q->where('status', 'pending')
+                    ->orWhere(function ($q) {
+                        $q->where('status', 'approved')
+                            ->where('expires_at', '>', now());
+                    });
+            })
+            ->latest('id')
+            ->get()
+            ->unique('torpr_id')
+            ->keyBy('torpr_id');
+
+        $incomingEditRequests = TorprEditRequest::with(['torpr:id,nomor_pr,tujuan_pengadaan', 'requester:id,name,email'])
+            ->where('owner_user_id', auth()->id())
+            ->where('status', 'pending')
+            ->latest('id')
+            ->limit(25)
+            ->get();
+
+        $outgoingEditRequests = TorprEditRequest::with(['torpr:id,nomor_pr,tujuan_pengadaan', 'owner:id,name,email'])
+            ->where('requester_user_id', auth()->id())
+            ->latest('id')
+            ->limit(15)
+            ->get();
 
         // ✅ Ambil master portofolio yang sama dengan PPBJ
         $portofolios = Cache::remember('master_portofolios', 3600, function () {
             return MasterPortofolio::orderBy('nama')->pluck('nama')->toArray();
         });
 
-        return view('torpr.index', compact('rows', 'isHeavy', 'portofolios'));
+        return view('torpr.index', compact(
+            'rows',
+            'isHeavy',
+            'portofolios',
+            'editAccessRequests',
+            'incomingEditRequests',
+            'outgoingEditRequests'
+        ));
+    }
+
+    public function requestEditAccess(Request $request, $id)
+    {
+        $request->validate([
+            'reason' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        $user = $request->user();
+        abort_unless($user && $user->department === 'operasional', 403);
+
+        $torpr = Torpr::with(['latestReceiptApproval', 'createdBy'])->findOrFail($id);
+
+        if ((int) $torpr->created_by_user_id === (int) $user->id) {
+            return response()->json([
+                'message' => 'Anda adalah pembuat PR ini, jadi tidak perlu request edit.',
+            ], 422);
+        }
+
+        if ($torpr->latestReceiptApproval || $torpr->received_at) {
+            return response()->json([
+                'message' => 'PR sudah pernah diajukan ke Umum, sehingga edit request tidak bisa dibuat.',
+            ], 422);
+        }
+
+        if (!$torpr->createdBy) {
+            return response()->json([
+                'message' => 'Pembuat PR tidak ditemukan, request edit tidak bisa dikirim.',
+            ], 422);
+        }
+
+        $activeRequest = TorprEditRequest::where('torpr_id', $torpr->id)
+            ->where('requester_user_id', $user->id)
+            ->whereIn('status', ['pending', 'approved'])
+            ->where(function ($q) {
+                $q->where('status', 'pending')
+                    ->orWhere(function ($q) {
+                        $q->where('status', 'approved')
+                            ->where('expires_at', '>', now());
+                    });
+            })
+            ->latest('id')
+            ->first();
+
+        if ($activeRequest) {
+            return response()->json([
+                'message' => $activeRequest->status === 'pending'
+                    ? 'Request edit untuk PR ini masih menunggu persetujuan pembuat.'
+                    : 'Izin edit untuk PR ini masih aktif.',
+                'status' => $activeRequest->status,
+                'expires_at' => $activeRequest->expires_at?->toIso8601String(),
+            ], 422);
+        }
+
+        $editRequest = TorprEditRequest::create([
+            'torpr_id' => $torpr->id,
+            'requester_user_id' => $user->id,
+            'owner_user_id' => $torpr->created_by_user_id,
+            'status' => 'pending',
+            'reason' => $request->input('reason') ?: 'Request edit data PR.',
+        ]);
+
+        $this->logActivity($torpr, 'edit_requested', "Request edit dikirim oleh {$user->name}", [
+            'request_id' => $editRequest->id,
+            'requester' => $user->name,
+            'owner' => $torpr->createdBy?->name,
+            'reason' => $editRequest->reason,
+        ]);
+
+        return response()->json([
+            'ok' => true,
+            'message' => 'Request edit berhasil dikirim ke pembuat PR.',
+        ]);
+    }
+
+    public function reviewEditAccess(Request $request, $id)
+    {
+        $data = $request->validate([
+            'decision' => ['required', Rule::in(['approve', 'reject'])],
+            'review_note' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        $user = $request->user();
+        abort_unless($user && $user->department === 'operasional', 403);
+
+        $editRequest = TorprEditRequest::with(['torpr', 'requester'])->findOrFail($id);
+
+        abort_unless(
+            (int) $editRequest->owner_user_id === (int) $user->id,
+            403,
+            'Hanya pembuat PR yang dapat memproses request edit ini.'
+        );
+
+        if ($editRequest->status !== 'pending') {
+            return response()->json([
+                'message' => 'Request edit ini sudah diproses sebelumnya.',
+            ], 422);
+        }
+
+        $isApproved = $data['decision'] === 'approve';
+
+        $editRequest->update([
+            'status' => $isApproved ? 'approved' : 'rejected',
+            'reviewed_by_user_id' => $user->id,
+            'review_note' => $data['review_note'] ?? null,
+            'reviewed_at' => now(),
+            'expires_at' => $isApproved ? now()->addHours(24) : null,
+        ]);
+
+        $this->logActivity($editRequest->torpr, $isApproved ? 'edit_approved' : 'edit_rejected', $isApproved
+            ? "Request edit disetujui untuk {$editRequest->requester?->name}"
+            : "Request edit ditolak untuk {$editRequest->requester?->name}", [
+                'request_id' => $editRequest->id,
+                'requester' => $editRequest->requester?->name,
+                'reviewer' => $user->name,
+                'expires_at' => $editRequest->expires_at?->toDateTimeString(),
+                'review_note' => $editRequest->review_note,
+            ]);
+
+        return response()->json([
+            'ok' => true,
+            'message' => $isApproved
+                ? 'Request edit disetujui. Izin edit aktif 24 jam untuk data PR ini saja.'
+                : 'Request edit ditolak.',
+        ]);
     }
 
     public function resubmitRejectedPr(Request $request, $id)
@@ -957,11 +1120,21 @@ class TorprController extends Controller
     private function ensureCanManageTorpr(Torpr $torpr): void
     {
         $user = auth()->user();
+        $isCreator = $user
+            && $user->department === 'operasional'
+            && (int) $torpr->created_by_user_id === (int) $user->id;
+
+        $hasApprovedEditRequest = $user
+            && $user->department === 'operasional'
+            && TorprEditRequest::where('torpr_id', $torpr->id)
+                ->where('requester_user_id', $user->id)
+                ->where('owner_user_id', $torpr->created_by_user_id)
+                ->where('status', 'approved')
+                ->where('expires_at', '>', now())
+                ->exists();
 
         abort_unless(
-            $user
-                && $user->department === 'operasional'
-                && (int) $torpr->created_by_user_id === (int) $user->id,
+            $isCreator || $hasApprovedEditRequest,
             403,
             'Edit PR terkunci. Silakan request izin edit ke pembuat PR terlebih dahulu.'
         );

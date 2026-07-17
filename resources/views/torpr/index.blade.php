@@ -4,8 +4,17 @@
 
 
 @push('styles')
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700;800;900&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
     <style>
+        .torpr-page,
+        .torpr-page button,
+        .torpr-page input,
+        .torpr-page select,
+        .torpr-page textarea {
+            font-family: 'Montserrat', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        }
+
         /* ===== SELECT2 TORPR - dibuat menyatu dengan style input Tailwind ===== */
         .select2-container {
             width: 100% !important;
@@ -375,8 +384,8 @@
         .torpr-edit-request-card {
             border-radius: 1rem;
             border: 1px solid #bfdbfe;
-            background: #eff6ff;
-            color: #1e3a8a;
+            background: #dbeafe;
+            color: #172554;
             padding: .95rem;
             text-align: left;
             font-size: .84rem;
@@ -402,6 +411,24 @@
             font-weight: 650;
         }
 
+        .torpr-edit-request-reason {
+            min-height: 6.2rem;
+            width: 100%;
+            resize: vertical;
+            border-radius: .9rem;
+            border: 1px solid #cbd5e1;
+            background: #ffffff;
+            color: #0f172a;
+            padding: .85rem;
+            font-size: .86rem;
+            font-weight: 700;
+            line-height: 1.6;
+        }
+
+        .torpr-edit-request-reason::placeholder {
+            color: #64748b;
+        }
+
         html.dark .torpr-edit-request-card,
         .dark .torpr-edit-request-card {
             background: #172554 !important;
@@ -418,6 +445,34 @@
         .dark .torpr-edit-request-template {
             background: #0f172a !important;
             border-color: #475569 !important;
+            color: #f8fafc !important;
+        }
+
+        html.dark .torpr-edit-request-reason,
+        .dark .torpr-edit-request-reason {
+            background: #1e293b !important;
+            border-color: #475569 !important;
+            color: #ffffff !important;
+        }
+
+        html.dark .torpr-edit-request-reason::placeholder,
+        .dark .torpr-edit-request-reason::placeholder {
+            color: #cbd5e1 !important;
+        }
+
+        .torpr-request-center-row {
+            border-radius: 1rem;
+            border: 1px solid #dbeafe;
+            background: #ffffff;
+            color: #0f172a;
+            padding: .9rem;
+            box-shadow: 0 12px 30px rgba(15, 23, 42, .08);
+        }
+
+        html.dark .torpr-request-center-row,
+        .dark .torpr-request-center-row {
+            background: #111827 !important;
+            border-color: #334155 !important;
             color: #f8fafc !important;
         }
 
@@ -766,6 +821,7 @@
 @endpush
 
 @section('content')
+<div class="torpr-page">
     <div class="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between animate-slide-down">
         <div>
             <h1 class="text-2xl font-bold text-gray-800 dark:text-white">📄 TORPR</h1>
@@ -781,6 +837,21 @@
         </div>
 
         <div class="flex flex-col sm:flex-row gap-2 sm:items-center">
+            <button type="button" onclick="openTorprEditRequestCenter()"
+                class="group relative inline-flex items-center gap-2 rounded-lg
+                                                                                                                                                                                                                                                                                                              bg-white text-slate-800 ring-1 ring-slate-200
+                                                                                                                                                                                                                                                                                                              hover:bg-slate-50 hover:shadow-md
+                                                                                                                                                                                                                                                                                                              dark:bg-slate-800 dark:text-white dark:ring-slate-700 dark:hover:bg-slate-700
+                                                                                                                                                                                                                                                                                                              px-4 py-2 font-semibold transition-all active:scale-95">
+                <span class="text-lg">🔐</span>
+                <span>Req Edit</span>
+                @if(($incomingEditRequests->count() + $outgoingEditRequests->where('status', 'pending')->count()) > 0)
+                    <span class="absolute -right-2 -top-2 inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-red-600 px-1.5 text-xs font-black text-white shadow-lg">
+                        {{ $incomingEditRequests->count() + $outgoingEditRequests->where('status', 'pending')->count() }}
+                    </span>
+                @endif
+            </button>
+
             {{-- Import Button --}}
             <button type="button" onclick="openImportModal()"
                 class="group inline-flex items-center gap-2 rounded-lg
@@ -1130,6 +1201,12 @@
                             $isCreator = (int) $r->created_by_user_id === (int) auth()->id();
                             $creatorName = $r->creator_name ?: 'Pembuat PR';
                             $creatorContact = $r->creator_email ?: 'email belum tercatat';
+                            $editAccessRequest = $editAccessRequests->get($r->id);
+                            $hasApprovedEditAccess = $editAccessRequest
+                                && $editAccessRequest->status === 'approved'
+                                && $editAccessRequest->expires_at
+                                && $editAccessRequest->expires_at->isFuture();
+                            $hasPendingEditRequest = $editAccessRequest && $editAccessRequest->status === 'pending';
 
                             // ✅ Sama seperti filter Kelengkapan Data: hanya Superadmin Operasional
                             $canRequestUmum = auth()->check()
@@ -1275,14 +1352,24 @@
                                     </button>
                                     @if(!$locked)
                                         <div class="torpr-action-row">
-                                            @if($isCreator)
+                                            @if($isCreator || $hasApprovedEditAccess)
                                                 <button type="button" onclick="openEditForm({{ $r->id }})"
                                                     class="torpr-action-btn bg-amber-500 text-white shadow-sm shadow-amber-500/20 hover:bg-amber-600 dark:bg-amber-500 dark:text-white dark:hover:bg-amber-400">
                                                     <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                                             d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
                                                     </svg>
-                                                    Edit
+                                                    {{ $isCreator ? 'Edit' : 'Edit Izin' }}
+                                                </button>
+                                            @elseif($hasPendingEditRequest)
+                                                <button type="button" onclick="openTorprEditRequestCenter()"
+                                                    title="Request edit untuk PR ini masih menunggu pembuat PR."
+                                                    class="torpr-action-btn is-locked bg-blue-100 text-blue-800 ring-1 ring-blue-200 hover:bg-blue-200 dark:bg-blue-900/50 dark:text-blue-100 dark:ring-blue-500/50 dark:hover:bg-blue-800">
+                                                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                            d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                    </svg>
+                                                    Menunggu
                                                 </button>
                                             @else
                                                 <button type="button"
@@ -2267,6 +2354,7 @@
             </div>
         </div>
     </div>
+</div>
 @endsection
 
 @push('scripts')
@@ -4077,16 +4165,37 @@
                 }).format(date);
             }
 
+            const torprIncomingEditRequests = @js($incomingEditRequests->map(function ($req) {
+                return [
+                    'id' => $req->id,
+                    'nomor_pr' => $req->torpr?->nomor_pr ?: ('PR-' . $req->torpr_id),
+                    'tujuan' => $req->torpr?->tujuan_pengadaan ?: '-',
+                    'requester' => $req->requester?->name ?: 'User',
+                    'email' => $req->requester?->email ?: '-',
+                    'reason' => $req->reason ?: '-',
+                    'created_at' => $req->created_at?->timezone('Asia/Jakarta')->format('d M Y H:i:s') . ' WIB',
+                ];
+            })->values());
+
+            const torprOutgoingEditRequests = @js($outgoingEditRequests->map(function ($req) {
+                return [
+                    'id' => $req->id,
+                    'nomor_pr' => $req->torpr?->nomor_pr ?: ('PR-' . $req->torpr_id),
+                    'tujuan' => $req->torpr?->tujuan_pengadaan ?: '-',
+                    'owner' => $req->owner?->name ?: 'Pembuat PR',
+                    'status' => $req->status,
+                    'reason' => $req->reason ?: '-',
+                    'created_at' => $req->created_at?->timezone('Asia/Jakarta')->format('d M Y H:i:s') . ' WIB',
+                    'reviewed_at' => $req->reviewed_at?->timezone('Asia/Jakarta')->format('d M Y H:i:s') . ' WIB',
+                    'expires_at' => $req->expires_at?->timezone('Asia/Jakarta')->format('d M Y H:i:s') . ' WIB',
+                    'review_note' => $req->review_note ?: '-',
+                ];
+            })->values());
+
             window.requestTorprEditAccess = async function (id, nomorPr, creatorName, creatorContact) {
                 const safeNomor = nomorPr || ('PR-' + id);
                 const safeCreator = creatorName || 'Pembuat PR';
                 const safeContact = creatorContact || 'kontak belum tercatat';
-                const requestText = [
-                    `Mohon izin edit data PR ${safeNomor}.`,
-                    `Data ini dibuat oleh ${safeCreator} (${safeContact}).`,
-                    'Saya perlu melakukan penyesuaian data agar proses PR tetap akurat.',
-                    'Jika sudah diizinkan, mohon pembuat PR melakukan edit langsung atau menginformasikan perubahan yang perlu dibantu.'
-                ].join(' ');
 
                 const result = await Swal.fire({
                     icon: 'info',
@@ -4102,58 +4211,204 @@
                             </div>
                         </div>
                         <div class="torpr-edit-request-template">
-                            <strong>Template request:</strong><br>
-                            ${escapeHtml(requestText)}
+                            <strong>Alasan request edit</strong><br>
+                            <textarea id="torprEditRequestReason" class="torpr-edit-request-reason" maxlength="500" placeholder="Contoh: Mohon izin edit karena nilai PR perlu disesuaikan dengan dokumen terbaru."></textarea>
                         </div>
                     `,
                     showCancelButton: true,
-                    showDenyButton: true,
-                    confirmButtonText: 'Copy Request',
-                    denyButtonText: 'Follow Up Chat',
+                    confirmButtonText: 'Kirim Request',
                     cancelButtonText: 'Tutup',
-                    confirmButtonColor: '#2563eb',
-                    denyButtonColor: '#7c3aed',
+                    confirmButtonColor: '#16a34a',
+                    cancelButtonColor: '#64748b',
+                    showLoaderOnConfirm: true,
+                    allowOutsideClick: () => !Swal.isLoading(),
+                    customClass: {
+                        popup: 'torpr-delete-popup',
+                        title: 'torpr-delete-title',
+                        htmlContainer: 'torpr-delete-html',
+                    },
+                    preConfirm: async () => {
+                        const reason = document.getElementById('torprEditRequestReason')?.value?.trim() || '';
+
+                        try {
+                            const response = await fetch(`/torpr/${id}/request-edit`, {
+                                method: 'POST',
+                                headers: {
+                                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                                    'Content-Type': 'application/json',
+                                    'Accept': 'application/json',
+                                    'X-Requested-With': 'XMLHttpRequest',
+                                },
+                                body: JSON.stringify({ reason }),
+                            });
+
+                            const data = await response.json().catch(() => ({}));
+
+                            if (!response.ok) {
+                                Swal.showValidationMessage(data.message || 'Request edit gagal dikirim.');
+                                return false;
+                            }
+
+                            return data;
+                        } catch (error) {
+                            Swal.showValidationMessage(error.message || 'Koneksi gagal. Coba lagi.');
+                            return false;
+                        }
+                    },
+                });
+
+                if (result.isConfirmed && result.value?.ok) {
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Request terkirim',
+                        text: result.value.message || 'Request edit sudah masuk ke menu Req Edit pembuat PR.',
+                        timer: 1600,
+                        showConfirmButton: false,
+                        customClass: {
+                            popup: 'torpr-delete-popup',
+                            title: 'torpr-delete-title',
+                            htmlContainer: 'torpr-delete-html',
+                        },
+                    }).then(() => location.reload());
+                }
+            }
+
+            function statusBadgeClass(status) {
+                if (status === 'approved') return 'bg-emerald-100 text-emerald-800 ring-emerald-200 dark:bg-emerald-900/50 dark:text-emerald-100 dark:ring-emerald-600/50';
+                if (status === 'rejected') return 'bg-red-100 text-red-800 ring-red-200 dark:bg-red-900/50 dark:text-red-100 dark:ring-red-600/50';
+                return 'bg-amber-100 text-amber-800 ring-amber-200 dark:bg-amber-900/50 dark:text-amber-100 dark:ring-amber-600/50';
+            }
+
+            window.reviewTorprEditRequest = async function (id, decision) {
+                const result = await Swal.fire({
+                    icon: decision === 'approve' ? 'success' : 'warning',
+                    title: decision === 'approve' ? 'Setujui request edit?' : 'Tolak request edit?',
+                    input: 'textarea',
+                    inputPlaceholder: decision === 'approve'
+                        ? 'Catatan opsional untuk requester...'
+                        : 'Alasan penolakan opsional...',
+                    showCancelButton: true,
+                    confirmButtonText: decision === 'approve' ? 'Setujui 24 Jam' : 'Tolak',
+                    cancelButtonText: 'Batal',
+                    confirmButtonColor: decision === 'approve' ? '#16a34a' : '#dc2626',
                     cancelButtonColor: '#64748b',
                     customClass: {
                         popup: 'torpr-delete-popup',
                         title: 'torpr-delete-title',
                         htmlContainer: 'torpr-delete-html',
                     },
+                    preConfirm: async (review_note) => {
+                        try {
+                            const response = await fetch(`/torpr-edit-requests/${id}`, {
+                                method: 'PATCH',
+                                headers: {
+                                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                                    'Content-Type': 'application/json',
+                                    'Accept': 'application/json',
+                                    'X-Requested-With': 'XMLHttpRequest',
+                                },
+                                body: JSON.stringify({ decision, review_note }),
+                            });
+
+                            const data = await response.json().catch(() => ({}));
+
+                            if (!response.ok) {
+                                Swal.showValidationMessage(data.message || 'Gagal memproses request.');
+                                return false;
+                            }
+
+                            return data;
+                        } catch (error) {
+                            Swal.showValidationMessage(error.message || 'Koneksi gagal. Coba lagi.');
+                            return false;
+                        }
+                    },
                 });
 
-                if (result.isConfirmed) {
-                    try {
-                        await navigator.clipboard.writeText(requestText);
-                        Swal.fire({
-                            icon: 'success',
-                            title: 'Request disalin',
-                            text: 'Teks request edit sudah masuk clipboard. Tinggal kirim ke pembuat PR.',
-                            timer: 1500,
-                            showConfirmButton: false,
-                            customClass: {
-                                popup: 'torpr-delete-popup',
-                                title: 'torpr-delete-title',
-                                htmlContainer: 'torpr-delete-html',
-                            },
-                        });
-                    } catch (error) {
-                        Swal.fire({
-                            icon: 'warning',
-                            title: 'Copy manual',
-                            text: requestText,
-                            confirmButtonText: 'OK',
-                            customClass: {
-                                popup: 'torpr-delete-popup',
-                                title: 'torpr-delete-title',
-                                htmlContainer: 'torpr-delete-html',
-                            },
-                        });
-                    }
+                if (result.isConfirmed && result.value?.ok) {
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Berhasil',
+                        text: result.value.message,
+                        timer: 1500,
+                        showConfirmButton: false,
+                    }).then(() => location.reload());
                 }
+            }
 
-                if (result.isDenied && typeof shareRecordToChat === 'function') {
-                    shareRecordToChat('pr', id);
-                }
+            window.openTorprEditRequestCenter = function () {
+                const incomingHtml = torprIncomingEditRequests.length
+                    ? torprIncomingEditRequests.map(req => `
+                        <div class="torpr-request-center-row">
+                            <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                                <div>
+                                    <div class="font-black text-slate-950 dark:text-white">${escapeHtml(req.nomor_pr)}</div>
+                                    <div class="mt-1 text-xs font-bold text-slate-600 dark:text-slate-300">${escapeHtml(req.tujuan)}</div>
+                                    <div class="mt-2 text-xs text-slate-700 dark:text-slate-200">
+                                        Requester: <strong>${escapeHtml(req.requester)}</strong> (${escapeHtml(req.email)})<br>
+                                        Masuk: ${escapeHtml(req.created_at)}
+                                    </div>
+                                    <div class="mt-2 rounded-xl bg-blue-50 p-3 text-xs font-bold text-blue-900 ring-1 ring-blue-100 dark:bg-blue-950/60 dark:text-blue-100 dark:ring-blue-700/50">
+                                        ${escapeHtml(req.reason)}
+                                    </div>
+                                </div>
+                                <div class="flex shrink-0 gap-2">
+                                    <button type="button" onclick="reviewTorprEditRequest(${req.id}, 'approve')" class="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-black text-white hover:bg-emerald-700">Setujui</button>
+                                    <button type="button" onclick="reviewTorprEditRequest(${req.id}, 'reject')" class="rounded-lg bg-red-600 px-3 py-2 text-xs font-black text-white hover:bg-red-700">Tolak</button>
+                                </div>
+                            </div>
+                        </div>
+                    `).join('')
+                    : '<div class="rounded-xl bg-slate-50 p-4 text-sm font-bold text-slate-600 ring-1 ring-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:ring-slate-700">Belum ada request edit masuk.</div>';
+
+                const outgoingHtml = torprOutgoingEditRequests.length
+                    ? torprOutgoingEditRequests.map(req => `
+                        <div class="torpr-request-center-row">
+                            <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                                <div>
+                                    <div class="font-black text-slate-950 dark:text-white">${escapeHtml(req.nomor_pr)}</div>
+                                    <div class="mt-1 text-xs font-bold text-slate-600 dark:text-slate-300">${escapeHtml(req.tujuan)}</div>
+                                    <div class="mt-2 text-xs text-slate-700 dark:text-slate-200">
+                                        Pembuat: <strong>${escapeHtml(req.owner)}</strong><br>
+                                        Request: ${escapeHtml(req.created_at)}
+                                        ${req.reviewed_at ? `<br>Diproses: ${escapeHtml(req.reviewed_at)}` : ''}
+                                        ${req.expires_at ? `<br>Izin aktif sampai: ${escapeHtml(req.expires_at)}` : ''}
+                                    </div>
+                                    <div class="mt-2 text-xs font-bold text-slate-700 dark:text-slate-200">Alasan: ${escapeHtml(req.reason)}</div>
+                                    ${req.review_note && req.review_note !== '-' ? `<div class="mt-1 text-xs font-bold text-slate-700 dark:text-slate-200">Catatan: ${escapeHtml(req.review_note)}</div>` : ''}
+                                </div>
+                                <span class="inline-flex h-fit items-center rounded-full px-3 py-1 text-xs font-black uppercase ring-1 ${statusBadgeClass(req.status)}">${escapeHtml(req.status)}</span>
+                            </div>
+                        </div>
+                    `).join('')
+                    : '<div class="rounded-xl bg-slate-50 p-4 text-sm font-bold text-slate-600 ring-1 ring-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:ring-slate-700">Belum ada riwayat request edit keluar.</div>';
+
+                Swal.fire({
+                    title: '🔐 Pusat Req Edit TORPR',
+                    html: `
+                        <div class="space-y-5 text-left">
+                            <div class="rounded-2xl bg-indigo-50 p-4 text-sm font-bold text-indigo-950 ring-1 ring-indigo-100 dark:bg-indigo-950/60 dark:text-indigo-100 dark:ring-indigo-700/50">
+                                Izin edit bersifat spesifik per PR dan aktif 24 jam setelah disetujui. Untuk PR lain, user harus request lagi.
+                            </div>
+                            <div>
+                                <div class="mb-2 text-sm font-black text-slate-950 dark:text-white">Request Masuk untuk Data Saya</div>
+                                <div class="space-y-3">${incomingHtml}</div>
+                            </div>
+                            <div>
+                                <div class="mb-2 text-sm font-black text-slate-950 dark:text-white">Riwayat Request Saya</div>
+                                <div class="space-y-3">${outgoingHtml}</div>
+                            </div>
+                        </div>
+                    `,
+                    width: 900,
+                    confirmButtonText: 'Tutup',
+                    confirmButtonColor: '#2563eb',
+                    customClass: {
+                        popup: 'torpr-delete-popup',
+                        title: 'torpr-delete-title',
+                        htmlContainer: 'torpr-delete-html',
+                    },
+                });
             }
 
             function showTorprDeleteLockCountdown(message, retryAfter, lockedUntil = null) {
