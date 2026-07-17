@@ -54,6 +54,8 @@ class TorprController extends Controller
                 'pra.approved_by_user_id',
                 'u1.name as approved_by_name',
                 'u2.name as received_by_name',
+                'u3.name as creator_name',
+                'u3.email as creator_email',
             ])
             ->leftJoin(DB::raw('(
             SELECT pra1.* 
@@ -65,7 +67,8 @@ class TorprController extends Controller
             ) pra2 ON pra1.torpr_id = pra2.torpr_id AND pra1.id = pra2.max_id
         ) as pra'), 'pra.torpr_id', '=', 'torprs.id')
             ->leftJoin('users as u1', 'pra.approved_by_user_id', '=', 'u1.id')
-            ->leftJoin('users as u2', 'torprs.received_by_umum_user_id', '=', 'u2.id');
+            ->leftJoin('users as u2', 'torprs.received_by_umum_user_id', '=', 'u2.id')
+            ->leftJoin('users as u3', 'torprs.created_by_user_id', '=', 'u3.id');
 
         // ✅ SEARCH
         if ($search = trim($request->get('q'))) {
@@ -954,14 +957,13 @@ class TorprController extends Controller
     private function ensureCanManageTorpr(Torpr $torpr): void
     {
         $user = auth()->user();
-        $isSuperadminOps = $user
-            && $user->role === 'superadmin'
-            && $user->department === 'operasional';
 
         abort_unless(
-            $isSuperadminOps || (int) $torpr->created_by_user_id === (int) $user?->id,
+            $user
+                && $user->department === 'operasional'
+                && (int) $torpr->created_by_user_id === (int) $user->id,
             403,
-            'Anda hanya dapat mengubah data PR yang Anda buat.'
+            'Edit PR terkunci. Silakan request izin edit ke pembuat PR terlebih dahulu.'
         );
     }
 

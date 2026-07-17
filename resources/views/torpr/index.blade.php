@@ -368,6 +368,59 @@
             filter: none;
         }
 
+        .torpr-action-btn.is-locked {
+            border: 1px solid rgba(148, 163, 184, .42);
+        }
+
+        .torpr-edit-request-card {
+            border-radius: 1rem;
+            border: 1px solid #bfdbfe;
+            background: #eff6ff;
+            color: #1e3a8a;
+            padding: .95rem;
+            text-align: left;
+            font-size: .84rem;
+            line-height: 1.65;
+            font-weight: 700;
+        }
+
+        .torpr-edit-request-card strong {
+            color: #172554;
+            font-weight: 950;
+        }
+
+        .torpr-edit-request-template {
+            margin-top: .7rem;
+            border-radius: .9rem;
+            border: 1px dashed #93c5fd;
+            background: #ffffff;
+            color: #0f172a;
+            padding: .8rem;
+            text-align: left;
+            font-size: .8rem;
+            line-height: 1.6;
+            font-weight: 650;
+        }
+
+        html.dark .torpr-edit-request-card,
+        .dark .torpr-edit-request-card {
+            background: #172554 !important;
+            border-color: #60a5fa !important;
+            color: #eff6ff !important;
+        }
+
+        html.dark .torpr-edit-request-card strong,
+        .dark .torpr-edit-request-card strong {
+            color: #ffffff !important;
+        }
+
+        html.dark .torpr-edit-request-template,
+        .dark .torpr-edit-request-template {
+            background: #0f172a !important;
+            border-color: #475569 !important;
+            color: #f8fafc !important;
+        }
+
         .torpr-delete-popup {
             border: 1px solid rgba(226, 232, 240, .9) !important;
             box-shadow: 0 28px 80px rgba(15, 23, 42, .28) !important;
@@ -1074,6 +1127,9 @@
                             };
 
                             $locked = in_array($receipt, ['PENDING', 'APPROVED', 'REJECTED'], true);
+                            $isCreator = (int) $r->created_by_user_id === (int) auth()->id();
+                            $creatorName = $r->creator_name ?: 'Pembuat PR';
+                            $creatorContact = $r->creator_email ?: 'email belum tercatat';
 
                             // ✅ Sama seperti filter Kelengkapan Data: hanya Superadmin Operasional
                             $canRequestUmum = auth()->check()
@@ -1217,16 +1273,29 @@
                                         <span aria-hidden="true">💬</span>
                                         Follow Up
                                     </button>
-                                    @if(!$locked && (auth()->user()->role === 'superadmin' || (int) $r->created_by_user_id === (int) auth()->id()))
+                                    @if(!$locked)
                                         <div class="torpr-action-row">
-                                            <button type="button" onclick="openEditForm({{ $r->id }})"
-                                                class="torpr-action-btn bg-amber-500 text-white shadow-sm shadow-amber-500/20 hover:bg-amber-600 dark:bg-amber-500 dark:text-white dark:hover:bg-amber-400">
-                                                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                        d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
-                                                </svg>
-                                                Edit
-                                            </button>
+                                            @if($isCreator)
+                                                <button type="button" onclick="openEditForm({{ $r->id }})"
+                                                    class="torpr-action-btn bg-amber-500 text-white shadow-sm shadow-amber-500/20 hover:bg-amber-600 dark:bg-amber-500 dark:text-white dark:hover:bg-amber-400">
+                                                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                            d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
+                                                    </svg>
+                                                    Edit
+                                                </button>
+                                            @else
+                                                <button type="button"
+                                                    onclick="requestTorprEditAccess({{ $r->id }}, @js($r->nomor_pr ?? ('PR-' . $r->id)), @js($creatorName), @js($creatorContact))"
+                                                    title="Edit terkunci. Request izin edit ke pembuat PR."
+                                                    class="torpr-action-btn is-locked bg-slate-700 text-white shadow-sm shadow-slate-500/20 hover:bg-slate-800 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-100">
+                                                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                            d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2h-1V8a5 5 0 10-10 0v3H6a2 2 0 00-2 2v6a2 2 0 002 2zm3-10V8a3 3 0 116 0v3" />
+                                                    </svg>
+                                                    Req Edit
+                                                </button>
+                                            @endif
 
                                             <button type="button"
                                                 onclick="deleteTorprDraft({{ $r->id }}, @js($r->nomor_pr ?? ('PR-' . $r->id)))"
@@ -4006,6 +4075,85 @@
                     hour12: false,
                     timeZone: 'Asia/Jakarta',
                 }).format(date);
+            }
+
+            window.requestTorprEditAccess = async function (id, nomorPr, creatorName, creatorContact) {
+                const safeNomor = nomorPr || ('PR-' + id);
+                const safeCreator = creatorName || 'Pembuat PR';
+                const safeContact = creatorContact || 'kontak belum tercatat';
+                const requestText = [
+                    `Mohon izin edit data PR ${safeNomor}.`,
+                    `Data ini dibuat oleh ${safeCreator} (${safeContact}).`,
+                    'Saya perlu melakukan penyesuaian data agar proses PR tetap akurat.',
+                    'Jika sudah diizinkan, mohon pembuat PR melakukan edit langsung atau menginformasikan perubahan yang perlu dibantu.'
+                ].join(' ');
+
+                const result = await Swal.fire({
+                    icon: 'info',
+                    title: 'Edit PR terkunci',
+                    html: `
+                        <div class="torpr-edit-request-card">
+                            <div><strong>Data:</strong> ${escapeHtml(safeNomor)}</div>
+                            <div><strong>Pembuat:</strong> ${escapeHtml(safeCreator)}</div>
+                            <div><strong>Kontak:</strong> ${escapeHtml(safeContact)}</div>
+                            <div class="mt-2">
+                                Edit hanya bisa dilakukan oleh pembuat PR supaya riwayat data tetap jelas.
+                                Jika user lain perlu mengubah data, gunakan request edit dulu ke pembuat PR.
+                            </div>
+                        </div>
+                        <div class="torpr-edit-request-template">
+                            <strong>Template request:</strong><br>
+                            ${escapeHtml(requestText)}
+                        </div>
+                    `,
+                    showCancelButton: true,
+                    showDenyButton: true,
+                    confirmButtonText: 'Copy Request',
+                    denyButtonText: 'Follow Up Chat',
+                    cancelButtonText: 'Tutup',
+                    confirmButtonColor: '#2563eb',
+                    denyButtonColor: '#7c3aed',
+                    cancelButtonColor: '#64748b',
+                    customClass: {
+                        popup: 'torpr-delete-popup',
+                        title: 'torpr-delete-title',
+                        htmlContainer: 'torpr-delete-html',
+                    },
+                });
+
+                if (result.isConfirmed) {
+                    try {
+                        await navigator.clipboard.writeText(requestText);
+                        Swal.fire({
+                            icon: 'success',
+                            title: 'Request disalin',
+                            text: 'Teks request edit sudah masuk clipboard. Tinggal kirim ke pembuat PR.',
+                            timer: 1500,
+                            showConfirmButton: false,
+                            customClass: {
+                                popup: 'torpr-delete-popup',
+                                title: 'torpr-delete-title',
+                                htmlContainer: 'torpr-delete-html',
+                            },
+                        });
+                    } catch (error) {
+                        Swal.fire({
+                            icon: 'warning',
+                            title: 'Copy manual',
+                            text: requestText,
+                            confirmButtonText: 'OK',
+                            customClass: {
+                                popup: 'torpr-delete-popup',
+                                title: 'torpr-delete-title',
+                                htmlContainer: 'torpr-delete-html',
+                            },
+                        });
+                    }
+                }
+
+                if (result.isDenied && typeof shareRecordToChat === 'function') {
+                    shareRecordToChat('pr', id);
+                }
             }
 
             function showTorprDeleteLockCountdown(message, retryAfter, lockedUntil = null) {
