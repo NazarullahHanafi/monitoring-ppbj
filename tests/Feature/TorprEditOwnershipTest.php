@@ -203,4 +203,95 @@ class TorprEditOwnershipTest extends TestCase
             'status' => 'pending',
         ]);
     }
+
+    public function test_expired_edit_permission_no_longer_allows_update(): void
+    {
+        $creator = User::factory()->create([
+            'department' => 'operasional',
+            'role' => 'user',
+        ]);
+
+        $requester = User::factory()->create([
+            'department' => 'operasional',
+            'role' => 'user',
+        ]);
+
+        $torpr = Torpr::create([
+            'created_by_user_id' => $creator->id,
+            'nomor_pr' => 'PKB/PR-26/CON/0993',
+            'tujuan_pengadaan' => 'Draft izin edit kedaluwarsa',
+            'portofolio' => 'IT - FERS',
+            'tanggal_pr' => now(),
+            'jumlah_pr' => 1500000,
+        ]);
+
+        TorprEditRequest::create([
+            'torpr_id' => $torpr->id,
+            'requester_user_id' => $requester->id,
+            'owner_user_id' => $creator->id,
+            'status' => 'approved',
+            'reason' => 'Mohon izin edit nilai PR.',
+            'reviewed_by_user_id' => $creator->id,
+            'reviewed_at' => now()->subDays(2),
+            'expires_at' => now()->subMinute(),
+        ]);
+
+        $this->actingAs($requester)
+            ->putJson(route('torpr.update', $torpr->id), [
+                'tujuan_pengadaan' => 'Dicoba setelah izin expired',
+            ])
+            ->assertForbidden();
+
+        $this->assertDatabaseHas('torprs', [
+            'id' => $torpr->id,
+            'tujuan_pengadaan' => 'Draft izin edit kedaluwarsa',
+        ]);
+    }
+
+    public function test_only_pr_creator_can_review_edit_request(): void
+    {
+        $creator = User::factory()->create([
+            'department' => 'operasional',
+            'role' => 'user',
+        ]);
+
+        $requester = User::factory()->create([
+            'department' => 'operasional',
+            'role' => 'user',
+        ]);
+
+        $otherUser = User::factory()->create([
+            'department' => 'operasional',
+            'role' => 'user',
+        ]);
+
+        $torpr = Torpr::create([
+            'created_by_user_id' => $creator->id,
+            'nomor_pr' => 'PKB/PR-26/CON/0994',
+            'tujuan_pengadaan' => 'Draft request bukan milik reviewer',
+            'portofolio' => 'IT - FERS',
+            'tanggal_pr' => now(),
+            'jumlah_pr' => 1500000,
+        ]);
+
+        $editRequest = TorprEditRequest::create([
+            'torpr_id' => $torpr->id,
+            'requester_user_id' => $requester->id,
+            'owner_user_id' => $creator->id,
+            'status' => 'pending',
+            'reason' => 'Mohon izin edit nilai PR.',
+        ]);
+
+        $this->actingAs($otherUser)
+            ->patchJson(route('torpr.editRequests.review', $editRequest->id), [
+                'decision' => 'approve',
+                'review_note' => 'Saya setujui.',
+            ])
+            ->assertForbidden();
+
+        $this->assertDatabaseHas('torpr_edit_requests', [
+            'id' => $editRequest->id,
+            'status' => 'pending',
+        ]);
+    }
 }
