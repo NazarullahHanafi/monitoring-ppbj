@@ -16,6 +16,7 @@ class SpphPpbjSyncTest extends TestCase
     public function test_creating_spph_syncs_vendor_to_ppbj_penyedia_eksternal(): void
     {
         $user = User::factory()->create([
+            'name' => 'NAZAR',
             'department' => 'umum',
             'role' => 'user',
         ]);
@@ -107,6 +108,7 @@ class SpphPpbjSyncTest extends TestCase
         $spph = Spph::create([
             'nomor_spph' => '002/PKU-VI/SPPH/2026',
             'sequence_number' => 2,
+            'created_by_user_id' => $user->id,
             'tanggal' => '2026-06-30',
             'nomor_pr' => 'PKB/PR-26/CON/0502',
             'nama_vendor' => 'PT Vendor Lama',
@@ -197,6 +199,7 @@ class SpphPpbjSyncTest extends TestCase
         $spph = Spph::create([
             'nomor_spph' => '003/PKU-VI/SPPH/2026',
             'sequence_number' => 3,
+            'created_by_user_id' => $user->id,
             'tanggal' => '2026-06-30',
             'nomor_pr' => 'PKB/PR-26/CON/0503',
             'nama_vendor' => 'PT Vendor Hapus',
@@ -205,8 +208,11 @@ class SpphPpbjSyncTest extends TestCase
         ]);
 
         $this->actingAs($user)
-            ->delete(route('spph.destroy', $spph))
-            ->assertRedirect(route('spph.index'));
+            ->delete(route('spph.destroy', $spph), [
+                'creator_password' => 'password',
+            ])
+            ->assertOk()
+            ->assertJsonPath('ok', true);
 
         $this->assertDatabaseHas('ppbj', [
             'ppbj_no' => 'PKB/PR-26/CON/0503',

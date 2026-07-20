@@ -27,7 +27,8 @@ class TrackingPrCreatorTest extends TestCase
             'created_by_user_id' => $creator->id,
         ]);
 
-        $this->get(route('landing.track', ['q' => 'PKB/PR-26/CON/0401']))
+        $this->followingRedirects()
+            ->get(route('landing.track', ['q' => 'PKB/PR-26/CON/0401']))
             ->assertOk()
             ->assertSee('Eli')
             ->assertDontSee('Tidak Diketahui');
@@ -139,7 +140,8 @@ class TrackingPrCreatorTest extends TestCase
             'created_by_user_id' => $creator->id,
         ]);
 
-        $this->get(route('landing.track', ['q' => 'PKB/PR-26/CON/0503']))
+        $this->followingRedirects()
+            ->get(route('landing.track', ['q' => 'PKB/PR-26/CON/0503']))
             ->assertOk()
             ->assertSee('Eli')
             ->assertDontSee('Kepala Bidang (Manual)')
@@ -161,7 +163,8 @@ class TrackingPrCreatorTest extends TestCase
             'created_by_user_id' => $creator->id,
         ]);
 
-        $this->get(route('landing.track', ['q' => 'PKB/PR-26/CON/0601']))
+        $this->followingRedirects()
+            ->get(route('landing.track', ['q' => 'PKB/PR-26/CON/0601']))
             ->assertOk()
             ->assertSee('Reminder Otomatis PR')
             ->assertSee('PR menunggu TTD Kabid')
