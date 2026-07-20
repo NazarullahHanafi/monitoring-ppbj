@@ -934,7 +934,7 @@ class TorprController extends Controller
         Cache::forget($lockKey);
 
         $oldNomorPr = $torpr->nomor_pr;
-        $description = "Draft PR dihapus: " . ($torpr->nomor_pr ?: 'PR-' . $torpr->id);
+        $description = "Draft PR dihapus: " . $this->safeTorprNumber($torpr);
 
         DB::transaction(function () use ($torpr, $user, $creator, $description, $request) {
             \App\Models\ActivityLog::create([
@@ -1093,7 +1093,7 @@ class TorprController extends Controller
 
         try {
             $prData = [
-                'pr_no' => $torpr->nomor_pr ?? 'PR-' . $torpr->id,
+                'pr_no' => $this->safeTorprNumber($torpr),
                 'description' => $torpr->tujuan_pengadaan ?? 'Purchase Request',
                 'department' => 'Operasional',
                 'submitted_by' => $request->requested_name,
@@ -1208,7 +1208,7 @@ class TorprController extends Controller
         }
 
         $colors = ['#6366f1', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#3b82f6', '#ef4444', '#14b8a6', '#f97316', '#84cc16', '#06b6d4', '#a855f7'];
-        $number = $torpr->nomor_pr ?: 'PR-' . $torpr->id;
+        $number = $this->safeTorprNumber($torpr);
         $purpose = trim((string) ($torpr->tujuan_pengadaan ?? ''));
         $purpose = $purpose !== '' ? mb_substr($purpose, 0, 90) : 'Tanpa tujuan';
 
@@ -1247,6 +1247,13 @@ class TorprController extends Controller
         return count($parts) >= 2
             ? strtoupper(mb_substr($parts[0], 0, 1) . mb_substr($parts[1], 0, 1))
             : strtoupper(mb_substr($name, 0, 2));
+    }
+
+    private function safeTorprNumber(Torpr $torpr): string
+    {
+        $number = trim((string) ($torpr->nomor_pr ?? ''));
+
+        return $number !== '' ? $number : 'Nomor PR belum diisi';
     }
 
     private function forgetTorprJsonCache(int $id): void

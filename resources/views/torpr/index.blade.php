@@ -1478,6 +1478,7 @@
                             $isCreator = (int) $r->created_by_user_id === (int) auth()->id();
                             $creatorName = $r->creator_name ?: 'Pembuat PR';
                             $creatorContact = $r->creator_email ?: 'email belum tercatat';
+                            $safeNomorPr = trim((string) ($r->nomor_pr ?? '')) !== '' ? $r->nomor_pr : 'Nomor PR belum diisi';
                             $editAccessRequest = $editAccessRequests->get($r->id);
                             $hasApprovedEditAccess = $editAccessRequest
                                 && $editAccessRequest->status === 'approved'
@@ -1667,7 +1668,7 @@
                                                 </button>
                                             @else
                                                 <button type="button"
-                                                    onclick="requestTorprEditAccess({{ $r->id }}, @js($r->nomor_pr ?? ('PR-' . $r->id)), @js($creatorName), @js($creatorContact))"
+                                                    onclick="requestTorprEditAccess({{ $r->id }}, @js($safeNomorPr), @js($creatorName), @js($creatorContact))"
                                                     title="Edit terkunci. Request izin edit ke pembuat PR."
                                                     class="torpr-action-btn is-locked">
                                                     <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1679,7 +1680,7 @@
                                             @endif
 
                                             <button type="button"
-                                                onclick="deleteTorprDraft({{ $r->id }}, @js($r->nomor_pr ?? ('PR-' . $r->id)))"
+                                                onclick="deleteTorprDraft({{ $r->id }}, @js($safeNomorPr))"
                                                 title="Hapus hanya tersedia sebelum PR diajukan ke Umum. Wajib memakai password pembuat PR."
                                                 class="torpr-action-btn bg-red-600 text-white shadow-sm shadow-red-500/20 hover:bg-red-700 dark:bg-red-600 dark:text-white dark:hover:bg-red-500">
                                                 <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -3177,7 +3178,7 @@
 
         async function showAutoRequestPrompt(prId) {
             // Fetch PR data
-            let prNo = 'PR-' + prId;
+            let prNo = 'Nomor PR belum diisi';
 
             const result = await Swal.fire({
                 title: '📨 Request PR ke Umum',
@@ -4462,7 +4463,7 @@
             const torprIncomingEditRequests = @js($incomingEditRequests->map(function ($req) {
                 return [
                     'id' => $req->id,
-                    'nomor_pr' => $req->torpr?->nomor_pr ?: ('PR-' . $req->torpr_id),
+                    'nomor_pr' => $req->torpr?->nomor_pr ?: 'Nomor PR belum diisi',
                     'tujuan' => $req->torpr?->tujuan_pengadaan ?: '-',
                     'requester' => $req->requester?->name ?: 'User',
                     'email' => $req->requester?->email ?: '-',
@@ -4474,7 +4475,7 @@
             const torprOutgoingEditRequests = @js($outgoingEditRequests->map(function ($req) {
                 return [
                     'id' => $req->id,
-                    'nomor_pr' => $req->torpr?->nomor_pr ?: ('PR-' . $req->torpr_id),
+                    'nomor_pr' => $req->torpr?->nomor_pr ?: 'Nomor PR belum diisi',
                     'tujuan' => $req->torpr?->tujuan_pengadaan ?: '-',
                     'owner' => $req->owner?->name ?: 'Pembuat PR',
                     'status' => $req->status,
@@ -4487,7 +4488,7 @@
             })->values());
 
             window.requestTorprEditAccess = async function (id, nomorPr, creatorName, creatorContact) {
-                const safeNomor = nomorPr || ('PR-' + id);
+                const safeNomor = nomorPr || 'Nomor PR belum diisi';
                 const safeCreator = creatorName || 'Pembuat PR';
                 const safeContact = creatorContact || 'kontak belum tercatat';
 
@@ -4789,7 +4790,7 @@
                     html: `
                         <div class="text-left space-y-3">
                             <div class="torpr-delete-danger">
-                                <div class="torpr-delete-danger-title">Data: ${escapeHtml(nomorPr || ('PR-' + id))}</div>
+                                <div class="torpr-delete-danger-title">Data: ${escapeHtml(nomorPr || 'Nomor PR belum diisi')}</div>
                                 <div>
                                     Hapus hanya bisa untuk PR yang belum pernah diajukan ke Umum.
                                     Jika sudah pernah request, sistem akan menolak agar riwayat audit tetap aman.

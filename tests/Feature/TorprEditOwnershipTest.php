@@ -199,6 +199,48 @@ class TorprEditOwnershipTest extends TestCase
         $this->assertStringContainsString((string) $creator->id, (string) $chat->mentions);
     }
 
+    public function test_request_edit_chat_notification_does_not_expose_database_id_when_pr_number_is_empty(): void
+    {
+        $creator = User::factory()->create([
+            'name' => 'Riko Creator',
+            'department' => 'operasional',
+            'role' => 'user',
+        ]);
+
+        $requester = User::factory()->create([
+            'name' => 'Kiwil Requester',
+            'department' => 'operasional',
+            'role' => 'user',
+        ]);
+
+        $torpr = Torpr::create([
+            'created_by_user_id' => $creator->id,
+            'nomor_pr' => null,
+            'tujuan_pengadaan' => 'ATK',
+            'portofolio' => 'IT - FERS',
+            'tanggal_pr' => now(),
+            'jumlah_pr' => 1500000,
+        ]);
+
+        $this->actingAs($requester)
+            ->postJson(route('torpr.requestEdit', $torpr->id), [
+                'reason' => 'Mohon izin edit karena data PR perlu dilengkapi.',
+            ])
+            ->assertOk()
+            ->assertJsonPath('ok', true);
+
+        $chat = DB::table('chat_messages')
+            ->where('share_type', 'torpr_edit_request')
+            ->latest('id')
+            ->first();
+
+        $this->assertNotNull($chat);
+        $this->assertStringContainsString('Nomor PR belum diisi', $chat->message);
+        $this->assertStringNotContainsString('PR-' . $torpr->id, $chat->message);
+        $this->assertStringContainsString('Nomor PR belum diisi', (string) $chat->share_data);
+        $this->assertStringNotContainsString('PR-' . $torpr->id, (string) $chat->share_data);
+    }
+
     public function test_operasional_superadmin_can_edit_without_requesting_creator_permission(): void
     {
         $creator = User::factory()->create([
