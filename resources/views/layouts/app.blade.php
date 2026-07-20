@@ -1642,6 +1642,44 @@
             color: #c7d2fe
         }
 
+        .read-popup-search {
+            padding: 10px 12px 2px;
+            background: rgba(248, 250, 252, .72);
+            border-top: 1px solid rgba(148, 163, 184, .12)
+        }
+
+        .dark .read-popup-search {
+            background: rgba(15, 23, 42, .72);
+            border-top-color: rgba(148, 163, 184, .16)
+        }
+
+        .read-popup-search-input {
+            width: 100%;
+            border: 1px solid rgba(148, 163, 184, .28);
+            border-radius: 12px;
+            padding: 8px 11px;
+            background: rgba(255, 255, 255, .94);
+            color: #0f172a;
+            font-size: .72rem;
+            font-weight: 700;
+            outline: none
+        }
+
+        .read-popup-search-input:focus {
+            border-color: rgba(99, 102, 241, .62);
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, .12)
+        }
+
+        .dark .read-popup-search-input {
+            background: rgba(30, 41, 59, .92);
+            border-color: rgba(148, 163, 184, .24);
+            color: #f8fafc
+        }
+
+        .dark .read-popup-search-input::placeholder {
+            color: #94a3b8
+        }
+
         .read-popup-names {
             max-height: 330px;
             overflow-y: auto;
@@ -1722,6 +1760,11 @@
             font-size: .78rem;
             color: #64748b;
             text-align: center
+        }
+
+        .read-popup-empty.search-empty {
+            display: none;
+            padding-top: 10px
         }
 
         .dark .read-popup-empty {
@@ -3763,6 +3806,28 @@
                 }
             }
 
+            function handleReadPopupPageScroll(e) {
+                if (activeReadPopup && e && e.target && e.target.closest && e.target.closest('.read-popup')) return;
+                closeReadPopup();
+            }
+
+            function attachReadPopupSearch(popup) {
+                var input = popup ? popup.querySelector('.read-popup-search-input') : null;
+                if (!input) return;
+                var items = popup.querySelectorAll('.read-popup-name');
+                var empty = popup.querySelector('.read-popup-empty.search-empty');
+                input.addEventListener('input', function () {
+                    var q = String(input.value || '').toLowerCase().trim(), visible = 0;
+                    for (var i = 0; i < items.length; i++) {
+                        var item = items[i];
+                        var ok = !q || String(item.getAttribute('data-reader-search') || '').indexOf(q) !== -1;
+                        item.style.display = ok ? 'flex' : 'none';
+                        if (ok) visible++;
+                    }
+                    if (empty) empty.style.display = visible ? 'none' : 'block';
+                });
+            }
+
             function toggleReadPopup(checkEl, msgId) {
                 if (activeReadPopup) {
                     var sameAnchor = activeReadAnchor === checkEl;
@@ -3784,18 +3849,20 @@
                         } else {
                             var names = ''; for (var i = 0; i < readers.length; i++) {
                                 var rd = readers[i], rdName = rd.user_name || ('User #' + rd.user_id), c = UCLS[(rd.user_id || 0) % UCLS.length] || '#6366f1';
-                                names += '<div class="read-popup-name"><span class="read-popup-dot" style="background:' + c + '">' + eH(readerInitials(rdName)) + '</span><div class="read-popup-reader"><div class="read-popup-reader-name">' + eH(rdName) + '</div><div class="read-popup-reader-time">' + eH(formatReadDate(rd.read_at)) + '</div></div></div>';
+                                var rdTime = formatReadDate(rd.read_at), rdSearch = (rdName + ' ' + rdTime).toLowerCase();
+                                names += '<div class="read-popup-name" data-reader-search="' + eH(rdSearch) + '"><span class="read-popup-dot" style="background:' + c + '">' + eH(readerInitials(rdName)) + '</span><div class="read-popup-reader"><div class="read-popup-reader-name">' + eH(rdName) + '</div><div class="read-popup-reader-time">' + eH(rdTime) + '</div></div></div>';
                             }
-                            pp.innerHTML = '<div class="read-popup-title"><span>\u{1F441} Dilihat oleh</span><span class="read-popup-count">' + readers.length + ' orang</span></div><div class="read-popup-names">' + names + '</div>';
+                            pp.innerHTML = '<div class="read-popup-title"><span>\u{1F441} Dilihat oleh</span><span class="read-popup-count">' + readers.length + ' orang</span></div><div class="read-popup-search"><input type="search" class="read-popup-search-input" placeholder="Cari nama pembaca..." autocomplete="off"></div><div class="read-popup-names">' + names + '<div class="read-popup-empty search-empty">Nama pembaca tidak ditemukan.</div></div>';
                         }
                         document.body.appendChild(pp);
+                        attachReadPopupSearch(pp);
                         requestAnimationFrame(function () { positionReadPopup(pp, checkEl); pp.classList.add('open') });
                         activeReadPopup = pp; activeReadAnchor = checkEl;
                     }).catch(function () { checkEl.style.opacity = '' });
             }
             document.addEventListener('click', function (e) { if (activeReadPopup && !e.target.closest('.read-popup') && !e.target.closest('.msg-checks')) closeReadPopup() });
             window.addEventListener('resize', closeReadPopup);
-            window.addEventListener('scroll', closeReadPopup, true);
+            window.addEventListener('scroll', handleReadPopupPageScroll, true);
             document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && activeReadPopup) closeReadPopup() });
             if (messagesEl) messagesEl.addEventListener('scroll', closeReadPopup, { passive: true });
 
