@@ -719,12 +719,17 @@ class ChatController extends Controller
             return response()->json(['error' => 'Pesan tidak ditemukan'], 404);
         }
 
+        if ((int) $message->user_id !== (int) Auth::id()) {
+            return response()->json(['error' => 'Read receipt hanya tersedia untuk pengirim pesan'], 403);
+        }
+
         $reads = DB::table('chat_reads')
             ->leftJoin('users', 'chat_reads.user_id', '=', 'users.id')
             ->where('chat_reads.message_id', $id)
             ->where('chat_reads.user_id', '!=', $message->user_id)
             ->select('chat_reads.user_id', 'chat_reads.read_at', 'users.name as user_name')
             ->orderBy('chat_reads.read_at')
+            ->limit(100)
             ->get();
 
         return response()->json([
@@ -756,7 +761,7 @@ class ChatController extends Controller
         $reactions = $this->reactionMap($messageIds, $myId);
 
         foreach ($rows as $row) {
-            $row->read_count = $readCounts[$row->id] ?? 0;
+            $row->read_count = (int) $row->user_id === $myId ? ($readCounts[$row->id] ?? 0) : 0;
             $row->i_read = isset($myReads[$row->id]);
             $row->mentions_parsed = $this->parseMentions($row->mentions ?? null);
             $row->reactions = $reactions[$row->id] ?? [];

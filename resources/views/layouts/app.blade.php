@@ -3185,7 +3185,7 @@
             var draftMentions = [];
             var mentionState = { active: false, start: 0, query: '' };
             var followupState = { active: false, start: 0, query: '', items: [], selected: 0, timer: null, loading: false };
-            var activeReadPopup = null;
+            var activeReadPopup = null, activeReadAnchor = null, activeReadRequestToken = 0;
             var ctxMsgData = null;
             var allUsersLoaded = null;
             var swalActive = false;
@@ -3752,16 +3752,30 @@
                 if (!activeReadPopup) return;
                 var popup = activeReadPopup;
                 popup.classList.remove('open');
-                activeReadPopup = null;
+                activeReadPopup = null; activeReadAnchor = null; activeReadRequestToken++;
                 setTimeout(function () { if (popup && popup.parentNode) popup.parentNode.removeChild(popup) }, 180);
             }
 
+            function ensureReadPopupStillValid() {
+                if (!activeReadPopup) return;
+                if (!activeReadAnchor || !document.body.contains(activeReadAnchor) || !isChatReadable()) {
+                    closeReadPopup();
+                }
+            }
+
             function toggleReadPopup(checkEl, msgId) {
-                if (activeReadPopup) { closeReadPopup(); return }
+                if (activeReadPopup) {
+                    var sameAnchor = activeReadAnchor === checkEl;
+                    closeReadPopup();
+                    if (sameAnchor) return;
+                }
+                var requestToken = ++activeReadRequestToken;
+                activeReadAnchor = checkEl;
                 checkEl.style.opacity = '.5';
                 fetch(URL_READS + msgId + '/reads', { headers: { 'Accept': 'application/json' } })
                     .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json() })
                     .then(function (d) {
+                        if (requestToken !== activeReadRequestToken || !document.body.contains(checkEl) || !isChatReadable()) return;
                         checkEl.style.opacity = '';
                         var pp = document.createElement('div'); pp.className = 'read-popup';
                         var readers = d.readers || [];
@@ -3776,11 +3790,14 @@
                         }
                         document.body.appendChild(pp);
                         requestAnimationFrame(function () { positionReadPopup(pp, checkEl); pp.classList.add('open') });
-                        activeReadPopup = pp;
+                        activeReadPopup = pp; activeReadAnchor = checkEl;
                     }).catch(function () { checkEl.style.opacity = '' });
             }
             document.addEventListener('click', function (e) { if (activeReadPopup && !e.target.closest('.read-popup') && !e.target.closest('.msg-checks')) closeReadPopup() });
             window.addEventListener('resize', closeReadPopup);
+            window.addEventListener('scroll', closeReadPopup, true);
+            document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && activeReadPopup) closeReadPopup() });
+            if (messagesEl) messagesEl.addEventListener('scroll', closeReadPopup, { passive: true });
 
             function renderMentionText(text, mp) { var html = eH(text); if (!mp || !mp.length) return html; var hasAll = false; for (var i = 0; i < mp.length; i++) { if (mp[i].id === 'all') { hasAll = true; continue } var name = mp[i].name || ''; if (name) { var esc = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); html = html.replace(new RegExp('@' + esc, 'g'), '<span class="mention-hl">@' + eH(name) + '</span>') } } if (hasAll) html = html.replace(/@(Semua|semua)/gi, '<span class="mention-all-hl">@$1</span>'); return html }
             function amMentioned(mp) { if (!mp || !mp.length) return false; for (var i = 0; i < mp.length; i++) { if (mp[i].id === 'all') return true; if (String(mp[i].id) === String(MY_ID)) return true } return false }
@@ -3851,7 +3868,7 @@
                     var rc = parseInt(m.read_count) || 0;
                     if (rc > 0) { var ck = document.createElement('span'); ck.className = 'msg-checks msg-checks-read'; ck.textContent = '\u2713\u2713'; ck.title = 'Lihat siapa yang membaca'; ck.setAttribute('aria-label', 'Lihat siapa yang membaca'); ck.setAttribute('data-check-id', m.id); mt.appendChild(ck) }
                     else { var ck2 = document.createElement('span'); ck2.className = 'msg-checks'; ck2.textContent = '\u2713'; ck2.title = 'Terkirim. Belum ada yang membaca'; mt.appendChild(ck2) }
-                    if (m.can_delete) { var dl = document.createElement('button'); dl.type = 'button'; dl.className = 'msg-del'; dl.title = 'Hapus pesan tersedia maksimal 6 jam'; dl.textContent = '\u2715'; dl.setAttribute('data-del-id', m.id); mt.appendChild(dl); scheduleDeleteExpiry(wr, m.delete_expires_at) }
+                    if (m.can_delete) { var dl = document.createElement('button'); dl.type = 'button'; dl.className = 'msg-del'; dl.title = isMe ? 'Hapus pesan untuk semua maksimal 6 jam' : 'Hapus pesan dari tampilan saya'; dl.textContent = '\u2715'; dl.setAttribute('data-del-id', m.id); mt.appendChild(dl); scheduleDeleteExpiry(wr, m.delete_expires_at) }
                 }
                 bd.appendChild(mt); var reactions = document.createElement('div'); reactions.className = 'msg-reactions'; bd.appendChild(reactions); wr.appendChild(av); wr.appendChild(bd);
                 if (prepend) { var firstMessage = messagesEl.querySelector('.msg-wrap'); messagesEl.insertBefore(wr, firstMessage || null) } else messagesEl.appendChild(wr);
@@ -3864,6 +3881,8 @@
 
             /* ── Load messages ── */
             function loadMessages(initial) {
+                ensureReadPopupStillValid();
+                if (initial) closeReadPopup();
                 var since = initial ? 0 : chatMaxId;
                 fetch(URL_MSGS + '?since=' + since, { headers: { 'Accept': 'application/json' } })
                     .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json() })
@@ -3983,8 +4002,9 @@
             };
 
             function doDelete(id) {
+                closeReadPopup();
                 swalActive = true;
-                Swal.fire({ title: 'Hapus pesan?', text: 'Pesan akan dihapus permanen.', icon: 'warning', showCancelButton: true, confirmButtonColor: '#ef4444', cancelButtonColor: '#6b7280', confirmButtonText: 'Ya, hapus', cancelButtonText: 'Batal', allowOutsideClick: true, allowEscapeKey: true, background: document.documentElement.classList.contains('dark') ? '#1f2937' : '#fff', color: document.documentElement.classList.contains('dark') ? '#f3f4f6' : '#111827' })
+                Swal.fire({ title: 'Hapus pesan?', text: 'Pesan sendiri akan dihapus untuk semua. Pesan masuk dari user lain hanya hilang dari tampilan Anda.', icon: 'warning', showCancelButton: true, confirmButtonColor: '#ef4444', cancelButtonColor: '#6b7280', confirmButtonText: 'Ya, hapus', cancelButtonText: 'Batal', allowOutsideClick: true, allowEscapeKey: true, background: document.documentElement.classList.contains('dark') ? '#1f2937' : '#fff', color: document.documentElement.classList.contains('dark') ? '#f3f4f6' : '#111827' })
                     .then(function (r) { setTimeout(function () { swalActive = false }, 100); if (!r.isConfirmed) return; fetch(URL_DEL + id, { method: 'DELETE', headers: { 'X-CSRF-TOKEN': CSRF, 'Accept': 'application/json' } }).then(function (response) { return response.json().catch(function () { return {} }).then(function (body) { if (!response.ok) throw new Error(body.error || 'Gagal menghapus'); return body }) }).then(function () { var el = messagesEl.querySelector('[data-msg-id="' + id + '"]'); if (el) { el.style.animation = 'msgRemove .3s ease forwards'; setTimeout(function () { el.remove(); if (!messagesEl.querySelector('[data-msg-id]')) sE(true) }, 300) } }).catch(function (error) { var el = messagesEl.querySelector('[data-msg-id="' + id + '"]'); if (el) { el.setAttribute('data-can-delete', '0'); var btn = el.querySelector('.msg-del'); if (btn) btn.remove() } toast(error.message || 'Gagal menghapus', 'error') }) });
             }
 
@@ -4008,6 +4028,7 @@
 
             function setChatFullscreen(enabled) {
                 chatFullscreen = !!enabled; chatMinimized = false;
+                closeReadPopup();
                 if (panel) { panel.classList.toggle('fullscreen', chatFullscreen); panel.classList.remove('minimized') }
                 document.body.classList.toggle('chat-fullscreen-open', chatFullscreen);
                 renderPanelModeButtons();
@@ -4023,6 +4044,7 @@
             function minimizeChat() {
                 if (!chatOpen || chatMinimized) return;
                 chatMinimized = true; chatFullscreen = false;
+                closeReadPopup();
                 if (panel) { panel.classList.add('minimized'); panel.classList.remove('fullscreen') }
                 document.body.classList.remove('chat-fullscreen-open'); toggleSearch(false);
                 if (inp) inp.blur(); renderPanelModeButtons(); refreshMentionSummary();
@@ -4032,6 +4054,7 @@
                 if (!chatOpen) { doToggle(); return }
                 var hadMention = mentionUnread > 0;
                 chatMinimized = false;
+                closeReadPopup();
                 if (panel) panel.classList.remove('minimized');
                 unread = 0; uB(); renderPanelModeButtons(); loadMessages(true); startPoll(); startReactionPoll();
                 if (hadMention) setTimeout(scrollToNextMention, 400);

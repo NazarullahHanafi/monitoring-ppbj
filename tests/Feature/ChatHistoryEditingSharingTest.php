@@ -151,6 +151,34 @@ class ChatHistoryEditingSharingTest extends TestCase
             ->assertJsonPath('messages.0.id', $messageId);
     }
 
+    public function test_read_receipts_are_only_visible_to_message_sender(): void
+    {
+        $sender = User::factory()->create();
+        $receiver = User::factory()->create(['name' => 'Pembaca Pesan']);
+        $messageId = $this->insertMessage($sender, 'Pesan yang sudah dibaca');
+
+        DB::table('chat_reads')->insert([
+            'message_id' => $messageId,
+            'user_id' => $receiver->id,
+            'read_at' => now(),
+        ]);
+
+        $this->actingAs($sender)
+            ->getJson('/chat/'.$messageId.'/reads')
+            ->assertOk()
+            ->assertJsonPath('readers.0.user_name', 'Pembaca Pesan');
+
+        $this->actingAs($receiver)
+            ->getJson('/chat/messages')
+            ->assertOk()
+            ->assertJsonPath('messages.0.read_count', 0);
+
+        $this->actingAs($receiver)
+            ->getJson('/chat/'.$messageId.'/reads')
+            ->assertForbidden()
+            ->assertJsonPath('error', 'Read receipt hanya tersedia untuk pengirim pesan');
+    }
+
     public function test_authorized_departments_can_share_pr_spph_and_sp_snapshots(): void
     {
         $operasional = User::factory()->create(['department' => 'operasional']);
