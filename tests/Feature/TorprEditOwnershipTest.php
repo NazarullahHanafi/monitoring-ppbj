@@ -6,6 +6,7 @@ use App\Models\Torpr;
 use App\Models\TorprEditRequest;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 class TorprEditOwnershipTest extends TestCase
@@ -91,6 +92,111 @@ class TorprEditOwnershipTest extends TestCase
             'id' => $torpr->id,
             'tujuan_pengadaan' => 'Sudah diedit dengan izin',
         ]);
+    }
+
+    public function test_editing_with_approved_permission_is_marked_in_activity_log(): void
+    {
+        $creator = User::factory()->create([
+            'department' => 'operasional',
+            'role' => 'user',
+        ]);
+
+        $requester = User::factory()->create([
+            'department' => 'operasional',
+            'role' => 'user',
+        ]);
+
+        $torpr = Torpr::create([
+            'created_by_user_id' => $creator->id,
+            'nomor_pr' => 'PKB/PR-26/CON/1001',
+            'tujuan_pengadaan' => 'Draft dengan badge izin',
+            'portofolio' => 'IT - FERS',
+            'tanggal_pr' => now(),
+            'jumlah_pr' => 1500000,
+        ]);
+
+        $editRequest = TorprEditRequest::create([
+            'torpr_id' => $torpr->id,
+            'requester_user_id' => $requester->id,
+            'owner_user_id' => $creator->id,
+            'status' => 'approved',
+            'reason' => 'Perlu revisi tujuan PR',
+            'reviewed_by_user_id' => $creator->id,
+            'reviewed_at' => now(),
+            'expires_at' => now()->addHours(24),
+        ]);
+
+        $this->actingAs($requester)
+            ->putJson(route('torpr.update', $torpr->id), [
+                'tujuan_pengadaan' => 'Sudah diedit untuk badge izin',
+            ])
+            ->assertOk()
+            ->assertJsonPath('ok', true);
+
+        $this->assertDatabaseHas('activity_logs', [
+            'user_id' => $requester->id,
+            'model_type' => Torpr::class,
+            'model_id' => $torpr->id,
+            'action' => 'updated_with_edit_permission',
+        ]);
+
+        $log = DB::table('activity_logs')
+            ->where('model_type', Torpr::class)
+            ->where('model_id', $torpr->id)
+            ->where('action', 'updated_with_edit_permission')
+            ->first();
+
+        $this->assertStringContainsString((string) $editRequest->id, (string) $log->changes);
+    }
+
+    public function test_request_edit_creates_chat_notification_for_pr_creator(): void
+    {
+        $creator = User::factory()->create([
+            'name' => 'Riko Creator',
+            'department' => 'operasional',
+            'role' => 'user',
+        ]);
+
+        $requester = User::factory()->create([
+            'name' => 'Kiwil Requester',
+            'department' => 'operasional',
+            'role' => 'user',
+        ]);
+
+        $torpr = Torpr::create([
+            'created_by_user_id' => $creator->id,
+            'nomor_pr' => 'PKB/PR-26/CON/1002',
+            'tujuan_pengadaan' => 'Draft perlu request edit chat',
+            'portofolio' => 'IT - FERS',
+            'tanggal_pr' => now(),
+            'jumlah_pr' => 1500000,
+        ]);
+
+        $this->actingAs($requester)
+            ->postJson(route('torpr.requestEdit', $torpr->id), [
+                'reason' => 'Mohon izin edit karena deskripsi PR perlu dilengkapi.',
+            ])
+            ->assertOk()
+            ->assertJsonPath('ok', true);
+
+        $editRequest = TorprEditRequest::where('torpr_id', $torpr->id)
+            ->where('requester_user_id', $requester->id)
+            ->firstOrFail();
+
+        $this->assertDatabaseHas('chat_messages', [
+            'user_id' => $requester->id,
+            'share_type' => 'torpr_edit_request',
+            'share_id' => $editRequest->id,
+        ]);
+
+        $chat = DB::table('chat_messages')
+            ->where('share_type', 'torpr_edit_request')
+            ->where('share_id', $editRequest->id)
+            ->first();
+
+        $this->assertStringContainsString('@Riko Creator', $chat->message);
+        $this->assertStringContainsString('PKB/PR-26/CON/1002', $chat->message);
+        $this->assertStringContainsString((string) $creator->id, (string) $chat->mentions);
     }
 
     public function test_operasional_superadmin_can_edit_without_requesting_creator_permission(): void

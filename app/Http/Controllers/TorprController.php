@@ -227,6 +227,15 @@ class TorprController extends Controller
             ->limit(15)
             ->get();
 
+        $editPermissionLogs = \App\Models\ActivityLog::with('user:id,name')
+            ->where('model_type', Torpr::class)
+            ->whereIn('model_id', $rowIds)
+            ->where('action', 'updated_with_edit_permission')
+            ->latest('id')
+            ->get()
+            ->unique('model_id')
+            ->keyBy('model_id');
+
         // ✅ Ambil master portofolio yang sama dengan PPBJ
         $portofolios = Cache::remember('master_portofolios', 3600, function () {
             return MasterPortofolio::orderBy('nama')->pluck('nama')->toArray();
@@ -238,7 +247,8 @@ class TorprController extends Controller
             'portofolios',
             'editAccessRequests',
             'incomingEditRequests',
-            'outgoingEditRequests'
+            'outgoingEditRequests',
+            'editPermissionLogs'
         ));
     }
 
@@ -312,6 +322,8 @@ class TorprController extends Controller
             'owner' => $torpr->createdBy?->name,
             'reason' => $editRequest->reason,
         ]);
+
+        $this->notifyTorprEditRequestToChat($torpr, $editRequest, $user);
 
         return response()->json([
             'ok' => true,
@@ -723,7 +735,12 @@ class TorprController extends Controller
         $data = $this->normalizeDateTimes($data);
 
         // Cek Hak Akses Kacab
-        $isSuperadminOps = (auth()->user()->role === 'superadmin' && auth()->user()->department === 'operasional');
+        $user = auth()->user();
+        $isSuperadminOps = ($user->role === 'superadmin' && $user->department === 'operasional');
+        $isCreator = (int) $torpr->created_by_user_id === (int) $user->id;
+        $activeEditPermission = (! $isSuperadminOps && ! $isCreator)
+            ? $this->activeTorprEditPermission($torpr, $user)
+            : null;
         $data = $this->applyManualSignerNames($data, $torpr);
 
         // ==========================================
@@ -809,7 +826,23 @@ class TorprController extends Controller
 
         // Simpan Log
         if (!empty($changes)) {
-            $this->logActivity($torpr, 'updated', "Data PR diperbarui", $changes);
+            $logChanges = $changes;
+            $action = 'updated';
+            $description = 'Data PR diperbarui';
+
+            if ($activeEditPermission) {
+                $action = 'updated_with_edit_permission';
+                $description = 'Data PR diperbarui memakai izin Req Edit';
+                $logChanges['_edit_permission'] = [
+                    'request_id' => $activeEditPermission->id,
+                    'requester_user_id' => $activeEditPermission->requester_user_id,
+                    'owner_user_id' => $activeEditPermission->owner_user_id,
+                    'reason' => $activeEditPermission->reason,
+                    'expires_at' => $activeEditPermission->expires_at?->toDateTimeString(),
+                ];
+            }
+
+            $this->logActivity($torpr, $action, $description, $logChanges);
         }
 
         $this->forgetTorprJsonCache((int) $id);
@@ -1142,19 +1175,78 @@ class TorprController extends Controller
             && (int) $torpr->created_by_user_id === (int) $user->id;
 
         $hasApprovedEditRequest = $user
-            && $user->department === 'operasional'
-            && TorprEditRequest::where('torpr_id', $torpr->id)
-                ->where('requester_user_id', $user->id)
-                ->where('owner_user_id', $torpr->created_by_user_id)
-                ->where('status', 'approved')
-                ->where('expires_at', '>', now())
-                ->exists();
+            && $this->activeTorprEditPermission($torpr, $user) !== null;
 
         abort_unless(
             $isSuperadminOps || $isCreator || $hasApprovedEditRequest,
             403,
             'Edit PR terkunci. Silakan request izin edit ke pembuat PR terlebih dahulu.'
         );
+    }
+
+    private function activeTorprEditPermission(Torpr $torpr, User $user): ?TorprEditRequest
+    {
+        if ($user->department !== 'operasional') {
+            return null;
+        }
+
+        return TorprEditRequest::where('torpr_id', $torpr->id)
+            ->where('requester_user_id', $user->id)
+            ->where('owner_user_id', $torpr->created_by_user_id)
+            ->where('status', 'approved')
+            ->where('expires_at', '>', now())
+            ->latest('id')
+            ->first();
+    }
+
+    private function notifyTorprEditRequestToChat(Torpr $torpr, TorprEditRequest $editRequest, User $requester): void
+    {
+        $owner = $torpr->createdBy;
+
+        if (! $owner) {
+            return;
+        }
+
+        $colors = ['#6366f1', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#3b82f6', '#ef4444', '#14b8a6', '#f97316', '#84cc16', '#06b6d4', '#a855f7'];
+        $number = $torpr->nomor_pr ?: 'PR-' . $torpr->id;
+        $purpose = trim((string) ($torpr->tujuan_pengadaan ?? ''));
+        $purpose = $purpose !== '' ? mb_substr($purpose, 0, 90) : 'Tanpa tujuan';
+
+        DB::table('chat_messages')->insert([
+            'user_id' => $requester->id,
+            'user_name' => $requester->name,
+            'user_initials' => $this->chatInitials($requester->name),
+            'user_color' => $colors[$requester->id % count($colors)],
+            'message' => "Req Edit TORPR untuk @{$owner->name}: {$number} - {$purpose}. Alasan: {$editRequest->reason}",
+            'reply_to' => null,
+            'reply_preview' => null,
+            'reply_user' => null,
+            'mentions' => json_encode([
+                ['id' => $owner->id, 'name' => $owner->name],
+            ], JSON_UNESCAPED_UNICODE),
+            'share_type' => 'torpr_edit_request',
+            'share_id' => $editRequest->id,
+            'share_data' => json_encode([
+                'label' => 'Req Edit TORPR',
+                'number' => $number,
+                'title' => $purpose,
+                'status' => 'Menunggu persetujuan pembuat PR',
+                'meta' => 'Requester: ' . $requester->name,
+                'reason' => $editRequest->reason,
+                'torpr_id' => $torpr->id,
+                'request_id' => $editRequest->id,
+            ], JSON_UNESCAPED_UNICODE),
+            'created_at' => now(),
+        ]);
+    }
+
+    private function chatInitials(string $name): string
+    {
+        $parts = preg_split('/\s+/u', trim($name)) ?: [];
+
+        return count($parts) >= 2
+            ? strtoupper(mb_substr($parts[0], 0, 1) . mb_substr($parts[1], 0, 1))
+            : strtoupper(mb_substr($name, 0, 2));
     }
 
     private function forgetTorprJsonCache(int $id): void

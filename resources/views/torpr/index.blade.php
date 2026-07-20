@@ -1484,6 +1484,14 @@
                                 && $editAccessRequest->expires_at
                                 && $editAccessRequest->expires_at->isFuture();
                             $hasPendingEditRequest = $editAccessRequest && $editAccessRequest->status === 'pending';
+                            $editPermissionLog = $editPermissionLogs->get($r->id);
+                            $editPermissionAt = $editPermissionLog?->created_at
+                                ? \Carbon\Carbon::parse($editPermissionLog->created_at)->timezone('Asia/Jakarta')->format('d M Y H:i:s') . ' WIB'
+                                : '-';
+                            $editPermissionBy = $editPermissionLog?->user?->name ?: 'user';
+                            $editPermissionTitle = $editPermissionLog
+                                ? "Diedit dengan izin oleh {$editPermissionBy} pada {$editPermissionAt}"
+                                : '';
 
                             // ✅ Sama seperti filter Kelengkapan Data: hanya Superadmin Operasional
                             $canRequestUmum = auth()->check()
@@ -1519,10 +1527,10 @@
 
                             {{-- Nomor PR + Tombol Info --}}
                             <td class="px-4 py-3 text-gray-900 dark:text-white">
-                                <div class="flex items-center gap-2">
+                                <div class="flex items-start gap-2">
                                     <button type="button" onclick="openInfoPrModal({{ $r->id }})"
                                         title="Lihat informasi PR {{ $r->nomor_pr ?? '' }}"
-                                        class="group relative inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-lg
+                                        class="group relative mt-0.5 inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-lg
                                                        border border-blue-700 bg-blue-600 px-2.5 text-xs font-bold text-white
                                                        shadow-md shadow-blue-500/30 transition-all duration-300
                                                        hover:-translate-y-0.5 hover:bg-blue-700 hover:shadow-lg hover:shadow-blue-500/40
@@ -1537,9 +1545,17 @@
                                         <!-- <span class="relative leading-none">Info</span> -->
                                     </button>
 
-                                    <span class="font-mono font-semibold text-gray-900 dark:text-white">
-                                        {{ $r->nomor_pr ?? '—' }}
-                                    </span>
+                                    <div class="flex min-w-0 flex-col gap-1">
+                                        <span class="font-mono font-semibold text-gray-900 dark:text-white">
+                                            {{ $r->nomor_pr ?? '—' }}
+                                        </span>
+                                        @if($editPermissionLog)
+                                            <span title="{{ $editPermissionTitle }}"
+                                                class="inline-flex w-fit items-center gap-1 rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-black text-violet-700 ring-1 ring-violet-200 dark:bg-violet-950/70 dark:text-violet-100 dark:ring-violet-500/60">
+                                                🔓 Diedit dengan izin
+                                            </span>
+                                        @endif
+                                    </div>
                                 </div>
                             </td>
 
