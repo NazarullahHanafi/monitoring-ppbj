@@ -55,6 +55,12 @@ class ChatController extends Controller
         $myId = Auth::id();
 
         $rows = DB::table('chat_messages')
+            ->whereNotExists(function ($query) use ($myId) {
+                $query->selectRaw('1')
+                    ->from('chat_message_deletions')
+                    ->whereColumn('chat_message_deletions.message_id', 'chat_messages.id')
+                    ->where('chat_message_deletions.user_id', $myId);
+            })
             ->when($before > 0, fn ($query) => $query->where('id', '<', $before))
             ->when($before === 0 && $since > 0, fn ($query) => $query->where('id', '>', $since))
             ->orderByDesc('id')
@@ -131,6 +137,12 @@ class ChatController extends Controller
                     ->whereColumn('chat_reads.message_id', 'chat_messages.id')
                     ->where('chat_reads.user_id', $userId);
             })
+            ->whereNotExists(function ($query) use ($userId) {
+                $query->selectRaw('1')
+                    ->from('chat_message_deletions')
+                    ->whereColumn('chat_message_deletions.message_id', 'chat_messages.id')
+                    ->where('chat_message_deletions.user_id', $userId);
+            })
             ->orderByDesc('id')
             ->limit(self::UNREAD_SCAN_LIMIT)
             ->get(['id', 'user_id', 'user_name', 'message', 'mentions', 'created_at']);
@@ -174,6 +186,12 @@ class ChatController extends Controller
         $like = '%'.$term.'%';
 
         $rows = DB::table('chat_messages')
+            ->whereNotExists(function ($query) {
+                $query->selectRaw('1')
+                    ->from('chat_message_deletions')
+                    ->whereColumn('chat_message_deletions.message_id', 'chat_messages.id')
+                    ->where('chat_message_deletions.user_id', Auth::id());
+            })
             ->where(function ($query) use ($like) {
                 $query->where('message', 'like', $like)
                     ->orWhere('user_name', 'like', $like);
@@ -615,14 +633,31 @@ class ChatController extends Controller
     }
 
     /**
-     * Hapus pesan sendiri.
+     * Hapus pesan.
+     *
+     * Pesan sendiri masih mengikuti batas "hapus untuk semua" selama 6 jam.
+     * Pesan masuk dari user lain hanya disembunyikan untuk user yang sedang login.
      */
     public function destroy(int $id)
     {
         $message = DB::table('chat_messages')->find($id);
+        $userId = Auth::id();
 
-        if (! $message || $message->user_id !== Auth::id()) {
-            return response()->json(['error' => 'Tidak bisa menghapus'], 403);
+        if (! $message) {
+            return response()->json(['error' => 'Pesan tidak ditemukan'], 404);
+        }
+
+        if ((int) $message->user_id !== (int) $userId) {
+            DB::table('chat_message_deletions')->insertOrIgnore([
+                'message_id' => $id,
+                'user_id' => $userId,
+                'deleted_at' => now(),
+            ]);
+
+            return response()->json([
+                'deleted' => $id,
+                'mode' => 'for_me',
+            ]);
         }
 
         if (Carbon::parse($message->created_at)->addHours(self::DELETE_WINDOW_HOURS)->isPast()) {
@@ -633,7 +668,10 @@ class ChatController extends Controller
         DB::table('chat_reads')->where('message_id', $id)->delete();
         DB::table('chat_messages')->delete($id);
 
-        return response()->json(['deleted' => $id]);
+        return response()->json([
+            'deleted' => $id,
+            'mode' => 'for_everyone',
+        ]);
     }
 
     /**
@@ -726,8 +764,8 @@ class ChatController extends Controller
             $createdAt = Carbon::parse($row->created_at);
             $row->can_edit = (int) $row->user_id === $myId
                 && $createdAt->copy()->addMinutes(self::EDIT_WINDOW_MINUTES)->isFuture();
-            $row->can_delete = (int) $row->user_id === $myId
-                && $createdAt->copy()->addHours(self::DELETE_WINDOW_HOURS)->isFuture();
+            $row->can_delete = (int) $row->user_id !== $myId
+                || $createdAt->copy()->addHours(self::DELETE_WINDOW_HOURS)->isFuture();
             $row->delete_expires_at = (int) $row->user_id === $myId
                 ? $createdAt->copy()->addHours(self::DELETE_WINDOW_HOURS)->toIso8601String()
                 : null;

@@ -117,6 +117,40 @@ class ChatHistoryEditingSharingTest extends TestCase
             ->assertJsonPath('messages.0.can_delete', false);
     }
 
+    public function test_receiver_can_hide_incoming_message_without_deleting_it_for_sender(): void
+    {
+        $sender = User::factory()->create();
+        $receiver = User::factory()->create();
+        $messageId = $this->insertMessage($sender, 'Pesan masuk untuk penerima');
+
+        $this->actingAs($receiver)
+            ->getJson('/chat/messages')
+            ->assertOk()
+            ->assertJsonPath('messages.0.can_delete', true);
+
+        $this->actingAs($receiver)
+            ->deleteJson('/chat/'.$messageId)
+            ->assertOk()
+            ->assertJsonPath('deleted', $messageId)
+            ->assertJsonPath('mode', 'for_me');
+
+        $this->assertDatabaseHas('chat_messages', ['id' => $messageId]);
+        $this->assertDatabaseHas('chat_message_deletions', [
+            'message_id' => $messageId,
+            'user_id' => $receiver->id,
+        ]);
+
+        $this->actingAs($receiver)
+            ->getJson('/chat/messages')
+            ->assertOk()
+            ->assertJsonCount(0, 'messages');
+
+        $this->actingAs($sender)
+            ->getJson('/chat/messages')
+            ->assertOk()
+            ->assertJsonPath('messages.0.id', $messageId);
+    }
+
     public function test_authorized_departments_can_share_pr_spph_and_sp_snapshots(): void
     {
         $operasional = User::factory()->create(['department' => 'operasional']);
