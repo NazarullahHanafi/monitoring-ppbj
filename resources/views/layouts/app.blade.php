@@ -522,6 +522,51 @@
             padding: 6px
         }
 
+        .pp-scroll-tools {
+            display: none;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 0 10px 8px
+        }
+
+        .pp-scroll-tools.show {
+            display: flex
+        }
+
+        .pp-scroll-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            min-width: 92px;
+            border: 1px solid rgba(99, 102, 241, .22);
+            background: linear-gradient(135deg, rgba(99, 102, 241, .08), rgba(14, 165, 233, .08));
+            color: #4338ca;
+            border-radius: 999px;
+            padding: 6px 10px;
+            font-size: .68rem;
+            font-weight: 900;
+            transition: transform .18s ease, background .18s ease, box-shadow .18s ease
+        }
+
+        .pp-scroll-btn:hover {
+            transform: translateY(-1px);
+            background: linear-gradient(135deg, rgba(99, 102, 241, .14), rgba(14, 165, 233, .14));
+            box-shadow: 0 8px 18px rgba(99, 102, 241, .16)
+        }
+
+        .dark .pp-scroll-btn {
+            border-color: rgba(129, 140, 248, .28);
+            background: linear-gradient(135deg, rgba(129, 140, 248, .14), rgba(56, 189, 248, .10));
+            color: #c7d2fe
+        }
+
+        .dark .pp-scroll-btn:hover {
+            background: linear-gradient(135deg, rgba(129, 140, 248, .22), rgba(56, 189, 248, .16));
+            box-shadow: 0 8px 18px rgba(0, 0, 0, .25)
+        }
+
         .pp-list::-webkit-scrollbar {
             width: 3px
         }
@@ -3274,6 +3319,30 @@
             window._presenceUsers = [];
             function eH(s) { return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;') }
             function moodText(mood) { for (var mi = 0; mi < MO.length; mi++) { if (MO[mi].e === mood) return MO[mi].l + ' — ' + MO[mi].d } return mood || '' }
+            function ensurePresenceScrollTools() {
+                var list = document.getElementById('ppList'), panel = document.getElementById('presencePanel');
+                if (!list || !panel) return;
+
+                var tools = document.getElementById('ppScrollTools');
+                if (!tools) {
+                    tools = document.createElement('div');
+                    tools.id = 'ppScrollTools';
+                    tools.className = 'pp-scroll-tools';
+                    tools.innerHTML = '<button type="button" class="pp-scroll-btn" id="ppScrollTop">Atas</button><button type="button" class="pp-scroll-btn" id="ppScrollBottom">Bawah</button>';
+
+                    var footer = panel.querySelector('.pp-footer');
+                    panel.insertBefore(tools, footer || null);
+
+                    var topBtn = document.getElementById('ppScrollTop'), bottomBtn = document.getElementById('ppScrollBottom');
+                    if (topBtn) topBtn.addEventListener('click', function (e) { e.preventDefault(); e.stopPropagation(); list.scrollTo({ top: 0, behavior: 'smooth' }); });
+                    if (bottomBtn) bottomBtn.addEventListener('click', function (e) { e.preventDefault(); e.stopPropagation(); list.scrollTo({ top: list.scrollHeight, behavior: 'smooth' }); });
+                    tools.addEventListener('click', function (e) { e.stopPropagation(); });
+                }
+
+                setTimeout(function () {
+                    tools.classList.toggle('show', list.scrollHeight > list.clientHeight + 8);
+                }, 40);
+            }
             function render(u) {
                 window._presenceUsers = u; var st = document.getElementById('avatarStack'), pl = document.getElementById('ppList'), c = u.length,
                     oc = document.getElementById('onlineCountLabel'), pc = document.getElementById('ppCount'), cp = document.getElementById('cpOnlineCount');
@@ -3283,7 +3352,7 @@
                 if (st) { var v = u.slice(0, MA), ov = c - MA, h = ''; for (var j = 0; j < v.length; j++) { var x = v[j], xt = x.name + (x.mood ? ' • ' + x.mood + ' ' + moodText(x.mood) : ''); h += '<div class="av" style="background:' + x.color + '" title="' + eH(xt) + '">' + x.initials + (x.mood ? '<span class="mood-tag mood-tag-sm">' + x.mood + '</span>' : '') + '</div>' } if (ov > 0) h += '<div class="av av-overflow" title="' + ov + ' lainnya">+' + ov + '</div>'; st.innerHTML = h }
                 if (pl) { if (!c) { pl.innerHTML = '<div class="pp-empty">Tidak ada yang online</div>'; return } var ph = ''; for (var k = 0; k < u.length; k++) { var w = u[k], wt = w.name + (w.mood ? ' • ' + w.mood + ' ' + moodText(w.mood) : ''); ph += '<div class="pp-row' + (w.is_me ? ' me' : '') + '" title="' + eH(wt) + '"><div class="pp-av" style="background:' + w.color + '">' + w.initials + (w.mood ? '<span class="mood-tag">' + w.mood + '</span>' : '') + '</div><div class="pp-info"><div class="pp-name">' + eH(w.name) + '</div><div class="pp-dept">' + eH(w.department) + (w.mood ? ' • ' + eH(moodText(w.mood)) : '') + '</div></div>' + (w.is_me ? '<span class="pp-me-tag">Kamu</span>' : '') + '</div>' } pl.innerHTML = ph }
             }
-            function hb() { fetch(UH, { method: 'POST', headers: { 'X-CSRF-TOKEN': CSRF, 'Accept': 'application/json' } }).then(function (r) { if (!r.ok) throw 0; return r.json() }).then(function (d) { if (Array.isArray(d.online)) render(d.online) }).catch(function () { }) }
+            function hb() { fetch(UH, { method: 'POST', headers: { 'X-CSRF-TOKEN': CSRF, 'Accept': 'application/json' } }).then(function (r) { if (!r.ok) throw 0; return r.json() }).then(function (d) { if (Array.isArray(d.online)) { render(d.online); ensurePresenceScrollTools(); } }).catch(function () { }) }
             function cmM() { if (mC) return; mC = true; fetch(UG, { headers: { 'Accept': 'application/json' } }).then(function (r) { if (!r.ok) throw 0; return r.json() }).then(function (d) { if (d.mood) { myM = d.mood; window._myMood = myM || null; if (window.updateQuickMoodButton) window.updateQuickMoodButton(); var mf = document.getElementById('myMoodFloat'); if (mf) { mf.textContent = myM; mf.classList.remove('hidden') } } else { setTimeout(sMP, 1500) } }).catch(function () { }) }
             function sMP() { if (typeof Swal !== 'undefined' && Swal.isVisible()) return; var de = document.createElement('div'); de.className = 'mood-desc'; de.textContent = 'Pilih salah satu'; var ge = document.createElement('div'); ge.className = 'mood-grid'; MO.forEach(function (m) { var b = document.createElement('button'); b.type = 'button'; b.className = 'mood-btn'; b.innerHTML = '<span class="m-emoji">' + m.e + '</span><span class="m-label">' + m.l + '</span>'; b.addEventListener('mouseenter', function () { de.textContent = m.d; de.style.color = '#6366f1' }); b.addEventListener('mouseleave', function () { de.textContent = 'Pilih salah satu'; de.style.color = '' }); b.addEventListener('click', function () { if (mS) return; mS = true; Swal.close(); fetch(US, { method: 'POST', headers: { 'X-CSRF-TOKEN': CSRF, 'Content-Type': 'application/json', 'Accept': 'application/json' }, body: JSON.stringify({ mood: m.e }) }).then(function (r) { if (!r.ok) throw 0; return r.json() }).then(function (d) { myM = d.mood; var mf = document.getElementById('myMoodFloat'); if (mf) { mf.textContent = myM; mf.classList.remove('hidden') } hb() }).catch(function () { myM = m.e; var mf = document.getElementById('myMoodFloat'); if (mf) { mf.textContent = myM; mf.classList.remove('hidden') } }).finally(function () { mS = false }); setTimeout(function () { Swal.fire({ html: '<div style="text-align:center;padding:12px 0"><div style="font-size:3.5rem;line-height:1">' + m.e + '</div><div style="font-size:.9rem;color:#111827;font-weight:700;margin-top:10px">' + m.l + '!</div><div style="font-size:.78rem;color:#9ca3af;margin-top:4px">' + m.d + '</div></div>', timer: 1600, timerProgressBar: true, showConfirmButton: false, background: 'rgba(255,255,255,.95)', backdrop: 'rgba(0,0,0,.08)', customClass: { popup: 'rounded-2xl shadow-2xl' } }) }, 200) }); ge.appendChild(b) }); var sb = document.createElement('button'); sb.type = 'button'; sb.className = 'mood-skip'; sb.textContent = 'Lewati dulu'; sb.addEventListener('click', function () { Swal.close() }); var ct = document.createElement('div'); ct.appendChild(ge); ct.appendChild(de); ct.appendChild(sb); Swal.fire({ title: 'Bagaimana harimu?', html: ct, showConfirmButton: false, showCloseButton: true, allowOutsideClick: false, background: 'rgba(255,255,255,.97)', backdrop: 'rgba(0,0,0,.15)', width: 'auto', padding: '0 0 4px 0', customClass: { popup: 'rounded-2xl shadow-2xl', closeButton: 'hover:rotate-90 transition-transform duration-300' }, didOpen: function () { ge.querySelectorAll('.mood-btn').forEach(function (b, i) { b.style.opacity = '0'; b.style.transform = 'translateY(15px) scale(.8)'; setTimeout(function () { b.style.transition = 'all .35s cubic-bezier(.68,-.55,.265,1.55)'; b.style.opacity = '1'; b.style.transform = 'translateY(0) scale(1)' }, 50 * i) }) } }) }
             function moodGreeting() {
@@ -3291,14 +3360,15 @@
                 var slot = h < 11 ? 'pagi' : (h < 15 ? 'siang' : (h < 18 ? 'sore' : 'malam'));
                 var greet = slot === 'pagi' ? 'Selamat pagi' : (slot === 'siang' ? 'Selamat siang' : (slot === 'sore' ? 'Selamat sore' : 'Selamat malam'));
                 var first = String(MY_NAME || 'User').trim().split(/\s+/)[0] || 'User';
-                var sweet = String(MY_GENDER || '').toLowerCase() === 'female' ? 'cantik ' : '';
+                var isFemale = String(MY_GENDER || '').toLowerCase() === 'female';
+                var nameLabel = first + (isFemale ? ' Cantik' : '');
                 var jokes = {
-                    pagi: 'Mood dulu ya, biar dashboard tahu kamu datang dengan vibes apa. Kopi boleh, drama jangan dulu awkwk.',
-                    siang: 'Sebelum lanjut gas kerjaan, setor mood dulu. PR boleh banyak, senyum jangan hilang 😄',
-                    sore: 'Sore-sore cek mood dulu. Kalau capek, sistem tetap nemenin pelan-pelan.',
-                    malam: 'Selamat malam, pejuang sistem. Mood dulu biar lembur terasa agak manusiawi awkwk.'
+                    pagi: isFemale ? 'Kamu terlihat indah hari ini. Mood dulu ya, biar kerjaan ikut happy awkwk.' : 'Kamu kelihatan siap menaklukkan hari ini. Mood dulu ya, biar dashboard ikut semangat.',
+                    siang: isFemale ? 'Tetap glowing walau PR banyak. Setor mood dulu, habis itu kita gas pelan-pelan.' : 'Siang-siang tetap keren. Setor mood dulu, PR boleh banyak tapi tetap santuy.',
+                    sore: isFemale ? 'Sore ini vibes kamu tetap manis. Pilih mood dulu, sistem siap nemenin.' : 'Sore-sore tetap solid. Pilih mood dulu, sistem siap nemenin sampai beres.',
+                    malam: isFemale ? 'Malam ini kamu tetap cantik dan kuat. Mood dulu, biar lembur terasa agak manusiawi awkwk.' : 'Selamat malam, pejuang sistem. Mood dulu biar lembur terasa agak manusiawi awkwk.'
                 };
-                return { title: greet + ', ' + sweet + first + '!', text: jokes[slot] || jokes.pagi };
+                return { title: greet + ' ' + nameLabel + '!', text: jokes[slot] || jokes.pagi };
             }
 
             function sMPRequired() {
@@ -3404,9 +3474,10 @@
 
             sMP = sMPRequired;
             window.showMoodPicker = sMP;
-            function tPP() { pO = !pO; var p = document.getElementById('presencePanel'); if (p) p.classList.toggle('open', pO) }
+            function tPP() { pO = !pO; var p = document.getElementById('presencePanel'); if (p) p.classList.toggle('open', pO); if (pO) setTimeout(ensurePresenceScrollTools, 80) }
             cPP = function () { pO = false; var p = document.getElementById('presencePanel'); if (p) p.classList.remove('open') };
             window.closePresencePanel = cPP;
+            window.addEventListener('resize', ensurePresenceScrollTools);
             var pt = document.getElementById('presenceTrigger'); if (pt) pt.addEventListener('click', function (e) { e.stopPropagation(); tPP() });
             var mb = document.getElementById('btnChangeMood'); if (mb) mb.addEventListener('click', sMP);
             document.addEventListener('click', function (e) { var w = document.getElementById('presenceWrap'); if (pO && w && !w.contains(e.target)) cPP() });
