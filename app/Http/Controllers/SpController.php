@@ -4258,7 +4258,9 @@ class SpController extends Controller
             $isSuratPesananBiasa = trim((string) $nomorKontrak) === '';
             $lanjutan = ! $isSuratPesananBiasa ? ('Lanjutan Kontrak No. ' . trim((string) $nomorKontrak)) : '';
 
-            $firstPageShapeTop = $isSuratPesananBiasa ? '-110pt' : '-91.5pt';
+            // Posisi kop halaman pertama disamakan untuk Surat Pesanan biasa
+            // dan dokumen kontrak/SP di atas Rp50 juta agar hasil cetak konsisten.
+            $firstPageShapeTop = '-110pt';
 
             $putString('word/header1.xml', $makeHeaderXml('rId1', 'kop_surat_halaman_1', 'WordPictureWatermark27082704', '', $firstPageShapeTop, false));
             $putString('word/header2.xml', $makeHeaderXml('rId1', 'kop_surat_lanjutan', 'WordPictureWatermark27082705', $lanjutan, '-113.5pt', true));
