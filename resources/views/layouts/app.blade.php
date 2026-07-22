@@ -2487,6 +2487,35 @@
             border-color: rgba(20, 184, 166, .35)
         }
 
+        .quick-mood-btn {
+            display: none;
+            align-items: center;
+            gap: 5px;
+            font-size: .7rem;
+            font-weight: 900;
+            color: #db2777;
+            cursor: pointer;
+            padding: 4px 9px;
+            border-radius: 999px;
+            border: 1.5px solid rgba(236, 72, 153, .2);
+            transition: all .15s;
+            user-select: none;
+            flex-shrink: 0;
+            background: linear-gradient(135deg, rgba(236, 72, 153, .1), rgba(249, 115, 22, .1))
+        }
+
+        .dark .quick-mood-btn {
+            color: #f9a8d4;
+            background: linear-gradient(135deg, rgba(236, 72, 153, .16), rgba(249, 115, 22, .14));
+            border-color: rgba(249, 168, 212, .24)
+        }
+
+        .quick-mood-btn:hover {
+            transform: translateY(-1px) scale(1.03);
+            background: linear-gradient(135deg, rgba(236, 72, 153, .18), rgba(249, 115, 22, .16));
+            border-color: rgba(236, 72, 153, .38)
+        }
+
         .cp-char {
             font-size: .62rem;
             color: #9ca3af;
@@ -3182,21 +3211,22 @@
             var UH = '{{ route('presence.heartbeat') }}', UG = '{{ route('presence.mood.get') }}', US = '{{ route('presence.mood') }}',
                 CSRF = (document.querySelector('meta[name="csrf-token"]') || {}).content || '', IV = 120000, MA = 4,
                 CL = ['#6366f1', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#3b82f6', '#ef4444', '#14b8a6', '#f97316', '#84cc16', '#06b6d4', '#a855f7'],
-                MO = [{ e: '\u{1F604}', l: 'Senang', d: 'Hari menyenangkan!' }, { e: '\u{1F60A}', l: 'Baik', d: 'Berjalan lancar' }, { e: '\u{1F60E}', l: 'Keren', d: 'On top of the world' }, { e: '\u{1F525}', l: 'Semangat', d: "Full energy!" }, { e: '\u{1F389}', l: 'Eksis', d: 'Ada spesial' }, { e: '\u{1F62E}', l: 'Wow', d: 'Banyak kejutan' }, { e: '\u{1F610}', l: 'Biasa', d: 'Gitu aja' }, { e: '\u{1F62B}', l: 'Lelah', d: 'Butuh kopi' }, { e: '\u{1F971}', l: 'Ngantuk', d: 'Mata 5 watt, jiwa tetap online ☕' }, { e: '\u{1F60C}', l: 'Santuy', d: 'Pelan-pelan asal kelar, bestie' }, { e: '\u{1F92F}', l: 'Overthinking', d: 'Mikirnya kejauhan, kerjaan tetap jalan' }, { e: '\u{1FAE0}', l: 'Meleleh', d: 'Capek tipis, tetap elegan awkwk' }, { e: '\u{1F621}', l: 'Badmood', d: 'Butuh ruang dulu, jangan disenggol 😅' }, { e: '\u{1F622}', l: 'Sedih', d: 'Besok lebih baik' }, { e: '\u{1F912}', l: 'Sakit', d: 'Tidak enak badan' }];
+                MO = [{ e: '\u{1F604}', l: 'Senang', d: 'Hari menyenangkan!' }, { e: '\u{1F60A}', l: 'Baik', d: 'Berjalan lancar' }, { e: '\u{1F60E}', l: 'Keren', d: 'On top of the world' }, { e: '\u{1F525}', l: 'Semangat', d: "Full energy!" }, { e: '\u{1F389}', l: 'Eksis', d: 'Ada spesial' }, { e: '\u{1F62E}', l: 'Wow', d: 'Banyak kejutan' }, { e: '\u{1F610}', l: 'Biasa', d: 'Gitu aja' }, { e: '\u{1F62B}', l: 'Lelah', d: 'Butuh kopi' }, { e: '\u{1F971}', l: 'Ngantuk', d: 'Mata 5 watt, jiwa tetap online ☕' }, { e: '\u{1F60C}', l: 'Santuy', d: 'Pelan-pelan asal kelar, bestie' }, { e: '\u{1F92F}', l: 'Overthinking', d: 'Mikirnya kejauhan, kerjaan tetap jalan' }, { e: '\u{1FAE0}', l: 'Meleleh', d: 'Capek tipis, tetap elegan awkwk' }, { e: '\u{1F4BC}', l: 'Sibuk', d: 'Mode fokus, balasnya kalau semesta mengizinkan' }, { e: '\u{1F6B6}', l: 'Away', d: 'Lagi geser dari radar, nanti muncul lagi' }, { e: '\u{26D4}', l: 'Jangan Ganggu', d: 'Sedang bertapa digital, urgent boleh colek' }, { e: '\u{1F621}', l: 'Badmood', d: 'Butuh ruang dulu, jangan disenggol 😅' }, { e: '\u{1F622}', l: 'Sedih', d: 'Besok lebih baik' }, { e: '\u{1F912}', l: 'Sakit', d: 'Tidak enak badan' }];
             var tm = null, pO = false, myM = null, mC = false, mS = false;
             window._presenceUsers = [];
             function eH(s) { return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;') }
+            function moodText(mood) { for (var mi = 0; mi < MO.length; mi++) { if (MO[mi].e === mood) return MO[mi].l + ' — ' + MO[mi].d } return mood || '' }
             function render(u) {
                 window._presenceUsers = u; var st = document.getElementById('avatarStack'), pl = document.getElementById('ppList'), c = u.length,
                     oc = document.getElementById('onlineCountLabel'), pc = document.getElementById('ppCount'), cp = document.getElementById('cpOnlineCount');
                 if (oc) oc.textContent = c; if (pc) pc.textContent = c; if (cp) cp.textContent = c + ' orang online';
                 var me = null; for (var i = 0; i < u.length; i++) { if (u[i].is_me) { me = u[i]; break } }
-                if (me) myM = me.mood || null; var mf = document.getElementById('myMoodFloat'); if (mf) { if (myM) { mf.textContent = myM; mf.classList.remove('hidden') } else { mf.classList.add('hidden') } }
-                if (st) { var v = u.slice(0, MA), ov = c - MA, h = ''; for (var j = 0; j < v.length; j++) { var x = v[j]; h += '<div class="av" style="background:' + x.color + '" title="' + eH(x.name) + (x.mood ? ' ' + x.mood : '') + '">' + x.initials + (x.mood ? '<span class="mood-tag mood-tag-sm">' + x.mood + '</span>' : '') + '</div>' } if (ov > 0) h += '<div class="av av-overflow" title="' + ov + ' lainnya">+' + ov + '</div>'; st.innerHTML = h }
-                if (pl) { if (!c) { pl.innerHTML = '<div class="pp-empty">Tidak ada yang online</div>'; return } var ph = ''; for (var k = 0; k < u.length; k++) { var w = u[k]; ph += '<div class="pp-row' + (w.is_me ? ' me' : '') + '"><div class="pp-av" style="background:' + w.color + '">' + w.initials + (w.mood ? '<span class="mood-tag">' + w.mood + '</span>' : '') + '</div><div class="pp-info"><div class="pp-name">' + eH(w.name) + '</div><div class="pp-dept">' + eH(w.department) + '</div></div>' + (w.is_me ? '<span class="pp-me-tag">Kamu</span>' : '') + '</div>' } pl.innerHTML = ph }
+                if (me) myM = me.mood || null; window._myMood = myM || null; if (window.updateQuickMoodButton) window.updateQuickMoodButton(); var mf = document.getElementById('myMoodFloat'); if (mf) { if (myM) { mf.textContent = myM; mf.classList.remove('hidden') } else { mf.classList.add('hidden') } }
+                if (st) { var v = u.slice(0, MA), ov = c - MA, h = ''; for (var j = 0; j < v.length; j++) { var x = v[j], xt = x.name + (x.mood ? ' • ' + x.mood + ' ' + moodText(x.mood) : ''); h += '<div class="av" style="background:' + x.color + '" title="' + eH(xt) + '">' + x.initials + (x.mood ? '<span class="mood-tag mood-tag-sm">' + x.mood + '</span>' : '') + '</div>' } if (ov > 0) h += '<div class="av av-overflow" title="' + ov + ' lainnya">+' + ov + '</div>'; st.innerHTML = h }
+                if (pl) { if (!c) { pl.innerHTML = '<div class="pp-empty">Tidak ada yang online</div>'; return } var ph = ''; for (var k = 0; k < u.length; k++) { var w = u[k], wt = w.name + (w.mood ? ' • ' + w.mood + ' ' + moodText(w.mood) : ''); ph += '<div class="pp-row' + (w.is_me ? ' me' : '') + '" title="' + eH(wt) + '"><div class="pp-av" style="background:' + w.color + '">' + w.initials + (w.mood ? '<span class="mood-tag">' + w.mood + '</span>' : '') + '</div><div class="pp-info"><div class="pp-name">' + eH(w.name) + '</div><div class="pp-dept">' + eH(w.department) + (w.mood ? ' • ' + eH(moodText(w.mood)) : '') + '</div></div>' + (w.is_me ? '<span class="pp-me-tag">Kamu</span>' : '') + '</div>' } pl.innerHTML = ph }
             }
             function hb() { fetch(UH, { method: 'POST', headers: { 'X-CSRF-TOKEN': CSRF, 'Accept': 'application/json' } }).then(function (r) { if (!r.ok) throw 0; return r.json() }).then(function (d) { if (Array.isArray(d.online)) render(d.online) }).catch(function () { }) }
-            function cmM() { if (mC) return; mC = true; fetch(UG, { headers: { 'Accept': 'application/json' } }).then(function (r) { if (!r.ok) throw 0; return r.json() }).then(function (d) { if (d.mood) { myM = d.mood; var mf = document.getElementById('myMoodFloat'); if (mf) { mf.textContent = myM; mf.classList.remove('hidden') } } else { setTimeout(sMP, 1500) } }).catch(function () { }) }
+            function cmM() { if (mC) return; mC = true; fetch(UG, { headers: { 'Accept': 'application/json' } }).then(function (r) { if (!r.ok) throw 0; return r.json() }).then(function (d) { if (d.mood) { myM = d.mood; window._myMood = myM || null; if (window.updateQuickMoodButton) window.updateQuickMoodButton(); var mf = document.getElementById('myMoodFloat'); if (mf) { mf.textContent = myM; mf.classList.remove('hidden') } } else { setTimeout(sMP, 1500) } }).catch(function () { }) }
             function sMP() { if (typeof Swal !== 'undefined' && Swal.isVisible()) return; var de = document.createElement('div'); de.className = 'mood-desc'; de.textContent = 'Pilih salah satu'; var ge = document.createElement('div'); ge.className = 'mood-grid'; MO.forEach(function (m) { var b = document.createElement('button'); b.type = 'button'; b.className = 'mood-btn'; b.innerHTML = '<span class="m-emoji">' + m.e + '</span><span class="m-label">' + m.l + '</span>'; b.addEventListener('mouseenter', function () { de.textContent = m.d; de.style.color = '#6366f1' }); b.addEventListener('mouseleave', function () { de.textContent = 'Pilih salah satu'; de.style.color = '' }); b.addEventListener('click', function () { if (mS) return; mS = true; Swal.close(); fetch(US, { method: 'POST', headers: { 'X-CSRF-TOKEN': CSRF, 'Content-Type': 'application/json', 'Accept': 'application/json' }, body: JSON.stringify({ mood: m.e }) }).then(function (r) { if (!r.ok) throw 0; return r.json() }).then(function (d) { myM = d.mood; var mf = document.getElementById('myMoodFloat'); if (mf) { mf.textContent = myM; mf.classList.remove('hidden') } hb() }).catch(function () { myM = m.e; var mf = document.getElementById('myMoodFloat'); if (mf) { mf.textContent = myM; mf.classList.remove('hidden') } }).finally(function () { mS = false }); setTimeout(function () { Swal.fire({ html: '<div style="text-align:center;padding:12px 0"><div style="font-size:3.5rem;line-height:1">' + m.e + '</div><div style="font-size:.9rem;color:#111827;font-weight:700;margin-top:10px">' + m.l + '!</div><div style="font-size:.78rem;color:#9ca3af;margin-top:4px">' + m.d + '</div></div>', timer: 1600, timerProgressBar: true, showConfirmButton: false, background: 'rgba(255,255,255,.95)', backdrop: 'rgba(0,0,0,.08)', customClass: { popup: 'rounded-2xl shadow-2xl' } }) }, 200) }); ge.appendChild(b) }); var sb = document.createElement('button'); sb.type = 'button'; sb.className = 'mood-skip'; sb.textContent = 'Lewati dulu'; sb.addEventListener('click', function () { Swal.close() }); var ct = document.createElement('div'); ct.appendChild(ge); ct.appendChild(de); ct.appendChild(sb); Swal.fire({ title: 'Bagaimana harimu?', html: ct, showConfirmButton: false, showCloseButton: true, allowOutsideClick: false, background: 'rgba(255,255,255,.97)', backdrop: 'rgba(0,0,0,.15)', width: 'auto', padding: '0 0 4px 0', customClass: { popup: 'rounded-2xl shadow-2xl', closeButton: 'hover:rotate-90 transition-transform duration-300' }, didOpen: function () { ge.querySelectorAll('.mood-btn').forEach(function (b, i) { b.style.opacity = '0'; b.style.transform = 'translateY(15px) scale(.8)'; setTimeout(function () { b.style.transition = 'all .35s cubic-bezier(.68,-.55,.265,1.55)'; b.style.opacity = '1'; b.style.transform = 'translateY(0) scale(1)' }, 50 * i) }) } }) }
             window.showMoodPicker = sMP;
             function tPP() { pO = !pO; var p = document.getElementById('presencePanel'); if (p) p.classList.toggle('open', pO) }
@@ -3228,7 +3258,7 @@
             var draftMentions = [];
             var mentionState = { active: false, start: 0, query: '' };
             var followupState = { active: false, start: 0, query: '', items: [], selected: 0, timer: null, loading: false };
-            var activeReadPopup = null, activeReadAnchor = null, activeReadRequestToken = 0;
+            var activeReadPopup = null, activeReadAnchor = null, activeReadRequestToken = 0, quickMoodBtn = null;
             var ctxMsgData = null;
             var allUsersLoaded = null;
             var swalActive = false;
@@ -3480,11 +3510,53 @@
                 return fetch(URL_USERS, { headers: { 'Accept': 'application/json' } }).then(function (r) { if (!r.ok) throw 0; return r.json() }).then(function (data) { allUsersLoaded = data.map(function (u) { var p = (u.name || '').split(' '); return { id: u.id, name: u.name, department: u.department || '', initials: p.length >= 2 ? (p[0][0] + p[1][0]).toUpperCase() : (u.name || '??').substring(0, 2).toUpperCase(), color: UCLS[u.id % UCLS.length] } }); return allUsersLoaded }).catch(function () { return [] });
             }
 
+            function getQuickMoodReply() {
+                var mood = window._myMood || '';
+                var map = {
+                    '🥱': 'Mode ngantuk dulu ya, kalau slow response bukan ghosting—lagi buffering sambil cari kopi ☕',
+                    '😌': 'Lagi mode santuy produktif. Pelan-pelan asal kelar, bestie 😌',
+                    '🤯': 'Lagi overthinking tipis, tapi tenang kerjaan tetap jalan. Otak cuma buka banyak tab 🤯',
+                    '🫠': 'Mode meleleh aktif. Capek tipis, tetap elegan awkwk 🫠',
+                    '😡': 'Lagi badmood dulu ya. Mohon jangan disenggol kecuali urgent banget 😅',
+                    '💼': 'Lagi mode sibuk/fokus. Kalau belum balas, bukan sombong—lagi ngejar task 💼',
+                    '🚶': 'Lagi away sebentar. Nanti muncul lagi seperti notifikasi PR pending 🚶',
+                    '⛔': 'Mode jangan ganggu aktif. Kalau urgent boleh colek, kalau tidak urgent nanti aku balas ya ⛔',
+                    '🔥': 'Mode semangat menyala. Gaskeun sampai beres 🔥',
+                    '😎': 'Mode keren aktif. Semua under control, semoga server juga setuju 😎'
+                };
+                return map[mood] ? { mood: mood, text: map[mood] } : null;
+            }
+
+            function updateQuickMoodButton() {
+                if (!quickMoodBtn) return;
+                var quick = getQuickMoodReply();
+                if (!quick) { quickMoodBtn.style.display = 'none'; quickMoodBtn.textContent = ''; return }
+                quickMoodBtn.style.display = 'inline-flex';
+                quickMoodBtn.textContent = quick.mood + ' Mood reply';
+                quickMoodBtn.title = quick.text;
+            }
+            window.updateQuickMoodButton = updateQuickMoodButton;
+
+            function insertQuickMoodReply() {
+                if (!inp) return;
+                var quick = getQuickMoodReply();
+                if (!quick) { toast('Pilih mood dulu biar reply-nya ada rasa awkwk', 'info'); return }
+                var current = inp.value.trim();
+                inp.value = current ? current + '\n' + quick.text : quick.text;
+                inp.dispatchEvent(new Event('input'));
+                inp.focus();
+                toast('Mood reply siap dikirim. Tinggal Enter 🚀', 'success');
+            }
+
             if (emojiRow) {
                 for (var ei = 0; ei < EMOJIS.length; ei++) { (function (em) { var sp = document.createElement('span'); sp.className = 'cp-eq'; sp.textContent = em; sp.addEventListener('click', function (e) { e.stopPropagation(); if (!inp) return; var s = inp.selectionStart, en = inp.selectionEnd; inp.value = inp.value.substring(0, s) + em + inp.value.substring(en); inp.selectionStart = inp.selectionEnd = s + em.length; inp.dispatchEvent(new Event('input')); inp.focus() }); emojiRow.appendChild(sp) })(EMOJIS[ei]) }
                 var followupBtn = document.createElement('span'); followupBtn.className = 'followup-btn'; followupBtn.textContent = '/@ PR'; followupBtn.title = 'Follow up cepat PR/PPBJ';
                 emojiRow.appendChild(followupBtn);
                 followupBtn.addEventListener('click', function (e) { e.stopPropagation(); startFollowupCommand(); });
+                quickMoodBtn = document.createElement('span'); quickMoodBtn.className = 'quick-mood-btn'; quickMoodBtn.textContent = '';
+                emojiRow.appendChild(quickMoodBtn);
+                quickMoodBtn.addEventListener('click', function (e) { e.stopPropagation(); insertQuickMoodReply(); });
+                updateQuickMoodButton();
                 var atBtn = document.createElement('span'); atBtn.className = 'at-btn'; atBtn.textContent = '@';
                 var atBadge = document.createElement('span'); atBadge.className = 'at-btn-badge'; atBadge.id = 'atBtnBadge'; atBadge.textContent = '0';
                 atBtn.appendChild(atBadge); emojiRow.appendChild(atBtn);
