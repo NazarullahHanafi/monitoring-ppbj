@@ -567,6 +567,7 @@
                                 class="rounded-lg bg-gray-800 dark:bg-gray-600 px-4 py-2 text-sm font-semibold text-white hover:bg-black dark:hover:bg-gray-500 transition">
                                 Lihat Isi Data
                             </button>
+                            @endif
                         </div>
                     </div>
                 </div>
@@ -662,6 +663,9 @@
                     'metode_pengadaan' => ['Metode Pengadaan', $metodePengadaans, 'metode_pengadaan'],
                     'penyedia_eksternal' => ['Penyedia Eksternal', $penyediaEksternals, 'penyedia_eksternal'],
                 ];
+
+                $canFullManageMaster = auth()->user()?->role === 'superadmin' && auth()->user()?->department === 'umum';
+                $canCreatePenyediaEksternal = auth()->user()?->department === 'umum' && auth()->user()?->role !== 'viewer';
             @endphp
 
             <form id="ppbjForm" class="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -693,6 +697,7 @@
                                 @endforeach
                             </select>
 
+                            @if($canFullManageMaster || ($type === 'penyedia_eksternal' && $canCreatePenyediaEksternal))
                             <button type="button"
                                 class="rounded-lg bg-gray-100 dark:bg-gray-700 px-3 border border-gray-200 dark:border-gray-600 hover:bg-gray-200 dark:hover:bg-gray-600 transition"
                                 onclick="openMaster('{{ $type }}')" title="Kelola master">

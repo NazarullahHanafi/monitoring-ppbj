@@ -48,7 +48,7 @@ class MasterDataController extends Controller
     // Fungsi untuk menambah data master
     public function addMaster(Request $request, string $type)
     {
-        $this->ensureSuperadminUmum($request, 'create', $type);
+        $this->ensureCanCreateMaster($request, $type);
 
         $request->validate([
             'nama' => 'required|string|max:100',
@@ -119,5 +119,38 @@ class MasterDataController extends Controller
         ]);
 
         abort(403, 'Hanya Superadmin Umum yang dapat mengubah master data.');
+    }
+
+    private function ensureCanCreateMaster(Request $request, string $type): void
+    {
+        $user = $request->user();
+
+        if ($user && $user->role === 'superadmin' && $user->department === 'umum') {
+            return;
+        }
+
+        if (
+            $type === 'penyedia_eksternal'
+            && $user
+            && $user->department === 'umum'
+            && $user->role !== 'viewer'
+        ) {
+            return;
+        }
+
+        Log::warning('Unauthorized master data mutation attempt', [
+            'user_id' => $user?->id,
+            'email' => $user?->email,
+            'role' => $user?->role,
+            'department' => $user?->department,
+            'action' => 'create',
+            'type' => $type,
+            'ip' => $request->ip(),
+        ]);
+
+        abort(403, $type === 'penyedia_eksternal'
+            ? 'Hanya user Umum yang dapat menambahkan penyedia eksternal.'
+            : 'Hanya Superadmin Umum yang dapat menambahkan master data.'
+        );
     }
 }
