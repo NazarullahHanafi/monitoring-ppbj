@@ -703,6 +703,7 @@
                                 onclick="openMaster('{{ $type }}')" title="Kelola master">
                                 ⚙
                             </button>
+                            @endif
                         </div>
                     </div>
                 @endforeach
