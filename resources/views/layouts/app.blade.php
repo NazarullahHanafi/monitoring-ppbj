@@ -671,6 +671,35 @@
             color: #a5b4fc
         }
 
+        .pp-chat-btn {
+            border: 1px solid rgba(99, 102, 241, .22);
+            background: linear-gradient(135deg, rgba(99, 102, 241, .10), rgba(14, 165, 233, .10));
+            color: #4338ca;
+            border-radius: 999px;
+            padding: 4px 8px;
+            font-size: .62rem;
+            font-weight: 900;
+            white-space: nowrap;
+            transition: transform .18s ease, box-shadow .18s ease, background .18s ease
+        }
+
+        .pp-chat-btn:hover {
+            transform: translateY(-1px);
+            background: linear-gradient(135deg, rgba(99, 102, 241, .18), rgba(14, 165, 233, .16));
+            box-shadow: 0 8px 16px rgba(99, 102, 241, .16)
+        }
+
+        .dark .pp-chat-btn {
+            border-color: rgba(129, 140, 248, .30);
+            background: linear-gradient(135deg, rgba(129, 140, 248, .18), rgba(56, 189, 248, .12));
+            color: #dbeafe
+        }
+
+        .dark .pp-chat-btn:hover {
+            background: linear-gradient(135deg, rgba(129, 140, 248, .26), rgba(56, 189, 248, .18));
+            box-shadow: 0 8px 16px rgba(0, 0, 0, .28)
+        }
+
         .pp-empty {
             padding: 20px;
             text-align: center;
@@ -3350,7 +3379,18 @@
                 var me = null; for (var i = 0; i < u.length; i++) { if (u[i].is_me) { me = u[i]; break } }
                 if (me) myM = me.mood || null; window._myMood = myM || null; if (window.updateQuickMoodButton) window.updateQuickMoodButton(); var mf = document.getElementById('myMoodFloat'); if (mf) { if (myM) { mf.textContent = myM; mf.classList.remove('hidden') } else { mf.classList.add('hidden') } }
                 if (st) { var v = u.slice(0, MA), ov = c - MA, h = ''; for (var j = 0; j < v.length; j++) { var x = v[j], xt = x.name + (x.mood ? ' • ' + x.mood + ' ' + moodText(x.mood) : ''); h += '<div class="av" style="background:' + x.color + '" title="' + eH(xt) + '">' + x.initials + (x.mood ? '<span class="mood-tag mood-tag-sm">' + x.mood + '</span>' : '') + '</div>' } if (ov > 0) h += '<div class="av av-overflow" title="' + ov + ' lainnya">+' + ov + '</div>'; st.innerHTML = h }
-                if (pl) { if (!c) { pl.innerHTML = '<div class="pp-empty">Tidak ada yang online</div>'; return } var ph = ''; for (var k = 0; k < u.length; k++) { var w = u[k], wt = w.name + (w.mood ? ' • ' + w.mood + ' ' + moodText(w.mood) : ''); ph += '<div class="pp-row' + (w.is_me ? ' me' : '') + '" title="' + eH(wt) + '"><div class="pp-av" style="background:' + w.color + '">' + w.initials + (w.mood ? '<span class="mood-tag">' + w.mood + '</span>' : '') + '</div><div class="pp-info"><div class="pp-name">' + eH(w.name) + '</div><div class="pp-dept">' + eH(w.department) + (w.mood ? ' • ' + eH(moodText(w.mood)) : '') + '</div></div>' + (w.is_me ? '<span class="pp-me-tag">Kamu</span>' : '') + '</div>' } pl.innerHTML = ph }
+                if (pl) {
+                    if (!c) { pl.innerHTML = '<div class="pp-empty">Tidak ada yang online</div>'; return }
+                    var ph = '';
+                    for (var k = 0; k < u.length; k++) {
+                        var w = u[k], wt = w.name + (w.mood ? ' • ' + w.mood + ' ' + moodText(w.mood) : '');
+                        var action = w.is_me
+                            ? '<span class="pp-me-tag">Kamu</span>'
+                            : '<button type="button" class="pp-chat-btn" data-uid="' + eH(w.id) + '" data-uname="' + eH(w.name) + '" data-mood="' + eH(w.mood || '') + '" title="Tanya mood ' + eH(w.name) + '">Chat mood</button>';
+                        ph += '<div class="pp-row' + (w.is_me ? ' me' : '') + '" title="' + eH(wt) + '"><div class="pp-av" style="background:' + w.color + '">' + w.initials + (w.mood ? '<span class="mood-tag">' + w.mood + '</span>' : '') + '</div><div class="pp-info"><div class="pp-name">' + eH(w.name) + '</div><div class="pp-dept">' + eH(w.department) + (w.mood ? ' • ' + eH(moodText(w.mood)) : '') + '</div></div>' + action + '</div>';
+                    }
+                    pl.innerHTML = ph;
+                }
             }
             function hb() { fetch(UH, { method: 'POST', headers: { 'X-CSRF-TOKEN': CSRF, 'Accept': 'application/json' } }).then(function (r) { if (!r.ok) throw 0; return r.json() }).then(function (d) { if (Array.isArray(d.online)) { render(d.online); ensurePresenceScrollTools(); } }).catch(function () { }) }
             function cmM() { if (mC) return; mC = true; fetch(UG, { headers: { 'Accept': 'application/json' } }).then(function (r) { if (!r.ok) throw 0; return r.json() }).then(function (d) { if (d.mood) { myM = d.mood; window._myMood = myM || null; if (window.updateQuickMoodButton) window.updateQuickMoodButton(); var mf = document.getElementById('myMoodFloat'); if (mf) { mf.textContent = myM; mf.classList.remove('hidden') } } else { setTimeout(sMP, 1500) } }).catch(function () { }) }
@@ -3478,6 +3518,20 @@
             cPP = function () { pO = false; var p = document.getElementById('presencePanel'); if (p) p.classList.remove('open') };
             window.closePresencePanel = cPP;
             window.addEventListener('resize', ensurePresenceScrollTools);
+            document.addEventListener('click', function (e) {
+                var moodBtn = e.target.closest('.pp-chat-btn');
+                if (!moodBtn) return;
+                e.preventDefault();
+                e.stopPropagation();
+                var payload = {
+                    id: moodBtn.getAttribute('data-uid') || '',
+                    name: moodBtn.getAttribute('data-uname') || 'teman',
+                    mood: moodBtn.getAttribute('data-mood') || ''
+                };
+                if (typeof window.quickMoodChat === 'function') {
+                    window.quickMoodChat(payload);
+                }
+            });
             var pt = document.getElementById('presenceTrigger'); if (pt) pt.addEventListener('click', function (e) { e.stopPropagation(); tPP() });
             var mb = document.getElementById('btnChangeMood'); if (mb) mb.addEventListener('click', sMP);
             document.addEventListener('click', function (e) { var w = document.getElementById('presenceWrap'); if (pO && w && !w.contains(e.target)) cPP() });
@@ -3829,6 +3883,38 @@
                 else { var ex = false; for (var i = 0; i < draftMentions.length; i++) { if (String(draftMentions[i].id) === String(uid)) { ex = true; break } } if (!ex) draftMentions.push({ id: uid, name: uname }) }
                 updateAtBadge(); closeMentionDd(); inp.dispatchEvent(new Event('input')); inp.focus();
             }
+
+            function moodNudgeText(user) {
+                var name = (user && user.name) ? user.name : 'teman';
+                var mood = (user && user.mood) ? user.mood : '';
+                var templates = mood
+                    ? [
+                        '@' + name + ' why mood you like that ' + mood + '? Cerita dong, sistem siap jadi tempat sambat digital awkwkwk',
+                        '@' + name + ' mood ' + mood + ' terpantau dari radar SIMONPR. Aman bestie? Kalau perlu backup moral, chat ini siaga 😆',
+                        '@' + name + ' vibes kamu hari ini ' + mood + ' banget. Spill tipis dong, ini mood karena kerjaan atau karena kopi kurang? awkwk'
+                    ]
+                    : [
+                        '@' + name + ' mood kamu masih misterius nih. Pilih mood dulu dong, biar kami bisa ikut kepo dengan sopan awkwkwk',
+                        '@' + name + ' kok belum setor mood? Sistem penasaran, manusia juga penasaran 😆',
+                        '@' + name + ' mood check dulu bestie. Biar dashboard tahu kamu datang dengan vibes apa hari ini.'
+                    ];
+                return templates[Math.floor(Math.random() * templates.length)];
+            }
+
+            window.quickMoodChat = function (user) {
+                if (!inp || !user || !user.id) return;
+                if (!chatOpen) doToggle();
+                else if (chatMinimized) restoreChat();
+                if (typeof cPP === 'function') cPP();
+
+                var text = moodNudgeText(user);
+                inp.value = text;
+                draftMentions = [{ id: user.id, name: user.name || 'User' }];
+                updateAtBadge();
+                inp.dispatchEvent(new Event('input'));
+                setTimeout(function () { inp.focus(); inp.selectionStart = inp.selectionEnd = inp.value.length; }, 120);
+                toast('Quick chat mood siap. Tinggal Enter kalau mau kirim awkwk', 'success');
+            };
 
             function findFollowupToken(value, pos) {
                 var before = value.substring(0, pos), idx = before.lastIndexOf('/@');
