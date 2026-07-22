@@ -72,7 +72,7 @@ class MasterDataController extends Controller
     // Fungsi untuk update data master
     public function update(Request $request, string $type, int $id)
     {
-        $this->ensureSuperadminUmum($request, 'update', $type);
+        $this->ensureCanMutateMaster($request, 'update', $type);
 
         $request->validate(['nama' => 'required|string|max:100']);
 
@@ -89,7 +89,7 @@ class MasterDataController extends Controller
     // Fungsi untuk menghapus data master
     public function destroy(string $type, int $id)
     {
-        $this->ensureSuperadminUmum(request(), 'delete', $type);
+        $this->ensureCanMutateMaster(request(), 'delete', $type);
 
         $model = $this->modelByType($type);
         $model::findOrFail($id)->delete();
@@ -123,6 +123,11 @@ class MasterDataController extends Controller
 
     private function ensureCanCreateMaster(Request $request, string $type): void
     {
+        $this->ensureCanMutateMaster($request, 'create', $type);
+    }
+
+    private function ensureCanMutateMaster(Request $request, string $action, string $type): void
+    {
         $user = $request->user();
 
         if ($user && $user->role === 'superadmin' && $user->department === 'umum') {
@@ -143,14 +148,14 @@ class MasterDataController extends Controller
             'email' => $user?->email,
             'role' => $user?->role,
             'department' => $user?->department,
-            'action' => 'create',
+            'action' => $action,
             'type' => $type,
             'ip' => $request->ip(),
         ]);
 
         abort(403, $type === 'penyedia_eksternal'
-            ? 'Hanya user Umum yang dapat menambahkan penyedia eksternal.'
-            : 'Hanya Superadmin Umum yang dapat menambahkan master data.'
+            ? 'Hanya user Umum yang dapat mengubah penyedia eksternal.'
+            : 'Hanya Superadmin Umum yang dapat mengubah master data.'
         );
     }
 }

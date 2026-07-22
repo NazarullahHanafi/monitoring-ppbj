@@ -30,7 +30,7 @@ class MasterDataPermissionTest extends TestCase
         ]);
     }
 
-    public function test_umum_regular_user_cannot_update_or_delete_penyedia_eksternal_master(): void
+    public function test_umum_regular_user_can_update_and_delete_penyedia_eksternal_master(): void
     {
         $user = User::factory()->create([
             'role' => 'user',
@@ -45,14 +45,18 @@ class MasterDataPermissionTest extends TestCase
             ->putJson("/master/penyedia_eksternal/{$vendor->id}", [
                 'nama' => 'PT Vendor Diubah',
             ])
-            ->assertForbidden();
+            ->assertOk()
+            ->assertJsonPath('message', 'Berhasil diupdate');
+
+        $vendor->refresh();
 
         $this->actingAs($user)
             ->deleteJson("/master/penyedia_eksternal/{$vendor->id}")
-            ->assertForbidden();
+            ->assertOk()
+            ->assertJsonPath('message', 'Berhasil dihapus');
 
-        $this->assertDatabaseHas('master_penyedia_eksternal', [
-            'nama' => 'PT Vendor Terkunci',
+        $this->assertDatabaseMissing('master_penyedia_eksternal', [
+            'id' => $vendor->id,
         ]);
     }
 
