@@ -3182,7 +3182,7 @@
             var UH = '{{ route('presence.heartbeat') }}', UG = '{{ route('presence.mood.get') }}', US = '{{ route('presence.mood') }}',
                 CSRF = (document.querySelector('meta[name="csrf-token"]') || {}).content || '', IV = 120000, MA = 4,
                 CL = ['#6366f1', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#3b82f6', '#ef4444', '#14b8a6', '#f97316', '#84cc16', '#06b6d4', '#a855f7'],
-                MO = [{ e: '\u{1F604}', l: 'Senang', d: 'Hari menyenangkan!' }, { e: '\u{1F60A}', l: 'Baik', d: 'Berjalan lancar' }, { e: '\u{1F60E}', l: 'Keren', d: 'On top of the world' }, { e: '\u{1F525}', l: 'Semangat', d: "Full energy!" }, { e: '\u{1F389}', l: 'Eksis', d: 'Ada spesial' }, { e: '\u{1F62E}', l: 'Wow', d: 'Banyak kejutan' }, { e: '\u{1F610}', l: 'Biasa', d: 'Gitu aja' }, { e: '\u{1F62B}', l: 'Lelah', d: 'Butuh kopi' }, { e: '\u{1F622}', l: 'Sedih', d: 'Besok lebih baik' }, { e: '\u{1F912}', l: 'Sakit', d: 'Tidak enak badan' }];
+                MO = [{ e: '\u{1F604}', l: 'Senang', d: 'Hari menyenangkan!' }, { e: '\u{1F60A}', l: 'Baik', d: 'Berjalan lancar' }, { e: '\u{1F60E}', l: 'Keren', d: 'On top of the world' }, { e: '\u{1F525}', l: 'Semangat', d: "Full energy!" }, { e: '\u{1F389}', l: 'Eksis', d: 'Ada spesial' }, { e: '\u{1F62E}', l: 'Wow', d: 'Banyak kejutan' }, { e: '\u{1F610}', l: 'Biasa', d: 'Gitu aja' }, { e: '\u{1F62B}', l: 'Lelah', d: 'Butuh kopi' }, { e: '\u{1F621}', l: 'Badmood', d: 'Butuh ruang dulu, jangan disenggol 😅' }, { e: '\u{1F622}', l: 'Sedih', d: 'Besok lebih baik' }, { e: '\u{1F912}', l: 'Sakit', d: 'Tidak enak badan' }];
             var tm = null, pO = false, myM = null, mC = false, mS = false;
             window._presenceUsers = [];
             function eH(s) { return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;') }
@@ -3814,6 +3814,9 @@
             function attachReadPopupSearch(popup) {
                 var input = popup ? popup.querySelector('.read-popup-search-input') : null;
                 if (!input) return;
+                ['click', 'pointerdown', 'mousedown', 'touchstart'].forEach(function (evt) {
+                    popup.addEventListener(evt, function (e) { e.stopPropagation() }, { passive: evt === 'touchstart' });
+                });
                 var items = popup.querySelectorAll('.read-popup-name');
                 var empty = popup.querySelector('.read-popup-empty.search-empty');
                 input.addEventListener('input', function () {
@@ -4206,7 +4209,7 @@
                 if (swalActive) return;
                 if (followupState.active && panel && !e.target.closest('#cpInputWrap')) closeFollowupDd();
                 if (mentionState.active && panel && !e.target.closest('#cpInputWrap')) closeMentionDd();
-                if (chatOpen && !chatMinimized && panel && !panel.contains(e.target) && trigger && !trigger.contains(e.target) && !ctxMenu.contains(e.target)) { closeChat() }
+                if (chatOpen && !chatMinimized && panel && !panel.contains(e.target) && trigger && !trigger.contains(e.target) && !ctxMenu.contains(e.target) && !e.target.closest('.read-popup')) { closeChat() }
             });
         })();
 
