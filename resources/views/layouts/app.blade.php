@@ -812,6 +812,63 @@
             color: #6b7280
         }
 
+        .mood-greeting {
+            margin: 0 auto 12px;
+            max-width: 360px;
+            border-radius: 18px;
+            border: 1px solid rgba(99, 102, 241, .18);
+            background: linear-gradient(135deg, rgba(239, 246, 255, .95), rgba(250, 245, 255, .95));
+            padding: 14px 16px;
+            text-align: left;
+            box-shadow: 0 18px 45px rgba(99, 102, 241, .14)
+        }
+
+        .mood-greeting-title {
+            color: #111827;
+            font-size: .95rem;
+            font-weight: 900;
+            letter-spacing: -.02em;
+            margin-bottom: 4px
+        }
+
+        .mood-greeting-text {
+            color: #64748b;
+            font-size: .78rem;
+            font-weight: 700;
+            line-height: 1.45
+        }
+
+        .dark .mood-greeting {
+            border-color: rgba(129, 140, 248, .26);
+            background: linear-gradient(135deg, rgba(15, 23, 42, .96), rgba(30, 41, 59, .94));
+            box-shadow: 0 18px 45px rgba(0, 0, 0, .35)
+        }
+
+        .dark .mood-greeting-title {
+            color: #f8fafc
+        }
+
+        .dark .mood-greeting-text {
+            color: #cbd5e1
+        }
+
+        .mood-required-note {
+            margin: 10px auto 0;
+            max-width: 340px;
+            border-radius: 999px;
+            background: rgba(16, 185, 129, .1);
+            color: #047857;
+            padding: 7px 12px;
+            font-size: .72rem;
+            font-weight: 900;
+            text-align: center
+        }
+
+        .dark .mood-required-note {
+            background: rgba(16, 185, 129, .16);
+            color: #a7f3d0
+        }
+
         .mood-skip {
             display: block;
             text-align: center;
@@ -3212,6 +3269,7 @@
                 CSRF = (document.querySelector('meta[name="csrf-token"]') || {}).content || '', IV = 120000, MA = 4,
                 CL = ['#6366f1', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#3b82f6', '#ef4444', '#14b8a6', '#f97316', '#84cc16', '#06b6d4', '#a855f7'],
                 MO = [{ e: '\u{1F604}', l: 'Senang', d: 'Hari menyenangkan!' }, { e: '\u{1F60A}', l: 'Baik', d: 'Berjalan lancar' }, { e: '\u{1F60E}', l: 'Keren', d: 'On top of the world' }, { e: '\u{1F525}', l: 'Semangat', d: "Full energy!" }, { e: '\u{1F389}', l: 'Eksis', d: 'Ada spesial' }, { e: '\u{1F62E}', l: 'Wow', d: 'Banyak kejutan' }, { e: '\u{1F610}', l: 'Biasa', d: 'Gitu aja' }, { e: '\u{1F62B}', l: 'Lelah', d: 'Butuh kopi' }, { e: '\u{1F971}', l: 'Ngantuk', d: 'Mata 5 watt, jiwa tetap online ☕' }, { e: '\u{1F60C}', l: 'Santuy', d: 'Pelan-pelan asal kelar, bestie' }, { e: '\u{1F92F}', l: 'Overthinking', d: 'Mikirnya kejauhan, kerjaan tetap jalan' }, { e: '\u{1FAE0}', l: 'Meleleh', d: 'Capek tipis, tetap elegan awkwk' }, { e: '\u{1F4BC}', l: 'Sibuk', d: 'Mode fokus, balasnya kalau semesta mengizinkan' }, { e: '\u{1F6B6}', l: 'Away', d: 'Lagi geser dari radar, nanti muncul lagi' }, { e: '\u{26D4}', l: 'Jangan Ganggu', d: 'Sedang bertapa digital, urgent boleh colek' }, { e: '\u{1F621}', l: 'Badmood', d: 'Butuh ruang dulu, jangan disenggol 😅' }, { e: '\u{1F622}', l: 'Sedih', d: 'Besok lebih baik' }, { e: '\u{1F912}', l: 'Sakit', d: 'Tidak enak badan' }];
+            var MY_GENDER = @json(auth()->user()->gender ?? null), MY_NAME = @json(auth()->user()->name ?? 'User');
             var tm = null, pO = false, myM = null, mC = false, mS = false;
             window._presenceUsers = [];
             function eH(s) { return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;') }
@@ -3228,6 +3286,123 @@
             function hb() { fetch(UH, { method: 'POST', headers: { 'X-CSRF-TOKEN': CSRF, 'Accept': 'application/json' } }).then(function (r) { if (!r.ok) throw 0; return r.json() }).then(function (d) { if (Array.isArray(d.online)) render(d.online) }).catch(function () { }) }
             function cmM() { if (mC) return; mC = true; fetch(UG, { headers: { 'Accept': 'application/json' } }).then(function (r) { if (!r.ok) throw 0; return r.json() }).then(function (d) { if (d.mood) { myM = d.mood; window._myMood = myM || null; if (window.updateQuickMoodButton) window.updateQuickMoodButton(); var mf = document.getElementById('myMoodFloat'); if (mf) { mf.textContent = myM; mf.classList.remove('hidden') } } else { setTimeout(sMP, 1500) } }).catch(function () { }) }
             function sMP() { if (typeof Swal !== 'undefined' && Swal.isVisible()) return; var de = document.createElement('div'); de.className = 'mood-desc'; de.textContent = 'Pilih salah satu'; var ge = document.createElement('div'); ge.className = 'mood-grid'; MO.forEach(function (m) { var b = document.createElement('button'); b.type = 'button'; b.className = 'mood-btn'; b.innerHTML = '<span class="m-emoji">' + m.e + '</span><span class="m-label">' + m.l + '</span>'; b.addEventListener('mouseenter', function () { de.textContent = m.d; de.style.color = '#6366f1' }); b.addEventListener('mouseleave', function () { de.textContent = 'Pilih salah satu'; de.style.color = '' }); b.addEventListener('click', function () { if (mS) return; mS = true; Swal.close(); fetch(US, { method: 'POST', headers: { 'X-CSRF-TOKEN': CSRF, 'Content-Type': 'application/json', 'Accept': 'application/json' }, body: JSON.stringify({ mood: m.e }) }).then(function (r) { if (!r.ok) throw 0; return r.json() }).then(function (d) { myM = d.mood; var mf = document.getElementById('myMoodFloat'); if (mf) { mf.textContent = myM; mf.classList.remove('hidden') } hb() }).catch(function () { myM = m.e; var mf = document.getElementById('myMoodFloat'); if (mf) { mf.textContent = myM; mf.classList.remove('hidden') } }).finally(function () { mS = false }); setTimeout(function () { Swal.fire({ html: '<div style="text-align:center;padding:12px 0"><div style="font-size:3.5rem;line-height:1">' + m.e + '</div><div style="font-size:.9rem;color:#111827;font-weight:700;margin-top:10px">' + m.l + '!</div><div style="font-size:.78rem;color:#9ca3af;margin-top:4px">' + m.d + '</div></div>', timer: 1600, timerProgressBar: true, showConfirmButton: false, background: 'rgba(255,255,255,.95)', backdrop: 'rgba(0,0,0,.08)', customClass: { popup: 'rounded-2xl shadow-2xl' } }) }, 200) }); ge.appendChild(b) }); var sb = document.createElement('button'); sb.type = 'button'; sb.className = 'mood-skip'; sb.textContent = 'Lewati dulu'; sb.addEventListener('click', function () { Swal.close() }); var ct = document.createElement('div'); ct.appendChild(ge); ct.appendChild(de); ct.appendChild(sb); Swal.fire({ title: 'Bagaimana harimu?', html: ct, showConfirmButton: false, showCloseButton: true, allowOutsideClick: false, background: 'rgba(255,255,255,.97)', backdrop: 'rgba(0,0,0,.15)', width: 'auto', padding: '0 0 4px 0', customClass: { popup: 'rounded-2xl shadow-2xl', closeButton: 'hover:rotate-90 transition-transform duration-300' }, didOpen: function () { ge.querySelectorAll('.mood-btn').forEach(function (b, i) { b.style.opacity = '0'; b.style.transform = 'translateY(15px) scale(.8)'; setTimeout(function () { b.style.transition = 'all .35s cubic-bezier(.68,-.55,.265,1.55)'; b.style.opacity = '1'; b.style.transform = 'translateY(0) scale(1)' }, 50 * i) }) } }) }
+            function moodGreeting() {
+                var h = new Date().getHours();
+                var slot = h < 11 ? 'pagi' : (h < 15 ? 'siang' : (h < 18 ? 'sore' : 'malam'));
+                var greet = slot === 'pagi' ? 'Selamat pagi' : (slot === 'siang' ? 'Selamat siang' : (slot === 'sore' ? 'Selamat sore' : 'Selamat malam'));
+                var first = String(MY_NAME || 'User').trim().split(/\s+/)[0] || 'User';
+                var sweet = String(MY_GENDER || '').toLowerCase() === 'female' ? 'cantik ' : '';
+                var jokes = {
+                    pagi: 'Mood dulu ya, biar dashboard tahu kamu datang dengan vibes apa. Kopi boleh, drama jangan dulu awkwk.',
+                    siang: 'Sebelum lanjut gas kerjaan, setor mood dulu. PR boleh banyak, senyum jangan hilang 😄',
+                    sore: 'Sore-sore cek mood dulu. Kalau capek, sistem tetap nemenin pelan-pelan.',
+                    malam: 'Selamat malam, pejuang sistem. Mood dulu biar lembur terasa agak manusiawi awkwk.'
+                };
+                return { title: greet + ', ' + sweet + first + '!', text: jokes[slot] || jokes.pagi };
+            }
+
+            function sMPRequired() {
+                if (typeof Swal === 'undefined') return;
+                if (Swal.isVisible()) { setTimeout(sMPRequired, 900); return; }
+
+                var dark = document.documentElement.classList.contains('dark'), grt = moodGreeting();
+                var gr = document.createElement('div');
+                gr.className = 'mood-greeting';
+                gr.innerHTML = '<div class="mood-greeting-title">' + eH(grt.title) + '</div><div class="mood-greeting-text">' + eH(grt.text) + '</div>';
+
+                var de = document.createElement('div');
+                de.className = 'mood-desc';
+                de.textContent = 'Pilih mood dulu ya — wajib, tapi santuy awkwk';
+
+                var ge = document.createElement('div');
+                ge.className = 'mood-grid';
+
+                MO.forEach(function (m) {
+                    var b = document.createElement('button');
+                    b.type = 'button';
+                    b.className = 'mood-btn';
+                    b.innerHTML = '<span class="m-emoji">' + m.e + '</span><span class="m-label">' + m.l + '</span>';
+                    b.addEventListener('mouseenter', function () { de.textContent = m.d; de.style.color = '#6366f1'; });
+                    b.addEventListener('mouseleave', function () { de.textContent = 'Pilih mood dulu ya — wajib, tapi santuy awkwk'; de.style.color = ''; });
+                    b.addEventListener('click', function () {
+                        if (mS) return;
+                        mS = true;
+                        Swal.close();
+                        fetch(US, {
+                            method: 'POST',
+                            headers: { 'X-CSRF-TOKEN': CSRF, 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                            body: JSON.stringify({ mood: m.e })
+                        }).then(function (r) {
+                            if (!r.ok) throw 0;
+                            return r.json();
+                        }).then(function (d) {
+                            myM = d.mood || m.e;
+                            window._myMood = myM || null;
+                            if (window.updateQuickMoodButton) window.updateQuickMoodButton();
+                            var mf = document.getElementById('myMoodFloat');
+                            if (mf) { mf.textContent = myM; mf.classList.remove('hidden'); }
+                            hb();
+                        }).catch(function () {
+                            myM = m.e;
+                            window._myMood = myM || null;
+                            var mf = document.getElementById('myMoodFloat');
+                            if (mf) { mf.textContent = myM; mf.classList.remove('hidden'); }
+                        }).finally(function () {
+                            mS = false;
+                        });
+
+                        setTimeout(function () {
+                            Swal.fire({
+                                html: '<div style="text-align:center;padding:12px 0"><div style="font-size:3.5rem;line-height:1">' + m.e + '</div><div style="font-size:.95rem;color:' + (dark ? '#f8fafc' : '#111827') + ';font-weight:900;margin-top:10px">' + eH(m.l) + '!</div><div style="font-size:.78rem;color:' + (dark ? '#cbd5e1' : '#64748b') + ';font-weight:700;margin-top:4px">' + eH(m.d) + '</div></div>',
+                                timer: 1500,
+                                timerProgressBar: true,
+                                showConfirmButton: false,
+                                background: dark ? 'rgba(15,23,42,.98)' : 'rgba(255,255,255,.98)',
+                                backdrop: 'rgba(0,0,0,.08)',
+                                customClass: { popup: 'rounded-2xl shadow-2xl' }
+                            });
+                        }, 180);
+                    });
+                    ge.appendChild(b);
+                });
+
+                var note = document.createElement('div');
+                note.className = 'mood-required-note';
+                note.textContent = 'Mood wajib dipilih dulu sebelum lanjut buka aplikasi ✨';
+
+                var ct = document.createElement('div');
+                ct.appendChild(gr);
+                ct.appendChild(ge);
+                ct.appendChild(de);
+                ct.appendChild(note);
+
+                Swal.fire({
+                    title: 'Mood check dulu 😄',
+                    html: ct,
+                    showConfirmButton: false,
+                    showCloseButton: false,
+                    allowOutsideClick: false,
+                    allowEscapeKey: false,
+                    background: dark ? 'rgba(15,23,42,.98)' : 'rgba(255,255,255,.98)',
+                    backdrop: 'rgba(0,0,0,.18)',
+                    width: 'auto',
+                    padding: '0 0 8px 0',
+                    customClass: { popup: 'rounded-2xl shadow-2xl' },
+                    didOpen: function () {
+                        ge.querySelectorAll('.mood-btn').forEach(function (b, i) {
+                            b.style.opacity = '0';
+                            b.style.transform = 'translateY(15px) scale(.8)';
+                            setTimeout(function () {
+                                b.style.transition = 'all .35s cubic-bezier(.68,-.55,.265,1.55)';
+                                b.style.opacity = '1';
+                                b.style.transform = 'translateY(0) scale(1)';
+                            }, 45 * i);
+                        });
+                    }
+                });
+            }
+
+            sMP = sMPRequired;
             window.showMoodPicker = sMP;
             function tPP() { pO = !pO; var p = document.getElementById('presencePanel'); if (p) p.classList.toggle('open', pO) }
             cPP = function () { pO = false; var p = document.getElementById('presencePanel'); if (p) p.classList.remove('open') };

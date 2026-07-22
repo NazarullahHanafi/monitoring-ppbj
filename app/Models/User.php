@@ -23,6 +23,7 @@ class User extends Authenticatable
         'password',
         'role',
         'department',
+        'gender',
         'buyer_name',
         'last_seen_at',
         'last_login_ip',

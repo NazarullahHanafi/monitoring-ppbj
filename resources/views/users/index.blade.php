@@ -333,6 +333,7 @@
                             </th>
                             <th class="px-6 py-4 text-center font-semibold">Role</th>
                             <th class="px-6 py-4 text-center font-semibold">Department</th>
+                            <th class="px-6 py-4 text-center font-semibold">Gender</th>
                             <th class="px-6 py-4 text-center font-semibold">Buyer Terkait</th>
                             <th class="px-6 py-4 text-center font-semibold">Terakhir Online</th>
                             <th class="px-6 py-4 text-center font-semibold">IP Login</th>
@@ -428,6 +429,23 @@
                                             </svg>
                                             OPERASIONAL
                                         </span>
+                                    @endif
+                                </td>
+
+                                {{-- Gender --}}
+                                <td class="px-6 py-4 text-center">
+                                    @if(($user->gender ?? null) === 'female')
+                                        <span
+                                            class="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-bold rounded-full bg-pink-50 text-pink-700 dark:bg-pink-900/30 dark:text-pink-200 border border-pink-200 dark:border-pink-700">
+                                            ♀ Perempuan
+                                        </span>
+                                    @elseif(($user->gender ?? null) === 'male')
+                                        <span
+                                            class="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-bold rounded-full bg-sky-50 text-sky-700 dark:bg-sky-900/30 dark:text-sky-200 border border-sky-200 dark:border-sky-700">
+                                            ♂ Laki-laki
+                                        </span>
+                                    @else
+                                        <span class="text-xs font-semibold text-gray-400 dark:text-gray-500">Belum diisi</span>
                                     @endif
                                 </td>
 
@@ -539,7 +557,7 @@
                                     <div class="flex items-center justify-center gap-2">
                                         {{-- Edit Button --}}
                                         <button type="button"
-                                            onclick="openEditModal({{ $user->id }}, @js($user->name), @js($user->email), @js($user->role), @js($user->department), @js($user->buyer_name))"
+                                            onclick="openEditModal({{ $user->id }}, @js($user->name), @js($user->email), @js($user->role), @js($user->department), @js($user->gender), @js($user->buyer_name))"
                                             class="inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold transition-all duration-200
                                                                            bg-blue-600 hover:bg-blue-700 text-white border border-blue-700
                                                                            dark:bg-blue-600 dark:hover:bg-blue-700 dark:border-blue-500
@@ -586,7 +604,7 @@
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="8" class="text-center py-16 text-gray-500 dark:text-gray-400">
+                                <td colspan="10" class="text-center py-16 text-gray-500 dark:text-gray-400">
                                     <div class="flex flex-col items-center gap-4">
                                         <div
                                             class="w-20 h-20 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center">
@@ -695,6 +713,22 @@
                             <option value="umum">Umum</option>
                             <option value="operasional">Operasional</option>
                         </select>
+                    </div>
+
+                    {{-- Gender --}}
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                            Gender
+                        </label>
+                        <select name="gender"
+                            class="w-full rounded-lg border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20">
+                            <option value="">Belum diisi</option>
+                            <option value="male">Laki-laki</option>
+                            <option value="female">Perempuan</option>
+                        </select>
+                        <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                            Dipakai untuk sapaan mood harian, misalnya kata “cantik” hanya untuk user perempuan.
+                        </p>
                     </div>
 
                     {{-- Buyer Mapping --}}
@@ -836,6 +870,21 @@
                             <option value="umum">Umum</option>
                             <option value="operasional">Operasional</option>
                         </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                            Gender
+                        </label>
+                        <select name="gender" id="editGender"
+                            class="w-full rounded-lg border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20">
+                            <option value="">Belum diisi</option>
+                            <option value="male">Laki-laki</option>
+                            <option value="female">Perempuan</option>
+                        </select>
+                        <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                            Sapaan lucu di popup mood mengikuti pilihan ini.
+                        </p>
                     </div>
 
                     {{-- Buyer Mapping --}}
@@ -1078,12 +1127,13 @@
                 document.getElementById('addPasswordStrength').className = 'password-strength-bar';
             }
 
-            function openEditModal(id, name, email, role, department, buyerName) {
+            function openEditModal(id, name, email, role, department, gender, buyerName) {
                 document.getElementById('editUserId').value = id;
                 document.getElementById('editName').value = name;
                 document.getElementById('editEmail').value = email;
                 document.getElementById('editRole').value = role;
                 document.getElementById('editDept').value = department;
+                document.getElementById('editGender').value = gender || '';
                 document.getElementById('editBuyerName').value = buyerName || '';
 
                 document.getElementById('editUserModal').classList.remove('hidden');

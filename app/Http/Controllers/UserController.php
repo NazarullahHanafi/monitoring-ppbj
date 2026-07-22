@@ -32,6 +32,7 @@ class UserController extends Controller
                 'email',
                 'role',
                 'department',
+                'gender',
                 'buyer_name',
                 'last_seen_at',
                 'last_login_ip',
@@ -141,6 +142,10 @@ class UserController extends Controller
                 'max:50',
                 Rule::exists('master_buyer', 'nama')
             ],
+            'gender' => [
+                'nullable',
+                Rule::in(['male', 'female'])
+            ],
         ], [
             'name.required' => 'Nama wajib diisi',
             'name.min' => 'Nama minimal 3 karakter',
@@ -162,6 +167,7 @@ class UserController extends Controller
                     'password' => Hash::make($validated['password']),
                     'role' => $validated['role'],
                     'department' => $validated['department'],
+                    'gender' => $validated['gender'] ?? null,
                     'buyer_name' => $validated['buyer_name'] ?? null,
                 ]);
             });
@@ -238,6 +244,10 @@ class UserController extends Controller
                 'max:50',
                 Rule::exists('master_buyer', 'nama')
             ],
+            'gender' => [
+                'nullable',
+                Rule::in(['male', 'female'])
+            ],
         ], [
             'name.required' => 'Nama wajib diisi',
             'name.min' => 'Nama minimal 3 karakter',
@@ -252,6 +262,7 @@ class UserController extends Controller
                     'email' => strtolower($validated['email']),
                     'role' => $validated['role'],
                     'department' => $validated['department'],
+                    'gender' => $validated['gender'] ?? null,
                     'buyer_name' => $validated['buyer_name'] ?? null,
                 ]);
             });
@@ -490,11 +501,11 @@ class UserController extends Controller
             fprintf($out, chr(0xEF) . chr(0xBB) . chr(0xBF));
 
             // Header
-            fputcsv($out, ['ID', 'Nama', 'Email', 'Role', 'Department', 'Buyer Terkait', 'Terakhir Online', 'IP Login Terakhir', 'IP Aktif Terakhir', 'Created At']);
+            fputcsv($out, ['ID', 'Nama', 'Email', 'Role', 'Department', 'Gender', 'Buyer Terkait', 'Terakhir Online', 'IP Login Terakhir', 'IP Aktif Terakhir', 'Created At']);
 
             // Query
             $query = DB::table('users')
-                ->select(['id', 'name', 'email', 'role', 'department', 'buyer_name', 'last_seen_at', 'last_login_ip', 'last_seen_ip', 'created_at']);
+                ->select(['id', 'name', 'email', 'role', 'department', 'gender', 'buyer_name', 'last_seen_at', 'last_login_ip', 'last_seen_ip', 'created_at']);
 
             // Apply filters
             if ($request->filled('department')) {
@@ -514,6 +525,11 @@ class UserController extends Controller
                         $user->email,
                         $user->role,
                         $user->department,
+                        match ($user->gender) {
+                            'male' => 'Laki-laki',
+                            'female' => 'Perempuan',
+                            default => 'Belum diisi',
+                        },
                         $user->buyer_name,
                         $user->last_seen_at ? \Carbon\Carbon::parse($user->last_seen_at)->format('Y-m-d H:i:s') : 'Belum pernah',
                         $user->last_login_ip ?: '-',
