@@ -3546,7 +3546,7 @@
             var URL_MSGS = '/chat/messages', URL_MENTION_COUNT = '/chat/mentions/unread', URL_SEND = '/chat/send', URL_DEL = '/chat/',
                 URL_READ = '/chat/read', URL_READS = '/chat/', URL_USERS = '/chat/users', URL_SEARCH = '/chat/search',
                 URL_REACTIONS = '/chat/reactions', URL_REACT = '/chat/', URL_SHARE = '/chat/share',
-                URL_FOLLOWUPS = '/chat/followups', URL_FOLLOWUP = '/chat/followup',
+                URL_FOLLOWUPS = '/chat/followups', URL_FOLLOWUP = '/chat/followup', URL_QUICK_MOOD = '/chat/quick-mood',
                 CSRF = (document.querySelector('meta[name="csrf-token"]') || {}).content || '',
                 MY_ID = {{ auth()->id() }}, MAX_LEN = 500,
                 EMOJIS = ['\u{1F604}', '\u{1F60A}', '\u{1F44D}', '\u{1F525}', '\u2764\uFE0F', '\u{1F389}', '\u{1F602}', '\u{1F914}', '\u{1F60E}', '\u{1F4AF}', '\u{1F64F}', '\u2705'],
@@ -3884,36 +3884,34 @@
                 updateAtBadge(); closeMentionDd(); inp.dispatchEvent(new Event('input')); inp.focus();
             }
 
-            function moodNudgeText(user) {
-                var name = (user && user.name) ? user.name : 'teman';
-                var mood = (user && user.mood) ? user.mood : '';
-                var templates = mood
-                    ? [
-                        '@' + name + ' why mood you like that ' + mood + '? Cerita dong, sistem siap jadi tempat sambat digital awkwkwk',
-                        '@' + name + ' mood ' + mood + ' terpantau dari radar SIMONPR. Aman bestie? Kalau perlu backup moral, chat ini siaga 😆',
-                        '@' + name + ' vibes kamu hari ini ' + mood + ' banget. Spill tipis dong, ini mood karena kerjaan atau karena kopi kurang? awkwk'
-                    ]
-                    : [
-                        '@' + name + ' mood kamu masih misterius nih. Pilih mood dulu dong, biar kami bisa ikut kepo dengan sopan awkwkwk',
-                        '@' + name + ' kok belum setor mood? Sistem penasaran, manusia juga penasaran 😆',
-                        '@' + name + ' mood check dulu bestie. Biar dashboard tahu kamu datang dengan vibes apa hari ini.'
-                    ];
-                return templates[Math.floor(Math.random() * templates.length)];
-            }
-
             window.quickMoodChat = function (user) {
                 if (!inp || !user || !user.id) return;
                 if (!chatOpen) doToggle();
                 else if (chatMinimized) restoreChat();
                 if (typeof cPP === 'function') cPP();
 
-                var text = moodNudgeText(user);
-                inp.value = text;
-                draftMentions = [{ id: user.id, name: user.name || 'User' }];
-                updateAtBadge();
-                inp.dispatchEvent(new Event('input'));
-                setTimeout(function () { inp.focus(); inp.selectionStart = inp.selectionEnd = inp.value.length; }, 120);
-                toast('Quick chat mood siap. Tinggal Enter kalau mau kirim awkwk', 'success');
+                fetch(URL_QUICK_MOOD, {
+                    method: 'POST',
+                    headers: { 'X-CSRF-TOKEN': CSRF, 'Accept': 'application/json', 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ target_user_id: user.id, mood: user.mood || '' })
+                })
+                    .then(function (response) {
+                        return response.json().catch(function () { return {} }).then(function (body) {
+                            if (!response.ok) throw new Error(body.error || 'Quick chat gagal dikirim');
+                            return body;
+                        });
+                    })
+                    .then(function (body) {
+                        if (body.message && !messagesEl.querySelector('.msg-wrap[data-msg-id="' + body.message.id + '"]')) {
+                            appendMsg(body.message);
+                            chatMaxId = Math.max(chatMaxId, body.message.id);
+                            sBB();
+                        }
+                        toast('Quick chat mood terkirim. Sekali sehari biar nggak spam awkwk', 'success');
+                    })
+                    .catch(function (error) {
+                        toast(error.message || 'Quick chat mood gagal', 'warning');
+                    });
             };
 
             function findFollowupToken(value, pos) {

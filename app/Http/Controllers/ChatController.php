@@ -633,6 +633,92 @@ class ChatController extends Controller
     }
 
     /**
+     * Quick chat lucu untuk menanyakan mood user online.
+     * Dibatasi 1 kali per pengirim -> target per hari agar tidak menjadi spam.
+     */
+    public function quickMood(Request $request)
+    {
+        $validated = $request->validate([
+            'target_user_id' => ['required', 'integer', Rule::exists('users', 'id')],
+            'mood' => ['nullable', 'string', 'max:20'],
+        ]);
+
+        $user = Auth::user();
+        $targetId = (int) $validated['target_user_id'];
+
+        if ($targetId === (int) $user->id) {
+            return response()->json(['error' => 'Tidak perlu chat mood ke diri sendiri, cukup jujur sama hati awkwk.'], 422);
+        }
+
+        $target = DB::table('users')
+            ->select('id', 'name')
+            ->where('id', $targetId)
+            ->first();
+
+        if (! $target) {
+            return response()->json(['error' => 'User tidak ditemukan.'], 404);
+        }
+
+        $today = now()->format('Ymd');
+        $cacheKey = "chat_quick_mood:{$user->id}:{$targetId}:{$today}";
+
+        if (Cache::has($cacheKey)) {
+            return response()->json([
+                'error' => 'Quick mood untuk user ini sudah dikirim hari ini. Besok bisa kepo lagi awkwk.',
+                'retry_at' => now()->copy()->endOfDay()->addSecond()->toDateTimeString(),
+            ], 409);
+        }
+
+        $mood = trim((string) ($validated['mood'] ?? ''));
+        $message = $this->quickMoodMessage($target->name, $mood);
+        $colors = $this->colors();
+        $color = $colors[$user->id % count($colors)];
+        $mentionsJson = json_encode([
+            ['id' => $target->id, 'name' => $target->name],
+        ], JSON_UNESCAPED_UNICODE);
+
+        $id = DB::table('chat_messages')->insertGetId([
+            'user_id' => $user->id,
+            'user_name' => $user->name,
+            'user_initials' => $this->initials($user->name),
+            'user_color' => $color,
+            'message' => $message,
+            'reply_to' => null,
+            'reply_preview' => null,
+            'reply_user' => null,
+            'mentions' => $mentionsJson,
+            'created_at' => now(),
+        ]);
+
+        $ttl = max(60, (int) ceil(now()->diffInSeconds(now()->copy()->endOfDay()->addSecond())));
+        Cache::put($cacheKey, true, $ttl);
+
+        $messages = collect([DB::table('chat_messages')->find($id)]);
+        $this->enrichMessages($messages, $user->id);
+
+        return response()->json(['message' => $messages->first()], 201);
+    }
+
+    private function quickMoodMessage(string $targetName, string $mood = ''): string
+    {
+        $name = trim($targetName) !== '' ? trim($targetName) : 'teman';
+
+        $templates = $mood !== ''
+            ? [
+                "@{$name} why mood you like that {$mood}? Cerita dong, sistem siap jadi tempat sambat digital awkwkwk",
+                "@{$name} mood {$mood} terpantau dari radar SIMONPR. Aman bestie? Kalau perlu backup moral, chat ini siaga 😆",
+                "@{$name} vibes kamu hari ini {$mood} banget. Spill tipis dong, ini mood karena kerjaan atau karena kopi kurang? awkwk",
+            ]
+            : [
+                "@{$name} mood kamu masih misterius nih. Pilih mood dulu dong, biar kami bisa ikut kepo dengan sopan awkwkwk",
+                "@{$name} kok belum setor mood? Sistem penasaran, manusia juga penasaran 😆",
+                "@{$name} mood check dulu bestie. Biar dashboard tahu kamu datang dengan vibes apa hari ini.",
+            ];
+
+        return $templates[array_rand($templates)];
+    }
+
+    /**
      * Hapus pesan.
      *
      * Pesan sendiri masih mengikuti batas "hapus untuk semua" selama 6 jam.

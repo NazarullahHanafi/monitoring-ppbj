@@ -101,6 +101,9 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
         Route::post('/followup', [App\Http\Controllers\ChatController::class, 'followup'])
             ->name('followup')
             ->middleware('throttle:30,1');
+        Route::post('/quick-mood', [App\Http\Controllers\ChatController::class, 'quickMood'])
+            ->name('quick-mood')
+            ->middleware('throttle:20,1');
         Route::post('/{id}/reaction', [App\Http\Controllers\ChatController::class, 'react'])->name('react');
         Route::post('/send', [App\Http\Controllers\ChatController::class, 'send'])->name('send');
         Route::patch('/{id}', [App\Http\Controllers\ChatController::class, 'update'])->name('update');

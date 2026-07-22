@@ -53,6 +53,32 @@ class ChatHistoryEditingSharingTest extends TestCase
         $this->assertSame(201, DB::table('chat_messages')->count());
     }
 
+    public function test_quick_mood_chat_can_only_be_sent_once_per_target_per_day(): void
+    {
+        $sender = User::factory()->create(['name' => 'Nazar']);
+        $target = User::factory()->create(['name' => 'Putri']);
+
+        $this->actingAs($sender)
+            ->postJson('/chat/quick-mood', [
+                'target_user_id' => $target->id,
+                'mood' => '😴',
+            ])
+            ->assertCreated()
+            ->assertJsonPath('message.user_id', $sender->id);
+
+        $this->assertDatabaseCount('chat_messages', 1);
+        $this->assertStringContainsString('@Putri', DB::table('chat_messages')->value('message'));
+
+        $this->actingAs($sender)
+            ->postJson('/chat/quick-mood', [
+                'target_user_id' => $target->id,
+                'mood' => '😴',
+            ])
+            ->assertStatus(409);
+
+        $this->assertDatabaseCount('chat_messages', 1);
+    }
+
     public function test_sender_can_edit_a_recent_message(): void
     {
         $sender = User::factory()->create();
