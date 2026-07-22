@@ -567,7 +567,6 @@
                                 class="rounded-lg bg-gray-800 dark:bg-gray-600 px-4 py-2 text-sm font-semibold text-white hover:bg-black dark:hover:bg-gray-500 transition">
                                 Lihat Isi Data
                             </button>
-                            @endif
                         </div>
                     </div>
                 </div>
