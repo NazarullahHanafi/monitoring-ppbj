@@ -2417,7 +2417,7 @@
                                 class="px-4 py-3.5 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase w-20">
                                 PIC</th>
                             <th
-                                class="px-4 py-3.5 text-center text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase w-28">
+                                class="px-4 py-3.5 text-center text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase w-[260px] min-w-[240px]">
                                 Aksi</th>
                         </tr>
                     </thead>
@@ -2458,8 +2458,8 @@
                                 <td class="px-4 py-3"><span
                                         class="inline-block bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 text-xs font-semibold px-2 py-0.5 rounded-full">{{ $s->pic }}</span>
                                 </td>
-                                <td class="px-4 py-3">
-                                    <div class="flex items-center justify-center gap-1.5">
+                                <td class="px-4 py-3 w-[260px] min-w-[240px]">
+                                    <div class="flex flex-wrap items-center justify-center gap-1.5 max-w-[250px] mx-auto">
                                         <button type="button" onclick="shareRecordToChat('spph', {{ $s->id }})"
                                             class="p-1.5 rounded-lg text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors"
                                             title="Bagikan SPPH ke Chat Tim" aria-label="Bagikan SPPH ke Chat Tim">
@@ -2484,7 +2484,8 @@
                                                 ZIP
                                             </a>
                                             <select onchange="openSpphSelectedVendor(this);"
-                                                class="text-[11px] rounded-lg border border-sky-200 dark:border-sky-800 bg-sky-50 dark:bg-sky-900/30 text-sky-700 dark:text-sky-200 px-1.5 py-1"
+                                                class="w-[150px] sm:w-[170px] max-w-full text-[11px] rounded-lg border border-sky-200 dark:border-sky-800 bg-sky-50 dark:bg-sky-900/30 text-sky-700 dark:text-sky-200 px-2 py-1.5 truncate"
+                                                style="width: 170px; max-width: 170px;"
                                                 title="Cetak SPPH per vendor">
                                                 <option value="">Cetak vendor...</option>
                                                 @foreach($vendorList as $vendorName)
