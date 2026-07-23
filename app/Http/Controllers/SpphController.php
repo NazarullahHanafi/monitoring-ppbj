@@ -92,7 +92,7 @@ class SpphController extends Controller
             ->when($vendorFilter, fn($q) => $this->applyVendorFilter($q, $vendorFilter))
             ->when($dari, fn($q) => $q->where('tanggal', '>=', $dari))
             ->when($sampai, fn($q) => $q->where('tanggal', '<=', $sampai))
-            ->orderBy('sequence_number', 'desc')
+            ->orderBy('id', 'desc')
             ->paginate(25)
             ->withQueryString();
 
@@ -204,7 +204,7 @@ class SpphController extends Controller
             ->when($vendorFilter, fn($q) => $this->applyVendorFilter($q, $vendorFilter))
             ->when($dari, fn($q) => $q->where('tanggal', '>=', $dari))
             ->when($sampai, fn($q) => $q->where('tanggal', '<=', $sampai))
-            ->orderBy('sequence_number', 'desc')
+            ->orderBy('id', 'desc')
             ->get();
 
         $filename = 'SPPH_' . now()->format('Ymd_His') . '.csv';

@@ -13,6 +13,42 @@ class SpphPpbjSyncTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_spph_index_shows_newest_record_first_not_biggest_number(): void
+    {
+        $user = User::factory()->create([
+            'department' => 'umum',
+            'role' => 'superadmin',
+        ]);
+
+        Spph::create([
+            'nomor_spph' => '590/PKU-VII/SPPH/2026',
+            'sequence_number' => 590,
+            'tanggal' => '2026-07-10',
+            'nomor_pr' => 'PKB/PR-26/CON/0590',
+            'nama_vendor' => 'Vendor Lama Nomor Besar',
+            'deskripsi_pengadaan' => 'Data lama dengan nomor besar',
+            'pic' => $user->name,
+        ]);
+
+        Spph::create([
+            'nomor_spph' => '570/PKU-VII/SPPH/2026',
+            'sequence_number' => 570,
+            'tanggal' => '2026-07-23',
+            'nomor_pr' => 'PKB/PR-26/CON/0570',
+            'nama_vendor' => 'Vendor Baru Nomor Lanjutan',
+            'deskripsi_pengadaan' => 'Data baru dengan nomor lebih kecil',
+            'pic' => $user->name,
+        ]);
+
+        $response = $this->actingAs($user)->get(route('spph.index'));
+
+        $response->assertOk();
+        $numbers = $response->viewData('spphs')->pluck('nomor_spph')->all();
+
+        $this->assertSame('570/PKU-VII/SPPH/2026', $numbers[0]);
+        $this->assertSame('590/PKU-VII/SPPH/2026', $numbers[1]);
+    }
+
     public function test_creating_spph_syncs_vendor_to_ppbj_penyedia_eksternal(): void
     {
         $user = User::factory()->create([
