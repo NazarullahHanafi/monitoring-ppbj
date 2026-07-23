@@ -2606,6 +2606,33 @@
                                     class="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm">
                             </div>
                         </div>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div><label
+                                    class="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">Email</label><input
+                                    type="email" id="newVendorEmail" placeholder="vendor@email.com"
+                                    class="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm">
+                            </div>
+                            <div><label
+                                    class="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">NPWP</label><input
+                                    type="text" id="newVendorNpwp" placeholder="00.000.000.0-000.000"
+                                    class="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm">
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div><label
+                                    class="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">Direktur / Penanggung Jawab</label><input
+                                    type="text" id="newVendorDirektur" placeholder="Nama direktur..."
+                                    class="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm">
+                            </div>
+                            <div><label
+                                    class="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">Jabatan</label><input
+                                    type="text" id="newVendorJabatan" placeholder="Direktur / Ketua / Owner..."
+                                    class="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm">
+                            </div>
+                        </div>
+                        <p class="text-[11px] leading-relaxed text-emerald-700 dark:text-emerald-300 bg-white/70 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-lg px-3 py-2">
+                            Data NPWP, direktur, dan jabatan akan dipakai otomatis saat cetak kontrak/SP di atas Rp50 juta agar dokumen tidak banyak titik-titik kosong.
+                        </p>
                         <div id="newVendorStatus" class="hidden text-xs px-3 py-2 rounded-lg"></div>
                         <button type="button" onclick="saveNewVendor()"
                             class="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm transition-colors"><span
@@ -4267,7 +4294,7 @@
         const CSRF_TOKEN = document.querySelector('meta[name="csrf-token"]').content;
 
         function cancelNewVendor() { $('#vendorSelectSp').val('').trigger('change'); document.getElementById('newVendorBoxSp').classList.add('hidden'); resetNewVendorForm(); }
-        function resetNewVendorForm() { ['newVendorNama', 'newVendorAlamat', 'newVendorTelp', 'newVendorFax'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; }); setVendorStatus('', ''); }
+        function resetNewVendorForm() { ['newVendorNama', 'newVendorAlamat', 'newVendorTelp', 'newVendorFax', 'newVendorEmail', 'newVendorNpwp', 'newVendorDirektur', 'newVendorJabatan'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; }); setVendorStatus('', ''); }
         function setVendorStatus(msg, type) { const el = document.getElementById('newVendorStatus'); if (!msg) { el.classList.add('hidden'); return; } el.classList.remove('hidden', 'bg-red-100', 'text-red-700', 'bg-green-100', 'text-green-700', 'dark:bg-red-900/30', 'dark:text-red-400', 'dark:bg-green-900/30', 'dark:text-green-400'); if (type === 'error') el.classList.add('bg-red-100', 'dark:bg-red-900/30', 'text-red-700', 'dark:text-red-400'); else el.classList.add('bg-green-100', 'dark:bg-green-900/30', 'text-green-700', 'dark:text-green-400'); el.textContent = msg; }
 
         async function saveNewVendor() {
@@ -4275,6 +4302,10 @@
             const alamat = document.getElementById('newVendorAlamat').value.trim();
             const telp = document.getElementById('newVendorTelp').value.trim();
             const fax = document.getElementById('newVendorFax').value.trim();
+            const email = document.getElementById('newVendorEmail').value.trim();
+            const npwp = document.getElementById('newVendorNpwp').value.trim();
+            const direktur = document.getElementById('newVendorDirektur').value.trim();
+            const jabatan = document.getElementById('newVendorJabatan').value.trim();
             if (!nama) { setVendorStatus('❌ Nama vendor wajib diisi!', 'error'); document.getElementById('newVendorNama').focus(); return; }
             document.getElementById('newVendorBtnText').textContent = 'Menyimpan...';
             document.getElementById('newVendorSpinner').classList.remove('hidden');
@@ -4286,6 +4317,10 @@
                 if (alamat) fd.append('alamat', alamat);
                 if (telp) fd.append('telepon', telp);
                 if (fax) fd.append('fax', fax);
+                if (email) fd.append('email', email);
+                if (npwp) fd.append('npwp', npwp);
+                if (direktur) fd.append('direktur', direktur);
+                if (jabatan) fd.append('jabatan', jabatan);
                 fd.append('is_active', '1');
                 const res = await fetch(VENDOR_STORE_URL, { method: 'POST', body: fd, headers: { 'Accept': 'application/json' } });
                 const data = await res.json();
