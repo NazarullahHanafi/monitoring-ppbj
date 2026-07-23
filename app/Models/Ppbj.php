@@ -28,6 +28,7 @@ class Ppbj extends Model
         'note',
         'portofolio',
         'buyer',
+        'created_by_user_id',
         'total_sebelum_ppn',
 
         'target_sla_hari',
@@ -78,8 +79,15 @@ class Ppbj extends Model
         'keterangan',
         'tgl_diserahkan',
         'status',
+        'status_sla',
         'cancel_reason',
+        'cancelled_at',
     ];
+
+    public function createdBy()
+    {
+        return $this->belongsTo(User::class, 'created_by_user_id');
+    }
 
     public function getIsCancelledAttribute(): bool
     {
@@ -156,6 +164,11 @@ class Ppbj extends Model
 
     public function applySlaCalculation()
     {
+        if (($this->status ?? 'ACTIVE') === 'CANCELLED') {
+            $this->status_sla = 'CANCELLED';
+            return;
+        }
+
         $total = $this->total_sebelum_ppn ?? 0;
         $nilaiSpSpk = $this->nilai_sp_spk ?? 0;
 

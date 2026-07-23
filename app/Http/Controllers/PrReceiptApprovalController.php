@@ -107,6 +107,10 @@ class PrReceiptApprovalController extends Controller
                             $existingUpdates['buyer'] = $buyerName;
                         }
 
+                        if (blank($existingPpbj->created_by_user_id ?? null) && Schema::hasColumn('ppbj', 'created_by_user_id')) {
+                            $existingUpdates['created_by_user_id'] = auth()->id();
+                        }
+
                         if (filled($torpr->portofolio) && blank($existingPpbj->portofolio ?? null)) {
                             $existingUpdates['portofolio'] = $torpr->portofolio;
                         }
@@ -211,6 +215,7 @@ class PrReceiptApprovalController extends Controller
             'uraian' => $torpr->tujuan_pengadaan,
             'portofolio' => $torpr->portofolio,
             'buyer' => $buyerName,
+            'created_by_user_id' => auth()->id(),
             'total_sebelum_ppn' => $total,
             'target_sla_hari' => $targetSla,
             'sisa_target_sla' => $sisaTargetSla,

@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Ppbj;
 use App\Models\PrReceiptApproval;  // ← TAMBAHAN: import model approval
 use Illuminate\Http\Request;
+use App\Models\User;
 use App\Models\MasterBuyer;
 use App\Models\MasterPortofolio;
 use App\Models\MasterMetodePengadaan;
@@ -13,6 +14,7 @@ use Illuminate\Validation\Rule;
 use App\Http\Controllers\DashboardController;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Database\QueryException;
 use Carbon\Carbon;
@@ -306,6 +308,7 @@ class PpbjController extends Controller
 
         try {
             $data = $request->only(Ppbj::manualFields());
+            $data['created_by_user_id'] = auth()->id();
             Ppbj::create($data);
         } catch (QueryException $e) {
             return response()->json([
@@ -423,18 +426,125 @@ class PpbjController extends Controller
 
         $request->validate([
             'reason' => ['required', 'string', 'min:3', 'max:500'],
+            'creator_password' => ['required', 'string', 'min:1', 'max:255'],
+        ], [
+            'creator_password.required' => 'Password pembuat PPBJ wajib diisi untuk cancel data.',
         ]);
 
-        $ppbj->update([
-            'status' => 'CANCELLED',
-            'status_sla' => 'CANCELLED',
-            'cancel_reason' => $request->reason,
-            'cancelled_at' => now(),
-        ]);
+        $user = $request->user();
+        $verifier = $this->resolvePpbjCancelVerifier($ppbj, $request);
+
+        if (!$verifier) {
+            return response()->json([
+                'message' => 'User verifikasi tidak ditemukan, sehingga password cancel tidak bisa dicek.',
+            ], 422);
+        }
+
+        $currentUserId = $user?->id ?: 'guest';
+        $ipHash = sha1((string) $request->ip());
+        $attemptKey = "ppbj_cancel_password_attempts:{$ppbj->id}:{$verifier->id}:{$currentUserId}:{$ipHash}";
+        $lockKey = "ppbj_cancel_password_lock:{$ppbj->id}:{$verifier->id}:{$currentUserId}:{$ipHash}";
+
+        if ($lockedUntil = Cache::get($lockKey)) {
+            $lockedUntilAt = Carbon::parse($lockedUntil);
+            $retryAfter = (int) ceil(max(1, now()->diffInSeconds($lockedUntilAt, false)));
+
+            return response()->json([
+                'message' => 'Terlalu banyak percobaan password salah. Silakan coba lagi sekitar ' . ceil($retryAfter / 60) . ' menit lagi.',
+                'locked' => true,
+                'retry_after' => $retryAfter,
+                'locked_until' => $lockedUntilAt->toIso8601String(),
+            ], 429);
+        }
+
+        if (!Hash::check((string) $request->creator_password, (string) $verifier->password)) {
+            $attempts = ((int) Cache::get($attemptKey, 0)) + 1;
+            $remainingAttempts = max(0, 3 - $attempts);
+            Cache::put($attemptKey, $attempts, now()->addMinutes(15));
+
+            if ($attempts >= 3) {
+                $lockedUntil = now()->addMinutes(15);
+                Cache::put($lockKey, $lockedUntil->toIso8601String(), $lockedUntil);
+                Cache::forget($attemptKey);
+
+                return response()->json([
+                    'message' => 'Password salah 3 kali. Aksi cancel PPBJ dikunci selama 15 menit.',
+                    'locked' => true,
+                    'retry_after' => 15 * 60,
+                    'locked_until' => $lockedUntil->toIso8601String(),
+                ], 429);
+            }
+
+            return response()->json([
+                'message' => 'Password pembuat PPBJ tidak sesuai. Sisa percobaan: ' . $remainingAttempts . '.',
+                'attempts_remaining' => $remainingAttempts,
+            ], 422);
+        }
+
+        Cache::forget($attemptKey);
+        Cache::forget($lockKey);
+
+        DB::transaction(function () use ($ppbj, $request, $user, $verifier) {
+            $ppbj->update([
+                'status' => 'CANCELLED',
+                'status_sla' => 'CANCELLED',
+                'cancel_reason' => $request->reason,
+                'cancelled_at' => now(),
+            ]);
+
+            if (blank($ppbj->created_by_user_id) && $verifier->id) {
+                $ppbj->forceFill(['created_by_user_id' => $verifier->id])->saveQuietly();
+            }
+
+            if (class_exists(\App\Models\ActivityLog::class)) {
+                \App\Models\ActivityLog::create([
+                    'user_id' => $user?->id,
+                    'model_type' => Ppbj::class,
+                    'model_id' => $ppbj->id,
+                    'action' => 'cancelled',
+                    'description' => 'PPBJ di-cancel: ' . ($ppbj->ppbj_no ?: 'PPBJ-' . $ppbj->id),
+                    'changes' => [
+                        'ppbj_no' => $ppbj->ppbj_no,
+                        'reason' => $request->reason,
+                        'verified_by' => $verifier->email,
+                        'cancelled_by' => $user?->email,
+                    ],
+                ]);
+            }
+        });
 
         DashboardController::clearCache();
 
         return response()->json(['message' => 'Data berhasil di-cancel']);
+    }
+
+    private function resolvePpbjCancelVerifier(Ppbj $ppbj, Request $request): ?User
+    {
+        $ppbj->loadMissing('createdBy');
+
+        if ($ppbj->createdBy) {
+            return $ppbj->createdBy;
+        }
+
+        $buyer = trim((string) ($ppbj->buyer ?? ''));
+
+        if ($buyer !== '') {
+            $buyerKey = mb_strtolower($buyer);
+
+            $matchedUser = User::query()
+                ->where(function ($query) use ($buyerKey) {
+                    $query->whereRaw('LOWER(name) = ?', [$buyerKey])
+                        ->orWhereRaw('LOWER(buyer_name) = ?', [$buyerKey]);
+                })
+                ->orderBy('id')
+                ->first();
+
+            if ($matchedUser) {
+                return $matchedUser;
+            }
+        }
+
+        return $request->user();
     }
 
     // =====================
@@ -1124,6 +1234,7 @@ class PpbjController extends Controller
                     'tgl_invoice' => $validatedItem['tgl_invoice'],
                     'keterangan' => $validatedItem['keterangan'],
                     'tgl_diserahkan' => $validatedItem['tgl_diserahkan'],
+                    'created_by_user_id' => auth()->id(),
                 ]);
 
                 $imported++;

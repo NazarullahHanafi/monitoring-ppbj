@@ -2215,66 +2215,132 @@
             }
 
             window.cancelData = function (id) {
-                const doCancel = (reason) => fetch(`/ppbj/${id}/cancel`, {
+                const doCancel = (reason, creatorPassword) => fetch(`/ppbj/${id}/cancel`, {
                     method: 'PUT',
                     headers: {
                         'X-CSRF-TOKEN': '{{ csrf_token() }}',
                         'Content-Type': 'application/json',
                         'X-Requested-With': 'XMLHttpRequest'
                     },
-                    body: JSON.stringify({ reason })
+                    body: JSON.stringify({ reason, creator_password: creatorPassword })
                 }).then(async (r) => {
+                    const body = await r.json().catch(() => ({}));
+
                     if (!r.ok) {
-                        let msg = 'Cancel gagal';
-                        try {
-                            const j = await r.json();
-                            msg = j?.message || msg;
-                        } catch { }
+                        let msg = body?.message || 'Cancel gagal';
+
+                        if (body?.locked_until) {
+                            const unlockAt = new Date(body.locked_until);
+                            if (!Number.isNaN(unlockAt.getTime())) {
+                                msg += ` Bisa dicoba lagi: ${unlockAt.toLocaleString('id-ID', {
+                                    weekday: 'long',
+                                    day: '2-digit',
+                                    month: 'long',
+                                    year: 'numeric',
+                                    hour: '2-digit',
+                                    minute: '2-digit',
+                                    second: '2-digit',
+                                    hour12: false,
+                                })}.`;
+                            }
+                        }
+
                         throw new Error(msg);
                     }
-                    return r.json().catch(() => ({}));
+
+                    return body;
                 });
 
                 if (window.Swal) {
+                    const isDark = document.documentElement.classList.contains('dark');
+                    const popupBg = isDark ? '#111827' : '#ffffff';
+                    const textColor = isDark ? '#f8fafc' : '#111827';
+                    const mutedColor = isDark ? '#cbd5e1' : '#475569';
+                    const inputBg = isDark ? '#1f2937' : '#f8fafc';
+                    const borderColor = isDark ? '#475569' : '#cbd5e1';
+
                     Swal.fire({
                         title: 'Cancel Data?',
-                        text: 'Data tidak terhapus, hanya berubah status menjadi CANCELLED.',
                         icon: 'warning',
-                        input: 'textarea',
-                        inputLabel: 'Alasan cancel (wajib)',
-                        inputPlaceholder: 'Contoh: PR dibatalkan / vendor tidak sanggup / revisi kebutuhan...',
-                        inputAttributes: { maxlength: 500 },
+                        html: `
+                            <div style="text-align:left;display:grid;gap:12px;color:${textColor};font-family:Montserrat,Inter,system-ui,sans-serif">
+                                <div style="border:1px solid ${isDark ? '#7f1d1d' : '#fecaca'};background:${isDark ? '#450a0a' : '#fff1f2'};color:${isDark ? '#fecaca' : '#991b1b'};border-radius:14px;padding:12px 14px;font-size:13px;line-height:1.55">
+                                    <strong>Data tidak dihapus permanen.</strong><br>
+                                    Status akan berubah menjadi <strong>CANCELLED</strong> agar riwayat audit tetap aman.
+                                </div>
+
+                                <label for="ppbjCancelReason" style="font-weight:800;font-size:13px">Alasan cancel <span style="color:#ef4444">*</span></label>
+                                <textarea id="ppbjCancelReason" maxlength="500" placeholder="Contoh: PR dibatalkan / vendor tidak sanggup / revisi kebutuhan..." style="width:100%;min-height:96px;resize:vertical;border-radius:14px;border:1px solid ${borderColor};background:${inputBg};color:${textColor};padding:12px 14px;outline:none"></textarea>
+
+                                <label for="ppbjCancelPassword" style="font-weight:800;font-size:13px">Password pembuat PPBJ <span style="color:#ef4444">*</span></label>
+                                <div style="display:flex;gap:8px;align-items:center;border-radius:14px;border:1px solid ${borderColor};background:${inputBg};padding:6px">
+                                    <input id="ppbjCancelPassword" type="password" placeholder="Masukkan password pembuat / buyer / user login" style="flex:1;min-width:0;border:0;background:transparent;color:${textColor};padding:8px;outline:none">
+                                    <button type="button" id="ppbjCancelTogglePassword" style="border:0;border-radius:10px;background:#2563eb;color:white;padding:8px 12px;font-weight:800;font-size:12px;cursor:pointer">Lihat</button>
+                                </div>
+
+                                <div style="border:1px solid ${isDark ? '#92400e' : '#fed7aa'};background:${isDark ? '#431407' : '#fffbeb'};color:${isDark ? '#fed7aa' : '#92400e'};border-radius:14px;padding:10px 12px;font-size:12px;line-height:1.5">
+                                    Untuk data lama tanpa pembuat: sistem mencocokkan dari <strong>buyer</strong>. Jika buyer tidak cocok/kosong, gunakan password user yang sedang login. Salah 3x akan dikunci 15 menit.
+                                </div>
+                            </div>
+                        `,
                         showCancelButton: true,
-                        confirmButtonColor: '#111827',
+                        confirmButtonColor: '#dc2626',
                         cancelButtonColor: '#9ca3af',
                         confirmButtonText: 'Ya, cancel',
                         cancelButtonText: 'Batal',
-                        preConfirm: (value) => {
-                            const v = (value || '').trim();
-                            if (!v) {
+                        background: popupBg,
+                        color: textColor,
+                        didOpen: () => {
+                            const passwordInput = document.getElementById('ppbjCancelPassword');
+                            const toggle = document.getElementById('ppbjCancelTogglePassword');
+                            const reasonInput = document.getElementById('ppbjCancelReason');
+                            if (reasonInput) reasonInput.focus();
+                            if (toggle && passwordInput) {
+                                toggle.addEventListener('click', () => {
+                                    const shown = passwordInput.type === 'text';
+                                    passwordInput.type = shown ? 'password' : 'text';
+                                    toggle.textContent = shown ? 'Lihat' : 'Tutup';
+                                });
+                            }
+                        },
+                        preConfirm: () => {
+                            const reason = (document.getElementById('ppbjCancelReason')?.value || '').trim();
+                            const password = (document.getElementById('ppbjCancelPassword')?.value || '').trim();
+
+                            if (!reason) {
                                 Swal.showValidationMessage('Alasan cancel wajib diisi');
                                 return false;
                             }
-                            if (v.length < 3) {
+                            if (reason.length < 3) {
                                 Swal.showValidationMessage('Alasan minimal 3 karakter');
                                 return false;
                             }
-                            return v;
+                            if (!password) {
+                                Swal.showValidationMessage('Password pembuat PPBJ wajib diisi');
+                                return false;
+                            }
+
+                            Swal.showLoading();
+
+                            return doCancel(reason, password)
+                                .then((data) => ({ reason, data }))
+                                .catch((e) => {
+                                    Swal.showValidationMessage(e.message || 'Cancel gagal');
+                                    return false;
+                                });
                         }
                     }).then((res) => {
-                        if (res.isConfirmed) {
-                            doCancel(res.value)
-                                .then(() => {
-                                    paintRowCancelled(id, res.value);
-                                    toastOk('Cancelled', 'Status berhasil diubah');
-                                })
-                                .catch((e) => toastErr('Gagal', e.message || 'Cancel gagal'));
+                        if (res.isConfirmed && res.value?.reason) {
+                            paintRowCancelled(id, res.value.reason);
+                            toastOk('Cancelled', 'Status berhasil diubah');
                         }
                     });
                 } else {
                     const reason = prompt('Alasan cancel (wajib):');
                     if (!reason || !reason.trim()) return;
-                    doCancel(reason.trim())
+                    const password = prompt('Password pembuat PPBJ (wajib):');
+                    if (!password) return;
+                    doCancel(reason.trim(), password)
                         .then(() => {
                             paintRowCancelled(id, reason.trim());
                             alert('Berhasil cancel');
