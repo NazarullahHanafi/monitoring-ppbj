@@ -82,11 +82,23 @@ class Ppbj extends Model
         'status_sla',
         'cancel_reason',
         'cancelled_at',
+        'cancelled_by_user_id',
+        'cancel_verified_by_user_id',
     ];
 
     public function createdBy()
     {
         return $this->belongsTo(User::class, 'created_by_user_id');
+    }
+
+    public function cancelledBy()
+    {
+        return $this->belongsTo(User::class, 'cancelled_by_user_id');
+    }
+
+    public function cancelVerifiedBy()
+    {
+        return $this->belongsTo(User::class, 'cancel_verified_by_user_id');
     }
 
     public function getIsCancelledAttribute(): bool

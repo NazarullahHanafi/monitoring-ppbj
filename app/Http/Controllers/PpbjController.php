@@ -73,12 +73,17 @@ class PpbjController extends Controller
                 'tgl_invoice',
                 'receiving_transaction',
                 'cancel_reason',
+                'cancelled_at',
+                'cancelled_by_user_id',
+                'cancel_verified_by_user_id',
                 'progres',
                 'status_sla',
                 'sisa_target_sla',
                 'status',
                 'keterangan',
                 'created_at',
+                DB::raw('(select name from users where users.id = ppbj.cancelled_by_user_id limit 1) as cancelled_by_name'),
+                DB::raw('(select name from users where users.id = ppbj.cancel_verified_by_user_id limit 1) as cancel_verified_by_name'),
             ]);
 
         // ── Search + deteksi field yang cocok ──────────────────────────────────
@@ -490,6 +495,8 @@ class PpbjController extends Controller
                 'status_sla' => 'CANCELLED',
                 'cancel_reason' => $request->reason,
                 'cancelled_at' => now(),
+                'cancelled_by_user_id' => $user?->id,
+                'cancel_verified_by_user_id' => $verifier->id,
             ]);
 
             if (blank($ppbj->created_by_user_id) && $verifier->id) {
@@ -515,7 +522,19 @@ class PpbjController extends Controller
 
         DashboardController::clearCache();
 
-        return response()->json(['message' => 'Data berhasil di-cancel']);
+        $ppbj->refresh();
+        $cancelledAt = $ppbj->cancelled_at
+            ? Carbon::parse($ppbj->cancelled_at)->toIso8601String()
+            : now()->toIso8601String();
+
+        return response()->json([
+            'message' => 'Data berhasil di-cancel',
+            'cancelled_at' => $cancelledAt,
+            'cancelled_by_user_id' => $user?->id,
+            'cancelled_by_name' => $user?->name ?? $user?->email ?? '—',
+            'cancel_verified_by_user_id' => $verifier->id,
+            'cancel_verified_by_name' => $verifier->name ?? $verifier->email ?? '—',
+        ]);
     }
 
     private function resolvePpbjCancelVerifier(Ppbj $ppbj, Request $request): ?User

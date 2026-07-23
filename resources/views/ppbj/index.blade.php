@@ -558,6 +558,21 @@
                             <div id="cancelReasonText" class="font-semibold text-gray-800 dark:text-gray-200">—</div>
                         </div>
 
+                        <div class="mt-3 grid grid-cols-1 gap-2 text-xs sm:grid-cols-3">
+                            <div class="rounded-lg border border-gray-200 bg-white px-3 py-2 dark:border-gray-600 dark:bg-gray-800">
+                                <div class="text-gray-500 dark:text-gray-400">Dicancel oleh</div>
+                                <div id="cancelledByText" class="font-bold text-gray-900 dark:text-gray-100">—</div>
+                            </div>
+                            <div class="rounded-lg border border-gray-200 bg-white px-3 py-2 dark:border-gray-600 dark:bg-gray-800">
+                                <div class="text-gray-500 dark:text-gray-400">Password diverifikasi</div>
+                                <div id="cancelVerifiedByText" class="font-bold text-gray-900 dark:text-gray-100">—</div>
+                            </div>
+                            <div class="rounded-lg border border-gray-200 bg-white px-3 py-2 dark:border-gray-600 dark:bg-gray-800">
+                                <div class="text-gray-500 dark:text-gray-400">Waktu cancel</div>
+                                <div id="cancelledAtText" class="font-bold text-gray-900 dark:text-gray-100">—</div>
+                            </div>
+                        </div>
+
                         <div class="text-sm text-gray-600 dark:text-gray-400 mt-3">
                             Klik tombol di bawah untuk melihat isi datanya.
                         </div>
@@ -1338,6 +1353,9 @@
             const detailHint = document.getElementById('detailHint');
             const cancelledBanner = document.getElementById('cancelledBanner');
             const cancelReasonText = document.getElementById('cancelReasonText');
+            const cancelledByText = document.getElementById('cancelledByText');
+            const cancelVerifiedByText = document.getElementById('cancelVerifiedByText');
+            const cancelledAtText = document.getElementById('cancelledAtText');
             const detailArchiveCard = document.getElementById('detailArchiveCard');
 
             const formTitle = document.getElementById('formTitle');
@@ -1396,6 +1414,24 @@
                 } else {
                     input.value = integerPart;
                 }
+            }
+
+            function formatPpbjAuditDate(value) {
+                if (!value) return '—';
+
+                const date = new Date(value);
+                if (Number.isNaN(date.getTime())) return value;
+
+                return date.toLocaleString('id-ID', {
+                    weekday: 'long',
+                    day: '2-digit',
+                    month: 'long',
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                    hour12: false,
+                });
             }
 
             function toCurrencyString(val) {
@@ -1758,6 +1794,9 @@
                     detailHint.textContent = 'Status: CANCELLED';
                     const reason = (d.cancel_reason ?? '').toString().trim();
                     if (cancelReasonText) cancelReasonText.textContent = reason ? reason : '—';
+                    if (cancelledByText) cancelledByText.textContent = d.cancelled_by_name || '—';
+                    if (cancelVerifiedByText) cancelVerifiedByText.textContent = d.cancel_verified_by_name || '—';
+                    if (cancelledAtText) cancelledAtText.textContent = formatPpbjAuditDate(d.cancelled_at);
                     cancelledBanner.classList.remove('hidden');
                 } else {
                     detailHint.textContent = '';
@@ -2188,7 +2227,7 @@
             // =========================
             // CANCEL FUNCTIONALITY
             // =========================
-            function paintRowCancelled(id, reason) {
+            function paintRowCancelled(id, reason, audit = {}) {
                 const row = document.getElementById(`row_${id}`);
                 if (!row) return;
 
@@ -2211,6 +2250,11 @@
                     window.ppbjData[id].status = 'CANCELLED';
                     window.ppbjData[id].status_sla = 'CANCELLED';
                     window.ppbjData[id].cancel_reason = reason || window.ppbjData[id].cancel_reason || null;
+                    window.ppbjData[id].cancelled_at = audit.cancelled_at || window.ppbjData[id].cancelled_at || null;
+                    window.ppbjData[id].cancelled_by_user_id = audit.cancelled_by_user_id || window.ppbjData[id].cancelled_by_user_id || null;
+                    window.ppbjData[id].cancel_verified_by_user_id = audit.cancel_verified_by_user_id || window.ppbjData[id].cancel_verified_by_user_id || null;
+                    window.ppbjData[id].cancelled_by_name = audit.cancelled_by_name || window.ppbjData[id].cancelled_by_name || '—';
+                    window.ppbjData[id].cancel_verified_by_name = audit.cancel_verified_by_name || window.ppbjData[id].cancel_verified_by_name || '—';
                 }
             }
 
@@ -2274,12 +2318,12 @@
 
                                 <label for="ppbjCancelPassword" style="font-weight:800;font-size:13px">Password pembuat PPBJ <span style="color:#ef4444">*</span></label>
                                 <div style="display:flex;gap:8px;align-items:center;border-radius:14px;border:1px solid ${borderColor};background:${inputBg};padding:6px">
-                                    <input id="ppbjCancelPassword" type="password" placeholder="Masukkan password pembuat / buyer / user login" style="flex:1;min-width:0;border:0;background:transparent;color:${textColor};padding:8px;outline:none">
+                                    <input id="ppbjCancelPassword" type="password" placeholder="Masukkan password pembuat PPBJ" style="flex:1;min-width:0;border:0;background:transparent;color:${textColor};padding:8px;outline:none">
                                     <button type="button" id="ppbjCancelTogglePassword" style="border:0;border-radius:10px;background:#2563eb;color:white;padding:8px 12px;font-weight:800;font-size:12px;cursor:pointer">Lihat</button>
                                 </div>
 
                                 <div style="border:1px solid ${isDark ? '#92400e' : '#fed7aa'};background:${isDark ? '#431407' : '#fffbeb'};color:${isDark ? '#fed7aa' : '#92400e'};border-radius:14px;padding:10px 12px;font-size:12px;line-height:1.5">
-                                    Untuk data lama tanpa pembuat: sistem mencocokkan dari <strong>buyer</strong>. Jika buyer tidak cocok/kosong, gunakan password user yang sedang login. Salah 3x akan dikunci 15 menit.
+                                    Jika salah 3 kali, aksi cancel akan dikunci 15 menit demi keamanan data.
                                 </div>
                             </div>
                         `,
@@ -2331,7 +2375,7 @@
                         }
                     }).then((res) => {
                         if (res.isConfirmed && res.value?.reason) {
-                            paintRowCancelled(id, res.value.reason);
+                            paintRowCancelled(id, res.value.reason, res.value.data || {});
                             toastOk('Cancelled', 'Status berhasil diubah');
                         }
                     });
@@ -2341,8 +2385,8 @@
                     const password = prompt('Password pembuat PPBJ (wajib):');
                     if (!password) return;
                     doCancel(reason.trim(), password)
-                        .then(() => {
-                            paintRowCancelled(id, reason.trim());
+                        .then((data) => {
+                            paintRowCancelled(id, reason.trim(), data || {});
                             alert('Berhasil cancel');
                         })
                         .catch(e => alert(e.message));

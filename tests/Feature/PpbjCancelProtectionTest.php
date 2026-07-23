@@ -66,6 +66,8 @@ class PpbjCancelProtectionTest extends TestCase
         $this->assertSame('CANCELLED', $ppbj->status);
         $this->assertSame('CANCELLED', $ppbj->status_sla);
         $this->assertNotNull($ppbj->cancelled_at);
+        $this->assertSame($actor->id, $ppbj->cancelled_by_user_id);
+        $this->assertSame($creator->id, $ppbj->cancel_verified_by_user_id);
     }
 
     public function test_old_ppbj_without_creator_can_use_matching_buyer_password(): void
@@ -99,7 +101,10 @@ class PpbjCancelProtectionTest extends TestCase
             ])
             ->assertOk();
 
-        $this->assertSame($buyerUser->id, $ppbj->fresh()->created_by_user_id);
+        $ppbj->refresh();
+        $this->assertSame($buyerUser->id, $ppbj->created_by_user_id);
+        $this->assertSame($actor->id, $ppbj->cancelled_by_user_id);
+        $this->assertSame($buyerUser->id, $ppbj->cancel_verified_by_user_id);
     }
 
     public function test_old_ppbj_without_creator_or_buyer_falls_back_to_logged_in_user_password(): void
@@ -124,6 +129,9 @@ class PpbjCancelProtectionTest extends TestCase
             ])
             ->assertOk();
 
-        $this->assertSame($actor->id, $ppbj->fresh()->created_by_user_id);
+        $ppbj->refresh();
+        $this->assertSame($actor->id, $ppbj->created_by_user_id);
+        $this->assertSame($actor->id, $ppbj->cancelled_by_user_id);
+        $this->assertSame($actor->id, $ppbj->cancel_verified_by_user_id);
     }
 }
