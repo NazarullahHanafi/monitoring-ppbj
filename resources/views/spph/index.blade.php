@@ -2622,8 +2622,78 @@
                         @endforeach
                         <option value="__tambah__">➕ Tambah Vendor Baru...</option>
                     </select>
-                    <div id="newVendorBox" class="hidden mt-1"><input type="text" name="vendor_baru"
-                            placeholder="Nama vendor baru..." class="m-input" style="border-color:#a78bfa"></div>
+                    <div class="mt-2">
+                        <button type="button" id="toggleNewVendorSpph"
+                            class="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-700 text-xs font-bold hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition">
+                            🏢 Tambah detail vendor baru
+                        </button>
+                    </div>
+                    <div id="newVendorBoxSpph"
+                        class="hidden mt-3 rounded-xl border-2 border-dashed border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-900/20 p-4 space-y-3">
+                        <div class="flex items-center justify-between">
+                            <span class="text-sm font-bold text-emerald-700 dark:text-emerald-300 flex items-center gap-1.5">🏢 Data Vendor Baru</span>
+                            <button type="button" onclick="cancelNewVendorSpph()"
+                                class="text-xs text-gray-500 dark:text-gray-300 hover:text-red-500 transition">✕ Batal</button>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">Nama Vendor <span class="text-red-500">*</span></label>
+                            <input type="text" id="newSpphVendorNama" placeholder="PT. Nama Vendor..."
+                                class="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">Alamat</label>
+                            <textarea id="newSpphVendorAlamat" rows="2" placeholder="Jl. Contoh No. 1, Kota..."
+                                class="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none text-sm"></textarea>
+                        </div>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">Telepon</label>
+                                <input type="text" id="newSpphVendorTelp" placeholder="0761-xxxxx"
+                                    class="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">Fax</label>
+                                <input type="text" id="newSpphVendorFax" placeholder="0761-xxxxx"
+                                    class="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm">
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">Email</label>
+                                <input type="email" id="newSpphVendorEmail" placeholder="vendor@email.com"
+                                    class="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">NPWP</label>
+                                <input type="text" id="newSpphVendorNpwp" placeholder="00.000.000.0-000.000"
+                                    class="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm">
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">Direktur / Penanggung Jawab</label>
+                                <input type="text" id="newSpphVendorDirektur" placeholder="Nama direktur..."
+                                    class="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">Jabatan</label>
+                                <input type="text" id="newSpphVendorJabatan" placeholder="Direktur / Ketua / Owner..."
+                                    class="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm">
+                            </div>
+                        </div>
+                        <p class="text-[11px] leading-relaxed text-emerald-700 dark:text-emerald-300 bg-white/70 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-lg px-3 py-2">
+                            Data lengkap vendor akan tersimpan ke master vendor dan otomatis bisa dipakai saat cetak SPPH/SP/kontrak.
+                        </p>
+                        <div id="newSpphVendorStatus" class="hidden text-xs px-3 py-2 rounded-lg"></div>
+                        <button type="button" onclick="saveNewVendorSpph()"
+                            class="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm transition">
+                            <span id="newSpphVendorBtnText">💾 Simpan Vendor</span>
+                            <svg id="newSpphVendorSpinner" class="hidden w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                            </svg>
+                        </button>
+                    </div>
                 </div>
 
                 <div class="form-group">
@@ -4027,12 +4097,132 @@
             select.value = '';
         }
 
+        const SPPH_VENDOR_STORE_URL = '{{ route('vendor.store') }}';
+
+        function resetNewVendorSpphForm() {
+            ['newSpphVendorNama', 'newSpphVendorAlamat', 'newSpphVendorTelp', 'newSpphVendorFax', 'newSpphVendorEmail', 'newSpphVendorNpwp', 'newSpphVendorDirektur', 'newSpphVendorJabatan'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.value = '';
+            });
+            setNewVendorSpphStatus('', '');
+        }
+
+        function setNewVendorSpphStatus(message, type) {
+            const el = document.getElementById('newSpphVendorStatus');
+            if (!el) return;
+
+            if (!message) {
+                el.classList.add('hidden');
+                el.textContent = '';
+                return;
+            }
+
+            el.classList.remove('hidden', 'bg-red-100', 'text-red-700', 'bg-green-100', 'text-green-700', 'dark:bg-red-900/30', 'dark:text-red-300', 'dark:bg-green-900/30', 'dark:text-green-300');
+            if (type === 'error') {
+                el.classList.add('bg-red-100', 'dark:bg-red-900/30', 'text-red-700', 'dark:text-red-300');
+            } else {
+                el.classList.add('bg-green-100', 'dark:bg-green-900/30', 'text-green-700', 'dark:text-green-300');
+            }
+            el.textContent = message;
+        }
+
+        function cancelNewVendorSpph() {
+            document.getElementById('newVendorBoxSpph')?.classList.add('hidden');
+            resetNewVendorSpphForm();
+        }
+
+        async function saveNewVendorSpph() {
+            const nama = document.getElementById('newSpphVendorNama')?.value.trim() || '';
+            const alamat = document.getElementById('newSpphVendorAlamat')?.value.trim() || '';
+            const telp = document.getElementById('newSpphVendorTelp')?.value.trim() || '';
+            const fax = document.getElementById('newSpphVendorFax')?.value.trim() || '';
+            const email = document.getElementById('newSpphVendorEmail')?.value.trim() || '';
+            const npwp = document.getElementById('newSpphVendorNpwp')?.value.trim() || '';
+            const direktur = document.getElementById('newSpphVendorDirektur')?.value.trim() || '';
+            const jabatan = document.getElementById('newSpphVendorJabatan')?.value.trim() || '';
+
+            if (!nama) {
+                setNewVendorSpphStatus('❌ Nama vendor wajib diisi.', 'error');
+                document.getElementById('newSpphVendorNama')?.focus();
+                return;
+            }
+
+            document.getElementById('newSpphVendorBtnText').textContent = 'Menyimpan...';
+            document.getElementById('newSpphVendorSpinner')?.classList.remove('hidden');
+            setNewVendorSpphStatus('', '');
+
+            try {
+                const fd = new FormData();
+                fd.append('_token', document.querySelector('meta[name="csrf-token"]')?.content || '{{ csrf_token() }}');
+                fd.append('nama_vendor', nama);
+                if (alamat) fd.append('alamat', alamat);
+                if (telp) fd.append('telepon', telp);
+                if (fax) fd.append('fax', fax);
+                if (email) fd.append('email', email);
+                if (npwp) fd.append('npwp', npwp);
+                if (direktur) fd.append('direktur', direktur);
+                if (jabatan) fd.append('jabatan', jabatan);
+                fd.append('is_active', '1');
+
+                const response = await fetch(SPPH_VENDOR_STORE_URL, {
+                    method: 'POST',
+                    body: fd,
+                    headers: { 'Accept': 'application/json' }
+                });
+                const data = await response.json();
+
+                if (!response.ok) {
+                    const message = data.errors ? Object.values(data.errors).flat().join(', ') : (data.message || 'Gagal menyimpan vendor.');
+                    setNewVendorSpphStatus('❌ ' + message, 'error');
+                    return;
+                }
+
+                const vendorName = data.nama_vendor || nama;
+                const $select = $('#vendorSelect');
+                const exists = $select.find('option').filter(function () { return this.value === vendorName; }).length > 0;
+                if (!exists) {
+                    $select.append(new Option(vendorName, vendorName, true, true));
+                }
+                const currentValues = $select.val() || [];
+                if (!currentValues.includes(vendorName)) {
+                    currentValues.push(vendorName);
+                }
+                $select.val(currentValues).trigger('change');
+
+                cancelNewVendorSpph();
+                Swal.fire({
+                    toast: true,
+                    position: 'top-end',
+                    icon: 'success',
+                    title: `✅ Vendor "${vendorName}" berhasil ditambahkan ke SPPH.`,
+                    showConfirmButton: false,
+                    timer: 3000,
+                    timerProgressBar: true,
+                    background: document.documentElement.classList.contains('dark') ? '#1f2937' : '#fff',
+                    color: document.documentElement.classList.contains('dark') ? '#f3f4f6' : '#111827'
+                });
+            } catch (error) {
+                setNewVendorSpphStatus('❌ Terjadi kesalahan koneksi.', 'error');
+            } finally {
+                document.getElementById('newSpphVendorBtnText').textContent = '💾 Simpan Vendor';
+                document.getElementById('newSpphVendorSpinner')?.classList.add('hidden');
+            }
+        }
+
         $(document).ready(function () {
             initPpbjSelect2('.ppbj-select', 'ppbjInfo', 'ppbjStatus', 'ppbjInfoContent', () => updatePrFinalValue(), 'addDeskripsi', 'addDeskripsiBadge');
             initPpbjSelect2('.edit-ppbj-select', 'editPpbjInfo', 'editPpbjStatus', 'editPpbjInfoContent', () => updateEditPrFinalValue(), 'editDeskripsi', 'editDeskripsiBadge');
 
             $('#vendorSelect option[value=""], #vendorSelect option[value="__tambah__"], #editVendor option[value=""]').remove();
             $('#newVendorBox').remove();
+            $('#toggleNewVendorSpph').on('click', function () {
+                const box = document.getElementById('newVendorBoxSpph');
+                if (!box) return;
+                box.classList.toggle('hidden');
+                if (!box.classList.contains('hidden')) {
+                    setTimeout(() => document.getElementById('newSpphVendorNama')?.focus(), 50);
+                }
+            });
 
             const cfg = (ph, parent) => {
                 const option = {
