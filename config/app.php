@@ -75,6 +75,15 @@ return [
 
     'owner_backup_mysqldump_path' => env('MYSQLDUMP_PATH', 'mysqldump'),
 
+    'performance_monitor' => [
+        'enabled' => (bool) env('PERFORMANCE_MONITOR_ENABLED', true),
+        'traffic_per_minute_threshold' => (int) env('PERFORMANCE_TRAFFIC_PER_MINUTE_THRESHOLD', 120),
+        'slow_request_ms' => (int) env('PERFORMANCE_SLOW_REQUEST_MS', 3000),
+        'slow_requests_per_minute_threshold' => (int) env('PERFORMANCE_SLOW_REQUESTS_PER_MINUTE_THRESHOLD', 8),
+        'error_spike_threshold' => (int) env('PERFORMANCE_ERROR_SPIKE_THRESHOLD', 5),
+        'alert_cooldown_minutes' => (int) env('PERFORMANCE_ALERT_COOLDOWN_MINUTES', 5),
+    ],
+
     /*
     |--------------------------------------------------------------------------
     | Application Timezone

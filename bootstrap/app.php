@@ -10,6 +10,7 @@ use App\Http\Middleware\EnsureActiveUser;
 use App\Http\Middleware\EnsureNotReadOnly;
 use App\Http\Middleware\EnsureNotSoftMaintenance;
 use App\Http\Middleware\EnsureOwnerAccess;
+use App\Http\Middleware\MonitorPerformance;
 use App\Http\Middleware\SecurityHeaders;
 use App\Services\TelegramBotService;
 
@@ -31,6 +32,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->prepend(EnsureNotSoftMaintenance::class);
         $middleware->append(EnsureActiveUser::class);
         $middleware->append(SecurityHeaders::class);
+        $middleware->append(MonitorPerformance::class);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->report(function (\Throwable $e) {

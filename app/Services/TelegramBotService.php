@@ -208,6 +208,36 @@ class TelegramBotService
         ]));
     }
 
+    public function notifyPerformanceAlert(string $event, array $metrics = []): void
+    {
+        if (! app()->environment('production')) {
+            return;
+        }
+
+        $lines = [
+            '⚡ Alert performa SIMONPR',
+            'Kejadian: '.$event,
+            'Waktu: '.now()->translatedFormat('l, d F Y H:i:s').' WIB',
+            '',
+            'Detail:',
+        ];
+
+        foreach ($metrics as $key => $value) {
+            if (is_array($value) || is_object($value)) {
+                continue;
+            }
+
+            $label = Str::of((string) $key)->replace('_', ' ')->headline()->toString();
+            $lines[] = '- '.$label.': '.Str::limit((string) $value, 180);
+        }
+
+        $lines[] = '';
+        $lines[] = 'Saran cepat: cek /health, /security_today, dan aktifkan read-only/maintenance dari /ops bila diperlukan.';
+        $lines[] = 'Alert memakai cooldown supaya Telegram tidak spam dan performa website tetap stabil.';
+
+        $this->sendNotification(implode("\n", $lines));
+    }
+
     public function setWebhook(string $url): array
     {
         $token = $this->token();
