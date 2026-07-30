@@ -39,6 +39,16 @@ class TelegramSetWebhook extends Command
 
         $this->info('Webhook Telegram aktif: '.$url);
 
+        $commandsResult = $telegram->setCommands();
+
+        if (($commandsResult['ok'] ?? false) !== true) {
+            $this->warn('Webhook aktif, tapi command menu gagal didaftarkan: '.($commandsResult['description'] ?? 'unknown error'));
+
+            return self::SUCCESS;
+        }
+
+        $this->info('Command menu Telegram aktif. Klik / di Telegram untuk melihat daftar command.');
+
         return self::SUCCESS;
     }
 }

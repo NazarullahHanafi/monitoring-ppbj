@@ -123,6 +123,37 @@ class TelegramBotService
         }
     }
 
+    public function setCommands(): array
+    {
+        $token = $this->token();
+
+        if (! $token) {
+            return ['ok' => false, 'description' => 'TELEGRAM_BOT_TOKEN belum diatur.'];
+        }
+
+        $commands = [
+            ['command' => 'tele', 'description' => 'Status sistem dan ringkasan data'],
+            ['command' => 'list', 'description' => 'Aktivitas terbaru website'],
+            ['command' => 'online', 'description' => 'User yang sedang online'],
+            ['command' => 'users', 'description' => 'Terakhir aktif/login user'],
+            ['command' => 'ops', 'description' => 'Panel maintenance dan read-only'],
+            ['command' => 'health', 'description' => 'Health check sistem cepat'],
+            ['command' => 'help', 'description' => 'Daftar command SIMONPR'],
+        ];
+
+        try {
+            $response = Http::timeout($this->timeout())
+                ->asForm()
+                ->post("https://api.telegram.org/bot{$token}/setMyCommands", [
+                    'commands' => json_encode($commands),
+                ]);
+
+            return $response->json() ?: ['ok' => false, 'description' => $response->body()];
+        } catch (Throwable) {
+            return ['ok' => false, 'description' => 'Tidak dapat mendaftarkan command Telegram.'];
+        }
+    }
+
     public function sendOpsPanel(string|int $chatId): bool
     {
         return $this->sendMessage($chatId, $this->opsPanelText(), $this->opsKeyboard());
