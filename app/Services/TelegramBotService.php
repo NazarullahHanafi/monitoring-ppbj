@@ -66,6 +66,8 @@ class TelegramBotService
             '/unlock_user', 'unlock_user',
             '/who_online_detail', 'who_online_detail',
             '/locked_users', 'locked_users',
+            '/audit_today', 'audit_today',
+            '/security_today', 'security_today',
         ];
 
         if (in_array($command, $ownerOnlyCommands, true) && ! $this->isOwnerActor($fromId)) {
@@ -83,6 +85,8 @@ class TelegramBotService
             '/health', 'health' => $this->sendMessage($chatId, $this->healthText()),
             '/who_online_detail', 'who_online_detail' => $this->sendMessage($chatId, $this->whoOnlineDetailText()),
             '/locked_users', 'locked_users' => $this->sendMessage($chatId, $this->lockedUsersText()),
+            '/audit_today', 'audit_today' => $this->sendMessage($chatId, $this->auditTodayText()),
+            '/security_today', 'security_today' => $this->sendMessage($chatId, $this->securityTodayText()),
             '/force_logout_user', 'force_logout_user' => $this->sendMessage($chatId, $this->forceLogoutUserByCommand($text, $fromId)),
             '/lock_user', 'lock_user' => $this->sendMessage($chatId, $this->lockUserByCommand($text, $fromId)),
             '/unlock_user', 'unlock_user' => $this->sendMessage($chatId, $this->unlockUserByCommand($text, $fromId)),
@@ -244,6 +248,8 @@ class TelegramBotService
             ['command' => 'health', 'description' => 'Health check sistem cepat'],
             ['command' => 'who_online_detail', 'description' => 'Owner: detail user online'],
             ['command' => 'locked_users', 'description' => 'Owner: daftar akun terkunci'],
+            ['command' => 'audit_today', 'description' => 'Owner: ringkasan audit hari ini'],
+            ['command' => 'security_today', 'description' => 'Owner: pantauan keamanan hari ini'],
             ['command' => 'force_logout_user', 'description' => 'Owner: paksa logout user by email'],
             ['command' => 'lock_user', 'description' => 'Owner: kunci akun user by email'],
             ['command' => 'unlock_user', 'description' => 'Owner: buka kunci akun user by email'],
@@ -429,6 +435,200 @@ class TelegramBotService
             $lines[] = ($index + 1).". {$time} — {$actor}";
             $lines[] = "   {$description}";
         }
+
+        return implode("\n", $lines);
+    }
+
+    public function auditTodayText(int $limit = 8): string
+    {
+        if (! Schema::hasTable('activity_logs')) {
+            return "Audit hari ini\n\nBelum ada tabel activity_logs.";
+        }
+
+        return Cache::remember('telegram_audit_today_text', 30, function () use ($limit) {
+            $start = now()->startOfDay();
+            $end = now()->endOfDay();
+            $limit = max(1, min($limit, 12));
+
+            $total = ActivityLog::query()
+                ->whereBetween('created_at', [$start, $end])
+                ->count();
+
+            $actionCounts = ActivityLog::query()
+                ->select('action', DB::raw('count(*) as total'))
+                ->whereBetween('created_at', [$start, $end])
+                ->groupBy('action')
+                ->orderByDesc('total')
+                ->limit(8)
+                ->pluck('total', 'action');
+
+            $moduleCounts = ActivityLog::query()
+                ->select('model_type', DB::raw('count(*) as total'))
+                ->whereBetween('created_at', [$start, $end])
+                ->groupBy('model_type')
+                ->orderByDesc('total')
+                ->limit(8)
+                ->pluck('total', 'model_type');
+
+            $latestLogs = ActivityLog::query()
+                ->with('user:id,name,email')
+                ->whereBetween('created_at', [$start, $end])
+                ->latest()
+                ->limit($limit)
+                ->get();
+
+            $lines = [
+                'Audit hari ini SIMONPR',
+                'Tanggal: '.now()->translatedFormat('l, d F Y').' WIB',
+                'Dibuat: '.now()->translatedFormat('H:i:s').' WIB',
+                '',
+                "Total aktivitas tercatat: {$total}",
+            ];
+
+            $lines[] = '';
+            $lines[] = 'Aksi terbanyak:';
+            if ($actionCounts->isEmpty()) {
+                $lines[] = '- Belum ada aksi tercatat hari ini.';
+            } else {
+                foreach ($actionCounts as $action => $count) {
+                    $lines[] = '- '.($action ?: '-').": {$count}";
+                }
+            }
+
+            $lines[] = '';
+            $lines[] = 'Modul paling aktif:';
+            if ($moduleCounts->isEmpty()) {
+                $lines[] = '- Belum ada modul aktif.';
+            } else {
+                foreach ($moduleCounts as $modelType => $count) {
+                    $lines[] = '- '.$this->shortModelName((string) $modelType).": {$count}";
+                }
+            }
+
+            $lines[] = '';
+            $lines[] = 'Aktivitas terbaru:';
+            if ($latestLogs->isEmpty()) {
+                $lines[] = '- Belum ada aktivitas terbaru.';
+            } else {
+                foreach ($latestLogs as $index => $log) {
+                    $actor = $log->user?->name ?: 'System';
+                    $time = optional($log->created_at)->format('H:i:s') ?: '-';
+                    $description = Str::limit((string) ($log->description ?: $log->action), 90);
+                    $lines[] = ($index + 1).". {$time} - {$actor}";
+                    $lines[] = "   {$description}";
+                }
+            }
+
+            $lines[] = '';
+            $lines[] = 'Catatan: laporan ini dibatasi data hari ini agar tetap ringan untuk server.';
+
+            return implode("\n", $lines);
+        });
+    }
+
+    public function securityTodayText(int $limit = 6): string
+    {
+        $start = now()->startOfDay();
+        $end = now()->endOfDay();
+        $limit = max(1, min($limit, 10));
+
+        $lockedNow = Schema::hasTable('users') && Schema::hasColumn('users', 'is_active')
+            ? User::query()->where('is_active', false)->count()
+            : 0;
+
+        $lockedToday = Schema::hasTable('users') && Schema::hasColumn('users', 'locked_at')
+            ? User::query()->whereBetween('locked_at', [$start, $end])->count()
+            : 0;
+
+        $failedJobsToday = Schema::hasTable('failed_jobs')
+            ? DB::table('failed_jobs')->whereBetween('failed_at', [$start, $end])->count()
+            : 0;
+
+        $ownerActionCounts = collect();
+        $criticalActionCounts = collect();
+        $latestSecurityLogs = collect();
+
+        if (Schema::hasTable('activity_logs')) {
+            $ownerActionCounts = ActivityLog::query()
+                ->select('action', DB::raw('count(*) as total'))
+                ->whereBetween('created_at', [$start, $end])
+                ->whereIn('action', [
+                    'telegram_force_logout_user',
+                    'telegram_lock_user',
+                    'telegram_unlock_user',
+                    'owner_backup_email_sent',
+                ])
+                ->groupBy('action')
+                ->pluck('total', 'action');
+
+            $criticalActionCounts = ActivityLog::query()
+                ->select('action', DB::raw('count(*) as total'))
+                ->whereBetween('created_at', [$start, $end])
+                ->whereIn('action', ['deleted', 'cancelled'])
+                ->groupBy('action')
+                ->pluck('total', 'action');
+
+            $latestSecurityLogs = ActivityLog::query()
+                ->with('user:id,name,email')
+                ->whereBetween('created_at', [$start, $end])
+                ->where(function ($query) {
+                    $query->whereIn('action', [
+                        'telegram_force_logout_user',
+                        'telegram_lock_user',
+                        'telegram_unlock_user',
+                        'owner_backup_email_sent',
+                        'deleted',
+                        'cancelled',
+                    ])->orWhere('action', 'like', 'telegram_%');
+                })
+                ->latest()
+                ->limit($limit)
+                ->get();
+        }
+
+        $lines = [
+            'Security today SIMONPR',
+            'Tanggal: '.now()->translatedFormat('l, d F Y').' WIB',
+            'Dibuat: '.now()->translatedFormat('H:i:s').' WIB',
+            '',
+            'Status kontrol:',
+            '- Website: '.$this->modeLabel('maintenance'),
+            '- Read-only: '.$this->modeLabel('readonly'),
+            '- Debug: '.(config('app.debug') ? 'ON - perlu dicek' : 'OFF - aman'),
+            '',
+            'Sinyal keamanan:',
+            "- Akun terkunci saat ini: {$lockedNow}",
+            "- Akun dikunci hari ini: {$lockedToday}",
+            "- Failed jobs hari ini: {$failedJobsToday}",
+            '- Delete/cancel hari ini: '.(int) $criticalActionCounts->sum(),
+        ];
+
+        $lines[] = '';
+        $lines[] = 'Aksi owner hari ini:';
+        if ($ownerActionCounts->isEmpty()) {
+            $lines[] = '- Belum ada aksi owner sensitif.';
+        } else {
+            foreach ($ownerActionCounts as $action => $count) {
+                $lines[] = '- '.($action ?: '-').": {$count}";
+            }
+        }
+
+        $lines[] = '';
+        $lines[] = 'Log keamanan terbaru:';
+        if ($latestSecurityLogs->isEmpty()) {
+            $lines[] = '- Belum ada log keamanan kritis hari ini.';
+        } else {
+            foreach ($latestSecurityLogs as $index => $log) {
+                $actor = $log->user?->name ?: 'System';
+                $time = optional($log->created_at)->format('H:i:s') ?: '-';
+                $description = Str::limit((string) ($log->description ?: $log->action), 90);
+                $lines[] = ($index + 1).". {$time} - {$actor}";
+                $lines[] = "   {$description}";
+            }
+        }
+
+        $lines[] = '';
+        $lines[] = 'Tips: alert login gagal/error tetap dikirim real-time, sedangkan command ini untuk rekap cepat owner.';
 
         return implode("\n", $lines);
     }
@@ -918,6 +1118,21 @@ class TelegramBotService
         }
 
         return $name !== '' ? $name : ($email !== '' ? $email : 'User');
+    }
+
+    private function shortModelName(string $modelType): string
+    {
+        $modelType = trim($modelType);
+
+        if ($modelType === '') {
+            return '-';
+        }
+
+        return Str::of($modelType)
+            ->afterLast('\\')
+            ->replace('_', ' ')
+            ->headline()
+            ->toString();
     }
 
     public function isAllowedChat(string|int $chatId): bool

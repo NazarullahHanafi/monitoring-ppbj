@@ -335,6 +335,72 @@ class TelegramWebhookTest extends TestCase
         });
     }
 
+    public function test_telegram_owner_can_see_audit_and_security_today(): void
+    {
+        config()->set('services.telegram.bot_token', 'TEST_TOKEN');
+        config()->set('services.telegram.webhook_secret', 'secret-ok');
+        config()->set('services.telegram.allowed_chat_ids', '12345');
+        config()->set('services.telegram.owner_chat_ids', '1191851650');
+
+        $user = User::factory()->create([
+            'name' => 'Audit Actor',
+            'is_active' => false,
+            'locked_at' => now(),
+            'locked_by' => 'telegram:1191851650',
+            'locked_reason' => 'Audit test lock',
+        ]);
+
+        ActivityLog::create([
+            'user_id' => $user->id,
+            'model_type' => User::class,
+            'model_id' => $user->id,
+            'action' => 'updated',
+            'description' => 'Audit hari ini dari test',
+        ]);
+
+        ActivityLog::create([
+            'user_id' => null,
+            'model_type' => User::class,
+            'model_id' => $user->id,
+            'action' => 'telegram_lock_user',
+            'description' => 'Owner Telegram mengunci user test',
+        ]);
+
+        Http::fake([
+            'https://api.telegram.org/*' => Http::response(['ok' => true], 200),
+        ]);
+
+        $this->postJson('/telegram/webhook/secret-ok', [
+            'message' => [
+                'chat' => ['id' => 12345],
+                'from' => ['id' => 1191851650],
+                'text' => '/audit_today',
+            ],
+        ])->assertOk();
+
+        $this->postJson('/telegram/webhook/secret-ok', [
+            'message' => [
+                'chat' => ['id' => 12345],
+                'from' => ['id' => 1191851650],
+                'text' => '/security_today',
+            ],
+        ])->assertOk();
+
+        Http::assertSent(function ($request) {
+            $body = (string) $request->body();
+
+            return str_contains($body, 'Audit+hari+ini+SIMONPR')
+                && str_contains($body, 'Audit+hari+ini+dari+test');
+        });
+
+        Http::assertSent(function ($request) {
+            $body = (string) $request->body();
+
+            return str_contains($body, 'Security+today+SIMONPR')
+                && str_contains($body, 'telegram_lock_user');
+        });
+    }
+
     public function test_soft_maintenance_blocks_website_but_keeps_telegram_webhook_open(): void
     {
         config()->set('services.telegram.webhook_secret', 'secret-ok');
