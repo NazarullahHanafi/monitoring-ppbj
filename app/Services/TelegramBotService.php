@@ -13,6 +13,7 @@ use App\Models\User;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Throwable;
@@ -34,12 +35,21 @@ class TelegramBotService
             return;
         }
 
+        $command = Str::of($text)->before(' ')->before('@')->lower()->toString();
+
+        Log::info('Telegram chat discovered', [
+            'chat_id' => $chatId,
+            'chat_type' => data_get($message, 'chat.type'),
+            'chat_title' => data_get($message, 'chat.title'),
+            'from_id' => data_get($message, 'from.id'),
+            'from_username' => data_get($message, 'from.username'),
+            'command' => $command,
+        ]);
+
         if (! $this->isAllowedChat($chatId)) {
             $this->sendMessage($chatId, "⛔ Akses Telegram SIMONPR ditolak.\nChat ID: {$chatId}\n\nKirim Chat ID ini ke owner untuk didaftarkan.");
             return;
         }
-
-        $command = Str::of($text)->before(' ')->before('@')->lower()->toString();
 
         match ($command) {
             '/tele', 'tele', '/status', 'status' => $this->sendMessage($chatId, $this->statusText()),
