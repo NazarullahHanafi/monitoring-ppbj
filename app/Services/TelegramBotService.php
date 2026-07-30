@@ -15,6 +15,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
+use Throwable;
 
 class TelegramBotService
 {
@@ -56,15 +57,19 @@ class TelegramBotService
             return false;
         }
 
-        $response = Http::timeout($this->timeout())
-            ->asForm()
-            ->post("https://api.telegram.org/bot{$token}/sendMessage", [
-                'chat_id' => (string) $chatId,
-                'text' => $text,
-                'disable_web_page_preview' => true,
-            ]);
+        try {
+            $response = Http::timeout($this->timeout())
+                ->asForm()
+                ->post("https://api.telegram.org/bot{$token}/sendMessage", [
+                    'chat_id' => (string) $chatId,
+                    'text' => $text,
+                    'disable_web_page_preview' => true,
+                ]);
 
-        return $response->successful();
+            return $response->successful();
+        } catch (Throwable) {
+            return false;
+        }
     }
 
     public function setWebhook(string $url): array
@@ -75,15 +80,19 @@ class TelegramBotService
             return ['ok' => false, 'description' => 'TELEGRAM_BOT_TOKEN belum diatur.'];
         }
 
-        $response = Http::timeout($this->timeout())
-            ->asForm()
-            ->post("https://api.telegram.org/bot{$token}/setWebhook", [
-                'url' => $url,
-                'drop_pending_updates' => true,
-                'allowed_updates' => json_encode(['message', 'edited_message']),
-            ]);
+        try {
+            $response = Http::timeout($this->timeout())
+                ->asForm()
+                ->post("https://api.telegram.org/bot{$token}/setWebhook", [
+                    'url' => $url,
+                    'drop_pending_updates' => true,
+                    'allowed_updates' => json_encode(['message', 'edited_message']),
+                ]);
 
-        return $response->json() ?: ['ok' => false, 'description' => $response->body()];
+            return $response->json() ?: ['ok' => false, 'description' => $response->body()];
+        } catch (Throwable) {
+            return ['ok' => false, 'description' => 'Tidak dapat terhubung ke Telegram API dari server.'];
+        }
     }
 
     public function statusText(): string
@@ -177,7 +186,7 @@ class TelegramBotService
 
     private function timeout(): int
     {
-        return max(1, (int) config('services.telegram.timeout', 5));
+        return max(1, (int) config('services.telegram.timeout', 15));
     }
 
     private function safeCount(string $modelClass, string $table): int
