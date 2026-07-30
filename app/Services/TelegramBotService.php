@@ -22,6 +22,14 @@ class TelegramBotService
 {
     public function handleUpdate(array $update): void
     {
+        $callbackQuery = $update['callback_query'] ?? null;
+
+        if (is_array($callbackQuery)) {
+            $this->handleCallbackQuery($callbackQuery);
+
+            return;
+        }
+
         $message = $update['message'] ?? $update['edited_message'] ?? null;
 
         if (! is_array($message)) {
@@ -56,12 +64,14 @@ class TelegramBotService
             '/list', 'list' => $this->sendMessage($chatId, $this->activityListText()),
             '/online', 'online' => $this->sendMessage($chatId, $this->onlineUsersText()),
             '/users', 'users', '/lastlogin', 'lastlogin' => $this->sendMessage($chatId, $this->lastSeenUsersText()),
+            '/ops', 'ops', '/control', 'control' => $this->sendOpsPanel($chatId),
+            '/health', 'health' => $this->sendMessage($chatId, $this->healthText()),
             '/help', 'help', '/start', 'start' => $this->sendMessage($chatId, $this->helpText()),
             default => $this->sendMessage($chatId, "Aku belum kenal command itu 😄\n\n".$this->helpText()),
         };
     }
 
-    public function sendMessage(string|int $chatId, string $text): bool
+    public function sendMessage(string|int $chatId, string $text, ?array $replyMarkup = null): bool
     {
         $token = $this->token();
 
@@ -70,13 +80,19 @@ class TelegramBotService
         }
 
         try {
+            $payload = [
+                'chat_id' => (string) $chatId,
+                'text' => $text,
+                'disable_web_page_preview' => true,
+            ];
+
+            if ($replyMarkup !== null) {
+                $payload['reply_markup'] = json_encode($replyMarkup);
+            }
+
             $response = Http::timeout($this->timeout())
                 ->asForm()
-                ->post("https://api.telegram.org/bot{$token}/sendMessage", [
-                    'chat_id' => (string) $chatId,
-                    'text' => $text,
-                    'disable_web_page_preview' => true,
-                ]);
+                ->post("https://api.telegram.org/bot{$token}/sendMessage", $payload);
 
             return $response->successful();
         } catch (Throwable) {
@@ -98,13 +114,130 @@ class TelegramBotService
                 ->post("https://api.telegram.org/bot{$token}/setWebhook", [
                     'url' => $url,
                     'drop_pending_updates' => true,
-                    'allowed_updates' => json_encode(['message', 'edited_message']),
+                    'allowed_updates' => json_encode(['message', 'edited_message', 'callback_query']),
                 ]);
 
             return $response->json() ?: ['ok' => false, 'description' => $response->body()];
         } catch (Throwable) {
             return ['ok' => false, 'description' => 'Tidak dapat terhubung ke Telegram API dari server.'];
         }
+    }
+
+    public function sendOpsPanel(string|int $chatId): bool
+    {
+        return $this->sendMessage($chatId, $this->opsPanelText(), $this->opsKeyboard());
+    }
+
+    private function handleCallbackQuery(array $callbackQuery): void
+    {
+        $callbackId = (string) data_get($callbackQuery, 'id', '');
+        $chatId = (string) data_get($callbackQuery, 'message.chat.id', '');
+        $messageId = data_get($callbackQuery, 'message.message_id');
+        $fromId = (string) data_get($callbackQuery, 'from.id', '');
+        $data = (string) data_get($callbackQuery, 'data', '');
+
+        if ($callbackId === '' || $chatId === '' || $data === '') {
+            return;
+        }
+
+        if (! $this->isAllowedChat($chatId)) {
+            $this->answerCallbackQuery($callbackId, 'Chat ini belum terdaftar di SIMONPR.', true);
+
+            return;
+        }
+
+        if ($data === 'ops:refresh') {
+            $this->answerCallbackQuery($callbackId, 'Status diperbarui.');
+            $this->editMessageText($chatId, $messageId, $this->opsPanelText(), $this->opsKeyboard());
+
+            return;
+        }
+
+        if ($data === 'ops:health') {
+            $this->answerCallbackQuery($callbackId, 'Health check dikirim.');
+            $this->sendMessage($chatId, $this->healthText());
+
+            return;
+        }
+
+        if (! $this->isOwnerActor($fromId)) {
+            $this->answerCallbackQuery($callbackId, 'Hanya owner Telegram yang boleh menekan tombol ini.', true);
+
+            return;
+        }
+
+        $message = match ($data) {
+            'ops:maintenance:on' => $this->setMaintenanceMode(true),
+            'ops:maintenance:off' => $this->setMaintenanceMode(false),
+            'ops:readonly:on' => $this->setReadOnlyMode(true),
+            'ops:readonly:off' => $this->setReadOnlyMode(false),
+            default => 'Command tombol tidak dikenal.',
+        };
+
+        $this->answerCallbackQuery($callbackId, $message);
+        $this->editMessageText($chatId, $messageId, $this->opsPanelText()."\n\n".$message, $this->opsKeyboard());
+    }
+
+    private function opsPanelText(): string
+    {
+        return implode("\n", [
+            '🕹️ SIMONPR Control Center',
+            'Waktu: '.now()->translatedFormat('l, d F Y H:i:s').' WIB',
+            '',
+            'Website: '.$this->modeLabel('maintenance'),
+            'Read-only: '.$this->modeLabel('readonly'),
+            'Database: '.$this->databaseStatus(),
+            'Cache: '.$this->cacheStatus(),
+            '',
+            'Catatan: tombol maintenance/read-only hanya dapat dijalankan oleh owner Telegram.',
+        ]);
+    }
+
+    private function opsKeyboard(): array
+    {
+        $maintenanceOn = (bool) Cache::get('simonpr:maintenance_mode', false);
+        $readOnlyOn = (bool) Cache::get('simonpr:read_only_mode', false);
+
+        return [
+            'inline_keyboard' => [
+                [
+                    [
+                        'text' => $maintenanceOn ? '✅ Hidupkan Website' : '🛠️ Matikan Website 503',
+                        'callback_data' => $maintenanceOn ? 'ops:maintenance:off' : 'ops:maintenance:on',
+                    ],
+                ],
+                [
+                    [
+                        'text' => $readOnlyOn ? '🔓 Matikan Read-only' : '🔒 Aktifkan Read-only',
+                        'callback_data' => $readOnlyOn ? 'ops:readonly:off' : 'ops:readonly:on',
+                    ],
+                ],
+                [
+                    ['text' => '🩺 Health Check', 'callback_data' => 'ops:health'],
+                    ['text' => '🔄 Refresh', 'callback_data' => 'ops:refresh'],
+                ],
+            ],
+        ];
+    }
+
+    public function healthText(): string
+    {
+        return implode("\n", [
+            '🩺 SIMONPR Health Check',
+            'Waktu: '.now()->translatedFormat('l, d F Y H:i:s').' WIB',
+            '',
+            'Website: '.$this->modeLabel('maintenance'),
+            'Read-only: '.$this->modeLabel('readonly'),
+            'Database: '.$this->databaseStatus(),
+            'Cache: '.$this->cacheStatus(),
+            'Debug: '.(config('app.debug') ? 'ON ⚠️' : 'OFF ✅'),
+            '',
+            'User online: '.$this->onlineUserCount().' user',
+            'Approval pending: '.$this->pendingApprovalCount(),
+            'Pesan contact belum dibaca: '.$this->unreadContactCount(),
+            '',
+            'Aman untuk dipanggil berkala karena query dibatasi dan ringan.',
+        ]);
     }
 
     public function statusText(): string
@@ -307,6 +440,126 @@ class TelegramBotService
         }
 
         return "{$name} ({$role}/{$department}) - {$seenText}";
+    }
+
+    private function setMaintenanceMode(bool $enabled): string
+    {
+        if ($enabled) {
+            Cache::forever('simonpr:maintenance_mode', true);
+            Cache::forever('simonpr:maintenance_changed_at', now()->toIso8601String());
+
+            return '🛠️ Website dimatikan ke mode maintenance 503. Telegram tetap aktif untuk kontrol.';
+        }
+
+        Cache::forget('simonpr:maintenance_mode');
+        Cache::forever('simonpr:maintenance_changed_at', now()->toIso8601String());
+
+        return '✅ Website dihidupkan kembali. User sudah bisa akses normal.';
+    }
+
+    private function setReadOnlyMode(bool $enabled): string
+    {
+        if ($enabled) {
+            Cache::forever('simonpr:read_only_mode', true);
+            Cache::forever('simonpr:read_only_changed_at', now()->toIso8601String());
+
+            return '🔒 Mode read-only aktif. User bisa melihat data, tetapi CRUD/approve dikunci.';
+        }
+
+        Cache::forget('simonpr:read_only_mode');
+        Cache::forever('simonpr:read_only_changed_at', now()->toIso8601String());
+
+        return '🔓 Mode read-only dimatikan. CRUD/approve kembali normal.';
+    }
+
+    private function modeLabel(string $mode): string
+    {
+        return match ($mode) {
+            'maintenance' => Cache::get('simonpr:maintenance_mode', false) ? 'MAINTENANCE 503 🛠️' : 'LIVE ✅',
+            'readonly' => Cache::get('simonpr:read_only_mode', false) ? 'AKTIF 🔒' : 'OFF ✅',
+            default => '-',
+        };
+    }
+
+    private function onlineUserCount(): int
+    {
+        if (! Schema::hasTable('users') || ! Schema::hasColumn('users', 'last_seen_at')) {
+            return 0;
+        }
+
+        return (int) User::query()
+            ->whereNotNull('last_seen_at')
+            ->where('last_seen_at', '>=', now()->subMinutes(5))
+            ->count();
+    }
+
+    private function ownerChatIds(): array
+    {
+        $raw = (string) config('services.telegram.owner_chat_ids', '');
+
+        return collect(explode(',', $raw))
+            ->map(fn ($id) => trim($id))
+            ->filter()
+            ->values()
+            ->all();
+    }
+
+    private function isOwnerActor(string|int $fromId): bool
+    {
+        $owners = $this->ownerChatIds();
+
+        return $owners !== [] && in_array((string) $fromId, $owners, true);
+    }
+
+    private function answerCallbackQuery(string $callbackId, string $text = '', bool $alert = false): bool
+    {
+        $token = $this->token();
+
+        if (! $token || $callbackId === '') {
+            return false;
+        }
+
+        try {
+            return Http::timeout($this->timeout())
+                ->asForm()
+                ->post("https://api.telegram.org/bot{$token}/answerCallbackQuery", [
+                    'callback_query_id' => $callbackId,
+                    'text' => Str::limit($text, 180),
+                    'show_alert' => $alert ? 'true' : 'false',
+                ])
+                ->successful();
+        } catch (Throwable) {
+            return false;
+        }
+    }
+
+    private function editMessageText(string|int $chatId, mixed $messageId, string $text, ?array $replyMarkup = null): bool
+    {
+        $token = $this->token();
+
+        if (! $token || trim((string) $chatId) === '' || ! $messageId) {
+            return false;
+        }
+
+        try {
+            $payload = [
+                'chat_id' => (string) $chatId,
+                'message_id' => (string) $messageId,
+                'text' => $text,
+                'disable_web_page_preview' => true,
+            ];
+
+            if ($replyMarkup !== null) {
+                $payload['reply_markup'] = json_encode($replyMarkup);
+            }
+
+            return Http::timeout($this->timeout())
+                ->asForm()
+                ->post("https://api.telegram.org/bot{$token}/editMessageText", $payload)
+                ->successful();
+        } catch (Throwable) {
+            return false;
+        }
     }
 
     private function token(): ?string

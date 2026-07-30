@@ -4,6 +4,7 @@ namespace App\Http\Middleware;
 
 use Closure;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Symfony\Component\HttpFoundation\Response;
 
 class EnsureNotReadOnly
@@ -12,15 +13,20 @@ class EnsureNotReadOnly
     {
         $user = $request->user();
 
-        if (! $user || ! method_exists($user, 'isReadOnly') || ! $user->isReadOnly()) {
+        $globalReadOnly = (bool) Cache::get('simonpr:read_only_mode', false);
+        $userReadOnly = $user && method_exists($user, 'isReadOnly') && $user->isReadOnly();
+
+        if (! $globalReadOnly && ! $userReadOnly) {
             return $next($request);
         }
 
-        if ($request->isMethodSafe() || $request->routeIs('logout', 'presence.*', 'emoji.mood', 'chat.read')) {
+        if ($request->isMethodSafe() || $request->routeIs('logout', 'presence.*', 'emoji.mood', 'chat.read', 'telegram.webhook')) {
             return $next($request);
         }
 
-        $message = 'Akun viewer hanya memiliki akses baca. Perubahan data tidak diizinkan.';
+        $message = $globalReadOnly
+            ? 'SIMONPR sedang dalam mode read-only. Aksi tambah, ubah, hapus, dan approve sementara dikunci.'
+            : 'Akun viewer hanya memiliki akses baca. Perubahan data tidak diizinkan.';
 
         if ($request->expectsJson() || $request->ajax()) {
             return response()->json([

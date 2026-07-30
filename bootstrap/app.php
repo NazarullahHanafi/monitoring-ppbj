@@ -7,6 +7,7 @@ use App\Http\Middleware\DeptMiddleware;
 use App\Http\Middleware\CachePublicGuestResponse;
 use App\Http\Middleware\DisableLoggingForPolling;
 use App\Http\Middleware\EnsureNotReadOnly;
+use App\Http\Middleware\EnsureNotSoftMaintenance;
 use App\Http\Middleware\EnsureOwnerAccess;
 use App\Http\Middleware\SecurityHeaders;
 
@@ -25,6 +26,7 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
 
         $middleware->prepend(DisableLoggingForPolling::class);
+        $middleware->prepend(EnsureNotSoftMaintenance::class);
         $middleware->append(SecurityHeaders::class);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\ActivityLog;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
@@ -132,5 +133,75 @@ class TelegramWebhookTest extends TestCase
             return str_contains((string) $request->body(), 'Terakhir+aktif')
                 && str_contains((string) $request->body(), 'Riko');
         });
+    }
+
+    public function test_telegram_ops_callback_requires_owner_actor(): void
+    {
+        config()->set('services.telegram.bot_token', 'TEST_TOKEN');
+        config()->set('services.telegram.webhook_secret', 'secret-ok');
+        config()->set('services.telegram.allowed_chat_ids', '12345');
+        config()->set('services.telegram.owner_chat_ids', '1191851650');
+
+        Cache::forget('simonpr:read_only_mode');
+
+        Http::fake([
+            'https://api.telegram.org/*' => Http::response(['ok' => true], 200),
+        ]);
+
+        $this->postJson('/telegram/webhook/secret-ok', [
+            'callback_query' => [
+                'id' => 'callback-1',
+                'from' => ['id' => 99999],
+                'message' => [
+                    'chat' => ['id' => 12345],
+                    'message_id' => 77,
+                ],
+                'data' => 'ops:readonly:on',
+            ],
+        ])->assertOk();
+
+        $this->assertFalse((bool) Cache::get('simonpr:read_only_mode', false));
+    }
+
+    public function test_telegram_owner_can_toggle_read_only_mode(): void
+    {
+        config()->set('services.telegram.bot_token', 'TEST_TOKEN');
+        config()->set('services.telegram.webhook_secret', 'secret-ok');
+        config()->set('services.telegram.allowed_chat_ids', '12345');
+        config()->set('services.telegram.owner_chat_ids', '1191851650');
+
+        Cache::forget('simonpr:read_only_mode');
+
+        Http::fake([
+            'https://api.telegram.org/*' => Http::response(['ok' => true], 200),
+        ]);
+
+        $this->postJson('/telegram/webhook/secret-ok', [
+            'callback_query' => [
+                'id' => 'callback-2',
+                'from' => ['id' => 1191851650],
+                'message' => [
+                    'chat' => ['id' => 12345],
+                    'message_id' => 78,
+                ],
+                'data' => 'ops:readonly:on',
+            ],
+        ])->assertOk();
+
+        $this->assertTrue((bool) Cache::get('simonpr:read_only_mode', false));
+    }
+
+    public function test_soft_maintenance_blocks_website_but_keeps_telegram_webhook_open(): void
+    {
+        config()->set('services.telegram.webhook_secret', 'secret-ok');
+
+        Cache::forever('simonpr:maintenance_mode', true);
+
+        $this->get('/')->assertStatus(503);
+
+        $this->postJson('/telegram/webhook/wrong-secret', [])
+            ->assertNotFound();
+
+        Cache::forget('simonpr:maintenance_mode');
     }
 }

@@ -57,6 +57,7 @@ return [
     'telegram' => [
         'bot_token' => env('TELEGRAM_BOT_TOKEN'),
         'allowed_chat_ids' => env('TELEGRAM_ALLOWED_CHAT_IDS', env('TELEGRAM_ALLOWED_CHAT_ID', '')),
+        'owner_chat_ids' => env('TELEGRAM_OWNER_CHAT_IDS', env('TELEGRAM_ALLOWED_CHAT_ID', '')),
         'webhook_secret' => env('TELEGRAM_WEBHOOK_SECRET'),
         'timeout' => env('TELEGRAM_TIMEOUT', 5),
     ],
