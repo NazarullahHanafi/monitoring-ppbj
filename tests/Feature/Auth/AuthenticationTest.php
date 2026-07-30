@@ -119,4 +119,26 @@ class AuthenticationTest extends TestCase
                 && str_contains($body, 'Percobaan: 3x');
         });
     }
+
+    public function test_locked_user_can_not_login_even_with_correct_password(): void
+    {
+        config()->set('services.telegram.bot_token', 'TEST_TOKEN');
+        config()->set('services.telegram.notify_chat_ids', '12345');
+
+        Http::fake([
+            'https://api.telegram.org/*' => Http::response(['ok' => true], 200),
+        ]);
+
+        $user = User::factory()->create([
+            'email' => 'locked@example.test',
+            'is_active' => false,
+        ]);
+
+        $this->post('/login', [
+            'email' => $user->email,
+            'password' => 'password',
+        ])->assertSessionHasErrors('email');
+
+        $this->assertGuest();
+    }
 }

@@ -7,6 +7,7 @@ use Illuminate\Auth\Events\Lockout;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
@@ -57,6 +58,18 @@ class LoginRequest extends FormRequest
 
             throw ValidationException::withMessages([
                 'email' => trans('auth.failed'),
+            ]);
+        }
+
+        $user = Auth::user();
+
+        if ($user && Schema::hasTable('users') && Schema::hasColumn('users', 'is_active') && $user->is_active === false) {
+            Auth::logout();
+            RateLimiter::hit($this->throttleKey(), self::LOCKOUT_SECONDS);
+            $this->notifyTelegramLoginSecurityAlert('Login ditolak karena akun sedang dikunci owner', RateLimiter::attempts($this->throttleKey()));
+
+            throw ValidationException::withMessages([
+                'email' => 'Akun Anda sedang dikunci oleh owner sistem. Hubungi admin/owner SIMONPR.',
             ]);
         }
 

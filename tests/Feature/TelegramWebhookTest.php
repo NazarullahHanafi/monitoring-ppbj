@@ -191,6 +191,73 @@ class TelegramWebhookTest extends TestCase
         $this->assertTrue((bool) Cache::get('simonpr:read_only_mode', false));
     }
 
+    public function test_telegram_owner_only_user_commands_work(): void
+    {
+        config()->set('services.telegram.bot_token', 'TEST_TOKEN');
+        config()->set('services.telegram.webhook_secret', 'secret-ok');
+        config()->set('services.telegram.allowed_chat_ids', '12345');
+        config()->set('services.telegram.owner_chat_ids', '1191851650');
+
+        $user = User::factory()->create([
+            'name' => 'Target User',
+            'email' => 'target@example.test',
+            'is_active' => true,
+        ]);
+
+        \DB::table('sessions')->insert([
+            'id' => 'session-target-1',
+            'user_id' => $user->id,
+            'ip_address' => '127.0.0.1',
+            'user_agent' => 'phpunit',
+            'payload' => 'payload',
+            'last_activity' => time(),
+        ]);
+
+        Http::fake([
+            'https://api.telegram.org/*' => Http::response(['ok' => true], 200),
+        ]);
+
+        $this->postJson('/telegram/webhook/secret-ok', [
+            'message' => [
+                'chat' => ['id' => 12345],
+                'from' => ['id' => 99999],
+                'text' => '/lock_user target@example.test',
+            ],
+        ])->assertOk();
+
+        $this->assertTrue((bool) $user->fresh()->is_active);
+
+        $this->postJson('/telegram/webhook/secret-ok', [
+            'message' => [
+                'chat' => ['id' => 12345],
+                'from' => ['id' => 1191851650],
+                'text' => '/force_logout_user target@example.test',
+            ],
+        ])->assertOk();
+
+        $this->assertDatabaseMissing('sessions', ['id' => 'session-target-1']);
+
+        $this->postJson('/telegram/webhook/secret-ok', [
+            'message' => [
+                'chat' => ['id' => 12345],
+                'from' => ['id' => 1191851650],
+                'text' => '/lock_user target@example.test',
+            ],
+        ])->assertOk();
+
+        $this->assertFalse((bool) $user->fresh()->is_active);
+
+        $this->postJson('/telegram/webhook/secret-ok', [
+            'message' => [
+                'chat' => ['id' => 12345],
+                'from' => ['id' => 1191851650],
+                'text' => '/unlock_user target@example.test',
+            ],
+        ])->assertOk();
+
+        $this->assertTrue((bool) $user->fresh()->is_active);
+    }
+
     public function test_soft_maintenance_blocks_website_but_keeps_telegram_webhook_open(): void
     {
         config()->set('services.telegram.webhook_secret', 'secret-ok');

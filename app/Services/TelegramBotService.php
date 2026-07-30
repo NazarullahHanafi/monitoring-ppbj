@@ -59,6 +59,15 @@ class TelegramBotService
             return;
         }
 
+        $fromId = (string) data_get($message, 'from.id', '');
+        $ownerOnlyCommands = ['/force_logout_user', 'force_logout_user', '/lock_user', 'lock_user', '/unlock_user', 'unlock_user'];
+
+        if (in_array($command, $ownerOnlyCommands, true) && ! $this->isOwnerActor($fromId)) {
+            $this->sendMessage($chatId, "⛔ Command ini khusus owner SIMONPR.\nAktor Telegram: {$fromId}");
+
+            return;
+        }
+
         match ($command) {
             '/tele', 'tele', '/status', 'status' => $this->sendMessage($chatId, $this->statusText()),
             '/list', 'list' => $this->sendMessage($chatId, $this->activityListText()),
@@ -66,6 +75,9 @@ class TelegramBotService
             '/users', 'users', '/lastlogin', 'lastlogin' => $this->sendMessage($chatId, $this->lastSeenUsersText()),
             '/ops', 'ops', '/control', 'control' => $this->sendOpsPanel($chatId),
             '/health', 'health' => $this->sendMessage($chatId, $this->healthText()),
+            '/force_logout_user', 'force_logout_user' => $this->sendMessage($chatId, $this->forceLogoutUserByCommand($text, $fromId)),
+            '/lock_user', 'lock_user' => $this->sendMessage($chatId, $this->lockUserByCommand($text, $fromId)),
+            '/unlock_user', 'unlock_user' => $this->sendMessage($chatId, $this->unlockUserByCommand($text, $fromId)),
             '/help', 'help', '/start', 'start' => $this->sendMessage($chatId, $this->helpText()),
             default => $this->sendMessage($chatId, "Aku belum kenal command itu 😄\n\n".$this->helpText()),
         };
@@ -150,6 +162,40 @@ class TelegramBotService
         ]));
     }
 
+    public function notifyApplicationError(Throwable $exception, array $context = []): void
+    {
+        if (! app()->environment('production')) {
+            return;
+        }
+
+        $class = get_class($exception);
+        $message = Str::limit($exception->getMessage() ?: 'Tanpa pesan error', 180);
+        $file = Str::after($exception->getFile(), base_path().DIRECTORY_SEPARATOR);
+        $cacheKey = 'telegram_app_error_alert:'.sha1($class.'|'.$message.'|'.$file.'|'.$exception->getLine());
+
+        if (! Cache::add($cacheKey, true, now()->addMinutes(5))) {
+            return;
+        }
+
+        $userText = $context['user'] ?? '-';
+        $pathText = $context['path'] ?? '-';
+        $ipText = $context['ip'] ?? '-';
+        $methodText = $context['method'] ?? '-';
+
+        $this->sendNotification(implode("\n", [
+            '🚨 Error terdeteksi di SIMONPR',
+            'Tipe: '.$class,
+            'Pesan: '.$message,
+            'Lokasi: '.$file.':'.$exception->getLine(),
+            'URL: '.$methodText.' '.$pathText,
+            'User: '.$userText,
+            'IP: '.$ipText,
+            'Waktu: '.now()->translatedFormat('l, d F Y H:i:s').' WIB',
+            '',
+            'Alert otomatis dibatasi 1x per 5 menit untuk error yang sama.',
+        ]));
+    }
+
     public function setWebhook(string $url): array
     {
         $token = $this->token();
@@ -188,6 +234,9 @@ class TelegramBotService
             ['command' => 'users', 'description' => 'Terakhir aktif/login user'],
             ['command' => 'ops', 'description' => 'Panel maintenance dan read-only'],
             ['command' => 'health', 'description' => 'Health check sistem cepat'],
+            ['command' => 'force_logout_user', 'description' => 'Owner: paksa logout user by email'],
+            ['command' => 'lock_user', 'description' => 'Owner: kunci akun user by email'],
+            ['command' => 'unlock_user', 'description' => 'Owner: buka kunci akun user by email'],
             ['command' => 'help', 'description' => 'Daftar command SIMONPR'],
         ];
 
@@ -485,6 +534,184 @@ class TelegramBotService
 
             return implode("\n", $lines);
         });
+    }
+
+    private function forceLogoutUserByCommand(string $text, string|int $ownerTelegramId): string
+    {
+        $email = $this->extractEmailArgument($text);
+
+        if (! $email) {
+            return "Format salah.\nContoh: /force_logout_user user@sucofindo.com";
+        }
+
+        $user = $this->findUserByEmail($email);
+
+        if (! $user) {
+            return "User dengan email {$email} tidak ditemukan.";
+        }
+
+        $deletedSessions = $this->deleteUserSessions($user);
+        $this->writeOwnerAuditLog('telegram_force_logout_user', $user, [
+            'owner_telegram_id' => (string) $ownerTelegramId,
+            'deleted_sessions' => $deletedSessions,
+        ]);
+
+        return implode("\n", [
+            "✅ Force logout berhasil",
+            "User: ".$this->userDisplayName($user),
+            "Session aktif diputus: {$deletedSessions}",
+            "Waktu: ".now()->translatedFormat('l, d F Y H:i:s').' WIB',
+        ]);
+    }
+
+    private function lockUserByCommand(string $text, string|int $ownerTelegramId): string
+    {
+        $email = $this->extractEmailArgument($text);
+
+        if (! $email) {
+            return "Format salah.\nContoh: /lock_user user@sucofindo.com";
+        }
+
+        $user = $this->findUserByEmail($email);
+
+        if (! $user) {
+            return "User dengan email {$email} tidak ditemukan.";
+        }
+
+        if ($user->isOwner()) {
+            return "Akun owner tidak boleh dikunci dari Telegram demi mencegah lockout total.";
+        }
+
+        $updates = [];
+
+        if (Schema::hasColumn('users', 'is_active')) {
+            $updates['is_active'] = false;
+        }
+
+        if (Schema::hasColumn('users', 'locked_at')) {
+            $updates['locked_at'] = now();
+        }
+
+        if (Schema::hasColumn('users', 'locked_by')) {
+            $updates['locked_by'] = 'telegram:'.(string) $ownerTelegramId;
+        }
+
+        if (Schema::hasColumn('users', 'locked_reason')) {
+            $updates['locked_reason'] = 'Dikunci owner melalui Telegram';
+        }
+
+        if ($updates === []) {
+            return "Kolom lock user belum tersedia. Jalankan migration terlebih dahulu.";
+        }
+
+        $user->forceFill($updates)->save();
+        $deletedSessions = $this->deleteUserSessions($user);
+        $this->writeOwnerAuditLog('telegram_lock_user', $user, [
+            'owner_telegram_id' => (string) $ownerTelegramId,
+            'deleted_sessions' => $deletedSessions,
+        ]);
+
+        return implode("\n", [
+            "🔒 User berhasil dikunci",
+            "User: ".$this->userDisplayName($user),
+            "Session diputus: {$deletedSessions}",
+            "Efek: user tidak bisa login sampai di-unlock owner.",
+            "Waktu: ".now()->translatedFormat('l, d F Y H:i:s').' WIB',
+        ]);
+    }
+
+    private function unlockUserByCommand(string $text, string|int $ownerTelegramId): string
+    {
+        $email = $this->extractEmailArgument($text);
+
+        if (! $email) {
+            return "Format salah.\nContoh: /unlock_user user@sucofindo.com";
+        }
+
+        $user = $this->findUserByEmail($email);
+
+        if (! $user) {
+            return "User dengan email {$email} tidak ditemukan.";
+        }
+
+        $updates = [];
+
+        if (Schema::hasColumn('users', 'is_active')) {
+            $updates['is_active'] = true;
+        }
+
+        if (Schema::hasColumn('users', 'locked_at')) {
+            $updates['locked_at'] = null;
+        }
+
+        if (Schema::hasColumn('users', 'locked_by')) {
+            $updates['locked_by'] = null;
+        }
+
+        if (Schema::hasColumn('users', 'locked_reason')) {
+            $updates['locked_reason'] = null;
+        }
+
+        if ($updates === []) {
+            return "Kolom lock user belum tersedia. Jalankan migration terlebih dahulu.";
+        }
+
+        $user->forceFill($updates)->save();
+        $this->writeOwnerAuditLog('telegram_unlock_user', $user, [
+            'owner_telegram_id' => (string) $ownerTelegramId,
+        ]);
+
+        return implode("\n", [
+            "🔓 User berhasil dibuka kuncinya",
+            "User: ".$this->userDisplayName($user),
+            "Efek: user bisa login kembali.",
+            "Waktu: ".now()->translatedFormat('l, d F Y H:i:s').' WIB',
+        ]);
+    }
+
+    private function extractEmailArgument(string $text): ?string
+    {
+        $argument = trim(Str::of($text)->after(' ')->before(' ')->lower()->toString());
+
+        return filter_var($argument, FILTER_VALIDATE_EMAIL) ? $argument : null;
+    }
+
+    private function findUserByEmail(string $email): ?User
+    {
+        if (! Schema::hasTable('users')) {
+            return null;
+        }
+
+        return User::query()
+            ->whereRaw('LOWER(email) = ?', [mb_strtolower($email)])
+            ->first();
+    }
+
+    private function deleteUserSessions(User $user): int
+    {
+        if (! Schema::hasTable('sessions') || ! Schema::hasColumn('sessions', 'user_id')) {
+            return 0;
+        }
+
+        return (int) DB::table('sessions')
+            ->where('user_id', $user->id)
+            ->delete();
+    }
+
+    private function writeOwnerAuditLog(string $action, User $targetUser, array $changes = []): void
+    {
+        if (! Schema::hasTable('activity_logs')) {
+            return;
+        }
+
+        ActivityLog::create([
+            'user_id' => null,
+            'model_type' => User::class,
+            'model_id' => $targetUser->id,
+            'action' => $action,
+            'description' => "Owner Telegram menjalankan {$action} untuk {$targetUser->email}",
+            'changes' => $changes,
+        ]);
     }
 
     public function allowedChatIds(): array

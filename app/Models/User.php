@@ -23,11 +23,15 @@ class User extends Authenticatable
         'password',
         'role',
         'department',
+        'is_active',
         'gender',
         'buyer_name',
         'last_seen_at',
         'last_login_ip',
         'last_seen_ip',
+        'locked_at',
+        'locked_by',
+        'locked_reason',
     ];
 
     public function isReadOnly(): bool
@@ -112,7 +116,9 @@ class User extends Authenticatable
     {
         return [
             'email_verified_at' => 'datetime',
+            'is_active' => 'boolean',
             'last_seen_at' => 'datetime',
+            'locked_at' => 'datetime',
             'password' => 'hashed',
         ];
     }
