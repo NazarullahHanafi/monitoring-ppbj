@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Auth;
 
+use App\Services\TelegramBotService;
 use Illuminate\Auth\Events\Lockout;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Auth;
@@ -48,6 +49,12 @@ class LoginRequest extends FormRequest
         if (! Auth::attempt($this->only('email', 'password'), $this->boolean('remember'))) {
             RateLimiter::hit($this->throttleKey(), self::LOCKOUT_SECONDS);
 
+            $attempts = RateLimiter::attempts($this->throttleKey());
+
+            if ($attempts >= self::MAX_ATTEMPTS) {
+                $this->notifyTelegramLoginSecurityAlert('Login gagal 3x - akun dikunci sementara', $attempts);
+            }
+
             throw ValidationException::withMessages([
                 'email' => trans('auth.failed'),
             ]);
@@ -70,6 +77,7 @@ class LoginRequest extends FormRequest
         event(new Lockout($this));
 
         $seconds = RateLimiter::availableIn($this->throttleKey());
+        $this->notifyTelegramLoginSecurityAlert('Login gagal 3x - akun dikunci sementara', RateLimiter::attempts($this->throttleKey()));
 
         throw ValidationException::withMessages([
             'email' => trans('auth.throttle', [
@@ -85,5 +93,15 @@ class LoginRequest extends FormRequest
     public function throttleKey(): string
     {
         return Str::transliterate(Str::lower($this->string('email')).'|'.$this->ip());
+    }
+
+    private function notifyTelegramLoginSecurityAlert(string $reason, int $attempts): void
+    {
+        $email = (string) $this->input('email', '');
+        $ip = $this->ip();
+
+        app()->terminating(function () use ($email, $ip, $attempts, $reason) {
+            app(TelegramBotService::class)->notifyLoginSecurityAlert($email, $ip, $attempts, $reason);
+        });
     }
 }

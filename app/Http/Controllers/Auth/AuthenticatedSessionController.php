@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\LoginRequest;
+use App\Models\User;
+use App\Services\TelegramBotService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -31,6 +33,7 @@ class AuthenticatedSessionController extends Controller
         $request->session()->regenerate();
 
         $this->recordSuccessfulLogin($request);
+        $this->notifyTelegramLogin($request->user(), $request->ip());
 
         return redirect()->intended(\App\Providers\AppServiceProvider::homeFor($request->user()));
 
@@ -70,12 +73,39 @@ class AuthenticatedSessionController extends Controller
      */
     public function destroy(Request $request): RedirectResponse
     {
+        $user = $request->user();
+        $ip = $request->ip();
+
         Auth::guard('web')->logout();
 
         $request->session()->invalidate();
 
         $request->session()->regenerateToken();
 
+        $this->notifyTelegramLogout($user, $ip);
+
         return redirect('/');
+    }
+
+    private function notifyTelegramLogin(?User $user, ?string $ip): void
+    {
+        if (! $user) {
+            return;
+        }
+
+        app()->terminating(function () use ($user, $ip) {
+            app(TelegramBotService::class)->notifyUserLogin($user, $ip);
+        });
+    }
+
+    private function notifyTelegramLogout(?User $user, ?string $ip): void
+    {
+        if (! $user) {
+            return;
+        }
+
+        app()->terminating(function () use ($user, $ip) {
+            app(TelegramBotService::class)->notifyUserLogout($user, $ip);
+        });
     }
 }

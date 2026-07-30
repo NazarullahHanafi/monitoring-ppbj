@@ -100,6 +100,56 @@ class TelegramBotService
         }
     }
 
+    public function notifyUserLogin(User $user, ?string $ip = null): void
+    {
+        $this->sendNotification(implode("\n", [
+            '🟢 User login SIMONPR',
+            'Nama: '.$this->userDisplayName($user),
+            'Role: '.($user->role ?: '-'),
+            'Department: '.($user->department ?: '-'),
+            'IP: '.($ip ?: '-'),
+            'Waktu: '.now()->translatedFormat('l, d F Y H:i:s').' WIB',
+            '',
+            'Sistem mencatat login otomatis, owner tidak perlu cek manual lagi.',
+        ]));
+    }
+
+    public function notifyUserLogout(User $user, ?string $ip = null): void
+    {
+        $this->sendNotification(implode("\n", [
+            '⚪ User logout SIMONPR',
+            'Nama: '.$this->userDisplayName($user),
+            'Role: '.($user->role ?: '-'),
+            'Department: '.($user->department ?: '-'),
+            'IP: '.($ip ?: '-'),
+            'Waktu: '.now()->translatedFormat('l, d F Y H:i:s').' WIB',
+            '',
+            'Status keluar tercatat untuk jejak aktivitas login.',
+        ]));
+    }
+
+    public function notifyLoginSecurityAlert(string $email, ?string $ip = null, int $attempts = 0, string $reason = 'Login gagal berulang'): void
+    {
+        $email = trim($email) ?: '-';
+        $ip = trim((string) $ip) ?: '-';
+        $cacheKey = 'telegram_login_security_alert:'.sha1($email.'|'.$ip.'|'.$reason);
+
+        if (! Cache::add($cacheKey, true, now()->addMinutes(5))) {
+            return;
+        }
+
+        $this->sendNotification(implode("\n", [
+            '🚨 Alert keamanan login',
+            'Kejadian: '.$reason,
+            'Email dicoba: '.$email,
+            'IP: '.$ip,
+            'Percobaan: '.max(0, $attempts).'x',
+            'Waktu: '.now()->translatedFormat('l, d F Y H:i:s').' WIB',
+            '',
+            'Catatan: alert dibatasi 1x per 5 menit agar Telegram tidak spam.',
+        ]));
+    }
+
     public function setWebhook(string $url): array
     {
         $token = $this->token();
@@ -446,6 +496,38 @@ class TelegramBotService
             ->filter()
             ->values()
             ->all();
+    }
+
+    public function notificationChatIds(): array
+    {
+        $raw = (string) config('services.telegram.notify_chat_ids', '');
+
+        $ids = collect(explode(',', $raw))
+            ->map(fn ($id) => trim($id))
+            ->filter()
+            ->values()
+            ->all();
+
+        return $ids !== [] ? $ids : $this->allowedChatIds();
+    }
+
+    private function sendNotification(string $text): void
+    {
+        foreach ($this->notificationChatIds() as $chatId) {
+            $this->sendMessage($chatId, $text);
+        }
+    }
+
+    private function userDisplayName(User $user): string
+    {
+        $name = trim((string) $user->name);
+        $email = trim((string) $user->email);
+
+        if ($name !== '' && $email !== '') {
+            return "{$name} <{$email}>";
+        }
+
+        return $name !== '' ? $name : ($email !== '' ? $email : 'User');
     }
 
     public function isAllowedChat(string|int $chatId): bool

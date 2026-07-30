@@ -4,6 +4,7 @@ namespace Tests\Feature\Auth;
 
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
 class AuthenticationTest extends TestCase
@@ -50,5 +51,72 @@ class AuthenticationTest extends TestCase
 
         $this->assertGuest();
         $response->assertRedirect('/');
+    }
+
+    public function test_successful_login_and_logout_send_telegram_notifications(): void
+    {
+        config()->set('services.telegram.bot_token', 'TEST_TOKEN');
+        config()->set('services.telegram.notify_chat_ids', '12345');
+
+        Http::fake([
+            'https://api.telegram.org/*' => Http::response(['ok' => true], 200),
+        ]);
+
+        $user = User::factory()->create([
+            'name' => 'Nazar',
+            'email' => 'nazar@example.test',
+            'role' => 'superadmin',
+            'department' => 'umum',
+        ]);
+
+        $this->post('/login', [
+            'email' => $user->email,
+            'password' => 'password',
+        ])->assertRedirect(\App\Providers\AppServiceProvider::homeFor($user));
+
+        Http::assertSent(function ($request) {
+            $body = urldecode((string) $request->body());
+
+            return str_contains($body, 'User login SIMONPR')
+                && str_contains($body, 'Nazar <nazar@example.test>');
+        });
+
+        $this->post('/logout')->assertRedirect('/');
+
+        Http::assertSent(function ($request) {
+            $body = urldecode((string) $request->body());
+
+            return str_contains($body, 'User logout SIMONPR')
+                && str_contains($body, 'Nazar <nazar@example.test>');
+        });
+    }
+
+    public function test_repeated_failed_login_sends_telegram_security_alert(): void
+    {
+        config()->set('services.telegram.bot_token', 'TEST_TOKEN');
+        config()->set('services.telegram.notify_chat_ids', '12345');
+
+        Http::fake([
+            'https://api.telegram.org/*' => Http::response(['ok' => true], 200),
+        ]);
+
+        $user = User::factory()->create([
+            'email' => 'target@example.test',
+        ]);
+
+        for ($i = 0; $i < 3; $i++) {
+            $this->post('/login', [
+                'email' => $user->email,
+                'password' => 'salah-total',
+            ]);
+        }
+
+        Http::assertSent(function ($request) {
+            $body = urldecode((string) $request->body());
+
+            return str_contains($body, 'Alert keamanan login')
+                && str_contains($body, 'target@example.test')
+                && str_contains($body, 'Percobaan: 3x');
+        });
     }
 }
