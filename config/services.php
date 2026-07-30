@@ -54,4 +54,11 @@ return [
         'cache_seconds' => env('ARCHIVE_API_CACHE_SECONDS', 300),
     ],
 
+    'telegram' => [
+        'bot_token' => env('TELEGRAM_BOT_TOKEN'),
+        'allowed_chat_ids' => env('TELEGRAM_ALLOWED_CHAT_IDS', env('TELEGRAM_ALLOWED_CHAT_ID', '')),
+        'webhook_secret' => env('TELEGRAM_WEBHOOK_SECRET'),
+        'timeout' => env('TELEGRAM_TIMEOUT', 5),
+    ],
+
 ];

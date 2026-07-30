@@ -15,6 +15,7 @@ use App\Http\Controllers\SatuanController;
 use App\Http\Controllers\SpController;
 use App\Http\Controllers\SpMasterOptionController;
 use App\Http\Controllers\SpphController;
+use App\Http\Controllers\TelegramWebhookController;
 use App\Http\Controllers\TorprController;
 use App\Http\Controllers\TrackingPrController;
 use App\Http\Controllers\UserController;
@@ -57,6 +58,11 @@ Route::post('/contact', [ContactMessageController::class, 'store'])
 Route::get('/track/suggest', [TrackingPrController::class, 'suggest'])
     ->name('landing.track.suggest')
     ->middleware('throttle:60,1');
+
+Route::post('/telegram/webhook/{secret}', TelegramWebhookController::class)
+    ->name('telegram.webhook')
+    ->middleware('throttle:60,1')
+    ->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class]);
 
 // Dashboard redirect sesuai dept
 Route::get('/home', function () {
