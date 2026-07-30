@@ -84,4 +84,53 @@ class TelegramWebhookTest extends TestCase
             return str_contains((string) $request->body(), 'Aktivitas+test+Telegram');
         });
     }
+
+    public function test_telegram_webhook_can_return_online_and_last_seen_users(): void
+    {
+        config()->set('services.telegram.bot_token', 'TEST_TOKEN');
+        config()->set('services.telegram.webhook_secret', 'secret-ok');
+        config()->set('services.telegram.allowed_chat_ids', '12345');
+
+        User::factory()->create([
+            'name' => 'Nazar',
+            'role' => 'Superadmin',
+            'department' => 'Umum',
+            'last_seen_at' => now(),
+        ]);
+
+        User::factory()->create([
+            'name' => 'Riko',
+            'role' => 'User',
+            'department' => 'Operasional',
+            'last_seen_at' => now()->subHours(2),
+        ]);
+
+        Http::fake([
+            'https://api.telegram.org/*' => Http::response(['ok' => true], 200),
+        ]);
+
+        $this->postJson('/telegram/webhook/secret-ok', [
+            'message' => [
+                'chat' => ['id' => 12345],
+                'text' => '/online',
+            ],
+        ])->assertOk();
+
+        $this->postJson('/telegram/webhook/secret-ok', [
+            'message' => [
+                'chat' => ['id' => 12345],
+                'text' => '/users',
+            ],
+        ])->assertOk();
+
+        Http::assertSent(function ($request) {
+            return str_contains((string) $request->body(), 'User+sedang+online')
+                && str_contains((string) $request->body(), 'Nazar');
+        });
+
+        Http::assertSent(function ($request) {
+            return str_contains((string) $request->body(), 'Terakhir+aktif')
+                && str_contains((string) $request->body(), 'Riko');
+        });
+    }
 }

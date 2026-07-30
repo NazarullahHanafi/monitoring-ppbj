@@ -54,6 +54,8 @@ class TelegramBotService
         match ($command) {
             '/tele', 'tele', '/status', 'status' => $this->sendMessage($chatId, $this->statusText()),
             '/list', 'list' => $this->sendMessage($chatId, $this->activityListText()),
+            '/online', 'online' => $this->sendMessage($chatId, $this->onlineUsersText()),
+            '/users', 'users', '/lastlogin', 'lastlogin' => $this->sendMessage($chatId, $this->lastSeenUsersText()),
             '/help', 'help', '/start', 'start' => $this->sendMessage($chatId, $this->helpText()),
             default => $this->sendMessage($chatId, "Aku belum kenal command itu 😄\n\n".$this->helpText()),
         };
@@ -165,8 +167,110 @@ class TelegramBotService
             '',
             '/tele — lihat status sistem dan ringkasan data',
             '/list — lihat aktivitas terbaru website',
+            '/online — lihat user yang sedang online',
+            '/users — lihat terakhir aktif/login user',
             '/help — daftar command',
         ]);
+    }
+
+    public function onlineUsersText(int $limit = 20): string
+    {
+        if (! Schema::hasTable('users') || ! Schema::hasColumn('users', 'last_seen_at')) {
+            return "User online\n\nData last seen belum tersedia.";
+        }
+
+        return Cache::remember('telegram_online_users_text', 15, function () use ($limit) {
+            $threshold = now()->subMinutes(5);
+            $users = User::query()
+                ->select(['id', 'name', 'email', 'role', 'department', 'last_seen_at'])
+                ->whereNotNull('last_seen_at')
+                ->where('last_seen_at', '>=', $threshold)
+                ->orderByDesc('last_seen_at')
+                ->limit(max(1, min($limit, 30)))
+                ->get();
+
+            $totalOnline = User::query()
+                ->whereNotNull('last_seen_at')
+                ->where('last_seen_at', '>=', $threshold)
+                ->count();
+
+            $lines = [
+                'User sedang online',
+                'Patokan: aktif dalam 5 menit terakhir',
+                'Waktu cek: '.now()->translatedFormat('l, d F Y H:i:s').' WIB',
+                '',
+                "Total online: {$totalOnline} user",
+            ];
+
+            if ($users->isEmpty()) {
+                $lines[] = '';
+                $lines[] = 'Belum ada user yang terdeteksi online sekarang.';
+
+                return implode("\n", $lines);
+            }
+
+            $lines[] = '';
+            foreach ($users as $index => $user) {
+                $lines[] = ($index + 1).'. '.$this->telegramUserLine($user, true);
+            }
+
+            if ($totalOnline > $users->count()) {
+                $lines[] = '';
+                $lines[] = '...dan '.($totalOnline - $users->count()).' user lainnya.';
+            }
+
+            return implode("\n", $lines);
+        });
+    }
+
+    public function lastSeenUsersText(int $limit = 20): string
+    {
+        if (! Schema::hasTable('users') || ! Schema::hasColumn('users', 'last_seen_at')) {
+            return "Terakhir aktif user\n\nData last seen belum tersedia.";
+        }
+
+        return Cache::remember('telegram_last_seen_users_text', 30, function () use ($limit) {
+            $users = User::query()
+                ->select(['id', 'name', 'email', 'role', 'department', 'last_seen_at'])
+                ->orderByRaw('last_seen_at IS NULL ASC')
+                ->orderByDesc('last_seen_at')
+                ->orderBy('name')
+                ->limit(max(1, min($limit, 30)))
+                ->get();
+
+            $totalUsers = User::query()->count();
+            $onlineCount = User::query()
+                ->whereNotNull('last_seen_at')
+                ->where('last_seen_at', '>=', now()->subMinutes(5))
+                ->count();
+
+            $lines = [
+                'Terakhir aktif / login user',
+                'Data ringan dari tabel users, dibatasi agar bot tetap gesit.',
+                'Waktu cek: '.now()->translatedFormat('l, d F Y H:i:s').' WIB',
+                '',
+                "Online sekarang: {$onlineCount} / {$totalUsers} user",
+            ];
+
+            if ($users->isEmpty()) {
+                $lines[] = '';
+                $lines[] = 'Belum ada user terdaftar.';
+
+                return implode("\n", $lines);
+            }
+
+            $lines[] = '';
+            foreach ($users as $index => $user) {
+                $lines[] = ($index + 1).'. '.$this->telegramUserLine($user);
+            }
+
+            if ($totalUsers > $users->count()) {
+                $lines[] = '';
+                $lines[] = 'Gunakan menu Management User di website untuk daftar lengkap.';
+            }
+
+            return implode("\n", $lines);
+        });
     }
 
     public function allowedChatIds(): array
@@ -185,6 +289,24 @@ class TelegramBotService
         $allowed = $this->allowedChatIds();
 
         return $allowed !== [] && in_array((string) $chatId, $allowed, true);
+    }
+
+    private function telegramUserLine(User $user, bool $short = false): string
+    {
+        $name = trim((string) $user->name) ?: strtok((string) $user->email, '@') ?: 'User';
+        $role = trim((string) $user->role) ?: '-';
+        $department = trim((string) $user->department) ?: '-';
+        $lastSeen = $user->last_seen_at;
+
+        if (! $lastSeen) {
+            $seenText = 'belum pernah tercatat';
+        } else {
+            $seenText = $short
+                ? $lastSeen->diffForHumans()
+                : $lastSeen->translatedFormat('l, d F Y H:i:s').' WIB ('.$lastSeen->diffForHumans().')';
+        }
+
+        return "{$name} ({$role}/{$department}) - {$seenText}";
     }
 
     private function token(): ?string
