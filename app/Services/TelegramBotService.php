@@ -60,7 +60,13 @@ class TelegramBotService
         }
 
         $fromId = (string) data_get($message, 'from.id', '');
-        $ownerOnlyCommands = ['/force_logout_user', 'force_logout_user', '/lock_user', 'lock_user', '/unlock_user', 'unlock_user'];
+        $ownerOnlyCommands = [
+            '/force_logout_user', 'force_logout_user',
+            '/lock_user', 'lock_user',
+            '/unlock_user', 'unlock_user',
+            '/who_online_detail', 'who_online_detail',
+            '/locked_users', 'locked_users',
+        ];
 
         if (in_array($command, $ownerOnlyCommands, true) && ! $this->isOwnerActor($fromId)) {
             $this->sendMessage($chatId, "⛔ Command ini khusus owner SIMONPR.\nAktor Telegram: {$fromId}");
@@ -75,6 +81,8 @@ class TelegramBotService
             '/users', 'users', '/lastlogin', 'lastlogin' => $this->sendMessage($chatId, $this->lastSeenUsersText()),
             '/ops', 'ops', '/control', 'control' => $this->sendOpsPanel($chatId),
             '/health', 'health' => $this->sendMessage($chatId, $this->healthText()),
+            '/who_online_detail', 'who_online_detail' => $this->sendMessage($chatId, $this->whoOnlineDetailText()),
+            '/locked_users', 'locked_users' => $this->sendMessage($chatId, $this->lockedUsersText()),
             '/force_logout_user', 'force_logout_user' => $this->sendMessage($chatId, $this->forceLogoutUserByCommand($text, $fromId)),
             '/lock_user', 'lock_user' => $this->sendMessage($chatId, $this->lockUserByCommand($text, $fromId)),
             '/unlock_user', 'unlock_user' => $this->sendMessage($chatId, $this->unlockUserByCommand($text, $fromId)),
@@ -234,6 +242,8 @@ class TelegramBotService
             ['command' => 'users', 'description' => 'Terakhir aktif/login user'],
             ['command' => 'ops', 'description' => 'Panel maintenance dan read-only'],
             ['command' => 'health', 'description' => 'Health check sistem cepat'],
+            ['command' => 'who_online_detail', 'description' => 'Owner: detail user online'],
+            ['command' => 'locked_users', 'description' => 'Owner: daftar akun terkunci'],
             ['command' => 'force_logout_user', 'description' => 'Owner: paksa logout user by email'],
             ['command' => 'lock_user', 'description' => 'Owner: kunci akun user by email'],
             ['command' => 'unlock_user', 'description' => 'Owner: buka kunci akun user by email'],
@@ -536,6 +546,138 @@ class TelegramBotService
         });
     }
 
+    public function whoOnlineDetailText(int $limit = 25): string
+    {
+        if (! Schema::hasTable('users') || ! Schema::hasColumn('users', 'last_seen_at')) {
+            return "Detail user online\n\nData last_seen_at belum tersedia.";
+        }
+
+        $threshold = now()->subMinutes(5);
+        $select = ['id', 'name', 'email', 'role', 'department', 'last_seen_at'];
+
+        foreach (['last_seen_ip', 'last_login_ip', 'is_active'] as $column) {
+            if (Schema::hasColumn('users', $column)) {
+                $select[] = $column;
+            }
+        }
+
+        $users = User::query()
+            ->select($select)
+            ->whereNotNull('last_seen_at')
+            ->where('last_seen_at', '>=', $threshold)
+            ->orderByDesc('last_seen_at')
+            ->limit(max(1, min($limit, 40)))
+            ->get();
+
+        $totalOnline = User::query()
+            ->whereNotNull('last_seen_at')
+            ->where('last_seen_at', '>=', $threshold)
+            ->count();
+
+        $sessionCounts = $this->sessionCountsByUserIds($users->pluck('id')->all());
+
+        $lines = [
+            '🟢 Detail user online SIMONPR',
+            'Patokan: aktif dalam 5 menit terakhir',
+            'Waktu cek: '.now()->translatedFormat('l, d F Y H:i:s').' WIB',
+            '',
+            "Total online: {$totalOnline} user",
+        ];
+
+        if ($users->isEmpty()) {
+            $lines[] = '';
+            $lines[] = 'Belum ada user yang terdeteksi online sekarang.';
+
+            return implode("\n", $lines);
+        }
+
+        $lines[] = '';
+
+        foreach ($users as $index => $user) {
+            $mood = Cache::get('presence:mood:'.$user->id) ?: '-';
+            $lastSeen = $user->last_seen_at
+                ? $user->last_seen_at->translatedFormat('l, d F Y H:i:s').' WIB'
+                : '-';
+            $lastSeenIp = $user->last_seen_ip ?? '-';
+            $lastLoginIp = $user->last_login_ip ?? '-';
+            $status = ($user->is_active ?? true) === false ? 'TERKUNCI' : 'Aktif';
+            $sessions = (int) ($sessionCounts[$user->id] ?? 0);
+
+            $lines[] = ($index + 1).'. '.$this->userDisplayName($user);
+            $lines[] = '   Role/Dept: '.($user->role ?: '-').'/'.($user->department ?: '-');
+            $lines[] = '   Mood: '.$mood.' | Status: '.$status.' | Session: '.$sessions;
+            $lines[] = '   IP login: '.$lastLoginIp.' | IP aktif: '.$lastSeenIp;
+            $lines[] = '   Terakhir aktif: '.$lastSeen;
+        }
+
+        if ($totalOnline > $users->count()) {
+            $lines[] = '';
+            $lines[] = '...dan '.($totalOnline - $users->count()).' user online lainnya.';
+        }
+
+        return implode("\n", $lines);
+    }
+
+    public function lockedUsersText(int $limit = 25): string
+    {
+        if (! Schema::hasTable('users') || ! Schema::hasColumn('users', 'is_active')) {
+            return "Daftar akun terkunci\n\nKolom is_active belum tersedia.";
+        }
+
+        $select = ['id', 'name', 'email', 'role', 'department', 'is_active'];
+
+        foreach (['locked_at', 'locked_by', 'locked_reason', 'last_seen_at', 'last_login_ip'] as $column) {
+            if (Schema::hasColumn('users', $column)) {
+                $select[] = $column;
+            }
+        }
+
+        $users = User::query()
+            ->select($select)
+            ->where('is_active', false)
+            ->orderByDesc(Schema::hasColumn('users', 'locked_at') ? 'locked_at' : 'updated_at')
+            ->limit(max(1, min($limit, 40)))
+            ->get();
+
+        $totalLocked = User::query()->where('is_active', false)->count();
+
+        $lines = [
+            '🔒 Daftar akun terkunci SIMONPR',
+            'Waktu cek: '.now()->translatedFormat('l, d F Y H:i:s').' WIB',
+            '',
+            "Total terkunci: {$totalLocked} user",
+        ];
+
+        if ($users->isEmpty()) {
+            $lines[] = '';
+            $lines[] = 'Tidak ada akun yang sedang dikunci. Aman, pintu digital lagi ramah 😄';
+
+            return implode("\n", $lines);
+        }
+
+        $lines[] = '';
+
+        foreach ($users as $index => $user) {
+            $lockedAt = $user->locked_at
+                ? $user->locked_at->translatedFormat('l, d F Y H:i:s').' WIB'
+                : '-';
+
+            $lines[] = ($index + 1).'. '.$this->userDisplayName($user);
+            $lines[] = '   Role/Dept: '.($user->role ?: '-').'/'.($user->department ?: '-');
+            $lines[] = '   Dikunci: '.$lockedAt;
+            $lines[] = '   Oleh: '.($user->locked_by ?: '-');
+            $lines[] = '   Alasan: '.($user->locked_reason ?: '-');
+            $lines[] = '   Buka: /unlock_user '.$user->email;
+        }
+
+        if ($totalLocked > $users->count()) {
+            $lines[] = '';
+            $lines[] = '...dan '.($totalLocked - $users->count()).' user terkunci lainnya.';
+        }
+
+        return implode("\n", $lines);
+    }
+
     private function forceLogoutUserByCommand(string $text, string|int $ownerTelegramId): string
     {
         $email = $this->extractEmailArgument($text);
@@ -696,6 +838,27 @@ class TelegramBotService
         return (int) DB::table('sessions')
             ->where('user_id', $user->id)
             ->delete();
+    }
+
+    private function sessionCountsByUserIds(array $userIds): array
+    {
+        $userIds = collect($userIds)
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+
+        if ($userIds === [] || ! Schema::hasTable('sessions') || ! Schema::hasColumn('sessions', 'user_id')) {
+            return [];
+        }
+
+        return DB::table('sessions')
+            ->select('user_id', DB::raw('count(*) as total'))
+            ->whereIn('user_id', $userIds)
+            ->groupBy('user_id')
+            ->pluck('total', 'user_id')
+            ->map(fn ($total) => (int) $total)
+            ->all();
     }
 
     private function writeOwnerAuditLog(string $action, User $targetUser, array $changes = []): void
