@@ -39,11 +39,13 @@ class MonitorPerformance
             $trafficCount = $this->increment("perf:traffic:{$minuteKey}", 120);
 
             if ($elapsedMs >= $this->slowRequestMs()) {
+                $this->recordSlowPage($request, $elapsedMs);
                 $slowCount = $this->increment("perf:slow:{$minuteKey}", 120);
                 $this->alertIfSlowSpike($request, $elapsedMs, $slowCount);
             }
 
             if ($statusCode >= 500) {
+                $this->recordErrorPage($request, $statusCode, $elapsedMs);
                 $errorCount = $this->increment('perf:error_spike:'.now()->format('YmdHi'), 600);
                 $this->alertIfErrorSpike($request, $statusCode, $errorCount);
             }
@@ -162,5 +164,65 @@ class MonitorPerformance
     private function slowRequestMs(): int
     {
         return max(250, (int) config('app.performance_monitor.slow_request_ms', 3000));
+    }
+
+    private function recordSlowPage(Request $request, int $elapsedMs): void
+    {
+        $this->recordPageMetric('slow_pages', $request, [
+            'last_ms' => $elapsedMs,
+            'max_ms' => $elapsedMs,
+        ], function (array $current) use ($elapsedMs) {
+            $current['count'] = (int) ($current['count'] ?? 0) + 1;
+            $current['last_ms'] = $elapsedMs;
+            $current['max_ms'] = max((int) ($current['max_ms'] ?? 0), $elapsedMs);
+
+            return $current;
+        });
+    }
+
+    private function recordErrorPage(Request $request, int $statusCode, int $elapsedMs): void
+    {
+        $this->recordPageMetric('error_pages', $request, [
+            'last_status' => $statusCode,
+            'last_ms' => $elapsedMs,
+        ], function (array $current) use ($statusCode, $elapsedMs) {
+            $current['count'] = (int) ($current['count'] ?? 0) + 1;
+            $current['last_status'] = $statusCode;
+            $current['last_ms'] = $elapsedMs;
+
+            return $current;
+        });
+    }
+
+    private function recordPageMetric(string $type, Request $request, array $defaults, callable $mutate): void
+    {
+        $date = now()->format('Ymd');
+        $method = $request->method();
+        $path = '/'.ltrim($request->path(), '/');
+        $signature = $method.' '.$path;
+        $hash = sha1($signature);
+        $registryKey = "perf:{$type}:{$date}:registry";
+        $itemKey = "perf:{$type}:{$date}:{$hash}";
+        $ttl = now()->addDays(2);
+
+        $registry = Cache::get($registryKey, []);
+        $registry[] = $hash;
+        $registry = array_slice(array_values(array_unique($registry)), -120);
+        Cache::put($registryKey, $registry, $ttl);
+
+        $current = Cache::get($itemKey, array_merge([
+            'method' => $method,
+            'path' => $path,
+            'count' => 0,
+            'first_seen' => now()->toIso8601String(),
+            'last_seen' => null,
+        ], $defaults));
+
+        $current['method'] = $method;
+        $current['path'] = $path;
+        $current['last_seen'] = now()->toIso8601String();
+        $current = $mutate($current);
+
+        Cache::put($itemKey, $current, $ttl);
     }
 }

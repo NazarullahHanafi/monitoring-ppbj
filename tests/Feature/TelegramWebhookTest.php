@@ -448,6 +448,80 @@ class TelegramWebhookTest extends TestCase
             return str_contains($body, 'Status+maintenance+SIMONPR')
                 && str_contains($body, 'Update+database+sebentar');
         });
+
+        $this->postJson('/telegram/webhook/secret-ok', [
+            'message' => [
+                'chat' => ['id' => 12345],
+                'from' => ['id' => 1191851650],
+                'text' => '/maintenance_off',
+            ],
+        ])->assertOk();
+
+        $this->assertFalse((bool) Cache::get('simonpr:maintenance_mode', false));
+        $this->assertNull(Cache::get('simonpr:maintenance_until'));
+    }
+
+    public function test_telegram_owner_can_see_slow_pages_and_error_today(): void
+    {
+        config()->set('services.telegram.bot_token', 'TEST_TOKEN');
+        config()->set('services.telegram.webhook_secret', 'secret-ok');
+        config()->set('services.telegram.allowed_chat_ids', '12345');
+        config()->set('services.telegram.owner_chat_ids', '1191851650');
+
+        Http::fake([
+            'https://api.telegram.org/*' => Http::response(['ok' => true], 200),
+        ]);
+
+        $date = now()->format('Ymd');
+        Cache::put("perf:slow_pages:{$date}:registry", ['slow-hash'], now()->addDay());
+        Cache::put("perf:slow_pages:{$date}:slow-hash", [
+            'method' => 'GET',
+            'path' => '/ppbj/report',
+            'count' => 3,
+            'last_ms' => 4200,
+            'max_ms' => 7800,
+            'last_seen' => now()->toIso8601String(),
+        ], now()->addDay());
+
+        Cache::put("perf:error_pages:{$date}:registry", ['error-hash'], now()->addDay());
+        Cache::put("perf:error_pages:{$date}:error-hash", [
+            'method' => 'POST',
+            'path' => '/sp',
+            'count' => 2,
+            'last_status' => 500,
+            'last_ms' => 950,
+            'last_seen' => now()->toIso8601String(),
+        ], now()->addDay());
+
+        $this->postJson('/telegram/webhook/secret-ok', [
+            'message' => [
+                'chat' => ['id' => 12345],
+                'from' => ['id' => 1191851650],
+                'text' => '/slow_pages',
+            ],
+        ])->assertOk();
+
+        $this->postJson('/telegram/webhook/secret-ok', [
+            'message' => [
+                'chat' => ['id' => 12345],
+                'from' => ['id' => 1191851650],
+                'text' => '/error_today',
+            ],
+        ])->assertOk();
+
+        Http::assertSent(function ($request) {
+            $body = (string) $request->body();
+
+            return str_contains($body, 'Slow+pages+SIMONPR')
+                && str_contains($body, '%2Fppbj%2Freport');
+        });
+
+        Http::assertSent(function ($request) {
+            $body = (string) $request->body();
+
+            return str_contains($body, 'Error+500+SIMONPR')
+                && str_contains($body, '%2Fsp');
+        });
     }
 
     public function test_soft_maintenance_blocks_website_but_keeps_telegram_webhook_open(): void

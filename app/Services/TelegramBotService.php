@@ -71,6 +71,9 @@ class TelegramBotService
             '/maintenance_message', 'maintenance_message',
             '/maintenance_for', 'maintenance_for',
             '/maintenance_status', 'maintenance_status',
+            '/maintenance_off', 'maintenance_off',
+            '/slow_pages', 'slow_pages',
+            '/error_today', 'error_today',
         ];
 
         if (in_array($command, $ownerOnlyCommands, true) && ! $this->isOwnerActor($fromId)) {
@@ -93,6 +96,9 @@ class TelegramBotService
             '/maintenance_message', 'maintenance_message' => $this->sendMessage($chatId, $this->maintenanceMessageByCommand($text)),
             '/maintenance_for', 'maintenance_for' => $this->sendMessage($chatId, $this->maintenanceForByCommand($text)),
             '/maintenance_status', 'maintenance_status' => $this->sendMessage($chatId, $this->maintenanceStatusText()),
+            '/maintenance_off', 'maintenance_off' => $this->sendMessage($chatId, $this->maintenanceOffText()),
+            '/slow_pages', 'slow_pages' => $this->sendMessage($chatId, $this->slowPagesText()),
+            '/error_today', 'error_today' => $this->sendMessage($chatId, $this->errorTodayText()),
             '/force_logout_user', 'force_logout_user' => $this->sendMessage($chatId, $this->forceLogoutUserByCommand($text, $fromId)),
             '/lock_user', 'lock_user' => $this->sendMessage($chatId, $this->lockUserByCommand($text, $fromId)),
             '/unlock_user', 'unlock_user' => $this->sendMessage($chatId, $this->unlockUserByCommand($text, $fromId)),
@@ -315,6 +321,9 @@ class TelegramBotService
             ['command' => 'maintenance_message', 'description' => 'Owner: set alasan maintenance'],
             ['command' => 'maintenance_for', 'description' => 'Owner: maintenance durasi + alasan'],
             ['command' => 'maintenance_status', 'description' => 'Owner: cek countdown maintenance'],
+            ['command' => 'maintenance_off', 'description' => 'Owner: hidupkan website dari maintenance'],
+            ['command' => 'slow_pages', 'description' => 'Owner: halaman lambat hari ini'],
+            ['command' => 'error_today', 'description' => 'Owner: rekap error 500 hari ini'],
             ['command' => 'force_logout_user', 'description' => 'Owner: paksa logout user by email'],
             ['command' => 'lock_user', 'description' => 'Owner: kunci akun user by email'],
             ['command' => 'unlock_user', 'description' => 'Owner: buka kunci akun user by email'],
@@ -1286,6 +1295,21 @@ class TelegramBotService
             'Command cepat:',
             '/maintenance_for 10 alasan maintenance',
             '/maintenance_message alasan default',
+            '/maintenance_off',
+        ]);
+    }
+
+    private function maintenanceOffText(): string
+    {
+        $wasEnabled = (bool) Cache::get('simonpr:maintenance_mode', false);
+        $message = $this->setMaintenanceMode(false);
+
+        return implode("\n", [
+            $message,
+            'Status sebelumnya: '.($wasEnabled ? 'MAINTENANCE' : 'Sudah LIVE'),
+            'Waktu: '.now()->translatedFormat('l, d F Y H:i:s').' WIB',
+            '',
+            'Command cek: /maintenance_status',
         ]);
     }
 
@@ -1341,6 +1365,106 @@ class TelegramBotService
         $remainingSeconds = $seconds % 60;
 
         return sprintf('%02d jam %02d menit %02d detik', $hours, $minutes, $remainingSeconds);
+    }
+
+    private function slowPagesText(): string
+    {
+        $rows = $this->performanceMetricRows('slow_pages');
+        $threshold = max(250, (int) config('app.performance_monitor.slow_request_ms', 3000));
+
+        $lines = [
+            '🐢 Slow pages SIMONPR hari ini',
+            'Ambang lambat: ≥ '.$threshold.' ms',
+            'Tanggal: '.now()->translatedFormat('l, d F Y'),
+            '',
+        ];
+
+        if ($rows === []) {
+            $lines[] = 'Belum ada halaman yang melewati ambang lambat hari ini.';
+            $lines[] = 'Kalau website terasa berat tapi daftar kosong, kemungkinan masih di bawah threshold atau monitor belum aktif di environment ini.';
+
+            return implode("\n", $lines);
+        }
+
+        foreach (array_slice($rows, 0, 10) as $index => $row) {
+            $lines[] = ($index + 1).'. '.$row['method'].' '.$row['path'];
+            $lines[] = '   Lambat: '.$row['count'].'x | Terakhir: '.$row['last_ms'].' ms | Maks: '.$row['max_ms'].' ms';
+            $lines[] = '   Waktu terakhir: '.$this->metricTimeText($row['last_seen'] ?? null);
+        }
+
+        $lines[] = '';
+        $lines[] = 'Saran: jika halaman yang sama sering muncul, cek query database, eager loading, pagination, dan ukuran data yang dirender.';
+
+        return implode("\n", $lines);
+    }
+
+    private function errorTodayText(): string
+    {
+        $rows = $this->performanceMetricRows('error_pages');
+
+        $lines = [
+            '🚨 Error 500 SIMONPR hari ini',
+            'Tanggal: '.now()->translatedFormat('l, d F Y'),
+            '',
+        ];
+
+        if ($rows === []) {
+            $lines[] = 'Belum ada halaman error 500 yang tercatat oleh monitor hari ini.';
+            $lines[] = 'Mantap, sejauh ini aman sentosa. Tetap cek /health kalau ada laporan user.';
+
+            return implode("\n", $lines);
+        }
+
+        foreach (array_slice($rows, 0, 10) as $index => $row) {
+            $lines[] = ($index + 1).'. '.$row['method'].' '.$row['path'];
+            $lines[] = '   Error: '.$row['count'].'x | Status terakhir: '.($row['last_status'] ?? '-').' | Durasi: '.($row['last_ms'] ?? '-').' ms';
+            $lines[] = '   Waktu terakhir: '.$this->metricTimeText($row['last_seen'] ?? null);
+        }
+
+        $lines[] = '';
+        $lines[] = 'Saran: aktifkan read-only/maintenance dari /ops jika error berulang dan cek log server setelah itu.';
+
+        return implode("\n", $lines);
+    }
+
+    private function performanceMetricRows(string $type): array
+    {
+        $date = now()->format('Ymd');
+        $registry = Cache::get("perf:{$type}:{$date}:registry", []);
+
+        if (! is_array($registry) || $registry === []) {
+            return [];
+        }
+
+        $rows = [];
+        foreach (array_unique($registry) as $hash) {
+            $row = Cache::get("perf:{$type}:{$date}:{$hash}");
+
+            if (! is_array($row)) {
+                continue;
+            }
+
+            $rows[] = $row;
+        }
+
+        usort($rows, function (array $a, array $b): int {
+            $countCompare = ((int) ($b['count'] ?? 0)) <=> ((int) ($a['count'] ?? 0));
+
+            if ($countCompare !== 0) {
+                return $countCompare;
+            }
+
+            return strcmp((string) ($b['last_seen'] ?? ''), (string) ($a['last_seen'] ?? ''));
+        });
+
+        return $rows;
+    }
+
+    private function metricTimeText(mixed $value): string
+    {
+        $time = $this->parseCacheTime($value);
+
+        return $time ? $time->translatedFormat('H:i:s').' WIB' : '-';
     }
 
     private function setMaintenanceMode(bool $enabled, ?int $minutes = null, ?string $message = null): string
