@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AccountController;
+use App\Http\Controllers\ArchiveAttachmentController;
 use App\Http\Controllers\ChatController;
 use App\Http\Controllers\ContactMessageController;
 use App\Http\Controllers\DashboardController;
@@ -296,6 +297,9 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
         Route::prefix('spph')->name('spph.')->middleware('auth')->group(function () {
             Route::put('/{spph}', [SpphController::class, 'update'])->name('update');
             Route::delete('/{spph}', [SpphController::class, 'destroy'])->name('destroy');
+            Route::post('/{spph}/archive-attachment', [ArchiveAttachmentController::class, 'storeSpph'])
+                ->name('archive-attachment')
+                ->middleware('throttle:10,1');
             Route::get('/{spph}/cetak', [SpphController::class, 'cetakSpph'])->name('cetak')->middleware('throttle:30,1');
             Route::get('/{spph}/cetak-semua-vendor', [SpphController::class, 'cetakSemuaVendor'])->name('cetak-semua-vendor')->middleware('throttle:30,1');
             Route::get('/{spph}/items', [SpphController::class, 'getItems'])->name('items')->middleware('throttle:60,1');
@@ -307,6 +311,9 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
             Route::post('/', [SpController::class, 'store'])->name('store');
             Route::put('/{sp}', [SpController::class, 'update'])->name('update');
             Route::delete('/{sp}', [SpController::class, 'destroy'])->name('destroy');
+            Route::post('/{sp}/archive-attachment', [ArchiveAttachmentController::class, 'storeSp'])
+                ->name('archive-attachment')
+                ->middleware('throttle:10,1');
             Route::get('/{sp}/items', [SpController::class, 'getItems'])->name('items')->middleware('throttle:60,1');
 
             // Cetak SP

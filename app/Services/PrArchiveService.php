@@ -7,6 +7,7 @@ use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Http\UploadedFile;
 use Throwable;
 
 class PrArchiveService
@@ -40,6 +41,80 @@ class PrArchiveService
             max(30, (int) config('services.pr_archive.cache_seconds', 300)),
             fn () => $this->requestArchive($baseUrl, $prNumber)
         );
+    }
+
+    public function uploadDocument(array $metadata, UploadedFile $file): array
+    {
+        $baseUrl = rtrim((string) config('services.pr_archive.base_url'), '/');
+
+        if ($baseUrl === '') {
+            return $this->result(
+                'unconfigured',
+                'Upload arsip belum bisa dipakai karena koneksi ke Sistem Arsip belum dikonfigurasi.',
+                ['configured' => false]
+            );
+        }
+
+        $path = (string) config('services.pr_archive.upload_path', '/api/documents');
+        $url = $baseUrl . '/' . ltrim($path, '/');
+        $token = trim((string) config('services.pr_archive.token'));
+
+        try {
+            $request = Http::acceptJson()
+                ->connectTimeout(max(1, (int) config('services.pr_archive.connect_timeout', 2)))
+                ->timeout(max(5, (int) config('services.pr_archive.timeout', 8)));
+
+            if ($token !== '') {
+                $request = $request->withToken($token);
+            }
+
+            $response = $request
+                ->attach('file', file_get_contents($file->getRealPath()), $file->getClientOriginalName())
+                ->post($url, $this->cleanUploadMetadata($metadata));
+
+            if (!$response->successful()) {
+                Log::warning('Upload dokumen ke sistem arsip gagal.', [
+                    'status' => $response->status(),
+                    'source_module' => $metadata['source_module'] ?? null,
+                    'nomor_pr' => $metadata['nomor_pr'] ?? null,
+                    'nomor_dokumen' => $metadata['nomor_dokumen'] ?? null,
+                ]);
+
+                return $this->result(
+                    $response->status() === 404 ? 'unavailable' : 'failed',
+                    $response->status() === 404
+                        ? 'Endpoint upload Sistem Arsip belum tersedia.'
+                        : 'Dokumen belum berhasil dikirim ke Sistem Arsip.'
+                );
+            }
+
+            $payload = $response->json();
+            $document = is_array($payload) ? $this->normaliseUploadedDocument($payload, $baseUrl) : [];
+
+            $this->forgetPrCache((string) ($metadata['nomor_pr'] ?? ''));
+
+            return $this->result('uploaded', 'Dokumen berhasil dikirim ke Sistem Arsip.', [
+                'has_archive' => true,
+                'document_count' => 1,
+                'document' => $document,
+            ]);
+        } catch (Throwable $exception) {
+            report($exception);
+        }
+
+        return $this->result('unavailable', 'Sistem arsip sedang tidak dapat menerima upload dokumen.');
+    }
+
+    public function forgetPrCache(?string $prNumber): void
+    {
+        $prNumber = trim((string) $prNumber);
+        $baseUrl = rtrim((string) config('services.pr_archive.base_url'), '/');
+
+        if ($prNumber === '' || $baseUrl === '') {
+            return;
+        }
+
+        Cache::forget('pr_archive:' . hash('sha256', $baseUrl . '|' . $prNumber));
     }
 
     private function requestArchive(string $baseUrl, string $prNumber): array
@@ -150,6 +225,28 @@ class PrArchiveService
                 ];
             })
             ->values()
+            ->all();
+    }
+
+    private function normaliseUploadedDocument(array $payload, string $baseUrl): array
+    {
+        $item = Arr::get($payload, 'document')
+            ?? Arr::get($payload, 'data.document')
+            ?? Arr::get($payload, 'data')
+            ?? $payload;
+
+        if (!is_array($item)) {
+            return [];
+        }
+
+        return $this->normaliseDocuments(['documents' => [$item]], $baseUrl)[0] ?? [];
+    }
+
+    private function cleanUploadMetadata(array $metadata): array
+    {
+        return collect($metadata)
+            ->map(fn ($value) => is_scalar($value) || is_null($value) ? trim((string) $value) : $value)
+            ->filter(fn ($value) => !($value === '' || $value === [] || $value === null))
             ->all();
     }
 

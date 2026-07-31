@@ -2467,6 +2467,20 @@
                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h8m-8 4h5m8-2a8 8 0 01-8 8 8.5 8.5 0 01-3.8-.9L3 21l1.9-5.1A8 8 0 1119 17.2" />
                                             </svg>
                                         </button>
+                                        <button type="button"
+                                            onclick="openArchiveAttachmentUpload({
+                                                module: 'SPPH',
+                                                nomor: @js($s->nomor_spph ?? ('SPPH-' . $s->id)),
+                                                nomor_pr: @js($s->nomor_pr ?? ''),
+                                                vendor: @js(implode(', ', $vendorList)),
+                                                url: @js(route('spph.archive-attachment', $s))
+                                            })"
+                                            class="p-1.5 rounded-lg text-emerald-600 hover:bg-emerald-50 dark:text-emerald-300 dark:hover:bg-emerald-900/30 transition-colors"
+                                            title="Upload lampiran SPPH ke Sistem Arsip" aria-label="Upload lampiran SPPH ke Sistem Arsip">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.586-6.586a4 4 0 10-5.657-5.657L5.757 10.757a6 6 0 108.486 8.486L20.5 12.986" />
+                                            </svg>
+                                        </button>
                                         <a href="{{ route('spph.cetak', ['spph' => $s, 'vendor' => $vendorList[0] ?? $s->nama_vendor]) }}" target="_blank"
                                             onclick="event.preventDefault(); openSpphPrint(this.href);"
                                             class="p-1.5 rounded-lg text-sky-600 hover:bg-sky-50 dark:hover:bg-sky-900/30 transition-colors"
@@ -4415,3 +4429,5 @@
         });
     </script>
 @endpush
+
+@include('components.archive-upload-popup')
