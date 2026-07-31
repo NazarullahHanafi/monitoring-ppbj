@@ -12,6 +12,21 @@ use Illuminate\Validation\Rule;
 
 class ArchiveAttachmentController extends Controller
 {
+    private const ALLOWED_EXTENSIONS = [
+        'pdf',
+        'doc',
+        'docx',
+        'xls',
+        'xlsx',
+        'ppt',
+        'pptx',
+        'csv',
+        'txt',
+        'jpg',
+        'jpeg',
+        'png',
+    ];
+
     public function storeSp(Request $request, Sp $sp, PrArchiveService $archiveService): JsonResponse
     {
         $validated = $this->validateUpload($request);
@@ -85,7 +100,12 @@ class ArchiveAttachmentController extends Controller
                     'Lainnya',
                 ]),
             ],
-            'document_file' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:' . $maxKb],
+            'document_file' => [
+                'required',
+                'file',
+                'mimes:' . implode(',', self::ALLOWED_EXTENSIONS),
+                'max:' . $maxKb,
+            ],
             'notes' => ['nullable', 'string', 'max:500'],
         ]);
     }

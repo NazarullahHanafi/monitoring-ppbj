@@ -33,9 +33,9 @@
                             </label>
                             <label class="block">
                                 <span class="mb-1 block text-xs font-bold text-slate-700 dark:text-slate-200">File pendukung</span>
-                                <input id="archiveUploadFile" type="file" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
+                                <input id="archiveUploadFile" type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.csv,.txt,.jpg,.jpeg,.png,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,text/csv,text/plain,image/jpeg,image/png"
                                     class="w-full rounded-xl border border-dashed border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 file:mr-3 file:rounded-lg file:border-0 file:bg-blue-600 file:px-3 file:py-1.5 file:text-xs file:font-bold file:text-white dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100">
-                                <p class="mt-1 text-[11px] text-slate-500 dark:text-slate-400">Format: PDF/JPG/PNG. Maksimal mengikuti setting server arsip.</p>
+                                <p class="mt-1 text-[11px] text-slate-500 dark:text-slate-400">Format: PDF, Word, Excel, PowerPoint, CSV/TXT, JPG/PNG. Maksimal mengikuti setting server arsip.</p>
                             </label>
                             <label class="block">
                                 <span class="mb-1 block text-xs font-bold text-slate-700 dark:text-slate-200">Catatan singkat</span>

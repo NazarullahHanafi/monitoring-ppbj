@@ -54,7 +54,7 @@ class ArchiveAttachmentUploadTest extends TestCase
             ->postJson(route('sp.archive-attachment', $sp), [
                 'document_type' => 'Dokumen SP',
                 'notes' => 'Lampiran untuk audit',
-                'document_file' => UploadedFile::fake()->create('sp.pdf', 120, 'application/pdf'),
+                'document_file' => UploadedFile::fake()->create('sp.docx', 120, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'),
             ])
             ->assertCreated()
             ->assertJson([
@@ -68,7 +68,7 @@ class ArchiveAttachmentUploadTest extends TestCase
             return $request->method() === 'POST'
                 && $request->url() === 'https://arsip.example.test/api/documents'
                 && $request->hasHeader('Authorization', 'Bearer secret-token')
-                && $request->hasFile('file', null, 'sp.pdf')
+                && $request->hasFile('file', null, 'sp.docx')
                 && str_contains($body, 'name="source_module"')
                 && str_contains($body, 'SP')
                 && str_contains($body, 'name="nomor_pr"')
@@ -116,7 +116,7 @@ class ArchiveAttachmentUploadTest extends TestCase
         $this->actingAs($user)
             ->postJson(route('spph.archive-attachment', $spph), [
                 'document_type' => 'Penawaran Vendor',
-                'document_file' => UploadedFile::fake()->create('penawaran.pdf', 100, 'application/pdf'),
+                'document_file' => UploadedFile::fake()->create('penawaran.xlsx', 100, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'),
             ])
             ->assertCreated()
             ->assertJson(['state' => 'uploaded']);
@@ -125,7 +125,7 @@ class ArchiveAttachmentUploadTest extends TestCase
             $body = $request->body();
 
             return $request->method() === 'POST'
-                && $request->hasFile('file', null, 'penawaran.pdf')
+                && $request->hasFile('file', null, 'penawaran.xlsx')
                 && str_contains($body, 'name="source_module"')
                 && str_contains($body, 'SPPH')
                 && str_contains($body, 'name="nomor_spph"')
