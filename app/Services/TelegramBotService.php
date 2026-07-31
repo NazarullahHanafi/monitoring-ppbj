@@ -144,6 +144,32 @@ class TelegramBotService
         ]));
     }
 
+    public function notifyUserOnlineReturn(User $user, ?string $ip = null, mixed $previousLastSeen = null): void
+    {
+        $lastSeenText = '-';
+
+        if ($previousLastSeen) {
+            try {
+                $lastSeenText = \Illuminate\Support\Carbon::parse($previousLastSeen)
+                    ->translatedFormat('l, d F Y H:i:s').' WIB';
+            } catch (Throwable) {
+                $lastSeenText = (string) $previousLastSeen;
+            }
+        }
+
+        $this->sendNotification(implode("\n", [
+            '🟡 User aktif kembali SIMONPR',
+            'Nama: '.$this->userDisplayName($user),
+            'Role: '.($user->role ?: '-'),
+            'Department: '.($user->department ?: '-'),
+            'IP: '.($ip ?: '-'),
+            'Terakhir terlihat: '.$lastSeenText,
+            'Aktif lagi: '.now()->translatedFormat('l, d F Y H:i:s').' WIB',
+            '',
+            'Catatan: ini bukan selalu login baru. Bisa jadi user membuka aplikasi dari session yang masih aktif.',
+        ]));
+    }
+
     public function notifyUserLogout(User $user, ?string $ip = null): void
     {
         $this->sendNotification(implode("\n", [

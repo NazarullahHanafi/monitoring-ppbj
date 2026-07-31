@@ -6,6 +6,7 @@ use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
 class UserLastSeenTest extends TestCase
@@ -34,6 +35,44 @@ class UserLastSeenTest extends TestCase
             'last_seen_at' => '2026-07-10 09:30:00',
             'last_seen_ip' => '198.51.100.10',
         ]);
+
+        Carbon::setTestNow();
+    }
+
+    public function test_presence_heartbeat_notifies_telegram_when_user_returns_online(): void
+    {
+        Carbon::setTestNow('2026-07-10 09:30:00');
+        Cache::flush();
+
+        config()->set('app.env', 'production');
+        config()->set('services.telegram.bot_token', 'TEST_TOKEN');
+        config()->set('services.telegram.notify_chat_ids', '12345');
+
+        Http::fake([
+            'https://api.telegram.org/*' => Http::response(['ok' => true], 200),
+        ]);
+
+        $user = User::factory()->create([
+            'name' => 'Atika',
+            'department' => 'operasional',
+            'role' => 'user',
+            'last_seen_at' => now()->subMinutes(30),
+        ]);
+
+        $this->actingAs($user)
+            ->withServerVariables(['REMOTE_ADDR' => '198.51.100.44'])
+            ->postJson(route('presence.heartbeat'))
+            ->assertOk();
+
+        Http::assertSent(function ($request) {
+            $body = urldecode((string) $request->body());
+
+            return str_contains($body, 'User aktif kembali SIMONPR')
+                && str_contains($body, 'Atika')
+                && str_contains($body, '198.51.100.44');
+        });
+
+        $this->assertTrue(Cache::has('telegram:online_return:'.$user->id));
 
         Carbon::setTestNow();
     }

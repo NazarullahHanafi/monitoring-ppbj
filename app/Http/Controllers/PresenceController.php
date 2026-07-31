@@ -2,9 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\User;
+use App\Services\TelegramBotService;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
@@ -12,6 +14,7 @@ class PresenceController extends Controller
 {
     private const PRESENCE_TTL = 300;
     private const REGISTRY_TTL = 3600;
+    private const ONLINE_RETURN_AFTER_SECONDS = 600;
     private const CACHE_PREFIX = 'presence:user:';
     private const REGISTRY_KEY = 'presence:registry';
     private const MOOD_PREFIX = 'presence:mood:';
@@ -145,6 +148,17 @@ class PresenceController extends Controller
             return;
         }
 
+        $previousLastSeen = null;
+        $shouldNotifyOnlineReturn = false;
+
+        if (Schema::hasColumn('users', 'last_seen_at')) {
+            $previousLastSeen = DB::table('users')
+                ->where('id', $user->id)
+                ->value('last_seen_at');
+
+            $shouldNotifyOnlineReturn = $this->shouldNotifyOnlineReturn($user, $previousLastSeen);
+        }
+
         $updates = [];
 
         if (Schema::hasColumn('users', 'last_seen_at')) {
@@ -162,5 +176,57 @@ class PresenceController extends Controller
         DB::table('users')
             ->where('id', $user->id)
             ->update($updates);
+
+        if ($shouldNotifyOnlineReturn) {
+            $this->notifyTelegramOnlineReturn($user, request()->ip(), $previousLastSeen);
+        }
+    }
+
+    private function shouldNotifyOnlineReturn($user, mixed $previousLastSeen): bool
+    {
+        if (! $user || ! isset($user->id)) {
+            return false;
+        }
+
+        $cacheKey = 'telegram:online_return:' . $user->id;
+
+        if (Cache::has($cacheKey)) {
+            return false;
+        }
+
+        if (! $previousLastSeen) {
+            return Cache::add($cacheKey, true, now()->addMinutes(30));
+        }
+
+        try {
+            $lastSeen = \Illuminate\Support\Carbon::parse($previousLastSeen);
+        } catch (\Throwable) {
+            return Cache::add($cacheKey, true, now()->addMinutes(30));
+        }
+
+        if ($lastSeen->diffInSeconds(now()) < self::ONLINE_RETURN_AFTER_SECONDS) {
+            return false;
+        }
+
+        return Cache::add($cacheKey, true, now()->addMinutes(30));
+    }
+
+    private function notifyTelegramOnlineReturn($user, ?string $ip, mixed $previousLastSeen): void
+    {
+        if (! $user) {
+            return;
+        }
+
+        $freshUser = $user instanceof User
+            ? $user
+            : User::query()->find($user->id);
+
+        if (! $freshUser) {
+            return;
+        }
+
+        app()->terminating(function () use ($freshUser, $ip, $previousLastSeen) {
+            app(TelegramBotService::class)->notifyUserOnlineReturn($freshUser, $ip, $previousLastSeen);
+        });
     }
 }
