@@ -154,6 +154,7 @@ class PrArchiveService
             }
 
             $documents = $this->normaliseDocuments($payload, $baseUrl);
+            $packages = $this->normalisePackages($payload, $baseUrl);
             $reportedCount = (int) (Arr::get($payload, 'document_count')
                 ?? Arr::get($payload, 'data.document_count')
                 ?? count($documents));
@@ -173,6 +174,7 @@ class PrArchiveService
                     'has_archive' => true,
                     'document_count' => $documentCount,
                     'documents' => $documents,
+                    'packages' => $packages,
                 ]
             );
         } catch (ConnectionException $exception) {
@@ -228,6 +230,41 @@ class PrArchiveService
                     'download_url' => $this->normaliseUrl($url, $baseUrl),
                 ];
             })
+            ->values()
+            ->all();
+    }
+
+    private function normalisePackages(array $payload, string $baseUrl): array
+    {
+        $items = Arr::get($payload, 'packages')
+            ?? Arr::get($payload, 'data.packages')
+            ?? [];
+
+        if (!is_array($items) || !array_is_list($items)) {
+            return [];
+        }
+
+        return collect($items)
+            ->filter(fn ($item) => is_array($item))
+            ->map(function (array $item) use ($baseUrl) {
+                $zipUrl = $item['package_download_url']
+                    ?? $item['zip_url']
+                    ?? $item['download_package_url']
+                    ?? null;
+
+                return [
+                    'id' => $item['id'] ?? null,
+                    'name' => (string) ($item['name']
+                        ?? $item['title']
+                        ?? $item['document_number']
+                        ?? 'Paket arsip PR'),
+                    'document_number' => $item['document_number'] ?? null,
+                    'file_count' => (int) ($item['file_count'] ?? $item['attachment_count'] ?? 0),
+                    'location' => $this->normaliseLocation($item),
+                    'package_download_url' => $this->normaliseUrl($zipUrl, $baseUrl),
+                ];
+            })
+            ->filter(fn (array $item) => filled($item['package_download_url']))
             ->values()
             ->all();
     }
@@ -322,6 +359,7 @@ class PrArchiveService
             'has_archive' => false,
             'document_count' => 0,
             'documents' => [],
+            'packages' => [],
             'message' => $message,
             'checked_at' => now()->toIso8601String(),
         ], $extra);

@@ -1714,9 +1714,45 @@
                 return parts.filter(Boolean).join(' • ') || null;
             }
 
-            function renderArchiveDocuments(documents) {
+            function renderArchiveDocuments(documents, packages = []) {
                 const list = document.getElementById('detailArchiveDocuments');
                 if (!list || !Array.isArray(documents) || !documents.length) return;
+
+                if (Array.isArray(packages) && packages.length) {
+                    packages.forEach((packageItem) => {
+                        if (!packageItem?.package_download_url) return;
+
+                        const packageCard = document.createElement('div');
+                        packageCard.className = 'flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3 dark:border-emerald-700/50 dark:bg-emerald-900/20';
+
+                        const info = document.createElement('div');
+                        info.className = 'min-w-0 flex-1';
+
+                        const title = document.createElement('p');
+                        title.className = 'text-sm font-bold text-emerald-900 dark:text-emerald-100';
+                        title.textContent = 'Paket arsip lengkap PR/PPBJ';
+
+                        const meta = document.createElement('p');
+                        meta.className = 'mt-1 text-[11px] font-semibold text-emerald-700 dark:text-emerald-200';
+                        const fileCount = Number(packageItem.file_count || 0);
+                        meta.textContent = [
+                            packageItem.document_number || packageItem.name || 'Paket arsip',
+                            fileCount ? `${fileCount} file siap audit` : null,
+                        ].filter(Boolean).join(' • ');
+
+                        info.append(title, meta);
+
+                        const link = document.createElement('a');
+                        link.href = packageItem.package_download_url;
+                        link.target = '_blank';
+                        link.rel = 'noopener noreferrer';
+                        link.className = 'inline-flex shrink-0 items-center rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-emerald-700';
+                        link.textContent = 'ZIP Paket';
+
+                        packageCard.append(info, link);
+                        list.append(packageCard);
+                    });
+                }
 
                 documents.forEach((documentItem) => {
                     const item = document.createElement('div');
@@ -1774,7 +1810,7 @@
 
                     const archive = await response.json();
                     setArchiveState(archive.state, archive.message, id);
-                    renderArchiveDocuments(archive.documents || []);
+                    renderArchiveDocuments(archive.documents || [], archive.packages || []);
                 } catch (error) {
                     setArchiveState('unavailable', error.message || 'Sistem arsip sedang tidak dapat dihubungi.', id);
                 }
