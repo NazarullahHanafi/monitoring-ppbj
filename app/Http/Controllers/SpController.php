@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Sp;
 use App\Models\SpItem;
 use App\Models\Ppbj;
+use App\Models\Spph;
 use App\Models\Vendor;
 use App\Models\User;
 use App\Models\Satuan;
@@ -83,7 +84,9 @@ class SpController extends Controller
             ->paginate(25)
             ->withQueryString();
 
-        return view('sp.index', compact('vendors', 'pics', 'satuans', 'sps', 'lastNomor', 'search', 'pic', 'dari', 'sampai', 'stats', 'bidangIpItus', 'penandatanganScis', 'jabatanScis', 'oracleMode'));
+        $spVendorAuditMap = $this->buildSpVendorAuditMap($sps->getCollection());
+
+        return view('sp.index', compact('vendors', 'pics', 'satuans', 'sps', 'lastNomor', 'search', 'pic', 'dari', 'sampai', 'stats', 'bidangIpItus', 'penandatanganScis', 'jabatanScis', 'oracleMode', 'spVendorAuditMap'));
     }
 
     // =========================================================
@@ -109,15 +112,21 @@ class SpController extends Controller
         }
 
         $results = $query->orderBy('ppbj_no', 'desc')->limit(50)->get()
-            ->map(fn($r) => [
-                'id' => $r->ppbj_no,
-                'text' => $r->ppbj_no . ($r->uraian ? ' — ' . Str::limit($r->uraian, 40) : ''),
-                'uraian' => $r->uraian,
-                'portofolio' => $r->portofolio,
-                'buyer' => $r->buyer,
-                'has_spph' => !empty($r->spph_rfq_1),
-                'total_sebelum_ppn' => $r->total_sebelum_ppn,
-            ]);
+            ->map(function ($r) {
+                $spphMeta = $this->spphVendorMetaForPpbj($r);
+
+                return [
+                    'id' => $r->ppbj_no,
+                    'text' => $r->ppbj_no . ($r->uraian ? ' - ' . Str::limit($r->uraian, 40) : ''),
+                    'uraian' => $r->uraian,
+                    'portofolio' => $r->portofolio,
+                    'buyer' => $r->buyer,
+                    'has_spph' => !empty($r->spph_rfq_1),
+                    'spph_nomor' => $spphMeta['spph_nomor'],
+                    'spph_vendors' => $spphMeta['spph_vendors'],
+                    'total_sebelum_ppn' => $r->total_sebelum_ppn,
+                ];
+            });
 
         return response()->json(['results' => $results]);
     }
@@ -148,6 +157,8 @@ class SpController extends Controller
                 'message' => "PPBJ sudah terhubung dengan SP: {$ppbj->awarding_sp}",
                 'linked_sp' => $ppbj->awarding_sp,
                 'uraian' => $ppbj->uraian,
+                'spph_nomor' => $this->spphVendorMetaForPpbj($ppbj)['spph_nomor'],
+                'spph_vendors' => $this->spphVendorMetaForPpbj($ppbj)['spph_vendors'],
                 'total_sebelum_ppn' => $ppbj->total_sebelum_ppn,
             ]);
 
@@ -163,9 +174,136 @@ class SpController extends Controller
             'portofolio' => $ppbj->portofolio,
             'buyer' => $ppbj->buyer,
             'has_spph' => !empty($ppbj->spph_rfq_1),
+            'spph_nomor' => $this->spphVendorMetaForPpbj($ppbj)['spph_nomor'],
+            'spph_vendors' => $this->spphVendorMetaForPpbj($ppbj)['spph_vendors'],
             'warnings' => $warnings,
             'total_sebelum_ppn' => $ppbj->total_sebelum_ppn,
         ]);
+    }
+
+    private function spphVendorMetaForPpbj(object $ppbj): array
+    {
+        $spphNo = trim((string) ($ppbj->spph_rfq_1 ?? ''));
+
+        if ($spphNo === '') {
+            return [
+                'spph_nomor' => null,
+                'spph_vendors' => [],
+            ];
+        }
+
+        $spph = Spph::select(['nomor_spph', 'nama_vendor', 'vendor_names'])
+            ->where('nomor_spph', $spphNo)
+            ->first();
+
+        return [
+            'spph_nomor' => $spphNo,
+            'spph_vendors' => $spph?->print_vendor_names ?? [],
+        ];
+    }
+
+    private function buildSpVendorAuditMap($sps): array
+    {
+        $nomorPrs = collect($sps)
+            ->pluck('nomor_pr')
+            ->map(fn($nomor) => trim((string) $nomor))
+            ->filter()
+            ->unique()
+            ->values();
+
+        if ($nomorPrs->isEmpty()) {
+            return [];
+        }
+
+        $ppbjByNo = DB::table('ppbj')
+            ->select(['ppbj_no', 'spph_rfq_1'])
+            ->whereIn('ppbj_no', $nomorPrs)
+            ->get()
+            ->keyBy('ppbj_no');
+
+        $spphNos = $ppbjByNo
+            ->pluck('spph_rfq_1')
+            ->map(fn($nomor) => trim((string) $nomor))
+            ->filter()
+            ->unique()
+            ->values();
+
+        $spphByNo = $spphNos->isEmpty()
+            ? collect()
+            : Spph::select(['nomor_spph', 'nama_vendor', 'vendor_names'])
+                ->whereIn('nomor_spph', $spphNos)
+                ->get()
+                ->keyBy('nomor_spph');
+
+        return collect($sps)->mapWithKeys(function ($sp) use ($ppbjByNo, $spphByNo) {
+            $nomorPr = trim((string) $sp->nomor_pr);
+            $ppbj = $nomorPr !== '' ? $ppbjByNo->get($nomorPr) : null;
+
+            if (!$ppbj) {
+                return [$sp->id => ['status' => 'manual', 'label' => 'PR manual', 'vendors' => []]];
+            }
+
+            $spphNo = trim((string) ($ppbj->spph_rfq_1 ?? ''));
+            if ($spphNo === '') {
+                return [$sp->id => ['status' => 'no_spph', 'label' => 'Belum ada SPPH', 'vendors' => []]];
+            }
+
+            $vendors = $spphByNo->get($spphNo)?->print_vendor_names ?? [];
+            if (empty($vendors)) {
+                return [$sp->id => ['status' => 'no_vendor', 'label' => 'SPPH tanpa vendor', 'vendors' => []]];
+            }
+
+            $selected = $this->normalizeVendorText((string) $sp->nama_vendor);
+            $match = collect($vendors)->contains(fn($vendor) => $this->normalizeVendorText((string) $vendor) === $selected);
+
+            return [$sp->id => [
+                'status' => $match ? 'match' : 'mismatch',
+                'label' => $match ? 'Vendor sesuai SPPH' : 'Vendor beda SPPH',
+                'vendors' => $vendors,
+                'spph_nomor' => $spphNo,
+            ]];
+        })->all();
+    }
+
+    private function normalizeVendorText(string $vendor): string
+    {
+        return Str::of($vendor)
+            ->lower()
+            ->replaceMatches('/\s+/', ' ')
+            ->trim()
+            ->toString();
+    }
+
+    private function ensureSpVendorMatchesSpph(Request $request, ?string $nomorPr, string $vendorName)
+    {
+        $nomorPr = trim((string) $nomorPr);
+        if ($nomorPr === '') {
+            return null;
+        }
+
+        $ppbj = Ppbj::select(['ppbj_no', 'spph_rfq_1'])->where('ppbj_no', $nomorPr)->first();
+        if (!$ppbj) {
+            return null;
+        }
+
+        $meta = $this->spphVendorMetaForPpbj($ppbj);
+        $vendors = $meta['spph_vendors'] ?? [];
+        if (empty($vendors)) {
+            return null;
+        }
+
+        $selected = $this->normalizeVendorText($vendorName);
+        $matches = collect($vendors)->contains(fn($vendor) => $this->normalizeVendorText((string) $vendor) === $selected);
+
+        if ($matches || $request->boolean('vendor_mismatch_confirmed')) {
+            return null;
+        }
+
+        return back()
+            ->withErrors([
+                'nama_vendor' => 'Vendor SP berbeda dari vendor pada SPPH ' . ($meta['spph_nomor'] ?? '-') . '. Pilih vendor rekomendasi atau konfirmasi jika memang berbeda.',
+            ])
+            ->withInput();
     }
 
     // =========================================================
@@ -511,6 +649,7 @@ class SpController extends Controller
             'items.*.jumlah' => 'nullable|string|max:50',
             'items.*.harga_satuan' => 'nullable|string|max:50',
             'items.*.tgl_pemenuhan' => 'nullable|date',
+            'vendor_mismatch_confirmed' => 'nullable|boolean',
         ]);
 
         $this->validateSpModeValue($request, $oracleMode);
@@ -551,7 +690,14 @@ class SpController extends Controller
                 }
             }
 
-            $vendorName = $request->nama_vendor;
+            $vendorName = $request->filled('vendor_baru')
+                ? trim((string) $request->vendor_baru)
+                : $request->nama_vendor;
+
+            if ($vendorMismatchResponse = $this->ensureSpVendorMatchesSpph($request, $nomorPr, $vendorName)) {
+                return $vendorMismatchResponse;
+            }
+
             if ($request->filled('vendor_baru')) {
                 $v = Vendor::firstOrCreate(['nama_vendor' => trim($request->vendor_baru)]);
                 $vendorName = $v->nama_vendor;
@@ -682,6 +828,7 @@ class SpController extends Controller
             'items.*.jumlah' => 'nullable|string|max:50',
             'items.*.harga_satuan' => 'nullable|string|max:50',
             'items.*.tgl_pemenuhan' => 'nullable|date',
+            'vendor_mismatch_confirmed' => 'nullable|boolean',
         ]);
 
         $this->validateSpModeValue($request, $oracleMode);
@@ -736,6 +883,10 @@ class SpController extends Controller
 
             $nomorPemenang = $request->nomor_pemenang ?: ($ppbjAuto?->pemenang ?? null);
             $tanggalPemenang = $request->tanggal_pemenang ?: ($ppbjAuto?->tgl_pemenang ?? null);
+
+            if ($vendorMismatchResponse = $this->ensureSpVendorMatchesSpph($request, $nomorPr, $request->nama_vendor)) {
+                return $vendorMismatchResponse;
+            }
 
             $sp->update([
                 'nomor_sp' => $request->nomor_sp,

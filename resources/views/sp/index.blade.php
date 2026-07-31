@@ -2279,7 +2279,24 @@
                                 <td class="px-3 py-3 text-right">@if($s->nilai_pr)<span
                                 class="nilai-badge text-indigo-600 dark:text-indigo-400">{{ 'Rp ' . number_format($s->nilai_pr, 0, ',', '.') }}</span>@else<span
                                         class="text-gray-400 text-xs">-</span>@endif</td>
-                                <td class="px-3 py-3 text-gray-700 dark:text-gray-200 font-medium text-xs">{{ $s->nama_vendor }}
+                                <td class="px-3 py-3 text-gray-700 dark:text-gray-200 font-medium text-xs">
+                                    <div class="flex flex-col items-start gap-1">
+                                        <span>{{ $s->nama_vendor }}</span>
+                                        @php($vendorAudit = $spVendorAuditMap[$s->id] ?? null)
+                                        @if($vendorAudit)
+                                            @php($auditClass = match($vendorAudit['status'] ?? '') {
+                                                'match' => 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800',
+                                                'mismatch' => 'bg-rose-50 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800',
+                                                'no_spph', 'no_vendor' => 'bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800',
+                                                default => 'bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700',
+                                            })
+                                            <span class="inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-extrabold {{ $auditClass }}"
+                                                title="{{ !empty($vendorAudit['vendors']) ? 'Vendor SPPH: '.implode(', ', $vendorAudit['vendors']) : ($vendorAudit['label'] ?? '') }}">
+                                                {{ $vendorAudit['status'] === 'match' ? '✓' : ($vendorAudit['status'] === 'mismatch' ? '!' : 'i') }}
+                                                {{ $vendorAudit['label'] ?? 'Audit vendor' }}
+                                            </span>
+                                        @endif
+                                    </div>
                                 </td>
                                 <td class="px-3 py-3 text-gray-600 dark:text-gray-300 text-xs max-w-xs truncate"
                                     title="{{ $s->deskripsi_pengadaan }}">{{ $s->deskripsi_pengadaan }}</td>
@@ -2454,6 +2471,7 @@
                             autocomplete="off">
                     </div>
                     <input type="hidden" name="nomor_pr" id="nomorPrFinal">
+                    <input type="hidden" name="vendor_mismatch_confirmed" id="addVendorMismatchConfirmed" value="0">
                     <div id="ppbjInfo"
                         class="hidden mt-1.5 p-2 bg-sky-50 dark:bg-sky-900/20 border border-sky-200 dark:border-sky-800 rounded-lg">
                         <div class="flex items-start gap-2">
@@ -2578,6 +2596,7 @@
                         @endforeach
                         <option value="__tambah__">➕ Tambah Vendor Baru...</option>
                     </select>
+                    <div id="addSpphVendorRecommendation" class="hidden mt-2"></div>
                     <div id="newVendorBoxSp"
                         class="hidden mt-3 rounded-xl border-2 border-dashed border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-900/20 p-4 space-y-3">
                         <div class="flex items-center justify-between mb-1"><span
@@ -2764,6 +2783,7 @@
                             autocomplete="off">
                     </div>
                     <input type="hidden" name="nomor_pr" id="editNomorPrFinal">
+                    <input type="hidden" name="vendor_mismatch_confirmed" id="editVendorMismatchConfirmed" value="0">
                     <div id="editPpbjInfo"
                         class="hidden mt-1.5 p-2 bg-sky-50 dark:bg-sky-900/20 border border-sky-200 dark:border-sky-800 rounded-lg">
                         <div class="flex items-start gap-2">
@@ -2871,12 +2891,17 @@
                     </div>
                 </div>
 
-                <div><label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Nama Vendor <span
-                            class="text-red-500">*</span></label><select name="nama_vendor" id="editVendorSp" required
-                        class="edit-vendor-sp w-full">
-                        <option value="">-- Pilih Vendor --</option>@foreach($vendors as $v)<option
-                        value="{{ $v->nama_vendor }}">{{ $v->nama_vendor }}</option>@endforeach
-                    </select></div>
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Nama Vendor <span
+                            class="text-red-500">*</span></label>
+                    <select name="nama_vendor" id="editVendorSp" required class="edit-vendor-sp w-full">
+                        <option value="">-- Pilih Vendor --</option>
+                        @foreach($vendors as $v)
+                            <option value="{{ $v->nama_vendor }}">{{ $v->nama_vendor }}</option>
+                        @endforeach
+                    </select>
+                    <div id="editSpphVendorRecommendation" class="hidden mt-2"></div>
+                </div>
                 <div><label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Deskripsi Pengadaan
                         <span class="text-red-500">*</span></label>
                     <div id="editDeskripsiBadge" class="hidden mb-1"></div><textarea name="deskripsi_pengadaan"
@@ -3320,6 +3345,7 @@
                 const s = $('#ppbjSelect').val();
                 if (s) { $('#ppbjSelect').val(null).trigger('change'); }
                 $('#nomorPrManual').val('');
+                renderSpphVendorRecommendation('add', [], null);
                 updatePrFinalValue();
             }
         }
@@ -3357,6 +3383,7 @@
                 const s = $('#editPpbjSelect').val();
                 if (s) { $('#editPpbjSelect').val(null).trigger('change'); }
                 $('#editNomorPrManual').val('');
+                renderSpphVendorRecommendation('edit', [], null);
                 updateEditPrFinalValue();
             }
         }
@@ -3366,6 +3393,7 @@
         // ═══════════════════════════════════════
         function initPpbjSelect2(selector, infoId, statusId, contentId, onChangeCb, deskripsiId, badgeId) {
             const $sel = $(selector);
+            const vendorPrefix = selector === '.edit-sp-ppbj-select' ? 'edit' : 'add';
             $sel.select2({
                 placeholder: $sel.data('placeholder') || 'Pilih No. PPBJ...',
                 allowClear: true, width: '100%', minimumInputLength: 0,
@@ -3375,6 +3403,7 @@
                     const $c = $('<div>').append($('<strong class="font-mono">').text(item.id));
                     if (item.uraian) $c.append($('<br>')).append($('<small>').text(item.uraian).css({ color: '#6b7280' }));
                     if (!item.has_spph) $c.append(' <span style="color:#f59e0b;font-size:10px">⚠️ Belum SPPH</span>');
+                    if (item.spph_vendors && item.spph_vendors.length) $c.append(' <span style="color:#10b981;font-size:10px">✓ ' + item.spph_vendors.length + ' vendor SPPH</span>');
                     return $c;
                 },
                 templateSelection: item => item.id ? $('<span class="font-mono font-semibold">').text(item.id) : item.text
@@ -3399,6 +3428,7 @@
                     if ($npb2) $npb2.addClass('hidden').html('');
                     const $npInput2 = selector === '.sp-ppbj-select' ? $('#nilaiPrInput') : $('#editNilaiPr');
                     if ($npInput2) $npInput2.val('');
+                    renderSpphVendorRecommendation(vendorPrefix, [], null);
                     return;
                 }
                 $status.html('<span class="text-gray-400">🔄 Memeriksa...</span>');
@@ -3411,8 +3441,11 @@
                         if (d.portofolio) html += `<div><strong>Portofolio:</strong> ${d.portofolio}</div>`;
                         if (d.buyer) html += `<div><strong>Buyer:</strong> ${d.buyer}</div>`;
                         if (d.total_sebelum_ppn) html += `<div><strong>Nilai PR (PPBJ):</strong> Rp ${number_format_dots(d.total_sebelum_ppn)}</div>`;
+                        if (d.spph_nomor) html += `<div><strong>SPPH:</strong> <span class="font-mono">${escapedHtml(d.spph_nomor)}</span></div>`;
+                        if (d.spph_vendors && d.spph_vendors.length) html += `<div><strong>Vendor SPPH:</strong> ${d.spph_vendors.map(v => escapedHtml(v)).join(', ')}</div>`;
                         if (d.warnings && d.warnings.length) html += `<div class="text-amber-600 dark:text-amber-400">⚠️ ${d.warnings.join(', ')}</div>`;
                         $content.html(html);
+                        renderSpphVendorRecommendation(vendorPrefix, d.spph_vendors || [], d.spph_nomor || null);
                         if ($deskripsi && d.uraian) {
                             $deskripsi.val(d.uraian);
                             showDeskBadge($badge, d.uraian);
@@ -3436,7 +3469,10 @@
                         let linkedHtml = '';
                         if (d.uraian) linkedHtml += `<div><strong>Uraian:</strong> ${d.uraian}</div>`;
                         if (d.total_sebelum_ppn) linkedHtml += `<div><strong>Nilai PR (PPBJ):</strong> Rp ${number_format_dots(d.total_sebelum_ppn)}</div>`;
+                        if (d.spph_nomor) linkedHtml += `<div><strong>SPPH:</strong> <span class="font-mono">${escapedHtml(d.spph_nomor)}</span></div>`;
+                        if (d.spph_vendors && d.spph_vendors.length) linkedHtml += `<div><strong>Vendor SPPH:</strong> ${d.spph_vendors.map(v => escapedHtml(v)).join(', ')}</div>`;
                         $content.html(linkedHtml);
+                        renderSpphVendorRecommendation(vendorPrefix, d.spph_vendors || [], d.spph_nomor || null);
                         if (!linkedHtml) $info.addClass('hidden');
                         if ($deskripsi && d.uraian) {
                             $deskripsi.val(d.uraian);
@@ -3457,8 +3493,9 @@
                         }
                     } else if (d.status === 'cancelled') {
                         $status.html(`<span class="text-red-600 dark:text-red-400">❌ ${d.message}</span>`); $info.addClass('hidden');
-                    } else { $status.html('<span class="text-blue-600">📝 Manual</span>'); $info.addClass('hidden'); if ($badge) $badge.addClass('hidden').html(''); }
-                }).fail(() => { $status.html('<span class="text-red-600">❌ Gagal</span>'); $info.addClass('hidden'); });
+                        renderSpphVendorRecommendation(vendorPrefix, [], null);
+                    } else { $status.html('<span class="text-blue-600">📝 Manual</span>'); $info.addClass('hidden'); if ($badge) $badge.addClass('hidden').html(''); renderSpphVendorRecommendation(vendorPrefix, [], null); }
+                }).fail(() => { $status.html('<span class="text-red-600">❌ Gagal</span>'); $info.addClass('hidden'); renderSpphVendorRecommendation(vendorPrefix, [], null); });
             });
         }
 
@@ -3469,6 +3506,127 @@
             $b.html(`<span class="deskripsi-autofill-badge"><span>${l}: "${escapedHtml(t)}"</span><button type="button" onclick="$(this).closest('.deskripsi-autofill-badge').remove()" title="Hapus">✕</button></span>`).removeClass('hidden');
         }
         function escapedHtml(s) { return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+
+        const spphVendorState = {
+            add: { vendors: [], spphNomor: null },
+            edit: { vendors: [], spphNomor: null }
+        };
+
+        function normalizeVendorName(value) {
+            return String(value || '').toLowerCase().replace(/\s+/g, ' ').trim();
+        }
+
+        function getSelectedVendorForPrefix(prefix) {
+            return prefix === 'edit' ? ($('#editVendorSp').val() || '') : ($('#vendorSelectSp').val() || '');
+        }
+
+        function getVendorRecommendationTarget(prefix) {
+            return prefix === 'edit' ? $('#editSpphVendorRecommendation') : $('#addSpphVendorRecommendation');
+        }
+
+        function selectRecommendedSpphVendor(prefix, vendor) {
+            const selector = prefix === 'edit' ? '#editVendorSp' : '#vendorSelectSp';
+            const $select = $(selector);
+            if ($select.find(`option[value="${vendor}"]`).length === 0) {
+                const marker = prefix === 'edit' ? null : $select.find('option[value="__tambah__"]');
+                const option = new Option(vendor, vendor, true, true);
+                if (marker && marker.length) marker.before(option); else $select.append(option);
+            }
+            $select.val(vendor).trigger('change');
+            const input = document.getElementById(prefix === 'edit' ? 'editVendorMismatchConfirmed' : 'addVendorMismatchConfirmed');
+            if (input) input.value = '0';
+        }
+
+        function renderSpphVendorRecommendation(prefix, vendors, spphNomor) {
+            const $box = getVendorRecommendationTarget(prefix);
+            spphVendorState[prefix] = {
+                vendors: Array.isArray(vendors) ? vendors.filter(Boolean) : [],
+                spphNomor: spphNomor || null
+            };
+            const input = document.getElementById(prefix === 'edit' ? 'editVendorMismatchConfirmed' : 'addVendorMismatchConfirmed');
+            if (input) input.value = '0';
+
+            if (!$box.length || !spphVendorState[prefix].vendors.length) {
+                $box.addClass('hidden').html('');
+                return;
+            }
+
+            const selected = normalizeVendorName(getSelectedVendorForPrefix(prefix));
+            const isMatched = selected && spphVendorState[prefix].vendors.some(v => normalizeVendorName(v) === selected);
+            const badgeClass = isMatched
+                ? 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-100'
+                : selected
+                    ? 'border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-100'
+                    : 'border-sky-200 bg-sky-50 text-sky-900 dark:border-sky-700 dark:bg-sky-900/30 dark:text-sky-100';
+
+            const vendorButtons = spphVendorState[prefix].vendors.map(v => `
+                <button type="button"
+                    data-spph-vendor="${escapedHtml(v)}"
+                    data-spph-prefix="${prefix}"
+                    class="rounded-full border border-current/20 bg-white/70 dark:bg-slate-950/30 px-2.5 py-1 text-[11px] font-extrabold hover:scale-[1.02] transition">
+                    ${escapedHtml(v)}
+                </button>
+            `).join('');
+
+            $box.removeClass('hidden').html(`
+                <div class="rounded-2xl border ${badgeClass} p-3 shadow-sm">
+                    <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                        <div>
+                            <div class="text-xs font-black uppercase tracking-wide">Rekomendasi vendor dari SPPH</div>
+                            <div class="mt-0.5 text-[11px] font-semibold opacity-80">
+                                ${spphNomor ? `SPPH: <span class="font-mono">${escapedHtml(spphNomor)}</span>` : 'Vendor ini tercatat pada SPPH terkait.'}
+                            </div>
+                        </div>
+                        <span class="rounded-full px-2 py-1 text-[10px] font-black ${isMatched ? 'bg-emerald-600 text-white' : selected ? 'bg-amber-500 text-white' : 'bg-sky-600 text-white'}">
+                            ${isMatched ? 'Sesuai' : selected ? 'Perlu konfirmasi' : 'Pilih salah satu'}
+                        </span>
+                    </div>
+                    <div class="mt-2 flex flex-wrap gap-1.5">${vendorButtons}</div>
+                    ${selected && !isMatched ? '<div class="mt-2 text-[11px] font-bold">Vendor yang dipilih berbeda dari SPPH. Sistem akan minta konfirmasi sebelum disimpan.</div>' : ''}
+                </div>
+            `);
+        }
+
+        function updateSpphVendorRecommendation(prefix) {
+            renderSpphVendorRecommendation(prefix, spphVendorState[prefix].vendors, spphVendorState[prefix].spphNomor);
+        }
+
+        function confirmVendorMismatchBeforeSubmit(prefix, form, event) {
+            const state = spphVendorState[prefix] || { vendors: [] };
+            if (!state.vendors || !state.vendors.length) return false;
+            const input = document.getElementById(prefix === 'edit' ? 'editVendorMismatchConfirmed' : 'addVendorMismatchConfirmed');
+            if (input && input.value === '1') return false;
+
+            const selectedVendor = getSelectedVendorForPrefix(prefix);
+            const isMatched = state.vendors.some(v => normalizeVendorName(v) === normalizeVendorName(selectedVendor));
+            if (!selectedVendor || isMatched) return false;
+
+            event.preventDefault();
+            Swal.fire({
+                icon: 'warning',
+                title: 'Vendor berbeda dari SPPH',
+                html: `
+                    <div class="text-left text-sm leading-relaxed">
+                        <p class="mb-2">Vendor yang dipilih: <strong>${escapedHtml(selectedVendor)}</strong></p>
+                        <p class="mb-2">Vendor pada SPPH ${state.spphNomor ? `<strong>${escapedHtml(state.spphNomor)}</strong>` : 'terkait'}:</p>
+                        <ul class="list-disc pl-5">${state.vendors.map(v => `<li><strong>${escapedHtml(v)}</strong></li>`).join('')}</ul>
+                        <p class="mt-3">Apakah Anda yakin tetap memilih vendor yang berbeda?</p>
+                    </div>
+                `,
+                showCancelButton: true,
+                confirmButtonText: 'Ya, tetap simpan',
+                cancelButtonText: 'Pilih ulang vendor',
+                confirmButtonColor: '#f59e0b',
+                background: document.documentElement.classList.contains('dark') ? '#0f172a' : '#fff',
+                color: document.documentElement.classList.contains('dark') ? '#f8fafc' : '#111827'
+            }).then(result => {
+                if (result.isConfirmed) {
+                    if (input) input.value = '1';
+                    form.requestSubmit();
+                }
+            });
+            return true;
+        }
 
         // ═══════════════════════════════════════
         // FILTER HELPERS
@@ -4194,19 +4352,23 @@
                         $('#editPpbjSelect').append(o).trigger({ type: 'change', _suppressCustom: true });
                         updateEditPrFinalValue();
                         $('#editPpbjStatus').html('<span class="text-green-600 dark:text-green-400">✅ Terhubung dengan PPBJ</span>');
+                        renderSpphVendorRecommendation('edit', d.spph_vendors || [], d.spph_nomor || null);
                     } else {
                         _switchEditPpbjUiOnly('manual');
                         $('#editNomorPrManual').val(nomorPr);
                         updateEditPrFinalValue();
+                        renderSpphVendorRecommendation('edit', [], null);
                     }
                 }).fail(() => {
                     _switchEditPpbjUiOnly('manual');
                     $('#editNomorPrManual').val(nomorPr);
                     updateEditPrFinalValue();
+                    renderSpphVendorRecommendation('edit', [], null);
                 });
             } else {
                 _switchEditPpbjUiOnly('ppbj');
                 $('#editNomorPrFinal').val('');
+                renderSpphVendorRecommendation('edit', [], null);
             }
 
             const $ev = $('#editVendorSp'), $ep = $('#editPicSp');
@@ -4228,6 +4390,8 @@
             $('#editPpbjInfo').addClass('hidden');
             $('#editPpbjStatus').html('');
             $('#editNomorPrFinal').val('');
+            $('#editVendorMismatchConfirmed').val('0');
+            renderSpphVendorRecommendation('edit', [], null);
         }
 
         // ── Helper: toggle UI mode PPBJ/manual tanpa clear field ──
@@ -4870,6 +5034,8 @@
                 $('#ppbjInfo').addClass('hidden');
                 $('#ppbjStatus').html('');
                 $('#nomorPrFinal').val('');
+                $('#addVendorMismatchConfirmed').val('0');
+                renderSpphVendorRecommendation('add', [], null);
                 restoreSpModeDraftToAdd();
                 updateOracleReadinessChecklist('add');
             });
@@ -4878,6 +5044,13 @@
             $('#vendorSelectSp').on('change', function () {
                 if ($(this).val() === '__tambah__') { document.getElementById('newVendorBoxSp').classList.remove('hidden'); document.getElementById('newVendorNama').focus(); }
                 else { document.getElementById('newVendorBoxSp').classList.add('hidden'); resetNewVendorForm(); }
+                updateSpphVendorRecommendation('add');
+            });
+            $('#editVendorSp').on('change', function () {
+                updateSpphVendorRecommendation('edit');
+            });
+            $(document).on('click', '[data-spph-vendor]', function () {
+                selectRecommendedSpphVendor($(this).data('spph-prefix'), $(this).data('spph-vendor'));
             });
 
             // Nomor check
@@ -4894,6 +5067,9 @@
                     return;
                 }
                 updatePrFinalValue();
+                if (confirmVendorMismatchBeforeSubmit('add', this, e)) {
+                    return;
+                }
                 if (!updateSpModeGuard('add')) {
                     e.preventDefault();
                     Swal.fire({
@@ -4940,6 +5116,9 @@
                 }
 
                 updateEditPrFinalValue();
+                if (confirmVendorMismatchBeforeSubmit('edit', this, e)) {
+                    return;
+                }
                 if (!updateSpModeGuard('edit')) {
                     e.preventDefault();
                     Swal.fire({
