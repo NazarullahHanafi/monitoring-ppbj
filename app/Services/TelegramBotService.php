@@ -68,6 +68,9 @@ class TelegramBotService
             '/locked_users', 'locked_users',
             '/audit_today', 'audit_today',
             '/security_today', 'security_today',
+            '/maintenance_message', 'maintenance_message',
+            '/maintenance_for', 'maintenance_for',
+            '/maintenance_status', 'maintenance_status',
         ];
 
         if (in_array($command, $ownerOnlyCommands, true) && ! $this->isOwnerActor($fromId)) {
@@ -87,6 +90,9 @@ class TelegramBotService
             '/locked_users', 'locked_users' => $this->sendMessage($chatId, $this->lockedUsersText()),
             '/audit_today', 'audit_today' => $this->sendMessage($chatId, $this->auditTodayText()),
             '/security_today', 'security_today' => $this->sendMessage($chatId, $this->securityTodayText()),
+            '/maintenance_message', 'maintenance_message' => $this->sendMessage($chatId, $this->maintenanceMessageByCommand($text)),
+            '/maintenance_for', 'maintenance_for' => $this->sendMessage($chatId, $this->maintenanceForByCommand($text)),
+            '/maintenance_status', 'maintenance_status' => $this->sendMessage($chatId, $this->maintenanceStatusText()),
             '/force_logout_user', 'force_logout_user' => $this->sendMessage($chatId, $this->forceLogoutUserByCommand($text, $fromId)),
             '/lock_user', 'lock_user' => $this->sendMessage($chatId, $this->lockUserByCommand($text, $fromId)),
             '/unlock_user', 'unlock_user' => $this->sendMessage($chatId, $this->unlockUserByCommand($text, $fromId)),
@@ -280,6 +286,9 @@ class TelegramBotService
             ['command' => 'locked_users', 'description' => 'Owner: daftar akun terkunci'],
             ['command' => 'audit_today', 'description' => 'Owner: ringkasan audit hari ini'],
             ['command' => 'security_today', 'description' => 'Owner: pantauan keamanan hari ini'],
+            ['command' => 'maintenance_message', 'description' => 'Owner: set alasan maintenance'],
+            ['command' => 'maintenance_for', 'description' => 'Owner: maintenance durasi + alasan'],
+            ['command' => 'maintenance_status', 'description' => 'Owner: cek countdown maintenance'],
             ['command' => 'force_logout_user', 'description' => 'Owner: paksa logout user by email'],
             ['command' => 'lock_user', 'description' => 'Owner: kunci akun user by email'],
             ['command' => 'unlock_user', 'description' => 'Owner: buka kunci akun user by email'],
@@ -344,6 +353,9 @@ class TelegramBotService
 
         $message = match ($data) {
             'ops:maintenance:on' => $this->setMaintenanceMode(true),
+            'ops:maintenance:10' => $this->setMaintenanceForMinutes(10),
+            'ops:maintenance:30' => $this->setMaintenanceForMinutes(30),
+            'ops:maintenance:60' => $this->setMaintenanceForMinutes(60),
             'ops:maintenance:off' => $this->setMaintenanceMode(false),
             'ops:readonly:on' => $this->setReadOnlyMode(true),
             'ops:readonly:off' => $this->setReadOnlyMode(false),
@@ -381,6 +393,11 @@ class TelegramBotService
                         'text' => $maintenanceOn ? '✅ Hidupkan Website' : '🛠️ Matikan Website 503',
                         'callback_data' => $maintenanceOn ? 'ops:maintenance:off' : 'ops:maintenance:on',
                     ],
+                ],
+                [
+                    ['text' => 'Maintenance 10m', 'callback_data' => 'ops:maintenance:10'],
+                    ['text' => '30m', 'callback_data' => 'ops:maintenance:30'],
+                    ['text' => '60m', 'callback_data' => 'ops:maintenance:60'],
                 ],
                 [
                     [
@@ -1190,7 +1207,117 @@ class TelegramBotService
         return "{$name} ({$role}/{$department}) - {$seenText}";
     }
 
-    private function setMaintenanceMode(bool $enabled): string
+    private function maintenanceMessageByCommand(string $text): string
+    {
+        $message = trim(Str::of($text)->after(' ')->toString());
+
+        if ($message === '') {
+            return "Format salah.\nContoh: /maintenance_message Update fitur laporan, estimasi 10 menit.";
+        }
+
+        Cache::forever('simonpr:maintenance_message', Str::limit($message, 500, ''));
+        Cache::forever('simonpr:maintenance_message_changed_at', now()->toIso8601String());
+
+        return implode("\n", [
+            'Pesan maintenance berhasil disimpan.',
+            'Pesan: '.Str::limit($message, 300),
+            '',
+            'Untuk langsung maintenance dengan durasi:',
+            '/maintenance_for 10 '.$message,
+        ]);
+    }
+
+    private function maintenanceForByCommand(string $text): string
+    {
+        $payload = trim(Str::of($text)->after(' ')->toString());
+
+        if (! preg_match('/^(\d{1,4})(?:\s+(.+))?$/u', $payload, $matches)) {
+            return "Format salah.\nContoh: /maintenance_for 10 Update database dan clear cache.";
+        }
+
+        $minutes = max(1, min((int) $matches[1], 1440));
+        $message = trim((string) ($matches[2] ?? ''));
+
+        return $this->setMaintenanceForMinutes($minutes, $message !== '' ? $message : null);
+    }
+
+    private function maintenanceStatusText(): string
+    {
+        $enabled = (bool) Cache::get('simonpr:maintenance_mode', false);
+        $until = $this->maintenanceUntil();
+        $message = trim((string) Cache::get('simonpr:maintenance_message', '')) ?: '-';
+        $changedAt = $this->parseCacheTime(Cache::get('simonpr:maintenance_changed_at'));
+        $remaining = $until ? max(0, now()->diffInSeconds($until, false)) : null;
+
+        return implode("\n", [
+            'Status maintenance SIMONPR',
+            'Website: '.($enabled ? 'MAINTENANCE 503' : 'LIVE'),
+            'Pesan: '.Str::limit($message, 300),
+            'Mulai/diubah: '.($changedAt ? $changedAt->translatedFormat('l, d F Y H:i:s').' WIB' : '-'),
+            'Selesai otomatis: '.($until ? $until->translatedFormat('l, d F Y H:i:s').' WIB' : '-'),
+            'Sisa waktu: '.($remaining !== null ? $this->humanDuration($remaining) : '-'),
+            '',
+            'Command cepat:',
+            '/maintenance_for 10 alasan maintenance',
+            '/maintenance_message alasan default',
+        ]);
+    }
+
+    private function setMaintenanceForMinutes(int $minutes, ?string $message = null): string
+    {
+        $minutes = max(1, min($minutes, 1440));
+        $until = now()->addMinutes($minutes);
+
+        Cache::forever('simonpr:maintenance_mode', true);
+        Cache::forever('simonpr:maintenance_changed_at', now()->toIso8601String());
+        Cache::forever('simonpr:maintenance_until', $until->toIso8601String());
+
+        if ($message !== null && trim($message) !== '') {
+            Cache::forever('simonpr:maintenance_message', Str::limit(trim($message), 500, ''));
+        } elseif (! Cache::has('simonpr:maintenance_message')) {
+            Cache::forever('simonpr:maintenance_message', 'Maintenance sistem sedang berlangsung agar website tetap aman dan stabil.');
+        }
+
+        return implode("\n", [
+            'Website dimatikan ke mode maintenance 503.',
+            'Durasi: '.$minutes.' menit',
+            'Selesai otomatis: '.$until->translatedFormat('l, d F Y H:i:s').' WIB',
+            'Sisa waktu: '.$this->humanDuration(max(0, now()->diffInSeconds($until, false))),
+            'Pesan: '.Str::limit((string) Cache::get('simonpr:maintenance_message'), 260),
+            '',
+            'Telegram tetap aktif untuk kontrol. Cek dengan /maintenance_status.',
+        ]);
+    }
+
+    private function maintenanceUntil(): ?\Illuminate\Support\Carbon
+    {
+        return $this->parseCacheTime(Cache::get('simonpr:maintenance_until'));
+    }
+
+    private function parseCacheTime(mixed $value): ?\Illuminate\Support\Carbon
+    {
+        if (! $value) {
+            return null;
+        }
+
+        try {
+            return \Illuminate\Support\Carbon::parse((string) $value);
+        } catch (Throwable) {
+            return null;
+        }
+    }
+
+    private function humanDuration(int $seconds): string
+    {
+        $seconds = max(0, $seconds);
+        $hours = intdiv($seconds, 3600);
+        $minutes = intdiv($seconds % 3600, 60);
+        $remainingSeconds = $seconds % 60;
+
+        return sprintf('%02d jam %02d menit %02d detik', $hours, $minutes, $remainingSeconds);
+    }
+
+    private function setMaintenanceMode(bool $enabled, ?int $minutes = null, ?string $message = null): string
     {
         if ($enabled) {
             Cache::forever('simonpr:maintenance_mode', true);
@@ -1200,6 +1327,7 @@ class TelegramBotService
         }
 
         Cache::forget('simonpr:maintenance_mode');
+        Cache::forget('simonpr:maintenance_until');
         Cache::forever('simonpr:maintenance_changed_at', now()->toIso8601String());
 
         return '✅ Website dihidupkan kembali. User sudah bisa akses normal.';

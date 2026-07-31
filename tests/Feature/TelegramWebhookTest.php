@@ -401,17 +401,73 @@ class TelegramWebhookTest extends TestCase
         });
     }
 
+    public function test_telegram_owner_can_set_maintenance_message_and_duration(): void
+    {
+        config()->set('services.telegram.bot_token', 'TEST_TOKEN');
+        config()->set('services.telegram.webhook_secret', 'secret-ok');
+        config()->set('services.telegram.allowed_chat_ids', '12345');
+        config()->set('services.telegram.owner_chat_ids', '1191851650');
+
+        Http::fake([
+            'https://api.telegram.org/*' => Http::response(['ok' => true], 200),
+        ]);
+
+        $this->postJson('/telegram/webhook/secret-ok', [
+            'message' => [
+                'chat' => ['id' => 12345],
+                'from' => ['id' => 1191851650],
+                'text' => '/maintenance_message Update fitur laporan supaya makin cakep.',
+            ],
+        ])->assertOk();
+
+        $this->assertSame('Update fitur laporan supaya makin cakep.', Cache::get('simonpr:maintenance_message'));
+
+        $this->postJson('/telegram/webhook/secret-ok', [
+            'message' => [
+                'chat' => ['id' => 12345],
+                'from' => ['id' => 1191851650],
+                'text' => '/maintenance_for 10 Update database sebentar.',
+            ],
+        ])->assertOk();
+
+        $this->assertTrue((bool) Cache::get('simonpr:maintenance_mode'));
+        $this->assertSame('Update database sebentar.', Cache::get('simonpr:maintenance_message'));
+        $this->assertNotNull(Cache::get('simonpr:maintenance_until'));
+
+        $this->postJson('/telegram/webhook/secret-ok', [
+            'message' => [
+                'chat' => ['id' => 12345],
+                'from' => ['id' => 1191851650],
+                'text' => '/maintenance_status',
+            ],
+        ])->assertOk();
+
+        Http::assertSent(function ($request) {
+            $body = (string) $request->body();
+
+            return str_contains($body, 'Status+maintenance+SIMONPR')
+                && str_contains($body, 'Update+database+sebentar');
+        });
+    }
+
     public function test_soft_maintenance_blocks_website_but_keeps_telegram_webhook_open(): void
     {
         config()->set('services.telegram.webhook_secret', 'secret-ok');
 
         Cache::forever('simonpr:maintenance_mode', true);
+        Cache::forever('simonpr:maintenance_message', 'Maintenance test dengan alasan jelas.');
+        Cache::forever('simonpr:maintenance_until', now()->addMinutes(10)->toIso8601String());
 
-        $this->get('/')->assertStatus(503);
+        $this->get('/')
+            ->assertStatus(503)
+            ->assertSee('Maintenance test dengan alasan jelas.')
+            ->assertSee('data-remaining', false);
 
         $this->postJson('/telegram/webhook/wrong-secret', [])
             ->assertNotFound();
 
         Cache::forget('simonpr:maintenance_mode');
+        Cache::forget('simonpr:maintenance_message');
+        Cache::forget('simonpr:maintenance_until');
     }
 }
