@@ -1743,13 +1743,14 @@
 
                     item.append(info);
 
-                    if (documentItem.download_url) {
+                    const previewUrl = documentItem.preview_url || documentItem.download_url;
+                    if (previewUrl) {
                         const link = document.createElement('a');
-                        link.href = documentItem.download_url;
+                        link.href = previewUrl;
                         link.target = '_blank';
                         link.rel = 'noopener noreferrer';
                         link.className = 'inline-flex shrink-0 items-center rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-blue-700';
-                        link.textContent = 'Lihat PDF';
+                        link.textContent = 'Preview';
                         item.append(link);
                     }
 

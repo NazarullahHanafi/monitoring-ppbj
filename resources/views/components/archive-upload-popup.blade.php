@@ -106,7 +106,7 @@
                         throw new Error(data.message || 'Upload ke Sistem Arsip belum berhasil.');
                     }
 
-                    const previewUrl = data.document?.download_url;
+                    const previewUrl = data.document?.preview_url || data.document?.download_url;
                     await Swal.fire({
                         icon: 'success',
                         title: 'Lampiran masuk arsip',

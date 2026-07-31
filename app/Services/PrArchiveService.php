@@ -208,6 +208,9 @@ class PrArchiveService
                     ?? $item['link']
                     ?? $item['path']
                     ?? null;
+                $previewUrl = $item['preview_url']
+                    ?? $item['view_url']
+                    ?? $url;
 
                 return [
                     'id' => $item['id'] ?? null,
@@ -221,6 +224,7 @@ class PrArchiveService
                     'date' => $item['date'] ?? $item['uploaded_at'] ?? $item['created_at'] ?? null,
                     'size' => $item['size_label'] ?? $item['size'] ?? null,
                     'location' => $this->normaliseLocation($item),
+                    'preview_url' => $this->normaliseUrl($previewUrl, $baseUrl),
                     'download_url' => $this->normaliseUrl($url, $baseUrl),
                 ];
             })
