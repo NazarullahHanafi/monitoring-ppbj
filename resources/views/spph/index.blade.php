@@ -3257,6 +3257,8 @@
         const PPBJ_OPTIONS_URL = '{{ route("spph.ppbj-options") }}';
         const PPBJ_CHECK_URL = '{{ route("spph.check-ppbj") }}';
         const SATUANS = @json($satuans);
+        const SATUAN_STORE_URL = '{{ route("satuan.store") }}';
+        const ADD_SATUAN_VALUE = '__add_satuan__';
         const VENDOR_USAGE_STATS = @json($vendorUsageStats ?? []);
 
         let lastId = {{ $spphs->count() > 0 ? $spphs->max('id') : 0 }};
@@ -3975,11 +3977,106 @@
             row.remove(); renumber(wrapper);
         }
 
-        function buildSatOpts(s) { return SATUANS.map(v => `<option value="${escapedHtml(v)}"${v === s ? ' selected' : ''}>${escapedHtml(v)}</option>`).join(''); }
+        function buildSatOpts(s) {
+            const options = SATUANS.map(v => `<option value="${escapedHtml(v)}"${v === s ? ' selected' : ''}>${escapedHtml(v)}</option>`).join('');
+            return `${options}<option value="${ADD_SATUAN_VALUE}">+ Tambah satuan baru...</option>`;
+        }
+
+        function normalizeSatuanName(value) {
+            return String(value || '').trim().replace(/\s+/g, ' ');
+        }
+
+        function refreshSatuanSelects(targetSelect = null, selectedValue = '') {
+            document.querySelectorAll('select[name$="[satuan]"]').forEach(select => {
+                const keep = select === targetSelect ? selectedValue : select.value;
+                select.innerHTML = `<option value="">-- Pilih --</option>${buildSatOpts(keep)}`;
+                if (keep && keep !== ADD_SATUAN_VALUE) select.value = keep;
+            });
+        }
+
+        async function quickAddSatuan(selectEl) {
+            const previousValue = selectEl.dataset.previousValue || '';
+            const result = await Swal.fire({
+                title: 'Tambah satuan baru',
+                html: '<div class="text-sm text-slate-600 dark:text-slate-300">Masukkan satuan yang belum ada, misalnya <b>Roll</b>, <b>Lot</b>, atau <b>Dus</b>.</div>',
+                input: 'text',
+                inputPlaceholder: 'Contoh: Roll',
+                showCancelButton: true,
+                confirmButtonText: 'Simpan Satuan',
+                cancelButtonText: 'Batal',
+                customClass: { popup: 'rounded-2xl' },
+                inputValidator: value => {
+                    const name = normalizeSatuanName(value);
+                    if (!name) return 'Nama satuan wajib diisi.';
+                    if (name.length > 100) return 'Nama satuan maksimal 100 karakter.';
+                    if (SATUANS.some(v => normalizeSatuanName(v).toLowerCase() === name.toLowerCase())) return 'Satuan ini sudah ada.';
+                    return null;
+                }
+            });
+
+            if (!result.isConfirmed) {
+                selectEl.value = previousValue;
+                return;
+            }
+
+            const satuanName = normalizeSatuanName(result.value);
+
+            try {
+                const response = await fetch(SATUAN_STORE_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Accept': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || '{{ csrf_token() }}'
+                    },
+                    body: new URLSearchParams({ nama_satuan: satuanName })
+                });
+
+                if (!response.ok) {
+                    const error = await response.json().catch(() => ({}));
+                    throw new Error(error?.message || error?.errors?.nama_satuan?.[0] || 'Satuan gagal disimpan.');
+                }
+
+                if (!SATUANS.some(v => normalizeSatuanName(v).toLowerCase() === satuanName.toLowerCase())) {
+                    SATUANS.push(satuanName);
+                    SATUANS.sort((a, b) => String(a).localeCompare(String(b), 'id', { sensitivity: 'base' }));
+                }
+
+                refreshSatuanSelects(selectEl, satuanName);
+                Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: `Satuan "${satuanName}" ditambahkan`, showConfirmButton: false, timer: 2200 });
+            } catch (error) {
+                selectEl.value = previousValue;
+                Swal.fire('Gagal menambah satuan', error.message || 'Silakan coba lagi.', 'error');
+            }
+        }
+
+        function getDefaultFulfillmentDate(mode) {
+            const first = document.querySelector(`#${mode === 'add' ? 'addRows' : 'editRows'} input[name$="[tgl_pemenuhan]"]`);
+            return first?.value || '';
+        }
+
+        function syncFulfillmentFromFirst(inputEl) {
+            const wrapper = inputEl.closest('#addRows, #editRows');
+            if (!wrapper) return;
+            const inputs = Array.from(wrapper.querySelectorAll('input[name$="[tgl_pemenuhan]"]'));
+            if (inputs[0] !== inputEl) {
+                inputEl.dataset.followFirstDate = '0';
+                return;
+            }
+            inputs.slice(1).forEach(input => {
+                if (input.dataset.followFirstDate !== '0') {
+                    input.value = inputEl.value;
+                    input.dataset.followFirstDate = '1';
+                }
+            });
+        }
+
         function addRow(mode, item = null) {
             const wrapper = document.getElementById(mode === 'add' ? 'addRows' : 'editRows'), idx = mode === 'add' ? addIdx++ : editIdx++;
             const ns = mode === 'add' ? 'a' : 'e', rowNum = wrapper.querySelectorAll('.item-row').length + 1, edId = `rt-${ns}-${idx}`;
-            wrapper.insertAdjacentHTML('beforeend', `<div class="item-row" data-idx="${idx}"><span class="row-badge">${rowNum}</span><button type="button" class="btn-rm" onclick="removeRow(this)">×</button><div class="mt-1.5"><span class="item-label">Nama Barang / Jasa</span>${buildRtToolbar(edId)}<div class="rt-editor" contenteditable="true" id="${edId}" data-ph="Ketik nama barang / jasa..."></div><input type="hidden" name="items[${idx}][nama_barang]" id="hid-${edId}"></div><div class="item-grid mt-1.5"><div><span class="item-label">Satuan</span><select name="items[${idx}][satuan]" class="m-select" style="width:100%"><option value="">— Pilih —</option>${buildSatOpts(item?.satuan || '')}</select></div><div><span class="item-label">Jumlah</span><input type="text" name="items[${idx}][jumlah]" value="${escapedHtml(item?.jumlah || '')}" placeholder="cth: 10" class="m-input"></div><div><span class="item-label">Tgl. Pemenuhan</span><input type="date" name="items[${idx}][tgl_pemenuhan]" value="${escapedHtml(item?.tgl_pemenuhan ? item.tgl_pemenuhan.substring(0, 10) : '')}" class="m-input"></div></div></div>`);
+            const pemenuhanValue = item?.tgl_pemenuhan ? item.tgl_pemenuhan.substring(0, 10) : (rowNum > 1 ? getDefaultFulfillmentDate(mode) : '');
+            const followFirstDate = item?.tgl_pemenuhan ? '0' : (rowNum > 1 && pemenuhanValue ? '1' : '');
+            wrapper.insertAdjacentHTML('beforeend', `<div class="item-row" data-idx="${idx}"><span class="row-badge">${rowNum}</span><button type="button" class="btn-rm" onclick="removeRow(this)">×</button><div class="mt-1.5"><span class="item-label">Nama Barang / Jasa</span>${buildRtToolbar(edId)}<div class="rt-editor" contenteditable="true" id="${edId}" data-ph="Ketik nama barang / jasa..."></div><input type="hidden" name="items[${idx}][nama_barang]" id="hid-${edId}"></div><div class="item-grid mt-1.5"><div><span class="item-label">Satuan</span><select name="items[${idx}][satuan]" class="m-select" style="width:100%"><option value="">-- Pilih --</option>${buildSatOpts(item?.satuan || '')}</select></div><div><span class="item-label">Jumlah</span><input type="text" name="items[${idx}][jumlah]" value="${escapedHtml(item?.jumlah || '')}" placeholder="cth: 10" class="m-input"></div><div><span class="item-label">Tgl. Pemenuhan</span><input type="date" name="items[${idx}][tgl_pemenuhan]" value="${escapedHtml(pemenuhanValue)}" data-follow-first-date="${followFirstDate}" class="m-input"></div></div></div>`);
             renumber(wrapper); initRt(edId); if (item?.nama_barang) setRt(edId, item.nama_barang);
         }
         function renumber(w) { w.querySelectorAll('.item-row .row-badge').forEach((b, i) => b.textContent = i + 1); }
@@ -4485,6 +4582,22 @@
 
             $('#vendorSelect').on('change', () => renderVendorUsagePanel('vendorSelect', 'vendorUsagePanel'));
             $('#editVendor').on('change', () => renderVendorUsagePanel('editVendor', 'editVendorUsagePanel'));
+
+            $(document).on('focus', 'select[name$="[satuan]"]', function () {
+                this.dataset.previousValue = this.value || '';
+            });
+
+            $(document).on('change', 'select[name$="[satuan]"]', function () {
+                if (this.value === ADD_SATUAN_VALUE) {
+                    quickAddSatuan(this);
+                } else {
+                    this.dataset.previousValue = this.value || '';
+                }
+            });
+
+            $(document).on('change', '#addRows input[name$="[tgl_pemenuhan]"], #editRows input[name$="[tgl_pemenuhan]"]', function () {
+                syncFulfillmentFromFirst(this);
+            });
 
             // MANUAL INPUT CHECK (ADD)
             $('#nomorPrManual').on('input', function () {

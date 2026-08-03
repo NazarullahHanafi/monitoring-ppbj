@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Satuan;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Validation\Rule;
 
 class SatuanController extends Controller
@@ -21,10 +22,24 @@ class SatuanController extends Controller
             'keterangan'  => 'nullable|string|max:255',
         ]);
 
-        Satuan::create([
+        $satuan = Satuan::create([
             'nama_satuan' => trim($request->nama_satuan),
             'keterangan'  => $request->keterangan ? trim($request->keterangan) : null,
         ]);
+
+        Cache::forget('satuans:all');
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Satuan berhasil ditambahkan!',
+                'satuan' => [
+                    'id' => $satuan->id,
+                    'nama_satuan' => $satuan->nama_satuan,
+                    'keterangan' => $satuan->keterangan,
+                ],
+            ], 201);
+        }
 
         return redirect()->route('satuan.index')->with('success', 'Satuan berhasil ditambahkan!');
     }
@@ -41,12 +56,27 @@ class SatuanController extends Controller
             'keterangan'  => $request->keterangan ? trim($request->keterangan) : null,
         ]);
 
+        Cache::forget('satuans:all');
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Satuan berhasil diperbarui!',
+                'satuan' => [
+                    'id' => $satuan->id,
+                    'nama_satuan' => $satuan->nama_satuan,
+                    'keterangan' => $satuan->keterangan,
+                ],
+            ]);
+        }
+
         return redirect()->route('satuan.index')->with('success', 'Satuan berhasil diperbarui!');
     }
 
     public function destroy(Satuan $satuan)
     {
         $satuan->delete();
+        Cache::forget('satuans:all');
         return redirect()->route('satuan.index')->with('success', 'Satuan berhasil dihapus!');
     }
 
