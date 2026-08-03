@@ -16,6 +16,110 @@
             border-color: rgba(71, 85, 105, .95) !important;
         }
 
+        .vendor-usage-panel {
+            margin-top: .7rem;
+            display: grid;
+            gap: .55rem;
+        }
+
+        .vendor-usage-card {
+            border: 1px solid #dbeafe;
+            border-radius: 1rem;
+            background: linear-gradient(135deg, #eff6ff 0%, #f8fafc 100%);
+            color: #0f172a;
+            padding: .72rem .82rem;
+            box-shadow: 0 12px 28px rgba(37, 99, 235, .08);
+        }
+
+        .dark .vendor-usage-card {
+            border-color: rgba(96, 165, 250, .35);
+            background: linear-gradient(135deg, rgba(30, 41, 59, .96) 0%, rgba(15, 23, 42, .96) 100%);
+            color: #f8fafc;
+            box-shadow: 0 14px 30px rgba(0, 0, 0, .28);
+        }
+
+        .vendor-usage-name {
+            color: #0f172a;
+            font-size: .78rem;
+            font-weight: 950;
+            line-height: 1.35;
+        }
+
+        .dark .vendor-usage-name {
+            color: #f8fafc;
+        }
+
+        .vendor-usage-count {
+            display: inline-flex;
+            align-items: center;
+            gap: .25rem;
+            border-radius: 999px;
+            background: #2563eb;
+            color: #fff;
+            padding: .2rem .52rem;
+            font-size: .68rem;
+            font-weight: 950;
+            white-space: nowrap;
+        }
+
+        .vendor-usage-meta {
+            margin-top: .45rem;
+            display: flex;
+            flex-wrap: wrap;
+            gap: .35rem;
+            color: #475569;
+            font-size: .68rem;
+            font-weight: 800;
+        }
+
+        .dark .vendor-usage-meta {
+            color: #cbd5e1;
+        }
+
+        .vendor-usage-pill {
+            border: 1px solid rgba(148, 163, 184, .35);
+            border-radius: 999px;
+            background: rgba(255, 255, 255, .72);
+            padding: .18rem .48rem;
+        }
+
+        .dark .vendor-usage-pill {
+            background: rgba(15, 23, 42, .68);
+            border-color: rgba(148, 163, 184, .28);
+        }
+
+        .vendor-usage-hint {
+            margin-top: .5rem;
+            color: #334155;
+            font-size: .69rem;
+            line-height: 1.5;
+            font-weight: 750;
+        }
+
+        .dark .vendor-usage-hint {
+            color: #dbeafe;
+        }
+
+        .vendor-usage-card.status-sering {
+            border-color: #f97316;
+            background: linear-gradient(135deg, #fff7ed 0%, #fff 100%);
+        }
+
+        .dark .vendor-usage-card.status-sering {
+            border-color: rgba(251, 146, 60, .7);
+            background: linear-gradient(135deg, rgba(67, 20, 7, .82) 0%, rgba(15, 23, 42, .96) 100%);
+        }
+
+        .vendor-usage-card.status-baru {
+            border-color: #34d399;
+            background: linear-gradient(135deg, #ecfdf5 0%, #f8fafc 100%);
+        }
+
+        .dark .vendor-usage-card.status-baru {
+            border-color: rgba(52, 211, 153, .62);
+            background: linear-gradient(135deg, rgba(6, 78, 59, .55) 0%, rgba(15, 23, 42, .96) 100%);
+        }
+
         .secure-delete-popup .swal2-title,
         .secure-delete-popup .swal2-html-container {
             color: #0f172a !important;
@@ -2637,6 +2741,7 @@
                         @endforeach
                         <option value="__tambah__">➕ Tambah Vendor Baru...</option>
                     </select>
+                    <div id="vendorUsagePanel" class="vendor-usage-panel hidden"></div>
                     <div class="mt-2">
                         <button type="button" id="toggleNewVendorSpph"
                             class="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-700 text-xs font-bold hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition">
@@ -2710,7 +2815,6 @@
                         </button>
                     </div>
                 </div>
-
                 <div class="form-group">
                     <label>Deskripsi Pengadaan <span class="text-red-500">*</span></label>
                     <div id="addDeskripsiBadge" class="hidden mb-1"></div>
@@ -2820,6 +2924,7 @@
                         @foreach($vendors as $v)<option value="{{ $v->nama_vendor }}">{{ $v->nama_vendor }}</option>
                         @endforeach
                     </select>
+                    <div id="editVendorUsagePanel" class="vendor-usage-panel hidden"></div>
                 </div>
                 <div class="form-group">
                     <label>Deskripsi Pengadaan <span class="text-red-500">*</span></label>
@@ -3152,6 +3257,7 @@
         const PPBJ_OPTIONS_URL = '{{ route("spph.ppbj-options") }}';
         const PPBJ_CHECK_URL = '{{ route("spph.check-ppbj") }}';
         const SATUANS = @json($satuans);
+        const VENDOR_USAGE_STATS = @json($vendorUsageStats ?? []);
 
         let lastId = {{ $spphs->count() > 0 ? $spphs->max('id') : 0 }};
         let pollTimer = null, checkTimer = null, searchTimer = null, presTimer = null, hbTimer = null;
@@ -3511,6 +3617,8 @@
             addRow('add');
             document.getElementById('addForm').reset();
             document.getElementById('nomorStatus').innerHTML = '';
+            $('#vendorSelect').val(null).trigger('change');
+            renderVendorUsagePanel('vendorSelect', 'vendorUsagePanel');
 
             $('#addDeskripsi').val('');
             $('#addDeskripsiBadge').addClass('hidden').html('');
@@ -4141,6 +4249,90 @@
             el.textContent = message;
         }
 
+        function vendorUsageKey(name) {
+            return String(name || '').trim().toLowerCase().replace(/\s+/g, ' ');
+        }
+
+        function vendorUsageFor(name) {
+            const key = vendorUsageKey(name);
+            return VENDOR_USAGE_STATS[key] || {
+                name,
+                spph_count: 0,
+                sp_count: 0,
+                total_count: 0,
+                last_used_label: '-',
+                last_document: null,
+                status: 'baru',
+                hint: 'Vendor belum tercatat di SPPH/SP. Cocok untuk opsi baru, tetap cek profil vendor sebelum dipakai.'
+            };
+        }
+
+        function vendorUsageBadgeText(name) {
+            if (!name || name === '__tambah__') return '';
+            const usage = vendorUsageFor(name);
+            return `${Number(usage.total_count || 0)}x`;
+        }
+
+        function vendorUsageOptionTemplate(item) {
+            if (!item.id) return item.text || '';
+            if (item.id === '__tambah__') return $('<span class="font-semibold text-emerald-600 dark:text-emerald-300">').text(item.text || 'Tambah Vendor Baru...');
+
+            const usage = vendorUsageFor(item.id);
+            const $wrap = $('<div class="flex items-start justify-between gap-3">');
+            const $left = $('<div class="min-w-0">')
+                .append($('<div class="font-bold text-slate-800 dark:text-slate-100 truncate">').text(item.text || item.id))
+                .append($('<div class="text-[11px] text-slate-500 dark:text-slate-300 mt-0.5">').text(`SPPH ${usage.spph_count || 0}x | SP ${usage.sp_count || 0}x${usage.last_document ? ' | terakhir ' + usage.last_document : ''}`));
+            const $badge = $('<span class="shrink-0 rounded-full px-2 py-0.5 text-[11px] font-black bg-blue-600 text-white">').text(`${usage.total_count || 0}x`);
+
+            return $wrap.append($left).append($badge);
+        }
+
+        function vendorUsageSelectionTemplate(item) {
+            if (!item.id) return $('<span>').text(item.text || '');
+            if (item.id === '__tambah__') return $('<span>').text(item.text || 'Tambah Vendor Baru...');
+            return $('<span>').text(`${item.text || item.id} | ${vendorUsageBadgeText(item.id)}`);
+        }
+
+        function renderVendorUsagePanel(selectId, panelId) {
+            const selected = $(`#${selectId}`).val() || [];
+            const panel = document.getElementById(panelId);
+            if (!panel) return;
+
+            const vendors = selected.filter(vendor => vendor && vendor !== '__tambah__');
+            if (!vendors.length) {
+                panel.classList.add('hidden');
+                panel.innerHTML = '';
+                return;
+            }
+
+            panel.classList.remove('hidden');
+            panel.innerHTML = vendors.map(vendor => {
+                const usage = vendorUsageFor(vendor);
+                const statusClass = `status-${usage.status || 'normal'}`;
+                const filterUrl = `/spph?vendor=${encodeURIComponent(vendor)}`;
+                return `
+                    <div class="vendor-usage-card ${statusClass}">
+                        <div class="flex items-start justify-between gap-3">
+                            <div class="min-w-0">
+                                <div class="vendor-usage-name">${escapedHtml(vendor)}</div>
+                                <div class="vendor-usage-meta">
+                                    <span class="vendor-usage-pill">SPPH: ${Number(usage.spph_count || 0)}x</span>
+                                    <span class="vendor-usage-pill">SP: ${Number(usage.sp_count || 0)}x</span>
+                                    <span class="vendor-usage-pill">Terakhir: ${escapedHtml(usage.last_used_label || '-')}</span>
+                                    ${usage.last_document ? `<span class="vendor-usage-pill">Dok: ${escapedHtml(usage.last_document)}</span>` : ''}
+                                </div>
+                            </div>
+                            <span class="vendor-usage-count">${Number(usage.total_count || 0)}x total</span>
+                        </div>
+                        <div class="vendor-usage-hint">${escapedHtml(usage.hint || 'Riwayat vendor siap dipakai untuk audit.')}</div>
+                        <a href="${filterUrl}" target="_blank" rel="noopener" class="inline-flex mt-2 text-[11px] font-black text-blue-700 dark:text-blue-300 hover:underline">
+                            Lihat riwayat vendor →
+                        </a>
+                    </div>
+                `;
+            }).join('');
+        }
+
         function cancelNewVendorSpph() {
             document.getElementById('newVendorBoxSpph')?.classList.add('hidden');
             resetNewVendorSpphForm();
@@ -4259,7 +4451,10 @@
                     tags: true,
                     tokenSeparators: ['|'],
                     minimumResultsForSearch: 0,
-                    closeOnSelect: false
+                    closeOnSelect: false,
+                    templateResult: vendorUsageOptionTemplate,
+                    templateSelection: vendorUsageSelectionTemplate,
+                    escapeMarkup: markup => markup
                 };
 
                 if (parent && parent.length) option.dropdownParent = parent;
@@ -4287,6 +4482,9 @@
             initSelect2Safe($('.pic-select'), cfg('-- Pilih PIC --', $addModal));
             initSelect2Safe($('.edit-vendor-select'), vendorCfg('-- Pilih satu atau banyak vendor --', $editModal));
             initSelect2Safe($('.edit-pic-select'), cfg('-- Pilih PIC --', $editModal));
+
+            $('#vendorSelect').on('change', () => renderVendorUsagePanel('vendorSelect', 'vendorUsagePanel'));
+            $('#editVendor').on('change', () => renderVendorUsagePanel('editVendor', 'editVendorUsagePanel'));
 
             // MANUAL INPUT CHECK (ADD)
             $('#nomorPrManual').on('input', function () {

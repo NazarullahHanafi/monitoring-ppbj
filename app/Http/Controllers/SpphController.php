@@ -8,6 +8,7 @@ use App\Models\Satuan;
 use App\Models\Vendor;
 use App\Models\User;
 use App\Models\Ppbj;
+use App\Models\Sp;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Cache;
@@ -69,6 +70,7 @@ class SpphController extends Controller
                 ->orderBy('sequence_number', 'desc')->first()
         );
         $lastNomor = $lastSpph?->nomor_spph;
+        $vendorUsageStats = $this->vendorUsageStats();
 
         $spphs = Spph::select([
             'id',
@@ -109,7 +111,8 @@ class SpphController extends Controller
             'vendorFilter',
             'dari',
             'sampai',
-            'onboardingSeen'
+            'onboardingSeen',
+            'vendorUsageStats'
         ));
     }
 
@@ -429,6 +432,7 @@ class SpphController extends Controller
 
             Cache::forget('spph:last_nomor');
             Cache::forget('spph:suggest');
+            Cache::forget('vendor:usage-stats:spph-sp:v1');
 
             return redirect()->route('spph.index')->with('success', 'Data SPPH berhasil disimpan!');
             });
@@ -556,6 +560,7 @@ class SpphController extends Controller
 
             Cache::forget('spph:last_nomor');
             Cache::forget('spph:suggest');
+            Cache::forget('vendor:usage-stats:spph-sp:v1');
 
             return redirect()->route('spph.index')->with('success', 'Data SPPH berhasil diperbarui!');
             });
@@ -663,6 +668,7 @@ class SpphController extends Controller
             $spph->delete();
             Cache::forget('spph:last_nomor');
             Cache::forget('spph:suggest');
+            Cache::forget('vendor:usage-stats:spph-sp:v1');
         });
 
         return response()->json([
@@ -1761,6 +1767,104 @@ XML;
         Cache::forget('vendors:active');
 
         return $names->all();
+    }
+
+    private function vendorUsageStats(): array
+    {
+        return Cache::remember('vendor:usage-stats:spph-sp:v1', 600, function () {
+            $stats = [];
+
+            $ensure = function (string $vendor) use (&$stats): string {
+                $key = $this->vendorUsageKey($vendor);
+
+                if (!isset($stats[$key])) {
+                    $stats[$key] = [
+                        'name' => trim($vendor),
+                        'spph_count' => 0,
+                        'sp_count' => 0,
+                        'total_count' => 0,
+                        'last_used_at' => null,
+                        'last_used_label' => '-',
+                        'last_document' => null,
+                        'status' => 'baru',
+                        'hint' => 'Vendor belum tercatat di SPPH/SP. Cocok untuk opsi baru, tetap cek kelengkapan profil vendor.',
+                    ];
+                }
+
+                return $key;
+            };
+
+            $touchLastUsed = function (string $key, ?Carbon $date, ?string $document) use (&$stats): void {
+                if (!$date) {
+                    return;
+                }
+
+                $current = $stats[$key]['last_used_at']
+                    ? Carbon::parse($stats[$key]['last_used_at'])
+                    : null;
+
+                if (!$current || $date->greaterThan($current)) {
+                    $stats[$key]['last_used_at'] = $date->toDateString();
+                    $stats[$key]['last_used_label'] = $date->locale('id')->translatedFormat('d M Y');
+                    $stats[$key]['last_document'] = $document;
+                }
+            };
+
+            Spph::select(['nomor_spph', 'tanggal', 'nama_vendor', 'vendor_names'])
+                ->orderBy('id')
+                ->get()
+                ->each(function (Spph $spph) use (&$stats, $ensure, $touchLastUsed) {
+                    $date = $spph->tanggal ? Carbon::parse($spph->tanggal) : null;
+
+                    foreach ($spph->print_vendor_names as $vendor) {
+                        $key = $ensure($vendor);
+                        $stats[$key]['spph_count']++;
+                        $touchLastUsed($key, $date, $spph->nomor_spph);
+                    }
+                });
+
+            Sp::select(['nomor_sp', 'tanggal_sp', 'nama_vendor'])
+                ->whereNotNull('nama_vendor')
+                ->orderBy('id')
+                ->get()
+                ->each(function (Sp $sp) use (&$stats, $ensure, $touchLastUsed) {
+                    $vendor = trim((string) $sp->nama_vendor);
+                    if ($vendor === '') {
+                        return;
+                    }
+
+                    $key = $ensure($vendor);
+                    $stats[$key]['sp_count']++;
+                    $touchLastUsed($key, $sp->tanggal_sp ? Carbon::parse($sp->tanggal_sp) : null, $sp->nomor_sp);
+                });
+
+            foreach ($stats as &$row) {
+                $row['total_count'] = (int) $row['spph_count'] + (int) $row['sp_count'];
+
+                if ($row['total_count'] >= 10) {
+                    $row['status'] = 'sering';
+                    $row['hint'] = 'Vendor sangat sering tercatat. Bagus untuk historis, tapi tetap pertimbangkan rotasi/benchmark saat audit.';
+                } elseif ($row['total_count'] >= 5) {
+                    $row['status'] = 'cukup-sering';
+                    $row['hint'] = 'Vendor cukup sering dipakai. Aman, namun cocok dicek ulang kewajaran harga dan kelengkapan dokumen.';
+                } elseif ($row['total_count'] > 0) {
+                    $row['status'] = 'normal';
+                    $row['hint'] = 'Vendor pernah tercatat dan historinya masih wajar.';
+                }
+            }
+            unset($row);
+
+            return $stats;
+        });
+    }
+
+    private function vendorUsageKey(string $vendor): string
+    {
+        return Str::of($vendor)
+            ->trim()
+            ->lower()
+            ->replaceMatches('/\s+/', ' ')
+            ->toString();
     }
 
     private function applyVendorFilter($query, string $vendor)

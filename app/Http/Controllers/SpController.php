@@ -763,6 +763,7 @@ class SpController extends Controller
             Cache::forget('sp:last_nomor:auto');
             Cache::forget('sp:last_nomor:oracle');
             Cache::forget('sp:suggest');
+            Cache::forget('vendor:usage-stats:spph-sp:v1');
 
             return redirect()
                 ->route('sp.index', $oracleMode ? ['mode' => 'oracle'] : [])
@@ -950,6 +951,7 @@ class SpController extends Controller
             Cache::forget('sp:last_nomor:auto');
             Cache::forget('sp:last_nomor:oracle');
             Cache::forget('sp:suggest');
+            Cache::forget('vendor:usage-stats:spph-sp:v1');
 
             return redirect()
                 ->route('sp.index', $oracleMode ? ['mode' => 'oracle'] : [])
@@ -1066,6 +1068,7 @@ class SpController extends Controller
             Cache::forget('sp:last_nomor:auto');
             Cache::forget('sp:last_nomor:oracle');
             Cache::forget('sp:suggest');
+            Cache::forget('vendor:usage-stats:spph-sp:v1');
         });
 
         return response()->json([
