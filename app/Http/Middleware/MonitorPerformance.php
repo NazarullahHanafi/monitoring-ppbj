@@ -78,7 +78,18 @@ class MonitorPerformance
             'build/*',
             'images/*',
             'storage/*',
-            'telegram/webhook/*'
+            'telegram/webhook/*',
+            'presence/heartbeat',
+            'presence/mood',
+            'presence/mood/*',
+            'chat/messages',
+            'chat/mentions/unread',
+            'chat/reactions',
+            'sp/poll',
+            'sp/presence/*',
+            'spph/poll',
+            'spph/presence/*',
+            'approval/pr-receipts/pending-count'
         );
     }
 

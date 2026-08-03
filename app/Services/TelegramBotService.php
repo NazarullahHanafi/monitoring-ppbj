@@ -126,7 +126,8 @@ class TelegramBotService
                 $payload['reply_markup'] = json_encode($replyMarkup);
             }
 
-            $response = Http::timeout($this->timeout())
+            $response = Http::connectTimeout($this->connectTimeout())
+                ->timeout($this->timeout())
                 ->asForm()
                 ->post("https://api.telegram.org/bot{$token}/sendMessage", $payload);
 
@@ -285,7 +286,8 @@ class TelegramBotService
         }
 
         try {
-            $response = Http::timeout($this->timeout())
+            $response = Http::connectTimeout($this->connectTimeout())
+                ->timeout($this->timeout())
                 ->asForm()
                 ->post("https://api.telegram.org/bot{$token}/setWebhook", [
                     'url' => $url,
@@ -331,7 +333,8 @@ class TelegramBotService
         ];
 
         try {
-            $response = Http::timeout($this->timeout())
+            $response = Http::connectTimeout($this->connectTimeout())
+                ->timeout($this->timeout())
                 ->asForm()
                 ->post("https://api.telegram.org/bot{$token}/setMyCommands", [
                     'commands' => json_encode($commands),
@@ -1546,7 +1549,8 @@ class TelegramBotService
         }
 
         try {
-            return Http::timeout($this->timeout())
+            return Http::connectTimeout($this->connectTimeout())
+                ->timeout($this->timeout())
                 ->asForm()
                 ->post("https://api.telegram.org/bot{$token}/answerCallbackQuery", [
                     'callback_query_id' => $callbackId,
@@ -1579,7 +1583,8 @@ class TelegramBotService
                 $payload['reply_markup'] = json_encode($replyMarkup);
             }
 
-            return Http::timeout($this->timeout())
+            return Http::connectTimeout($this->connectTimeout())
+                ->timeout($this->timeout())
                 ->asForm()
                 ->post("https://api.telegram.org/bot{$token}/editMessageText", $payload)
                 ->successful();
@@ -1597,7 +1602,12 @@ class TelegramBotService
 
     private function timeout(): int
     {
-        return max(1, (int) config('services.telegram.timeout', 15));
+        return max(1, (int) config('services.telegram.timeout', 3));
+    }
+
+    private function connectTimeout(): int
+    {
+        return max(1, (int) config('services.telegram.connect_timeout', 1));
     }
 
     private function safeCount(string $modelClass, string $table): int

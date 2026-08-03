@@ -1101,7 +1101,7 @@ class TorprController extends Controller
             ];
 
             $adminUsers = User::where('department', 'umum')
-                ->select(['id', 'name', 'email', 'telegram_id'])
+                ->select(['id', 'name', 'email'])
                 ->get()
                 ->toArray();
 
