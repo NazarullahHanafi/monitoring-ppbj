@@ -75,60 +75,106 @@
 
                 if (!result.isConfirmed || !result.value) return;
 
-                const formData = new FormData();
-                formData.append('document_type', result.value.type);
-                formData.append('document_file', result.value.file);
-                formData.append('notes', result.value.notes);
+                await submitArchiveUpload(false);
 
-                Swal.fire({
-                    title: 'Mengirim ke Sistem Arsip...',
-                    html: 'File sedang dikirim. List tetap ringan karena PDF tidak dipreview otomatis.',
-                    allowOutsideClick: false,
-                    showConfirmButton: false,
-                    background: dark ? '#0f172a' : '#fff',
-                    color: dark ? '#f8fafc' : '#0f172a',
-                    didOpen: () => Swal.showLoading()
-                });
-
-                try {
-                    const response = await fetch(payload.url, {
-                        method: 'POST',
-                        headers: {
-                            'X-CSRF-TOKEN': csrf,
-                            'Accept': 'application/json'
-                        },
-                        body: formData
-                    });
-
-                    const data = await response.json().catch(() => ({}));
-
-                    if (!response.ok || data.state !== 'uploaded') {
-                        throw new Error(data.message || 'Upload ke Sistem Arsip belum berhasil.');
+                async function submitArchiveUpload(replaceExisting) {
+                    const formData = new FormData();
+                    formData.append('document_type', result.value.type);
+                    formData.append('document_file', result.value.file);
+                    formData.append('notes', result.value.notes);
+                    if (replaceExisting) {
+                        formData.append('replace_existing', '1');
                     }
 
-                    const previewUrl = data.document?.preview_url || data.document?.download_url;
-                    await Swal.fire({
-                        icon: 'success',
-                        title: 'Lampiran masuk arsip',
-                        html: `
-                            <div class="text-sm text-slate-600 dark:text-slate-300">
-                                Dokumen <b>${escapeArchiveUploadHtml(moduleName)}</b> berhasil dikirim ke Sistem Arsip.
-                                ${previewUrl ? `<div class="mt-3"><a href="${escapeArchiveUploadHtml(previewUrl)}" target="_blank" class="font-bold text-blue-600 dark:text-blue-300">Preview dokumen arsip</a></div>` : ''}
-                            </div>
-                        `,
-                        confirmButtonColor: '#2563eb',
-                        background: dark ? '#0f172a' : '#fff',
-                        color: dark ? '#f8fafc' : '#0f172a'
-                    });
-                } catch (error) {
                     Swal.fire({
-                        icon: 'warning',
-                        title: 'Belum terkirim ke Arsip',
-                        text: error.message || 'Sistem Arsip sedang tidak dapat menerima upload.',
-                        confirmButtonColor: '#f97316',
+                        title: replaceExisting ? 'Menimpa file lama...' : 'Mengirim ke Sistem Arsip...',
+                        html: replaceExisting
+                            ? 'File sebelumnya akan diganti dengan file terbaru. Riwayat paket PR tetap aman.'
+                            : 'File sedang dikirim. Jika jenis dokumen sudah ada, sistem akan minta konfirmasi dulu.',
+                        allowOutsideClick: false,
+                        showConfirmButton: false,
                         background: dark ? '#0f172a' : '#fff',
-                        color: dark ? '#f8fafc' : '#0f172a'
+                        color: dark ? '#f8fafc' : '#0f172a',
+                        didOpen: () => Swal.showLoading()
                     });
+
+                    try {
+                        const response = await fetch(payload.url, {
+                            method: 'POST',
+                            headers: {
+                                'X-CSRF-TOKEN': csrf,
+                                'Accept': 'application/json'
+                            },
+                            body: formData
+                        });
+
+                        const data = await response.json().catch(() => ({}));
+
+                        if (response.status === 409 || data.state === 'duplicate') {
+                            const previous = data.previous_document || {};
+                            const previewUrl = previous.preview_url || previous.download_url || '';
+                            const duplicateDecision = await Swal.fire({
+                                icon: 'warning',
+                                title: 'Dokumen ini sudah pernah diupload',
+                                html: `
+                                    <div class="text-left text-sm leading-7 text-slate-700 dark:text-slate-200">
+                                        <div class="rounded-2xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-700 dark:bg-amber-950/50">
+                                            <b>${escapeArchiveUploadHtml(result.value.type)}</b> untuk nomor
+                                            <b class="font-mono">${escapeArchiveUploadHtml(nomor)}</b> sudah ada di Sistem Arsip.
+                                            Jika dilanjutkan, file lama akan <b>ditimpa</b> oleh file yang baru dipilih.
+                                        </div>
+                                        <div class="mt-3 rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">
+                                            <div><b>File sebelumnya:</b> ${escapeArchiveUploadHtml(previous.name || previous.title || 'Lampiran sebelumnya')}</div>
+                                            <div><b>Upload:</b> ${escapeArchiveUploadHtml(previous.uploaded_by || '-')}</div>
+                                            ${previewUrl ? `<a href="${escapeArchiveUploadHtml(previewUrl)}" target="_blank" class="mt-3 inline-flex rounded-xl bg-blue-600 px-4 py-2 text-xs font-extrabold text-white">Review file sebelumnya</a>` : ''}
+                                        </div>
+                                    </div>
+                                `,
+                                showCancelButton: true,
+                                confirmButtonText: 'Ya, timpa file lama',
+                                cancelButtonText: 'Batal',
+                                confirmButtonColor: '#f97316',
+                                cancelButtonColor: '#64748b',
+                                background: dark ? '#0f172a' : '#fff',
+                                color: dark ? '#f8fafc' : '#0f172a',
+                                width: 620
+                            });
+
+                            if (duplicateDecision.isConfirmed) {
+                                await submitArchiveUpload(true);
+                            }
+
+                            return;
+                        }
+
+                        if (!response.ok || data.state !== 'uploaded') {
+                            throw new Error(data.message || 'Upload ke Sistem Arsip belum berhasil.');
+                        }
+
+                        const previewUrl = data.document?.preview_url || data.document?.download_url;
+                        await Swal.fire({
+                            icon: 'success',
+                            title: data.replaced ? 'Lampiran berhasil diperbarui' : 'Lampiran masuk arsip',
+                            html: `
+                                <div class="text-sm text-slate-600 dark:text-slate-300">
+                                    Dokumen <b>${escapeArchiveUploadHtml(moduleName)}</b> ${data.replaced ? 'berhasil menimpa file lama di' : 'berhasil dikirim ke'} Sistem Arsip.
+                                    ${previewUrl ? `<div class="mt-3"><a href="${escapeArchiveUploadHtml(previewUrl)}" target="_blank" class="font-bold text-blue-600 dark:text-blue-300">Preview dokumen arsip</a></div>` : ''}
+                                </div>
+                            `,
+                            confirmButtonColor: '#2563eb',
+                            background: dark ? '#0f172a' : '#fff',
+                            color: dark ? '#f8fafc' : '#0f172a'
+                        });
+                    } catch (error) {
+                        Swal.fire({
+                            icon: 'warning',
+                            title: 'Belum terkirim ke Arsip',
+                            text: error.message || 'Sistem Arsip sedang tidak dapat menerima upload.',
+                            confirmButtonColor: '#f97316',
+                            background: dark ? '#0f172a' : '#fff',
+                            color: dark ? '#f8fafc' : '#0f172a'
+                        });
+                    }
                 }
             }
 

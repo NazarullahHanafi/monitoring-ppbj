@@ -47,6 +47,7 @@ class ArchiveAttachmentController extends Controller
             'uploaded_by' => auth()->user()?->name,
             'uploaded_by_email' => auth()->user()?->email,
             'notes' => $validated['notes'] ?? null,
+            'replace_existing' => (bool) ($validated['replace_existing'] ?? false),
             'audit_package_key' => $this->auditPackageKey($sp->nomor_pr, $sp->nomor_sp),
         ], $request->file('document_file'));
 
@@ -74,6 +75,7 @@ class ArchiveAttachmentController extends Controller
             'uploaded_by' => auth()->user()?->name,
             'uploaded_by_email' => auth()->user()?->email,
             'notes' => $validated['notes'] ?? null,
+            'replace_existing' => (bool) ($validated['replace_existing'] ?? false),
             'audit_package_key' => $this->auditPackageKey($spph->nomor_pr, $spph->nomor_spph),
         ], $request->file('document_file'));
 
@@ -107,6 +109,7 @@ class ArchiveAttachmentController extends Controller
                 'max:' . $maxKb,
             ],
             'notes' => ['nullable', 'string', 'max:500'],
+            'replace_existing' => ['nullable', 'boolean'],
         ]);
     }
 
@@ -123,6 +126,7 @@ class ArchiveAttachmentController extends Controller
     {
         return match ($result['state'] ?? null) {
             'uploaded' => 201,
+            'duplicate' => 409,
             'unconfigured' => 503,
             'failed', 'unavailable' => 502,
             default => 422,

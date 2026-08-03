@@ -162,6 +162,92 @@ class ArchiveAttachmentUploadTest extends TestCase
             ]);
     }
 
+    public function test_duplicate_attachment_warning_from_archive_is_returned_to_browser(): void
+    {
+        config([
+            'services.pr_archive.base_url' => 'https://arsip.example.test',
+            'services.pr_archive.upload_path' => '/api/documents',
+        ]);
+
+        Http::fake([
+            'https://arsip.example.test/*' => Http::response([
+                'state' => 'duplicate',
+                'message' => 'Jenis dokumen ini sudah pernah diupload.',
+                'previous_document' => [
+                    'attachment_id' => 88,
+                    'name' => 'Dokumen SPPH lama',
+                    'preview_url' => '/api/archive/attachments/88/preview',
+                    'uploaded_by' => 'Nazar',
+                ],
+            ], 409),
+        ]);
+
+        $user = User::factory()->create(['department' => 'umum']);
+        $spph = Spph::create([
+            'nomor_spph' => '570/PKU-VII/SPPH/2026',
+            'sequence_number' => 570,
+            'tanggal' => '2026-07-20',
+            'nomor_pr' => 'PKB/PR-26/CON/0402',
+            'nama_vendor' => 'Vendor Utama',
+            'deskripsi_pengadaan' => 'Pengadaan pembanding vendor',
+            'pic' => 'Nazar',
+        ]);
+
+        $this->actingAs($user)
+            ->postJson(route('spph.archive-attachment', $spph), [
+                'document_type' => 'Dokumen SPPH',
+                'document_file' => UploadedFile::fake()->create('spph.pdf', 100, 'application/pdf'),
+            ])
+            ->assertStatus(409)
+            ->assertJsonPath('state', 'duplicate')
+            ->assertJsonPath('previous_document.id', 88)
+            ->assertJsonPath('previous_document.preview_url', 'https://arsip.example.test/api/archive/attachments/88/preview');
+    }
+
+    public function test_replace_existing_attachment_flag_is_forwarded_to_archive(): void
+    {
+        config([
+            'services.pr_archive.base_url' => 'https://arsip.example.test',
+            'services.pr_archive.upload_path' => '/api/documents',
+        ]);
+
+        Http::fake([
+            'https://arsip.example.test/*' => Http::response([
+                'document' => [
+                    'id' => 124,
+                    'nama_dokumen' => 'Dokumen SPPH Revisi',
+                    'download_url' => '/documents/124/preview',
+                ],
+                'replaced' => true,
+            ], 200),
+        ]);
+
+        $user = User::factory()->create(['department' => 'umum']);
+        $spph = Spph::create([
+            'nomor_spph' => '570/PKU-VII/SPPH/2026',
+            'sequence_number' => 570,
+            'tanggal' => '2026-07-20',
+            'nomor_pr' => 'PKB/PR-26/CON/0402',
+            'nama_vendor' => 'Vendor Utama',
+            'deskripsi_pengadaan' => 'Pengadaan pembanding vendor',
+            'pic' => 'Nazar',
+        ]);
+
+        $this->actingAs($user)
+            ->postJson(route('spph.archive-attachment', $spph), [
+                'document_type' => 'Dokumen SPPH',
+                'replace_existing' => true,
+                'document_file' => UploadedFile::fake()->create('spph-revisi.pdf', 100, 'application/pdf'),
+            ])
+            ->assertCreated()
+            ->assertJsonPath('state', 'uploaded');
+
+        Http::assertSent(function (Request $request) {
+            return str_contains($request->body(), 'name="replace_existing"')
+                && str_contains($request->body(), '1');
+        });
+    }
+
     public function test_sp_and_spph_pages_contain_archive_upload_button(): void
     {
         $spView = file_get_contents(resource_path('views/sp/index.blade.php'));

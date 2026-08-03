@@ -72,6 +72,19 @@ class PrArchiveService
                 ->attach('file', file_get_contents($file->getRealPath()), $file->getClientOriginalName())
                 ->post($url, $this->cleanUploadMetadata($metadata));
 
+            if ($response->status() === 409) {
+                $payload = $response->json();
+                $previousDocument = is_array($payload)
+                    ? $this->normaliseUploadedDocument(['document' => Arr::get($payload, 'previous_document', [])], $baseUrl)
+                    : [];
+
+                return $this->result('duplicate', $payload['message'] ?? 'Dokumen dengan jenis yang sama sudah pernah diupload.', [
+                    'has_archive' => true,
+                    'document_count' => 1,
+                    'previous_document' => $previousDocument,
+                ]);
+            }
+
             if (!$response->successful()) {
                 Log::warning('Upload dokumen ke sistem arsip gagal.', [
                     'status' => $response->status(),
@@ -97,6 +110,7 @@ class PrArchiveService
                 'has_archive' => true,
                 'document_count' => 1,
                 'document' => $document,
+                'replaced' => (bool) ($payload['replaced'] ?? false),
             ]);
         } catch (Throwable $exception) {
             report($exception);
@@ -215,7 +229,7 @@ class PrArchiveService
                     ?? $url;
 
                 return [
-                    'id' => $item['id'] ?? null,
+                    'id' => $item['id'] ?? $item['attachment_id'] ?? null,
                     'name' => (string) ($item['name']
                         ?? $item['title']
                         ?? $item['filename']
@@ -228,6 +242,8 @@ class PrArchiveService
                     'location' => $this->normaliseLocation($item),
                     'preview_url' => $this->normaliseUrl($previewUrl, $baseUrl),
                     'download_url' => $this->normaliseUrl($url, $baseUrl),
+                    'uploaded_by' => $item['uploaded_by'] ?? null,
+                    'uploaded_at' => $item['uploaded_at'] ?? $item['created_at'] ?? null,
                 ];
             })
             ->values()
