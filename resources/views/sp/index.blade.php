@@ -2611,12 +2611,19 @@
                         <option value="__tambah__">➕ Tambah Vendor Baru...</option>
                     </select>
                     <div id="addSpphVendorRecommendation" class="hidden mt-2"></div>
+                    <div class="mt-2">
+                        <button type="button" id="toggleNewVendorSp"
+                            class="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-700 text-xs font-bold hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition">
+                            🏢 Tambah detail vendor baru
+                        </button>
+                    </div>
                     <div id="newVendorBoxSp"
                         class="hidden mt-3 rounded-xl border-2 border-dashed border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-900/20 p-4 space-y-3">
-                        <div class="flex items-center justify-between mb-1"><span
-                                class="text-sm font-bold text-emerald-700 dark:text-emerald-400 flex items-center gap-1.5">🏢
-                                Tambah Vendor Baru</span><button type="button" onclick="cancelNewVendor()"
-                                class="text-xs text-gray-400 hover:text-red-500 transition-colors">✕ Batal</button></div>
+                        <div class="flex items-center justify-between">
+                            <span class="text-sm font-bold text-emerald-700 dark:text-emerald-300 flex items-center gap-1.5">🏢 Data Vendor Baru</span>
+                            <button type="button" onclick="cancelNewVendor()"
+                                class="text-xs text-gray-500 dark:text-gray-300 hover:text-red-500 transition">✕ Batal</button>
+                        </div>
                         <div><label class="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">Nama Vendor
                                 <span class="text-red-500">*</span></label><input type="text" id="newVendorNama"
                                 placeholder="PT. Nama Vendor..."
@@ -2666,6 +2673,12 @@
                         <p class="text-[11px] leading-relaxed text-emerald-700 dark:text-emerald-300 bg-white/70 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-lg px-3 py-2">
                             Data NPWP, direktur, dan jabatan akan dipakai otomatis saat cetak kontrak/SP di atas Rp50 juta agar dokumen tidak banyak titik-titik kosong.
                         </p>
+                        <div id="newVendorChecklistSp" class="rounded-xl border border-sky-200 dark:border-sky-800 bg-sky-50 dark:bg-sky-950/30 px-3 py-2 text-[11px] text-sky-800 dark:text-sky-200">
+                            <div class="font-black mb-1">🧭 Checklist profil vendor</div>
+                            <div class="grid grid-cols-2 gap-1" data-vendor-checklist-items>
+                                <span>○ Nama wajib</span><span>○ Kontak</span><span>○ NPWP</span><span>○ Penanggung jawab</span>
+                            </div>
+                        </div>
                         <div id="newVendorStatus" class="hidden text-xs px-3 py-2 rounded-lg"></div>
                         <button type="button" onclick="saveNewVendor()"
                             class="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm transition-colors"><span
@@ -4474,8 +4487,26 @@
         const CSRF_TOKEN = document.querySelector('meta[name="csrf-token"]').content;
 
         function cancelNewVendor() { $('#vendorSelectSp').val('').trigger('change'); document.getElementById('newVendorBoxSp').classList.add('hidden'); resetNewVendorForm(); }
-        function resetNewVendorForm() { ['newVendorNama', 'newVendorAlamat', 'newVendorTelp', 'newVendorFax', 'newVendorEmail', 'newVendorNpwp', 'newVendorDirektur', 'newVendorJabatan'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; }); setVendorStatus('', ''); }
+        function resetNewVendorForm() { ['newVendorNama', 'newVendorAlamat', 'newVendorTelp', 'newVendorFax', 'newVendorEmail', 'newVendorNpwp', 'newVendorDirektur', 'newVendorJabatan'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; }); setVendorStatus('', ''); updateVendorProfileChecklistSp(); }
         function setVendorStatus(msg, type) { const el = document.getElementById('newVendorStatus'); if (!msg) { el.classList.add('hidden'); return; } el.classList.remove('hidden', 'bg-red-100', 'text-red-700', 'bg-green-100', 'text-green-700', 'dark:bg-red-900/30', 'dark:text-red-400', 'dark:bg-green-900/30', 'dark:text-green-400'); if (type === 'error') el.classList.add('bg-red-100', 'dark:bg-red-900/30', 'text-red-700', 'dark:text-red-400'); else el.classList.add('bg-green-100', 'dark:bg-green-900/30', 'text-green-700', 'dark:text-green-400'); el.textContent = msg; }
+
+        function updateVendorProfileChecklistSp() {
+            const box = document.getElementById('newVendorChecklistSp');
+            const target = box?.querySelector('[data-vendor-checklist-items]');
+            if (!target) return;
+
+            const filled = id => (document.getElementById(id)?.value || '').trim().length > 0;
+            const checks = [
+                ['Nama wajib', filled('newVendorNama')],
+                ['Kontak', filled('newVendorTelp') || filled('newVendorEmail')],
+                ['NPWP', filled('newVendorNpwp')],
+                ['Penanggung jawab', filled('newVendorDirektur') && filled('newVendorJabatan')],
+            ];
+
+            target.innerHTML = checks.map(([label, ok]) =>
+                `<span class="${ok ? 'text-emerald-700 dark:text-emerald-300 font-black' : 'text-slate-500 dark:text-slate-300'}">${ok ? '✓' : '○'} ${escapedHtml(label)}</span>`
+            ).join('');
+        }
 
         async function saveNewVendor() {
             const nama = document.getElementById('newVendorNama').value.trim();
@@ -5056,6 +5087,7 @@
         // ═══════════════════════════════════════
         $(document).ready(function () {
             const cfg = ph => ({ placeholder: ph, allowClear: true, width: '100%' });
+            $('#vendorSelectSp option[value="__tambah__"]').remove();
             $('.vendor-select-sp').select2(cfg('-- Pilih Vendor --'));
             $('.pic-select-sp').select2(cfg('-- Pilih PIC --'));
             $('.edit-vendor-sp').select2(cfg('-- Pilih Vendor --'));
@@ -5085,6 +5117,16 @@
                     this.dataset.previousValue = this.value || '';
                 }
             });
+            $('#toggleNewVendorSp').on('click', function () {
+                const box = document.getElementById('newVendorBoxSp');
+                if (!box) return;
+                box.classList.toggle('hidden');
+                if (!box.classList.contains('hidden')) {
+                    updateVendorProfileChecklistSp();
+                    setTimeout(() => document.getElementById('newVendorNama')?.focus(), 50);
+                }
+            });
+            $('#newVendorBoxSp').on('input', 'input, textarea', updateVendorProfileChecklistSp);
             $('#vendorSelectSp, .pic-select-sp, #editVendorSp, #editPicSp, #ppbjSelect, #editPpbjSelect')
                 .on('change select2:select select2:clear', () => {
                     setTimeout(() => {
@@ -5130,6 +5172,8 @@
                 $('#ppbjStatus').html('');
                 $('#nomorPrFinal').val('');
                 $('#addVendorMismatchConfirmed').val('0');
+                document.getElementById('newVendorBoxSp')?.classList.add('hidden');
+                resetNewVendorForm();
                 renderSpphVendorRecommendation('add', [], null);
                 restoreSpModeDraftToAdd();
                 updateOracleReadinessChecklist('add');

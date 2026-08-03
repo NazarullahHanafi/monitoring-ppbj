@@ -2804,6 +2804,12 @@
                         <p class="text-[11px] leading-relaxed text-emerald-700 dark:text-emerald-300 bg-white/70 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-lg px-3 py-2">
                             Data lengkap vendor akan tersimpan ke master vendor dan otomatis bisa dipakai saat cetak SPPH/SP/kontrak.
                         </p>
+                        <div id="newSpphVendorChecklist" class="rounded-xl border border-sky-200 dark:border-sky-800 bg-sky-50 dark:bg-sky-950/30 px-3 py-2 text-[11px] text-sky-800 dark:text-sky-200">
+                            <div class="font-black mb-1">🧭 Checklist profil vendor</div>
+                            <div class="grid grid-cols-2 gap-1" data-vendor-checklist-items>
+                                <span>○ Nama wajib</span><span>○ Kontak</span><span>○ NPWP</span><span>○ Penanggung jawab</span>
+                            </div>
+                        </div>
                         <div id="newSpphVendorStatus" class="hidden text-xs px-3 py-2 rounded-lg"></div>
                         <button type="button" onclick="saveNewVendorSpph()"
                             class="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm transition">
@@ -3621,6 +3627,8 @@
             document.getElementById('nomorStatus').innerHTML = '';
             $('#vendorSelect').val(null).trigger('change');
             renderVendorUsagePanel('vendorSelect', 'vendorUsagePanel');
+            document.getElementById('newVendorBoxSpph')?.classList.add('hidden');
+            resetNewVendorSpphForm();
 
             $('#addDeskripsi').val('');
             $('#addDeskripsiBadge').addClass('hidden').html('');
@@ -4325,6 +4333,7 @@
                 if (el) el.value = '';
             });
             setNewVendorSpphStatus('', '');
+            updateVendorProfileChecklistSpph();
         }
 
         function setNewVendorSpphStatus(message, type) {
@@ -4344,6 +4353,24 @@
                 el.classList.add('bg-green-100', 'dark:bg-green-900/30', 'text-green-700', 'dark:text-green-300');
             }
             el.textContent = message;
+        }
+
+        function updateVendorProfileChecklistSpph() {
+            const box = document.getElementById('newSpphVendorChecklist');
+            const target = box?.querySelector('[data-vendor-checklist-items]');
+            if (!target) return;
+
+            const filled = id => (document.getElementById(id)?.value || '').trim().length > 0;
+            const checks = [
+                ['Nama wajib', filled('newSpphVendorNama')],
+                ['Kontak', filled('newSpphVendorTelp') || filled('newSpphVendorEmail')],
+                ['NPWP', filled('newSpphVendorNpwp')],
+                ['Penanggung jawab', filled('newSpphVendorDirektur') && filled('newSpphVendorJabatan')],
+            ];
+
+            target.innerHTML = checks.map(([label, ok]) =>
+                `<span class="${ok ? 'text-emerald-700 dark:text-emerald-300 font-black' : 'text-slate-500 dark:text-slate-300'}">${ok ? '✓' : '○'} ${escapedHtml(label)}</span>`
+            ).join('');
         }
 
         function vendorUsageKey(name) {
@@ -4524,9 +4551,11 @@
                 if (!box) return;
                 box.classList.toggle('hidden');
                 if (!box.classList.contains('hidden')) {
+                    updateVendorProfileChecklistSpph();
                     setTimeout(() => document.getElementById('newSpphVendorNama')?.focus(), 50);
                 }
             });
+            $('#newVendorBoxSpph').on('input', 'input, textarea', updateVendorProfileChecklistSpph);
 
             const cfg = (ph, parent) => {
                 const option = {
