@@ -62,8 +62,8 @@ return [
         'notify_chat_ids' => env('TELEGRAM_NOTIFY_CHAT_IDS', env('TELEGRAM_ALLOWED_CHAT_IDS', env('TELEGRAM_ALLOWED_CHAT_ID', ''))),
         'owner_chat_ids' => env('TELEGRAM_OWNER_CHAT_IDS', env('TELEGRAM_ALLOWED_CHAT_ID', '')),
         'webhook_secret' => env('TELEGRAM_WEBHOOK_SECRET'),
-        'connect_timeout' => env('TELEGRAM_CONNECT_TIMEOUT', 1),
-        'timeout' => env('TELEGRAM_TIMEOUT', 3),
+        'connect_timeout' => env('TELEGRAM_CONNECT_TIMEOUT', 5),
+        'timeout' => env('TELEGRAM_TIMEOUT', 15),
     ],
 
 ];

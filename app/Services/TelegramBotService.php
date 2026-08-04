@@ -131,8 +131,21 @@ class TelegramBotService
                 ->asForm()
                 ->post("https://api.telegram.org/bot{$token}/sendMessage", $payload);
 
+            if (! $response->successful()) {
+                Log::warning('Telegram sendMessage failed', [
+                    'chat_id_hash' => sha1((string) $chatId),
+                    'status' => $response->status(),
+                    'body' => Str::limit($response->body(), 300),
+                ]);
+            }
+
             return $response->successful();
-        } catch (Throwable) {
+        } catch (Throwable $exception) {
+            Log::warning('Telegram sendMessage connection failed', [
+                'chat_id_hash' => sha1((string) $chatId),
+                'error' => Str::limit($exception->getMessage(), 300),
+            ]);
+
             return false;
         }
     }
@@ -1206,7 +1219,11 @@ class TelegramBotService
     private function sendNotification(string $text): void
     {
         foreach ($this->notificationChatIds() as $chatId) {
-            $this->sendMessage($chatId, $text);
+            if (! $this->sendMessage($chatId, $text)) {
+                Log::warning('Telegram notification target failed', [
+                    'chat_id_hash' => sha1((string) $chatId),
+                ]);
+            }
         }
     }
 
@@ -1619,12 +1636,12 @@ class TelegramBotService
 
     private function timeout(): int
     {
-        return max(1, (int) config('services.telegram.timeout', 3));
+        return max(5, (int) config('services.telegram.timeout', 15));
     }
 
     private function connectTimeout(): int
     {
-        return max(1, (int) config('services.telegram.connect_timeout', 1));
+        return max(2, (int) config('services.telegram.connect_timeout', 5));
     }
 
     private function safeCount(string $modelClass, string $table): int
