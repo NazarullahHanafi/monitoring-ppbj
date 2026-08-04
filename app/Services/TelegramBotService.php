@@ -139,6 +139,9 @@ class TelegramBotService
 
     public function notifyUserLogin(User $user, ?string $ip = null): void
     {
+        Cache::put('telegram:recent_login:'.$user->id, true, now()->addMinutes(2));
+        Cache::put('telegram:app_entry:'.$user->id, true, now()->addMinutes(15));
+
         $this->sendNotification(implode("\n", [
             '🟢 User login SIMONPR',
             'Nama: '.$this->userDisplayName($user),
@@ -148,6 +151,20 @@ class TelegramBotService
             'Waktu: '.now()->translatedFormat('l, d F Y H:i:s').' WIB',
             '',
             'Sistem mencatat login otomatis, owner tidak perlu cek manual lagi.',
+        ]));
+    }
+
+    public function notifyUserAppEntry(User $user, ?string $ip = null): void
+    {
+        $this->sendNotification(implode("\n", [
+            '🟡 User masuk aplikasi SIMONPR',
+            'Nama: '.$this->userDisplayName($user),
+            'Role: '.($user->role ?: '-'),
+            'Department: '.($user->department ?: '-'),
+            'IP: '.($ip ?: '-'),
+            'Waktu: '.now()->translatedFormat('l, d F Y H:i:s').' WIB',
+            '',
+            'Catatan: user membuka dashboard dari session yang masih aktif. Notif ini dibatasi maksimal 1x per 15 menit per user agar Telegram tidak spam.',
         ]));
     }
 

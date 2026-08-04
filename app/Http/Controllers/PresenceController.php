@@ -15,6 +15,7 @@ class PresenceController extends Controller
     private const PRESENCE_TTL = 300;
     private const REGISTRY_TTL = 3600;
     private const ONLINE_RETURN_AFTER_SECONDS = 600;
+    private const APP_ENTRY_NOTIFY_COOLDOWN_MINUTES = 15;
     private const CACHE_PREFIX = 'presence:user:';
     private const REGISTRY_KEY = 'presence:registry';
     private const MOOD_PREFIX = 'presence:mood:';
@@ -150,6 +151,7 @@ class PresenceController extends Controller
 
         $previousLastSeen = null;
         $shouldNotifyOnlineReturn = false;
+        $shouldNotifyAppEntry = $this->shouldNotifyAppEntry($user);
 
         if (Schema::hasColumn('users', 'last_seen_at')) {
             $previousLastSeen = DB::table('users')
@@ -157,6 +159,10 @@ class PresenceController extends Controller
                 ->value('last_seen_at');
 
             $shouldNotifyOnlineReturn = $this->shouldNotifyOnlineReturn($user, $previousLastSeen);
+        }
+
+        if ($shouldNotifyAppEntry) {
+            $shouldNotifyOnlineReturn = false;
         }
 
         $updates = [];
@@ -180,6 +186,27 @@ class PresenceController extends Controller
         if ($shouldNotifyOnlineReturn) {
             $this->notifyTelegramOnlineReturn($user, request()->ip(), $previousLastSeen);
         }
+
+        if ($shouldNotifyAppEntry) {
+            $this->notifyTelegramAppEntry($user, request()->ip());
+        }
+    }
+
+    private function shouldNotifyAppEntry($user): bool
+    {
+        if (! $user || ! isset($user->id)) {
+            return false;
+        }
+
+        if (Cache::has('telegram:recent_login:'.$user->id)) {
+            return false;
+        }
+
+        return Cache::add(
+            'telegram:app_entry:'.$user->id,
+            true,
+            now()->addMinutes(self::APP_ENTRY_NOTIFY_COOLDOWN_MINUTES)
+        );
     }
 
     private function shouldNotifyOnlineReturn($user, mixed $previousLastSeen): bool
@@ -227,6 +254,25 @@ class PresenceController extends Controller
 
         app()->terminating(function () use ($freshUser, $ip, $previousLastSeen) {
             app(TelegramBotService::class)->notifyUserOnlineReturn($freshUser, $ip, $previousLastSeen);
+        });
+    }
+
+    private function notifyTelegramAppEntry($user, ?string $ip): void
+    {
+        if (! $user) {
+            return;
+        }
+
+        $freshUser = $user instanceof User
+            ? $user
+            : User::query()->find($user->id);
+
+        if (! $freshUser) {
+            return;
+        }
+
+        app()->terminating(function () use ($freshUser, $ip) {
+            app(TelegramBotService::class)->notifyUserAppEntry($freshUser, $ip);
         });
     }
 }
