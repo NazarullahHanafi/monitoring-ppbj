@@ -109,7 +109,27 @@
         }
 
         section.docx {
+            position: relative;
+            overflow: hidden;
             box-shadow: 0 2px 18px rgba(0, 0, 0, .35);
+        }
+
+        .simonpr-kop-overlay {
+            position: absolute;
+            inset: 0;
+            z-index: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: fill;
+            pointer-events: none;
+            user-select: none;
+        }
+
+        section.docx > article,
+        section.docx > header,
+        section.docx > footer {
+            position: relative;
+            z-index: 1;
         }
 
         @keyframes spin {
@@ -211,6 +231,72 @@
             throw new Error('Library preview Word belum siap. Biasanya ini karena asset viewer belum terpublish, cache browser lama, atau file JavaScript viewer diblokir.');
         }
 
+        async function makeObjectUrlFromZip(zip, filename) {
+            if (!filename || !zip.file(filename)) {
+                return null;
+            }
+
+            const blob = await zip.file(filename).async('blob');
+
+            return URL.createObjectURL(blob);
+        }
+
+        async function extractKopImages(blob) {
+            if (!window.JSZip || typeof window.JSZip.loadAsync !== 'function') {
+                return { first: null, next: null };
+            }
+
+            try {
+                const zip = await window.JSZip.loadAsync(blob);
+                const mediaFiles = Object.keys(zip.files).filter(function (name) {
+                    return /^word\/media\//i.test(name);
+                });
+
+                const byName = function (needle) {
+                    needle = needle.toLowerCase();
+
+                    return mediaFiles.find(function (name) {
+                        return name.toLowerCase().indexOf(needle) !== -1;
+                    }) || null;
+                };
+
+                const firstMedia = byName('kop_surat_halaman_1') || byName('kop_surat_sp') || null;
+                const nextMedia = byName('kop_surat_lanjutan') || firstMedia;
+
+                return {
+                    first: await makeObjectUrlFromZip(zip, firstMedia),
+                    next: await makeObjectUrlFromZip(zip, nextMedia)
+                };
+            } catch (error) {
+                console.warn('Kop surat tidak bisa diekstrak dari DOCX:', error);
+
+                return { first: null, next: null };
+            }
+        }
+
+        function applyKopOverlay(kopImages) {
+            if (!kopImages || (!kopImages.first && !kopImages.next)) {
+                return;
+            }
+
+            const pages = container.querySelectorAll('section.docx');
+
+            pages.forEach(function (page, index) {
+                const src = index === 0 ? (kopImages.first || kopImages.next) : (kopImages.next || kopImages.first);
+
+                if (!src || page.querySelector('.simonpr-kop-overlay')) {
+                    return;
+                }
+
+                const image = document.createElement('img');
+                image.src = src;
+                image.alt = '';
+                image.className = 'simonpr-kop-overlay';
+                image.setAttribute('aria-hidden', 'true');
+                page.insertBefore(image, page.firstChild);
+            });
+        }
+
         async function renderDocument() {
             try {
                 const renderAsync = await getDocxRenderer();
@@ -221,6 +307,7 @@
                 }
 
                 const blob = await response.blob();
+                const kopImages = await extractKopImages(blob);
                 const styleContainer = document.createElement('div');
                 document.head.appendChild(styleContainer);
                 container.innerHTML = '';
@@ -240,6 +327,8 @@
                     experimental: false,
                     debug: false
                 });
+
+                applyKopOverlay(kopImages);
 
                 loading.style.display = 'none';
             } catch (error) {
