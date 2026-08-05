@@ -22,6 +22,7 @@ use App\Traits\HasPresence;
 use PhpOffice\PhpWord\PhpWord;
 use PhpOffice\PhpWord\IOFactory;
 use App\Models\SpMasterOption;
+use App\Support\PrintPreviewFile;
 use PhpOffice\PhpWord\Shared\Html as PhpWordHtml;
 use ZipArchive;
 
@@ -1085,15 +1086,17 @@ class SpController extends Controller
         $nomor = trim((string) ($sp->nomor_sp ?: 'SP-' . $sp->id));
         $filename = $this->previewDownloadName('SP ' . $nomor . '.docx');
         $mode = strtolower((string) ($sp->numbering_mode ?? 'auto')) === 'oracle' ? 'oracle' : 'auto';
+        $preview = PrintPreviewFile::store($this->cetakSp($sp), $filename);
 
         return view('documents.print-preview', [
             'title' => 'Preview Cetak SP',
             'eyebrow' => 'PENOMORAN SP',
-            'documentType' => 'DOCX',
+            'documentType' => strtoupper($preview['extension'] ?? 'docx'),
             'documentName' => $nomor,
             'subtitle' => $sp->deskripsi_pengadaan ?: 'Surat Pesanan',
-            'downloadUrl' => route('sp.cetak', $sp),
-            'filename' => $filename,
+            'downloadUrl' => $preview['downloadUrl'],
+            'previewFrameUrl' => $preview['previewFrameUrl'],
+            'filename' => $preview['filename'],
             'backUrl' => route('sp.index', ['mode' => $mode]),
             'meta' => [
                 'Nomor SP' => $nomor,
@@ -1101,6 +1104,7 @@ class SpController extends Controller
                 'Vendor' => $sp->nama_vendor ?: '-',
                 'Nilai SP' => $sp->nilai_sp ? 'Rp ' . number_format((float) $sp->nilai_sp, 0, ',', '.') : '-',
                 'PIC' => $sp->pic ?: '-',
+                'Link berlaku sampai' => $preview['expiresText'],
             ],
         ]);
     }

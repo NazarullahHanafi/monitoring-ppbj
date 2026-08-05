@@ -18,6 +18,7 @@ use Illuminate\Database\QueryException;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use App\Traits\HasPresence;
+use App\Support\PrintPreviewFile;
 use PhpOffice\PhpWord\PhpWord;
 use PhpOffice\PhpWord\Settings;
 use PhpOffice\PhpWord\Shared\Html as PhpWordHtml;
@@ -724,15 +725,24 @@ class SpphController extends Controller
             'vendor' => $vendorName,
             'penandatangan' => $signerKey,
         ]);
+        $printRequest = Request::create($request->path(), 'GET', [
+            'vendor' => $vendorName,
+            'penandatangan' => $signerKey,
+        ]);
+        $preview = PrintPreviewFile::store(
+            $this->cetakSpph($printRequest, $spph),
+            $this->safeDownloadName('SPPH ' . ($spph->nomor_spph ?: $spph->id) . ' - ' . $vendorName . '.docx')
+        );
 
         return view('documents.print-preview', [
             'title' => 'Preview Cetak SPPH',
             'eyebrow' => 'PENOMORAN SPPH',
-            'documentType' => 'DOCX',
+            'documentType' => strtoupper($preview['extension'] ?? 'docx'),
             'documentName' => $spph->nomor_spph ?: 'SPPH-' . $spph->id,
             'subtitle' => $spph->deskripsi_pengadaan ?: 'Surat Permintaan Penawaran Harga',
-            'downloadUrl' => $downloadUrl,
-            'filename' => $this->safeDownloadName('SPPH ' . ($spph->nomor_spph ?: $spph->id) . ' - ' . $vendorName . '.docx'),
+            'downloadUrl' => $preview['downloadUrl'],
+            'previewFrameUrl' => $preview['previewFrameUrl'],
+            'filename' => $preview['filename'],
             'backUrl' => route('spph.index'),
             'meta' => [
                 'Nomor SPPH' => $spph->nomor_spph ?: '-',
@@ -740,6 +750,7 @@ class SpphController extends Controller
                 'Vendor' => $vendorName ?: '-',
                 'Penandatangan' => ($signer['name'] ?? '-') . ' - ' . ($signer['title'] ?? '-'),
                 'PIC' => $spph->pic ?: '-',
+                'Link berlaku sampai' => $preview['expiresText'],
             ],
         ]);
     }
@@ -754,17 +765,30 @@ class SpphController extends Controller
             'spph' => $spph,
             'penandatangan' => $signerKey,
         ]);
+        $preview = null;
+
+        if ($vendorCount <= 1) {
+            $printRequest = Request::create($request->path(), 'GET', [
+                'penandatangan' => $signerKey,
+            ]);
+            $preview = PrintPreviewFile::store(
+                $this->cetakSemuaVendor($printRequest, $spph),
+                $this->safeDownloadName('SPPH ' . ($spph->nomor_spph ?: $spph->id) . ' - Semua Vendor.docx')
+            );
+            $downloadUrl = $preview['downloadUrl'];
+        }
 
         return view('documents.print-preview', [
             'title' => 'Preview Cetak Semua Vendor SPPH',
             'eyebrow' => 'PENOMORAN SPPH',
-            'documentType' => $vendorCount > 1 ? 'ZIP' : 'DOCX',
+            'documentType' => $vendorCount > 1 ? 'ZIP' : strtoupper($preview['extension'] ?? 'docx'),
             'documentName' => $spph->nomor_spph ?: 'SPPH-' . $spph->id,
             'subtitle' => $vendorCount > 1
                 ? 'Paket dokumen SPPH untuk ' . $vendorCount . ' vendor'
                 : ($spph->deskripsi_pengadaan ?: 'Surat Permintaan Penawaran Harga'),
             'downloadUrl' => $downloadUrl,
-            'filename' => $this->safeDownloadName('SPPH ' . ($spph->nomor_spph ?: $spph->id) . ' - Semua Vendor.' . ($vendorCount > 1 ? 'zip' : 'docx')),
+            'previewFrameUrl' => $preview['previewFrameUrl'] ?? null,
+            'filename' => $preview['filename'] ?? $this->safeDownloadName('SPPH ' . ($spph->nomor_spph ?: $spph->id) . ' - Semua Vendor.' . ($vendorCount > 1 ? 'zip' : 'docx')),
             'backUrl' => route('spph.index'),
             'meta' => [
                 'Nomor SPPH' => $spph->nomor_spph ?: '-',
@@ -772,6 +796,7 @@ class SpphController extends Controller
                 'Jumlah Vendor' => $vendorCount . ' vendor',
                 'Penandatangan' => ($signer['name'] ?? '-') . ' - ' . ($signer['title'] ?? '-'),
                 'PIC' => $spph->pic ?: '-',
+                'Link berlaku sampai' => $preview['expiresText'] ?? 'Dibuat saat download',
             ],
         ]);
     }

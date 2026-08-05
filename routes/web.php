@@ -5,6 +5,7 @@ use App\Http\Controllers\ArchiveAttachmentController;
 use App\Http\Controllers\ChatController;
 use App\Http\Controllers\ContactMessageController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\DocumentPreviewController;
 use App\Http\Controllers\LandingController;
 use App\Http\Controllers\MasterDataController;
 use App\Http\Controllers\OperasionalDashboardController;
@@ -392,6 +393,10 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
                 ->middleware(\App\Http\Middleware\DisableLoggingForPolling::class)
                 ->name('presence');
         });
+
+        Route::get('/document-previews/{token}/file', [DocumentPreviewController::class, 'file'])
+            ->name('document-previews.file')
+            ->middleware(['auth', 'signed', 'throttle:120,1']);
     });
 
     // ========================

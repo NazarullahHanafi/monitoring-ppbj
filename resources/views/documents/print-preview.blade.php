@@ -21,10 +21,12 @@
             --accent: #06b6d4;
             --success: #10b981;
             --danger: #ef4444;
+            --viewer: #525659;
         }
+
         @media (prefers-color-scheme: dark) {
             :root {
-                --bg: #0b1220;
+                --bg: #07101f;
                 --card: #111c2e;
                 --text: #f8fafc;
                 --muted: #b7c5d9;
@@ -32,24 +34,35 @@
                 --primary: #60a5fa;
                 --primary2: #a78bfa;
                 --accent: #22d3ee;
+                --viewer: #202938;
             }
         }
+
         * { box-sizing: border-box; }
+
         body {
             margin: 0;
             min-height: 100vh;
             font-family: Montserrat, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
             background:
-                radial-gradient(circle at 12% 16%, rgba(34,211,238,.18), transparent 28%),
-                radial-gradient(circle at 85% 8%, rgba(168,85,247,.20), transparent 30%),
+                radial-gradient(circle at 12% 16%, rgba(34, 211, 238, .18), transparent 28%),
+                radial-gradient(circle at 85% 8%, rgba(168, 85, 247, .20), transparent 30%),
                 linear-gradient(135deg, var(--bg), #f8fbff 48%, var(--bg));
             color: var(--text);
-            padding: 34px 18px;
+            padding: 28px 18px;
         }
+
         @media (prefers-color-scheme: dark) {
-            body { background: radial-gradient(circle at 12% 16%, rgba(34,211,238,.12), transparent 28%), radial-gradient(circle at 85% 8%, rgba(168,85,247,.14), transparent 30%), linear-gradient(135deg, #07101f, #10182a 50%, #07101f); }
+            body {
+                background:
+                    radial-gradient(circle at 12% 16%, rgba(34, 211, 238, .12), transparent 28%),
+                    radial-gradient(circle at 85% 8%, rgba(168, 85, 247, .14), transparent 30%),
+                    linear-gradient(135deg, #07101f, #10182a 50%, #07101f);
+            }
         }
-        .wrap { width: min(1100px, 100%); margin: 0 auto; }
+
+        .wrap { width: min(1280px, 100%); margin: 0 auto; }
+
         .hero {
             overflow: hidden;
             border-radius: 28px;
@@ -57,39 +70,267 @@
             color: white;
             box-shadow: 0 24px 70px rgba(37, 99, 235, .25);
         }
-        .hero-inner { padding: 28px 30px; display:flex; align-items:center; justify-content:space-between; gap:20px; }
-        .eyebrow { letter-spacing: .22em; font-size: 12px; font-weight: 900; opacity:.86; }
-        h1 { margin: 10px 0 8px; font-size: clamp(28px, 4vw, 46px); line-height: 1.05; font-weight: 900; }
-        .hero p { margin: 0; max-width: 740px; line-height: 1.7; font-weight: 600; opacity: .92; }
-        .type-pill { flex:0 0 auto; width: 110px; height: 110px; border-radius: 28px; display:grid; place-items:center; background: rgba(255,255,255,.16); border:1px solid rgba(255,255,255,.28); font-size: 24px; font-weight: 900; box-shadow: inset 0 1px 0 rgba(255,255,255,.18); }
-        .grid { display:grid; grid-template-columns: .9fr 1.35fr; gap: 22px; margin-top: 22px; }
-        .card { background: color-mix(in srgb, var(--card) 94%, transparent); border:1px solid var(--line); border-radius: 26px; box-shadow: 0 22px 70px rgba(15,23,42,.10); }
-        .side { padding: 24px; }
-        .main { padding: 26px; min-height: 430px; display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center; position:relative; overflow:hidden; }
-        .main::before { content:""; position:absolute; width:380px; height:380px; border-radius:50%; background:linear-gradient(135deg, rgba(37,99,235,.14), rgba(219,39,119,.10)); filter: blur(4px); top:-130px; right:-120px; }
-        .doc-icon { width:96px; height:116px; border-radius:22px; background:linear-gradient(135deg, var(--primary), var(--primary2)); color:white; display:grid; place-items:center; font-weight:900; font-size:24px; box-shadow:0 20px 45px rgba(37,99,235,.25); position:relative; z-index:1; }
-        .doc-icon::after { content:""; position:absolute; top:0; right:0; border-top:26px solid rgba(255,255,255,.55); border-left:26px solid transparent; border-radius:0 20px 0 8px; }
-        .main h2 { position:relative; z-index:1; margin:22px 0 8px; font-size: 30px; line-height:1.18; }
-        .main .desc { position:relative; z-index:1; color: var(--muted); line-height:1.75; max-width:680px; font-weight:600; }
-        .meta-title { font-size:12px; letter-spacing:.14em; color:var(--muted); font-weight:900; text-transform:uppercase; margin-bottom:16px; }
-        .meta-list { display:grid; gap:12px; }
-        .meta-item { padding:14px 15px; border-radius:18px; border:1px solid var(--line); background: color-mix(in srgb, var(--card) 84%, var(--bg)); }
-        .meta-label { color:var(--muted); font-size:11px; font-weight:900; text-transform:uppercase; letter-spacing:.08em; margin-bottom:5px; }
-        .meta-value { font-size:14px; font-weight:800; line-height:1.45; word-break:break-word; }
-        .actions { display:flex; flex-wrap:wrap; gap:12px; justify-content:center; margin-top:26px; position:relative; z-index:1; }
-        .btn { border:0; border-radius:16px; padding:14px 18px; font-family:inherit; font-weight:900; cursor:pointer; text-decoration:none; display:inline-flex; align-items:center; gap:8px; transition:.18s ease; }
+
+        .hero-inner {
+            padding: 24px 28px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 20px;
+        }
+
+        .eyebrow {
+            letter-spacing: .22em;
+            font-size: 12px;
+            font-weight: 900;
+            opacity: .86;
+        }
+
+        h1 {
+            margin: 9px 0 7px;
+            font-size: clamp(26px, 3.4vw, 42px);
+            line-height: 1.05;
+            font-weight: 900;
+        }
+
+        .hero p {
+            margin: 0;
+            max-width: 820px;
+            line-height: 1.65;
+            font-weight: 600;
+            opacity: .92;
+        }
+
+        .type-pill {
+            flex: 0 0 auto;
+            min-width: 96px;
+            height: 78px;
+            padding: 0 18px;
+            border-radius: 24px;
+            display: grid;
+            place-items: center;
+            background: rgba(255, 255, 255, .16);
+            border: 1px solid rgba(255, 255, 255, .28);
+            font-size: 23px;
+            font-weight: 900;
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, .18);
+        }
+
+        .layout {
+            display: grid;
+            grid-template-columns: 330px minmax(0, 1fr);
+            gap: 22px;
+            margin-top: 22px;
+        }
+
+        .card {
+            background: color-mix(in srgb, var(--card) 94%, transparent);
+            border: 1px solid var(--line);
+            border-radius: 26px;
+            box-shadow: 0 22px 70px rgba(15, 23, 42, .10);
+        }
+
+        .side { padding: 22px; }
+
+        .viewer-card {
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            min-height: 76vh;
+        }
+
+        .viewer-top {
+            padding: 16px 18px;
+            border-bottom: 1px solid var(--line);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 14px;
+        }
+
+        .viewer-title {
+            min-width: 0;
+        }
+
+        .viewer-title strong {
+            display: block;
+            font-size: 15px;
+            line-height: 1.35;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .viewer-title span {
+            display: block;
+            margin-top: 3px;
+            color: var(--muted);
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        .viewer-shell {
+            flex: 1;
+            background: var(--viewer);
+            min-height: 640px;
+        }
+
+        .viewer-shell iframe {
+            display: block;
+            width: 100%;
+            height: 100%;
+            min-height: 640px;
+            border: 0;
+        }
+
+        .empty-preview {
+            min-height: 540px;
+            display: grid;
+            place-items: center;
+            text-align: center;
+            padding: 36px;
+            background:
+                radial-gradient(circle at center, rgba(37, 99, 235, .13), transparent 34%),
+                var(--viewer);
+            color: white;
+        }
+
+        .empty-preview h2 {
+            margin: 18px 0 8px;
+            font-size: 28px;
+        }
+
+        .empty-preview p {
+            margin: 0 auto;
+            max-width: 560px;
+            color: rgba(255, 255, 255, .72);
+            line-height: 1.7;
+            font-weight: 700;
+        }
+
+        .doc-icon {
+            width: 90px;
+            height: 110px;
+            border-radius: 22px;
+            background: linear-gradient(135deg, var(--primary), var(--primary2));
+            color: white;
+            display: grid;
+            place-items: center;
+            font-weight: 900;
+            font-size: 23px;
+            box-shadow: 0 20px 45px rgba(37, 99, 235, .25);
+            position: relative;
+            margin: 0 auto;
+        }
+
+        .doc-icon::after {
+            content: "";
+            position: absolute;
+            top: 0;
+            right: 0;
+            border-top: 25px solid rgba(255, 255, 255, .55);
+            border-left: 25px solid transparent;
+            border-radius: 0 20px 0 8px;
+        }
+
+        .meta-title {
+            font-size: 12px;
+            letter-spacing: .14em;
+            color: var(--muted);
+            font-weight: 900;
+            text-transform: uppercase;
+            margin-bottom: 15px;
+        }
+
+        .meta-list { display: grid; gap: 11px; }
+
+        .meta-item {
+            padding: 13px 14px;
+            border-radius: 18px;
+            border: 1px solid var(--line);
+            background: color-mix(in srgb, var(--card) 84%, var(--bg));
+        }
+
+        .meta-label {
+            color: var(--muted);
+            font-size: 11px;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: .08em;
+            margin-bottom: 5px;
+        }
+
+        .meta-value {
+            font-size: 13px;
+            font-weight: 800;
+            line-height: 1.45;
+            word-break: break-word;
+        }
+
+        .actions {
+            display: grid;
+            gap: 10px;
+            margin-top: 18px;
+        }
+
+        .btn {
+            border: 0;
+            border-radius: 16px;
+            padding: 13px 16px;
+            font-family: inherit;
+            font-weight: 900;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            transition: .18s ease;
+            width: 100%;
+            font-size: 13px;
+        }
+
         .btn:hover { transform: translateY(-2px); }
-        .btn-primary { color:white; background:linear-gradient(135deg, #2563eb, #7c3aed); box-shadow:0 15px 30px rgba(37,99,235,.25); }
-        .btn-soft { color:var(--text); background: color-mix(in srgb, var(--card) 86%, var(--bg)); border:1px solid var(--line); }
-        .btn-success { color:white; background:linear-gradient(135deg, #059669, #06b6d4); box-shadow:0 15px 30px rgba(16,185,129,.20); }
-        .note { margin-top:18px; border-radius:18px; padding:14px 16px; background:rgba(14,165,233,.10); border:1px solid rgba(14,165,233,.28); color:var(--muted); font-size:13px; line-height:1.7; font-weight:700; }
-        .status { min-height:22px; margin-top:14px; color:var(--muted); font-weight:800; font-size:13px; }
+        .btn-primary { color: white; background: linear-gradient(135deg, #2563eb, #7c3aed); box-shadow: 0 15px 30px rgba(37, 99, 235, .25); }
+        .btn-soft { color: var(--text); background: color-mix(in srgb, var(--card) 86%, var(--bg)); border: 1px solid var(--line); }
+        .btn-success { color: white; background: linear-gradient(135deg, #059669, #06b6d4); box-shadow: 0 15px 30px rgba(16, 185, 129, .20); }
+
+        .note {
+            margin-top: 16px;
+            border-radius: 18px;
+            padding: 13px 15px;
+            background: rgba(14, 165, 233, .10);
+            border: 1px solid rgba(14, 165, 233, .28);
+            color: var(--muted);
+            font-size: 12px;
+            line-height: 1.7;
+            font-weight: 700;
+        }
+
+        .status {
+            min-height: 22px;
+            margin-top: 12px;
+            color: var(--muted);
+            font-weight: 800;
+            font-size: 12px;
+            line-height: 1.6;
+        }
+
         .status.ok { color: var(--success); }
         .status.err { color: var(--danger); }
-        @media (max-width: 820px) {
-            .hero-inner { align-items:flex-start; flex-direction:column; }
-            .grid { grid-template-columns:1fr; }
-            .type-pill { width:86px; height:86px; border-radius:22px; }
+
+        @media (max-width: 980px) {
+            .layout { grid-template-columns: 1fr; }
+            .viewer-card { min-height: 70vh; }
+            .viewer-shell, .viewer-shell iframe { min-height: 520px; }
+        }
+
+        @media (max-width: 640px) {
+            body { padding: 16px 10px; }
+            .hero-inner { align-items: flex-start; flex-direction: column; }
+            .type-pill { height: 64px; border-radius: 18px; }
+            .viewer-top { align-items: flex-start; flex-direction: column; }
+            .viewer-shell, .viewer-shell iframe { min-height: 460px; }
         }
     </style>
 </head>
@@ -100,13 +341,13 @@
                 <div>
                     <div class="eyebrow">{{ $eyebrow ?? 'SIMONPR DOCUMENT' }}</div>
                     <h1>{{ $title ?? 'Preview Dokumen' }}</h1>
-                    <p>Dokumen tidak langsung di-download. Silakan cek informasinya dulu, lalu pilih <strong>Simpan ke Folder</strong> untuk Save As modern atau pakai Download biasa jika browser tidak mendukung.</p>
+                    <p>Dokumen sekarang bisa dilihat dulu sebelum disimpan. Setelah cocok, pilih <strong>Simpan ke Folder</strong> untuk Save As modern atau <strong>Download Biasa</strong> sebagai cadangan.</p>
                 </div>
                 <div class="type-pill">{{ $documentType ?? 'DOCX' }}</div>
             </div>
         </section>
 
-        <section class="grid">
+        <section class="layout">
             <aside class="card side">
                 <div class="meta-title">Detail dokumen</div>
                 <div class="meta-list">
@@ -117,22 +358,42 @@
                         </div>
                     @endforeach
                 </div>
-                <div class="note">
-                    Tips: fitur Save As paling mulus di Chrome/Edge pada HTTPS. Jika tombol modern tidak tersedia, sistem otomatis memakai download biasa.
-                </div>
-            </aside>
-
-            <section class="card main">
-                <div class="doc-icon">{{ $documentType ?? 'DOCX' }}</div>
-                <h2>{{ $documentName ?? 'Dokumen siap dicetak' }}</h2>
-                <p class="desc">{{ $subtitle ?? 'File siap dibuat dari data SIMONPR.' }}</p>
 
                 <div class="actions">
                     <button type="button" class="btn btn-success" id="saveAsBtn">💾 Simpan ke Folder</button>
                     <a class="btn btn-primary" id="downloadBtn" href="{{ $downloadUrl }}">⬇️ Download Biasa</a>
                     <a class="btn btn-soft" href="{{ $backUrl ?? url()->previous() }}">← Kembali</a>
                 </div>
+
                 <div class="status" id="saveStatus"></div>
+
+                <div class="note">
+                    Link preview bersifat sementara dan hanya bisa dibuka oleh sesi login yang membuat preview ini. Aman untuk dokumen internal, tetap nyaman untuk user.
+                </div>
+            </aside>
+
+            <section class="card viewer-card">
+                <div class="viewer-top">
+                    <div class="viewer-title">
+                        <strong>{{ $documentName ?? ($filename ?? 'Dokumen siap dicetak') }}</strong>
+                        <span>{{ $subtitle ?? 'File siap dibuat dari data SIMONPR.' }}</span>
+                    </div>
+                    <a class="btn btn-soft" style="width:auto; padding:10px 14px;" href="{{ $downloadUrl }}">Unduh</a>
+                </div>
+
+                @if(!empty($previewFrameUrl))
+                    <div class="viewer-shell">
+                        <iframe src="{{ $previewFrameUrl }}" title="Preview {{ $documentName ?? 'dokumen' }}"></iframe>
+                    </div>
+                @else
+                    <div class="empty-preview">
+                        <div>
+                            <div class="doc-icon">{{ $documentType ?? 'DOCX' }}</div>
+                            <h2>Preview langsung belum tersedia</h2>
+                            <p>Format ini belum bisa ditampilkan sebagai halaman dokumen. File tetap aman dan bisa disimpan ke folder pilihan user.</p>
+                        </div>
+                    </div>
+                @endif
             </section>
         </section>
     </main>
@@ -151,10 +412,19 @@
 
         function filenameFromDisposition(header) {
             if (!header) return fallbackFilename;
-            const utf = header.match(/filename\\*=UTF-8''([^;]+)/i);
+            const utf = header.match(/filename\*=UTF-8''([^;]+)/i);
             if (utf) return decodeURIComponent(utf[1].replace(/['"]/g, ''));
             const normal = header.match(/filename="?([^";]+)"?/i);
             return normal ? normal[1] : fallbackFilename;
+        }
+
+        function acceptFor(filename) {
+            const ext = (filename.split('.').pop() || '').toLowerCase();
+            if (ext === 'zip') return { 'application/zip': ['.zip'] };
+            if (ext === 'pdf') return { 'application/pdf': ['.pdf'] };
+            if (ext === 'xlsx') return { 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'] };
+            if (ext === 'pptx') return { 'application/vnd.openxmlformats-officedocument.presentationml.presentation': ['.pptx'] };
+            return { 'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'] };
         }
 
         async function fetchDocument() {
@@ -191,19 +461,14 @@
                 return;
             }
 
-            const extension = filename.split('.').pop()?.toLowerCase() || 'docx';
-            const accept = extension === 'zip'
-                ? { 'application/zip': ['.zip'] }
-                : { 'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'] };
-
             const handle = await window.showSaveFilePicker({
                 suggestedName: filename,
-                types: [{ description: extension === 'zip' ? 'ZIP Archive' : 'Word Document', accept }],
+                types: [{ description: 'SIMONPR Document', accept: acceptFor(filename) }],
             });
             const writable = await handle.createWritable();
             await writable.write(blob);
             await writable.close();
-            setStatus('Berhasil disimpan. Mantap, file sudah masuk folder pilihan user ✅', 'ok');
+            setStatus('Berhasil disimpan. File sudah masuk folder pilihan user ✅', 'ok');
         }
 
         saveAsBtn?.addEventListener('click', async () => {
