@@ -112,6 +112,7 @@
             position: relative;
             overflow: hidden;
             box-shadow: 0 2px 18px rgba(0, 0, 0, .35);
+            box-sizing: border-box;
         }
 
         section.docx > article,
@@ -314,12 +315,51 @@
             });
         }
 
+        function normalizeA4PageBoxes() {
+            const pages = container.querySelectorAll('section.docx');
+
+            pages.forEach(function (page) {
+                const rect = page.getBoundingClientRect();
+                const width = page.clientWidth || page.offsetWidth || rect.width || parseFloat(page.style.width) || 794;
+                const pageHeight = Math.round(width * 1.41421356237);
+
+                if (!width || !pageHeight) {
+                    return;
+                }
+
+                page.style.width = width + 'px';
+                page.style.height = pageHeight + 'px';
+                page.style.minHeight = pageHeight + 'px';
+                page.style.maxHeight = pageHeight + 'px';
+                page.style.overflow = 'hidden';
+                page.dataset.normalizedA4 = '1';
+            });
+        }
+
+        function pageContentHeight(page) {
+            const article = page.querySelector(':scope > article');
+
+            if (!article) {
+                return page.scrollHeight || 0;
+            }
+
+            return Math.max(
+                page.scrollHeight || 0,
+                article.offsetTop + article.scrollHeight
+            );
+        }
+
         function clonePageShell(page) {
             const nextPage = page.cloneNode(false);
             const article = page.querySelector(':scope > article');
             const nextArticle = article ? article.cloneNode(false) : document.createElement('article');
 
             nextPage.innerHTML = '';
+            nextPage.style.width = page.style.width;
+            nextPage.style.height = page.style.height;
+            nextPage.style.minHeight = page.style.minHeight;
+            nextPage.style.maxHeight = page.style.maxHeight;
+            nextPage.style.overflow = 'hidden';
             nextPage.appendChild(nextArticle);
 
             return { page: nextPage, article: nextArticle };
@@ -338,6 +378,8 @@
         }
 
         function repaginateOverflowPages(kopImages, expectedPages) {
+            normalizeA4PageBoxes();
+
             let guard = 0;
             let page = container.querySelector('section.docx');
 
@@ -348,10 +390,11 @@
 
                 const article = page.querySelector(':scope > article');
                 const pageHeight = page.clientHeight || page.offsetHeight || 0;
+                const contentHeight = pageContentHeight(page);
                 const currentPages = container.querySelectorAll('section.docx').length;
                 const shouldForceMorePages = currentPages < expectedPages && !page.nextElementSibling;
 
-                if (!article || !pageHeight || (page.scrollHeight <= pageHeight + 18 && !shouldForceMorePages)) {
+                if (!article || !pageHeight || (contentHeight <= pageHeight + 18 && !shouldForceMorePages)) {
                     page = page.nextElementSibling && page.nextElementSibling.matches('section.docx')
                         ? page.nextElementSibling
                         : null;
@@ -363,7 +406,7 @@
                 const nextArticle = cloned.article;
                 let moved = 0;
 
-                while (article.lastElementChild && (page.scrollHeight > pageHeight + 18 || (shouldForceMorePages && moved < 6))) {
+                while (article.lastElementChild && (pageContentHeight(page) > pageHeight + 18 || (shouldForceMorePages && moved < 6))) {
                     moveLastBlockToNextPage(page, nextArticle);
                     moved++;
 
@@ -381,6 +424,7 @@
 
                 page.parentNode.insertBefore(nextPage, page.nextSibling);
 
+                normalizeA4PageBoxes();
                 applyKopOverlay(kopImages);
                 page = nextPage;
             }
@@ -419,6 +463,7 @@
                     debug: false
                 });
 
+                normalizeA4PageBoxes();
                 applyKopOverlay(kopImages);
                 repaginateOverflowPages(kopImages, metadata.expectedPages);
 
