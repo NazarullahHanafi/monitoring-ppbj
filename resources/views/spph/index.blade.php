@@ -2585,20 +2585,20 @@
                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.586-6.586a4 4 0 10-5.657-5.657L5.757 10.757a6 6 0 108.486 8.486L20.5 12.986" />
                                             </svg>
                                         </button>
-                                        <a href="{{ route('spph.cetak', ['spph' => $s, 'vendor' => $vendorList[0] ?? $s->nama_vendor]) }}" target="_blank"
+                                        <a href="{{ route('spph.cetak.preview', ['spph' => $s, 'vendor' => $vendorList[0] ?? $s->nama_vendor]) }}" target="_blank"
                                             onclick="event.preventDefault(); openSpphPrint(this.href);"
                                             class="p-1.5 rounded-lg text-sky-600 hover:bg-sky-50 dark:hover:bg-sky-900/30 transition-colors"
-                                            title="Cetak SPPH vendor utama">
+                                            title="Preview & simpan SPPH vendor utama">
                                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                                     d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
                                             </svg>
                                         </a>
                                         @if(count($vendorList) > 1)
-                                            <a href="{{ route('spph.cetak-semua-vendor', $s) }}" target="_blank"
+                                            <a href="{{ route('spph.cetak-semua-vendor.preview', $s) }}" target="_blank"
                                                 onclick="event.preventDefault(); openSpphPrint(this.href);"
                                                 class="px-2 py-1 rounded-lg text-[11px] font-semibold text-emerald-700 dark:text-emerald-200 bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition-colors"
-                                                title="Cetak semua vendor sekaligus dalam ZIP">
+                                                title="Preview & simpan semua vendor sekaligus dalam ZIP">
                                                 ZIP
                                             </a>
                                             <select onchange="openSpphSelectedVendor(this);"
@@ -2607,7 +2607,7 @@
                                                 title="Cetak SPPH per vendor">
                                                 <option value="">Cetak vendor...</option>
                                                 @foreach($vendorList as $vendorName)
-                                                    <option value="{{ route('spph.cetak', ['spph' => $s, 'vendor' => $vendorName]) }}">{{ $vendorName }}</option>
+                                                    <option value="{{ route('spph.cetak.preview', ['spph' => $s, 'vendor' => $vendorName]) }}">{{ $vendorName }}</option>
                                                 @endforeach
                                             </select>
                                         @endif

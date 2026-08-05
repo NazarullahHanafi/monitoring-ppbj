@@ -300,7 +300,9 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
             Route::post('/{spph}/archive-attachment', [ArchiveAttachmentController::class, 'storeSpph'])
                 ->name('archive-attachment')
                 ->middleware('throttle:10,1');
+            Route::get('/{spph}/cetak-preview', [SpphController::class, 'previewCetak'])->name('cetak.preview')->middleware('throttle:30,1');
             Route::get('/{spph}/cetak', [SpphController::class, 'cetakSpph'])->name('cetak')->middleware('throttle:30,1');
+            Route::get('/{spph}/cetak-semua-vendor-preview', [SpphController::class, 'previewCetakSemuaVendor'])->name('cetak-semua-vendor.preview')->middleware('throttle:30,1');
             Route::get('/{spph}/cetak-semua-vendor', [SpphController::class, 'cetakSemuaVendor'])->name('cetak-semua-vendor')->middleware('throttle:30,1');
             Route::get('/{spph}/items', [SpphController::class, 'getItems'])->name('items')->middleware('throttle:60,1');
         });
@@ -317,6 +319,7 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
             Route::get('/{sp}/items', [SpController::class, 'getItems'])->name('items')->middleware('throttle:60,1');
 
             // Cetak SP
+            Route::get('/{sp}/cetak-preview', [SpController::class, 'previewCetak'])->name('cetak.preview')->middleware('throttle:30,1');
             Route::get('/{sp}/cetak', [SpController::class, 'cetakSp'])->name('cetak')->middleware('throttle:30,1');
 
             // Utilities

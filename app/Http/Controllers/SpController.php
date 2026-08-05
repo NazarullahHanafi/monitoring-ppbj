@@ -1080,6 +1080,31 @@ class SpController extends Controller
     // =========================================================
     // CETAK SP → WORD (dengan tabel items dinamis)
     // =========================================================
+    public function previewCetak(Sp $sp)
+    {
+        $nomor = trim((string) ($sp->nomor_sp ?: 'SP-' . $sp->id));
+        $filename = $this->previewDownloadName('SP ' . $nomor . '.docx');
+        $mode = strtolower((string) ($sp->numbering_mode ?? 'auto')) === 'oracle' ? 'oracle' : 'auto';
+
+        return view('documents.print-preview', [
+            'title' => 'Preview Cetak SP',
+            'eyebrow' => 'PENOMORAN SP',
+            'documentType' => 'DOCX',
+            'documentName' => $nomor,
+            'subtitle' => $sp->deskripsi_pengadaan ?: 'Surat Pesanan',
+            'downloadUrl' => route('sp.cetak', $sp),
+            'filename' => $filename,
+            'backUrl' => route('sp.index', ['mode' => $mode]),
+            'meta' => [
+                'Nomor SP' => $nomor,
+                'Nomor PR/PPBJ' => $sp->nomor_pr ?: '-',
+                'Vendor' => $sp->nama_vendor ?: '-',
+                'Nilai SP' => $sp->nilai_sp ? 'Rp ' . number_format((float) $sp->nilai_sp, 0, ',', '.') : '-',
+                'PIC' => $sp->pic ?: '-',
+            ],
+        ]);
+    }
+
     public function cetakSp(Sp $sp)
     {
         $sp->load('items');
@@ -5329,6 +5354,14 @@ class SpController extends Controller
     private function formatMoney($value): string
     {
         return number_format($this->moneyToFloat($value), 0, ',', '.');
+    }
+
+    private function previewDownloadName(string $name): string
+    {
+        $name = preg_replace('/[^\pL\pN\s._-]+/u', ' ', $name);
+        $name = preg_replace('/\s+/', ' ', trim((string) $name));
+
+        return $name !== '' ? $name : 'dokumen.docx';
     }
 
     // =========================================================

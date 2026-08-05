@@ -713,6 +713,69 @@ class SpphController extends Controller
     // =========================================================
     // CETAK SPPH → WORD
     // =========================================================
+    public function previewCetak(Request $request, Spph $spph)
+    {
+        $vendorName = $this->resolvePrintVendorName($spph, $request->query('vendor'));
+        $signerKey = strtolower((string) $request->query('penandatangan', 'jumelda'));
+        $signerKey = in_array($signerKey, ['jumelda', 'bambang'], true) ? $signerKey : 'jumelda';
+        $signer = $this->resolveSpphSigner($signerKey);
+        $downloadUrl = route('spph.cetak', [
+            'spph' => $spph,
+            'vendor' => $vendorName,
+            'penandatangan' => $signerKey,
+        ]);
+
+        return view('documents.print-preview', [
+            'title' => 'Preview Cetak SPPH',
+            'eyebrow' => 'PENOMORAN SPPH',
+            'documentType' => 'DOCX',
+            'documentName' => $spph->nomor_spph ?: 'SPPH-' . $spph->id,
+            'subtitle' => $spph->deskripsi_pengadaan ?: 'Surat Permintaan Penawaran Harga',
+            'downloadUrl' => $downloadUrl,
+            'filename' => $this->safeDownloadName('SPPH ' . ($spph->nomor_spph ?: $spph->id) . ' - ' . $vendorName . '.docx'),
+            'backUrl' => route('spph.index'),
+            'meta' => [
+                'Nomor SPPH' => $spph->nomor_spph ?: '-',
+                'Nomor PR/PPBJ' => $spph->nomor_pr ?: '-',
+                'Vendor' => $vendorName ?: '-',
+                'Penandatangan' => ($signer['name'] ?? '-') . ' - ' . ($signer['title'] ?? '-'),
+                'PIC' => $spph->pic ?: '-',
+            ],
+        ]);
+    }
+
+    public function previewCetakSemuaVendor(Request $request, Spph $spph)
+    {
+        $vendorCount = count($spph->print_vendor_names);
+        $signerKey = strtolower((string) $request->query('penandatangan', 'jumelda'));
+        $signerKey = in_array($signerKey, ['jumelda', 'bambang'], true) ? $signerKey : 'jumelda';
+        $signer = $this->resolveSpphSigner($signerKey);
+        $downloadUrl = route('spph.cetak-semua-vendor', [
+            'spph' => $spph,
+            'penandatangan' => $signerKey,
+        ]);
+
+        return view('documents.print-preview', [
+            'title' => 'Preview Cetak Semua Vendor SPPH',
+            'eyebrow' => 'PENOMORAN SPPH',
+            'documentType' => $vendorCount > 1 ? 'ZIP' : 'DOCX',
+            'documentName' => $spph->nomor_spph ?: 'SPPH-' . $spph->id,
+            'subtitle' => $vendorCount > 1
+                ? 'Paket dokumen SPPH untuk ' . $vendorCount . ' vendor'
+                : ($spph->deskripsi_pengadaan ?: 'Surat Permintaan Penawaran Harga'),
+            'downloadUrl' => $downloadUrl,
+            'filename' => $this->safeDownloadName('SPPH ' . ($spph->nomor_spph ?: $spph->id) . ' - Semua Vendor.' . ($vendorCount > 1 ? 'zip' : 'docx')),
+            'backUrl' => route('spph.index'),
+            'meta' => [
+                'Nomor SPPH' => $spph->nomor_spph ?: '-',
+                'Nomor PR/PPBJ' => $spph->nomor_pr ?: '-',
+                'Jumlah Vendor' => $vendorCount . ' vendor',
+                'Penandatangan' => ($signer['name'] ?? '-') . ' - ' . ($signer['title'] ?? '-'),
+                'PIC' => $spph->pic ?: '-',
+            ],
+        ]);
+    }
+
     public function cetakSpph(Request $request, Spph $spph)
     {
         Settings::setOutputEscapingEnabled(true);
