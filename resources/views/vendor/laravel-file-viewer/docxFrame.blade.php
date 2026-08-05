@@ -114,17 +114,6 @@
             box-shadow: 0 2px 18px rgba(0, 0, 0, .35);
         }
 
-        .simonpr-kop-overlay {
-            position: absolute;
-            inset: 0;
-            z-index: 0;
-            width: 100%;
-            height: 100%;
-            object-fit: fill;
-            pointer-events: none;
-            user-select: none;
-        }
-
         section.docx > article,
         section.docx > header,
         section.docx > footer {
@@ -284,16 +273,15 @@
             pages.forEach(function (page, index) {
                 const src = index === 0 ? (kopImages.first || kopImages.next) : (kopImages.next || kopImages.first);
 
-                if (!src || page.querySelector('.simonpr-kop-overlay')) {
+                if (!src) {
                     return;
                 }
 
-                const image = document.createElement('img');
-                image.src = src;
-                image.alt = '';
-                image.className = 'simonpr-kop-overlay';
-                image.setAttribute('aria-hidden', 'true');
-                page.insertBefore(image, page.firstChild);
+                page.style.backgroundImage = 'url("' + src + '")';
+                page.style.backgroundRepeat = 'no-repeat';
+                page.style.backgroundPosition = 'center center';
+                page.style.backgroundSize = '100% 100%';
+                page.style.backgroundColor = '#ffffff';
             });
         }
 
