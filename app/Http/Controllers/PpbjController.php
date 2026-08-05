@@ -79,9 +79,12 @@ class PpbjController extends Controller
                 'progres',
                 'status_sla',
                 'sisa_target_sla',
+                'target_sla_hari',
+                'realisasi_sla',
                 'status',
                 'keterangan',
                 'created_at',
+                'updated_at',
                 DB::raw('(select name from users where users.id = ppbj.cancelled_by_user_id limit 1) as cancelled_by_name'),
                 DB::raw('(select name from users where users.id = ppbj.cancel_verified_by_user_id limit 1) as cancel_verified_by_name'),
             ]);

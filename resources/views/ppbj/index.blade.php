@@ -1406,6 +1406,73 @@
                             && ! empty($data['no_invoice']);
                     }
 
+                    $parseDate = function ($date) {
+                        if (! $date) {
+                            return null;
+                        }
+
+                        try {
+                            return \Carbon\Carbon::parse($date);
+                        } catch (\Throwable) {
+                            return null;
+                        }
+                    };
+
+                    $startRaw = $data['tgl_diserahkan'] ?: ($data['tgl_terima_pr'] ?: ($data['tgl_ppbj'] ?? null));
+                    $startLabel = ! empty($data['tgl_diserahkan'])
+                        ? 'Tanggal diserahkan ke Umum'
+                        : (! empty($data['tgl_terima_pr'])
+                            ? 'Tanggal terima PR'
+                            : (! empty($data['tgl_ppbj']) ? 'Tanggal PPBJ / PR' : 'Tanggal awal belum tersedia'));
+                    $finishRaw = $data['tgl_invoice'] ?: ($data['tgl_bpb'] ?: ($data['tgl_bpg'] ?: ($data['updated_at'] ?? null)));
+                    $finishLabel = ! empty($data['tgl_invoice'])
+                        ? 'Tanggal invoice'
+                        : (! empty($data['tgl_bpb'])
+                            ? 'Tanggal BPB'
+                            : (! empty($data['tgl_bpg'])
+                                ? 'Tanggal BPG'
+                                : (! empty($data['updated_at']) ? 'Tanggal update terakhir' : 'Tanggal selesai belum tersedia')));
+                    $startDate = $parseDate($startRaw);
+                    $finishDate = $parseDate($finishRaw);
+                    $targetDays = (int) ($data['target_sla_hari'] ?? 0);
+                    $targetDate = ($startDate && $targetDays > 0) ? $startDate->copy()->addDays($targetDays) : null;
+                    $runningDays = $startDate ? max(0, (int) $startDate->diffInDays(now())) : null;
+                    $usedDays = ($startDate && $finishDate) ? max(0, (int) $startDate->diffInDays($finishDate)) : null;
+                    $finalRemainingDays = $usedDays !== null ? $targetDays - $usedDays : null;
+                    $outcomeLabel = null;
+
+                    if ($isSlaComplete) {
+                        if ($finalRemainingDays === null) {
+                            $outcomeLabel = 'SLA berhenti';
+                        } elseif ($finalRemainingDays < 0) {
+                            $outcomeLabel = 'Terlambat ' . abs($finalRemainingDays) . ' hari';
+                        } elseif ($finalRemainingDays > 0) {
+                            $outcomeLabel = 'Lebih cepat ' . $finalRemainingDays . ' hari';
+                        } else {
+                            $outcomeLabel = 'Tepat SLA';
+                        }
+                    }
+
+                    $slaExplanation = $isSlaComplete
+                        ? 'Pekerjaan sudah lengkap. Perhitungan SLA berhenti.'
+                        : 'SLA masih berjalan sampai hari ini.';
+
+                    if ($startDate && $targetDays > 0) {
+                        $targetText = $targetDate ? ' Target selesai maksimal ' . $targetDate->translatedFormat('d F Y') . '.' : '';
+
+                        if ($isSlaComplete && $finishDate && $usedDays !== null && $finalRemainingDays !== null) {
+                            $result = $finalRemainingDays > 0
+                                ? 'selesai lebih awal ' . $finalRemainingDays . ' hari dari target'
+                                : ($finalRemainingDays < 0
+                                    ? 'selesai terlambat ' . abs($finalRemainingDays) . ' hari dari target'
+                                    : 'selesai tepat sesuai target SLA');
+                            $slaExplanation = 'SLA dihitung dari ' . $startLabel . ' (' . $startDate->translatedFormat('d F Y') . ') sampai ' . $finishLabel . ' (' . $finishDate->translatedFormat('d F Y') . '). Target ' . $targetDays . ' hari.' . $targetText . ' Realisasi ' . $usedDays . ' hari, sehingga ' . $result . '.';
+                        } elseif (! $isSlaComplete) {
+                            $remaining = (int) ($data['sisa_target_sla'] ?? 0);
+                            $slaExplanation = 'SLA masih berjalan dari ' . $startLabel . ' (' . $startDate->translatedFormat('d F Y') . ') sampai hari ini. Target ' . $targetDays . ' hari.' . $targetText . ' Sudah berjalan ' . ($runningDays ?? 0) . ' hari, ' . ($remaining < 0 ? 'sehingga terlambat ' . abs($remaining) . ' hari.' : 'sisa ' . $remaining . ' hari.');
+                        }
+                    }
+
                     $data['status_sla'] = $data['status_sla'] ?? ($isSlaComplete ? 'LENGKAP' : null);
                     $data['sla_is_complete'] = $isSlaComplete;
                     $data['sla_final_label'] = method_exists($item, 'slaFinalLabel')
@@ -1413,18 +1480,16 @@
                         : ($isSlaComplete ? 'Selesai' : ((int) ($data['sisa_target_sla'] ?? 0)) . ' hari');
                     $data['sla_outcome_label'] = method_exists($item, 'slaOutcomeLabel')
                         ? $item->slaOutcomeLabel()
-                        : ($isSlaComplete ? 'SLA berhenti' : null);
-                    $data['sla_used_days'] = method_exists($item, 'slaUsedDays') ? $item->slaUsedDays() : null;
-                    $data['sla_final_remaining_days'] = method_exists($item, 'slaFinalRemainingDays') ? $item->slaFinalRemainingDays() : null;
-                    $data['sla_start_source_label'] = method_exists($item, 'slaStartSourceLabel') ? $item->slaStartSourceLabel() : null;
-                    $data['sla_finish_source_label'] = method_exists($item, 'slaFinishSourceLabel') ? $item->slaFinishSourceLabel() : null;
-                    $data['sla_running_days'] = method_exists($item, 'slaRunningDays') ? $item->slaRunningDays() : null;
-                    $data['sla_target_date_label'] = method_exists($item, 'slaTargetDateLabel') ? $item->slaTargetDateLabel() : null;
+                        : $outcomeLabel;
+                    $data['sla_used_days'] = method_exists($item, 'slaUsedDays') ? $item->slaUsedDays() : $usedDays;
+                    $data['sla_final_remaining_days'] = method_exists($item, 'slaFinalRemainingDays') ? $item->slaFinalRemainingDays() : $finalRemainingDays;
+                    $data['sla_start_source_label'] = method_exists($item, 'slaStartSourceLabel') ? $item->slaStartSourceLabel() : $startLabel;
+                    $data['sla_finish_source_label'] = method_exists($item, 'slaFinishSourceLabel') ? $item->slaFinishSourceLabel() : $finishLabel;
+                    $data['sla_running_days'] = method_exists($item, 'slaRunningDays') ? $item->slaRunningDays() : $runningDays;
+                    $data['sla_target_date_label'] = method_exists($item, 'slaTargetDateLabel') ? $item->slaTargetDateLabel() : ($targetDate ? $targetDate->translatedFormat('d F Y') : null);
                     $data['sla_explanation'] = method_exists($item, 'slaExplanation')
                         ? $item->slaExplanation()
-                        : ($isSlaComplete
-                            ? 'Pekerjaan sudah lengkap. Perhitungan SLA berhenti.'
-                            : 'SLA masih berjalan sampai hari ini.');
+                        : $slaExplanation;
 
                     return $data;
                 });
