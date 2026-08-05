@@ -35,8 +35,49 @@ class AuthenticatedSessionController extends Controller
         $this->recordSuccessfulLogin($request);
         $this->notifyTelegramLogin($request->user(), $request->ip());
 
-        return redirect()->intended(\App\Providers\AppServiceProvider::homeFor($request->user()));
+        return $this->redirectAfterLogin($request);
+    }
 
+    private function redirectAfterLogin(Request $request): RedirectResponse
+    {
+        $default = \App\Providers\AppServiceProvider::homeFor($request->user());
+        $intended = $request->session()->pull('url.intended', $default);
+
+        if (! $this->isSafeIntendedUrl($intended)) {
+            return redirect($default);
+        }
+
+        return redirect()->to($intended);
+    }
+
+    private function isSafeIntendedUrl(?string $url): bool
+    {
+        if (! is_string($url) || trim($url) === '') {
+            return false;
+        }
+
+        $path = parse_url($url, PHP_URL_PATH);
+        $path = trim(strtolower((string) $path), '/');
+
+        if ($path === '') {
+            return true;
+        }
+
+        $blockedPrefixes = [
+            'api/',
+            'chatbot/',
+            'telegram/',
+            'broadcasting/',
+            'storage/',
+        ];
+
+        foreach ($blockedPrefixes as $prefix) {
+            if (str_starts_with($path, $prefix)) {
+                return false;
+            }
+        }
+
+        return ! in_array($path, ['logout'], true);
     }
 
     private function recordSuccessfulLogin(Request $request): void
