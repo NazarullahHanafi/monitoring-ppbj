@@ -144,6 +144,105 @@ class Ppbj extends Model
         return 'ON TRACK';
     }
 
+    public function isSlaComplete(): bool
+    {
+        return ! $this->is_cancelled
+            && (int) ($this->progres ?? 0) === 100
+            && ! empty($this->no_invoice);
+    }
+
+    public function slaStartDate(): ?Carbon
+    {
+        $date = $this->tgl_diserahkan ?: $this->tgl_terima_pr ?: $this->tgl_ppbj;
+
+        return $date ? Carbon::parse($date) : null;
+    }
+
+    public function slaFinishDate(): ?Carbon
+    {
+        $date = $this->tgl_invoice
+            ?: $this->tgl_bpb
+            ?: $this->tgl_bpg
+            ?: $this->updated_at
+            ?: null;
+
+        return $date ? Carbon::parse($date) : null;
+    }
+
+    public function slaUsedDays(): ?int
+    {
+        $start = $this->slaStartDate();
+        $finish = $this->slaFinishDate();
+
+        if (! $start || ! $finish) {
+            return null;
+        }
+
+        return max(0, (int) $start->diffInDays($finish));
+    }
+
+    public function slaFinalRemainingDays(): ?int
+    {
+        $usedDays = $this->slaUsedDays();
+
+        if ($usedDays === null) {
+            return null;
+        }
+
+        return (int) ($this->target_sla_hari ?? 0) - $usedDays;
+    }
+
+    public function slaFinalLabel(): string
+    {
+        if ($this->is_cancelled) {
+            return 'Dibatalkan';
+        }
+
+        if (! $this->isSlaComplete()) {
+            return ((int) ($this->sisa_target_sla ?? 0)) . ' hari';
+        }
+
+        return 'Selesai';
+    }
+
+    public function slaOutcomeLabel(): ?string
+    {
+        if (! $this->isSlaComplete()) {
+            return null;
+        }
+
+        $remaining = $this->slaFinalRemainingDays();
+
+        if ($remaining === null) {
+            return 'Selesai';
+        }
+
+        if ($remaining < 0) {
+            return 'Terlambat ' . abs($remaining) . ' hari';
+        }
+
+        if ($remaining > 0) {
+            return 'Lebih cepat ' . $remaining . ' hari';
+        }
+
+        return 'Tepat SLA';
+    }
+
+    public function slaOutcomeColorClass(): string
+    {
+        $remaining = $this->slaFinalRemainingDays();
+
+        if ($remaining === null) {
+            return 'bg-slate-100 text-slate-700 ring-slate-200 dark:bg-slate-700 dark:text-slate-200 dark:ring-slate-600';
+        }
+
+        if ($remaining < 0) {
+            return 'bg-rose-50 text-rose-700 ring-rose-200 dark:bg-rose-500/15 dark:text-rose-200 dark:ring-rose-500/30';
+        }
+
+        return 'bg-emerald-50 text-emerald-700 ring-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-200 dark:ring-emerald-500/30';
+    }
+
     public function recalculate()
     {
         $total = $this->total_sebelum_ppn ?? 0;

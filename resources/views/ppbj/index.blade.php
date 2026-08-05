@@ -419,11 +419,17 @@
                             $progress = (int) ($row->progres ?? 0);
                             $progress = max(0, min(100, $progress));
                             $isCancelled = (strtoupper((string) ($row->status ?? 'ACTIVE')) === 'CANCELLED');
+                            $isSlaComplete = method_exists($row, 'isSlaComplete') ? $row->isSlaComplete() : ($progress === 100 && !empty($row->no_invoice));
+                            $slaMainLabel = method_exists($row, 'slaFinalLabel') ? $row->slaFinalLabel() : (($isSlaComplete || $isCancelled) ? ($isCancelled ? 'Dibatalkan' : 'Selesai') : (($row->sisa_target_sla ?? 0) . ' hari'));
+                            $slaOutcomeLabel = method_exists($row, 'slaOutcomeLabel') ? $row->slaOutcomeLabel() : null;
+                            $slaOutcomeClass = method_exists($row, 'slaOutcomeColorClass')
+                                ? $row->slaOutcomeColorClass()
+                                : 'bg-slate-100 text-slate-700 ring-slate-200 dark:bg-slate-700 dark:text-slate-200 dark:ring-slate-600';
 
                             if ($isCancelled) {
                                 $displayStatusSla = 'CANCELLED';
                                 $statusColor = 'bg-gray-600';
-                            } elseif ($progress === 100 && !empty($row->no_invoice)) {
+                            } elseif ($isSlaComplete) {
                                 $displayStatusSla = 'LENGKAP';
                                 $statusColor = 'bg-blue-600';
                             } else {
@@ -463,7 +469,15 @@
                             <td class="px-4 py-3 text-gray-700 dark:text-gray-300">{{ $row->portofolio }}</td>
                             <td class="px-4 py-3 text-gray-700 dark:text-gray-300">{{ $row->buyer }}</td>
 
-                            <td class="px-4 py-3 text-center text-gray-700 dark:text-gray-300">{{ $row->sisa_target_sla }} hari
+                            <td class="px-4 py-3 text-center">
+                                <div class="inline-flex flex-col items-center gap-1">
+                                    <span class="font-semibold text-gray-700 dark:text-gray-200">{{ $slaMainLabel }}</span>
+                                    @if($slaOutcomeLabel)
+                                        <span class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold ring-1 {{ $slaOutcomeClass }}">
+                                            {{ $slaOutcomeLabel }}
+                                        </span>
+                                    @endif
+                                </div>
                             </td>
 
                             <td class="px-4 py-3 text-center">
