@@ -155,7 +155,24 @@ class Ppbj extends Model
     {
         $date = $this->tgl_diserahkan ?: $this->tgl_terima_pr ?: $this->tgl_ppbj;
 
-        return $date ? Carbon::parse($date) : null;
+        return $this->parseSlaDate($date);
+    }
+
+    public function slaStartSourceLabel(): string
+    {
+        if ($this->tgl_diserahkan) {
+            return 'Tanggal diserahkan ke Umum';
+        }
+
+        if ($this->tgl_terima_pr) {
+            return 'Tanggal terima PR';
+        }
+
+        if ($this->tgl_ppbj) {
+            return 'Tanggal PPBJ / PR';
+        }
+
+        return 'Tanggal awal belum tersedia';
     }
 
     public function slaFinishDate(): ?Carbon
@@ -166,7 +183,28 @@ class Ppbj extends Model
             ?: $this->updated_at
             ?: null;
 
-        return $date ? Carbon::parse($date) : null;
+        return $this->parseSlaDate($date);
+    }
+
+    public function slaFinishSourceLabel(): string
+    {
+        if ($this->tgl_invoice) {
+            return 'Tanggal invoice';
+        }
+
+        if ($this->tgl_bpb) {
+            return 'Tanggal BPB';
+        }
+
+        if ($this->tgl_bpg) {
+            return 'Tanggal BPG';
+        }
+
+        if ($this->updated_at) {
+            return 'Tanggal update terakhir';
+        }
+
+        return 'Tanggal selesai belum tersedia';
     }
 
     public function slaUsedDays(): ?int
@@ -205,6 +243,36 @@ class Ppbj extends Model
         return 'Selesai';
     }
 
+    public function slaRunningDays(): ?int
+    {
+        $start = $this->slaStartDate();
+
+        if (! $start) {
+            return null;
+        }
+
+        return max(0, (int) $start->diffInDays(now()));
+    }
+
+    public function slaTargetDate(): ?Carbon
+    {
+        $start = $this->slaStartDate();
+        $target = (int) ($this->target_sla_hari ?? 0);
+
+        if (! $start || $target <= 0) {
+            return null;
+        }
+
+        return $start->copy()->addDays($target);
+    }
+
+    public function slaTargetDateLabel(): ?string
+    {
+        $targetDate = $this->slaTargetDate();
+
+        return $targetDate ? $targetDate->translatedFormat('d F Y') : null;
+    }
+
     public function slaOutcomeLabel(): ?string
     {
         if (! $this->isSlaComplete()) {
@@ -241,6 +309,71 @@ class Ppbj extends Model
         }
 
         return 'bg-emerald-50 text-emerald-700 ring-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-200 dark:ring-emerald-500/30';
+    }
+
+    public function slaExplanation(): string
+    {
+        if ($this->is_cancelled) {
+            return 'Data dibatalkan, SLA tidak lagi dihitung.';
+        }
+
+        $target = (int) ($this->target_sla_hari ?? 0);
+        $start = $this->slaStartDate();
+        $startLabel = $this->slaStartSourceLabel();
+        $targetDate = $this->slaTargetDateLabel();
+
+        if (! $start || $target <= 0) {
+            return 'SLA belum bisa dijelaskan lengkap karena target SLA atau tanggal awal belum tersedia.';
+        }
+
+        if ($this->isSlaComplete()) {
+            $finish = $this->slaFinishDate();
+            $usedDays = $this->slaUsedDays();
+            $remaining = $this->slaFinalRemainingDays();
+            $finishLabel = $this->slaFinishSourceLabel();
+
+            if (! $finish || $usedDays === null || $remaining === null) {
+                return "Pekerjaan sudah lengkap. Target SLA {$target} hari dan perhitungan SLA berhenti karena status sudah selesai.";
+            }
+
+            $startDate = $start->translatedFormat('d F Y');
+            $finishDate = $finish->translatedFormat('d F Y');
+            $targetText = $targetDate ? " Target selesai maksimal {$targetDate}." : '';
+
+            if ($remaining > 0) {
+                $result = "selesai lebih awal {$remaining} hari dari target";
+            } elseif ($remaining < 0) {
+                $result = "selesai terlambat " . abs($remaining) . " hari dari target";
+            } else {
+                $result = 'selesai tepat sesuai target SLA';
+            }
+
+            return "SLA dihitung dari {$startLabel} ({$startDate}) sampai {$finishLabel} ({$finishDate}). Target {$target} hari.{$targetText} Realisasi {$usedDays} hari, sehingga {$result}.";
+        }
+
+        $runningDays = $this->slaRunningDays();
+        $remaining = (int) ($this->sisa_target_sla ?? 0);
+        $startDate = $start->translatedFormat('d F Y');
+        $targetText = $targetDate ? " Target selesai maksimal {$targetDate}." : '';
+
+        if ($remaining < 0) {
+            return "SLA masih berjalan dari {$startLabel} ({$startDate}) sampai hari ini. Target {$target} hari.{$targetText} Sudah berjalan {$runningDays} hari, sehingga terlambat " . abs($remaining) . " hari.";
+        }
+
+        return "SLA masih berjalan dari {$startLabel} ({$startDate}) sampai hari ini. Target {$target} hari.{$targetText} Sudah berjalan {$runningDays} hari, sisa {$remaining} hari.";
+    }
+
+    protected function parseSlaDate($date): ?Carbon
+    {
+        if (! $date) {
+            return null;
+        }
+
+        try {
+            return Carbon::parse($date);
+        } catch (\Throwable) {
+            return null;
+        }
     }
 
     public function recalculate()

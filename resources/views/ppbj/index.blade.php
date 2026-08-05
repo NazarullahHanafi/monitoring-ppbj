@@ -425,6 +425,11 @@
                             $slaOutcomeClass = method_exists($row, 'slaOutcomeColorClass')
                                 ? $row->slaOutcomeColorClass()
                                 : 'bg-slate-100 text-slate-700 ring-slate-200 dark:bg-slate-700 dark:text-slate-200 dark:ring-slate-600';
+                            $slaExplanation = method_exists($row, 'slaExplanation')
+                                ? $row->slaExplanation()
+                                : ($isSlaComplete
+                                    ? 'Pekerjaan sudah lengkap. Perhitungan SLA berhenti.'
+                                    : 'SLA masih berjalan sampai hari ini.');
 
                             if ($isCancelled) {
                                 $displayStatusSla = 'CANCELLED';
@@ -469,7 +474,7 @@
                             <td class="px-4 py-3 text-gray-700 dark:text-gray-300">{{ $row->portofolio }}</td>
                             <td class="px-4 py-3 text-gray-700 dark:text-gray-300">{{ $row->buyer }}</td>
 
-                            <td class="px-4 py-3 text-center">
+                            <td class="px-4 py-3 text-center" title="{{ $slaExplanation }}">
                                 <div class="inline-flex flex-col items-center gap-1">
                                     <span class="font-semibold text-gray-700 dark:text-gray-200">{{ $slaMainLabel }}</span>
                                     @if($slaOutcomeLabel)
@@ -1411,6 +1416,15 @@
                         : ($isSlaComplete ? 'SLA berhenti' : null);
                     $data['sla_used_days'] = method_exists($item, 'slaUsedDays') ? $item->slaUsedDays() : null;
                     $data['sla_final_remaining_days'] = method_exists($item, 'slaFinalRemainingDays') ? $item->slaFinalRemainingDays() : null;
+                    $data['sla_start_source_label'] = method_exists($item, 'slaStartSourceLabel') ? $item->slaStartSourceLabel() : null;
+                    $data['sla_finish_source_label'] = method_exists($item, 'slaFinishSourceLabel') ? $item->slaFinishSourceLabel() : null;
+                    $data['sla_running_days'] = method_exists($item, 'slaRunningDays') ? $item->slaRunningDays() : null;
+                    $data['sla_target_date_label'] = method_exists($item, 'slaTargetDateLabel') ? $item->slaTargetDateLabel() : null;
+                    $data['sla_explanation'] = method_exists($item, 'slaExplanation')
+                        ? $item->slaExplanation()
+                        : ($isSlaComplete
+                            ? 'Pekerjaan sudah lengkap. Perhitungan SLA berhenti.'
+                            : 'SLA masih berjalan sampai hari ini.');
 
                     return $data;
                 });
@@ -1904,6 +1918,11 @@
                     'sla_outcome_label',
                     'sla_used_days',
                     'sla_final_remaining_days',
+                    'sla_start_source_label',
+                    'sla_finish_source_label',
+                    'sla_running_days',
+                    'sla_target_date_label',
+                    'sla_explanation',
                 ]);
                 const detailLabelMap = {
                     ppbj_no: 'Nomor PPBJ / PR',
@@ -1924,6 +1943,53 @@
                     nilai_sp_spk: 'Nilai SP/SPK',
                     nilai_bpg: 'Nilai BPG',
                 };
+                const slaResultLabel = d.sla_outcome_label || (d.sla_is_complete ? 'SLA berhenti' : d.sla_final_label || '-');
+                const slaResultClass = d.sla_is_complete
+                    ? 'bg-blue-50 text-blue-700 ring-blue-200 dark:bg-blue-500/15 dark:text-blue-200 dark:ring-blue-500/30'
+                    : (Number(d.sisa_target_sla || 0) < 0
+                        ? 'bg-rose-50 text-rose-700 ring-rose-200 dark:bg-rose-500/15 dark:text-rose-200 dark:ring-rose-500/30'
+                        : 'bg-emerald-50 text-emerald-700 ring-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-200 dark:ring-emerald-500/30');
+
+                html += `
+                    <div class="md:col-span-2 rounded-2xl border border-blue-200 bg-gradient-to-br from-blue-50 via-white to-emerald-50 p-4 shadow-sm dark:border-blue-500/30 dark:from-blue-950/40 dark:via-gray-800 dark:to-emerald-950/30">
+                        <div class="flex flex-wrap items-start justify-between gap-3">
+                            <div>
+                                <div class="text-[11px] font-black uppercase tracking-[0.18em] text-blue-600 dark:text-blue-300">Audit SLA</div>
+                                <div class="mt-1 text-base font-black text-gray-900 dark:text-white">Ringkasan perhitungan sisa SLA</div>
+                            </div>
+                            <span class="inline-flex items-center rounded-full px-3 py-1 text-xs font-black ring-1 ${slaResultClass}">
+                                ${escapeHtml(slaResultLabel)}
+                            </span>
+                        </div>
+
+                        <div class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-5">
+                            <div class="rounded-xl border border-slate-200 bg-white/80 p-3 dark:border-gray-700 dark:bg-gray-900/50">
+                                <div class="text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Target</div>
+                                <div class="mt-1 text-sm font-black text-slate-900 dark:text-white">${escapeHtml(d.target_sla_hari ?? '-')} hari</div>
+                            </div>
+                            <div class="rounded-xl border border-slate-200 bg-white/80 p-3 dark:border-gray-700 dark:bg-gray-900/50">
+                                <div class="text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Deadline</div>
+                                <div class="mt-1 text-sm font-black text-slate-900 dark:text-white">${escapeHtml(d.sla_target_date_label || '-')}</div>
+                            </div>
+                            <div class="rounded-xl border border-slate-200 bg-white/80 p-3 dark:border-gray-700 dark:bg-gray-900/50">
+                                <div class="text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Mulai hitung</div>
+                                <div class="mt-1 text-sm font-black text-slate-900 dark:text-white">${escapeHtml(d.sla_start_source_label || '-')}</div>
+                            </div>
+                            <div class="rounded-xl border border-slate-200 bg-white/80 p-3 dark:border-gray-700 dark:bg-gray-900/50">
+                                <div class="text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">${d.sla_is_complete ? 'Realisasi' : 'Berjalan'}</div>
+                                <div class="mt-1 text-sm font-black text-slate-900 dark:text-white">${escapeHtml((d.sla_is_complete ? d.sla_used_days : d.sla_running_days) ?? '-')} hari</div>
+                            </div>
+                            <div class="rounded-xl border border-slate-200 bg-white/80 p-3 dark:border-gray-700 dark:bg-gray-900/50">
+                                <div class="text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Status hitung</div>
+                                <div class="mt-1 text-sm font-black text-slate-900 dark:text-white">${escapeHtml(d.sla_final_label || '-')}</div>
+                            </div>
+                        </div>
+
+                        <p class="mt-4 rounded-xl border border-blue-100 bg-white/75 p-3 text-sm font-semibold leading-relaxed text-slate-700 dark:border-blue-500/20 dark:bg-gray-950/30 dark:text-slate-200">
+                            ${escapeHtml(d.sla_explanation || 'Penjelasan SLA belum tersedia.')}
+                        </p>
+                    </div>
+                `;
 
                 Object.entries(d).forEach(([k, v]) => {
                     if (k === 'id') return;
