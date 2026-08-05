@@ -1390,7 +1390,32 @@
             const masterList = document.getElementById('masterList');
 
             // data server
-            window.ppbjData = @json(collect($ppbj->items())->keyBy('id'));
+            @php
+                $ppbjJsonData = collect($ppbj->items())->keyBy('id')->map(function ($item) {
+                    $data = method_exists($item, 'toArray') ? $item->toArray() : (array) $item;
+                    $isSlaComplete = method_exists($item, 'isSlaComplete') ? $item->isSlaComplete() : false;
+                    if (! method_exists($item, 'isSlaComplete')) {
+                        $isCancelled = strtoupper((string) ($data['status'] ?? 'ACTIVE')) === 'CANCELLED';
+                        $isSlaComplete = ! $isCancelled
+                            && (int) ($data['progres'] ?? 0) === 100
+                            && ! empty($data['no_invoice']);
+                    }
+
+                    $data['status_sla'] = $data['status_sla'] ?? ($isSlaComplete ? 'LENGKAP' : null);
+                    $data['sla_is_complete'] = $isSlaComplete;
+                    $data['sla_final_label'] = method_exists($item, 'slaFinalLabel')
+                        ? $item->slaFinalLabel()
+                        : ($isSlaComplete ? 'Selesai' : ((int) ($data['sisa_target_sla'] ?? 0)) . ' hari');
+                    $data['sla_outcome_label'] = method_exists($item, 'slaOutcomeLabel')
+                        ? $item->slaOutcomeLabel()
+                        : ($isSlaComplete ? 'SLA berhenti' : null);
+                    $data['sla_used_days'] = method_exists($item, 'slaUsedDays') ? $item->slaUsedDays() : null;
+                    $data['sla_final_remaining_days'] = method_exists($item, 'slaFinalRemainingDays') ? $item->slaFinalRemainingDays() : null;
+
+                    return $data;
+                });
+            @endphp
+            window.ppbjData = @json($ppbjJsonData);
 
             // ===== MASTER CONFIG =====
             let currentMasterType = null;
@@ -1873,18 +1898,61 @@
             function renderDetail(d) {
                 let html = '';
                 const currencyKeys = ['total_sebelum_ppn', 'nilai_sp_spk', 'nilai_bpg'];
+                const hiddenDetailKeys = new Set([
+                    'sla_is_complete',
+                    'sla_final_label',
+                    'sla_outcome_label',
+                    'sla_used_days',
+                    'sla_final_remaining_days',
+                ]);
+                const detailLabelMap = {
+                    ppbj_no: 'Nomor PPBJ / PR',
+                    tgl_ppbj: 'Tanggal PPBJ / PR',
+                    tgl_terima_pr: 'Tanggal Terima PR',
+                    uraian: 'Uraian',
+                    portofolio: 'Portofolio',
+                    buyer: 'Buyer',
+                    total_sebelum_ppn: 'Nilai PR',
+                    target_sla_hari: 'Target SLA',
+                    sisa_target_sla: 'Sisa SLA',
+                    realisasi_sla: 'Realisasi SLA',
+                    status_sla: 'Status SLA',
+                    progres: 'Progress',
+                    no_invoice: 'Nomor Invoice',
+                    tgl_invoice: 'Tanggal Invoice',
+                    penyedia_eksternal: 'Penyedia Eksternal',
+                    nilai_sp_spk: 'Nilai SP/SPK',
+                    nilai_bpg: 'Nilai BPG',
+                };
 
                 Object.entries(d).forEach(([k, v]) => {
                     if (k === 'id') return;
+                    if (hiddenDetailKeys.has(k)) return;
 
                     let displayVal = v ?? '-';
                     if (currencyKeys.includes(k) && v !== null) {
                         displayVal = parseToRupiahDisplay(v);
                     }
+                    if (k === 'sisa_target_sla') {
+                        const parts = [
+                            d.sla_final_label || (v !== null && v !== undefined ? `${v} hari` : '-'),
+                            d.sla_outcome_label || null,
+                        ].filter(Boolean);
+                        displayVal = parts.join(' • ');
+                    }
+                    if (k === 'realisasi_sla' && d.sla_is_complete && d.sla_used_days !== null && d.sla_used_days !== undefined) {
+                        displayVal = `${d.sla_used_days} hari`;
+                    }
+                    if (k === 'target_sla_hari' && v !== null && v !== undefined && v !== '-') {
+                        displayVal = `${v} hari`;
+                    }
+                    if (k === 'progres' && v !== null && v !== undefined && v !== '-') {
+                        displayVal = `${v}%`;
+                    }
 
                     html += `
                                                                                 <div class="border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 p-3 rounded-xl">
-                                                                                    <div class="text-[11px] text-gray-500 dark:text-gray-400">${escapeHtml(k)}</div>
+                                                                                    <div class="text-[11px] text-gray-500 dark:text-gray-400">${escapeHtml(detailLabelMap[k] || k)}</div>
                                                                                     <div class="font-semibold break-all text-gray-800 dark:text-gray-200">${escapeHtml(displayVal)}</div>
                                                                                 </div>
                                                                             `;

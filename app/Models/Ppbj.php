@@ -214,7 +214,7 @@ class Ppbj extends Model
         $remaining = $this->slaFinalRemainingDays();
 
         if ($remaining === null) {
-            return 'Selesai';
+            return 'SLA berhenti';
         }
 
         if ($remaining < 0) {
@@ -233,7 +233,7 @@ class Ppbj extends Model
         $remaining = $this->slaFinalRemainingDays();
 
         if ($remaining === null) {
-            return 'bg-slate-100 text-slate-700 ring-slate-200 dark:bg-slate-700 dark:text-slate-200 dark:ring-slate-600';
+            return 'bg-blue-50 text-blue-700 ring-blue-200 dark:bg-blue-500/15 dark:text-blue-200 dark:ring-blue-500/30';
         }
 
         if ($remaining < 0) {
