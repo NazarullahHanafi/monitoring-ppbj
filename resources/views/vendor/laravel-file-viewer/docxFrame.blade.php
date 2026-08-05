@@ -230,13 +230,26 @@
             return URL.createObjectURL(blob);
         }
 
-        async function extractKopImages(blob) {
+        async function extractDocxMetadata(blob) {
             if (!window.JSZip || typeof window.JSZip.loadAsync !== 'function') {
-                return { first: null, next: null };
+                return { kopImages: { first: null, next: null }, expectedPages: null };
             }
 
             try {
                 const zip = await window.JSZip.loadAsync(blob);
+                let expectedPages = null;
+                const appXml = zip.file('docProps/app.xml')
+                    ? await zip.file('docProps/app.xml').async('string')
+                    : '';
+
+                if (appXml) {
+                    const match = appXml.match(/<Pages>(\d+)<\/Pages>/i);
+
+                    if (match) {
+                        expectedPages = Math.max(1, parseInt(match[1], 10) || 1);
+                    }
+                }
+
                 const mediaFiles = Object.keys(zip.files).filter(function (name) {
                     return /^word\/media\//i.test(name);
                 });
@@ -266,13 +279,16 @@
                     || firstMedia;
 
                 return {
-                    first: await makeObjectUrlFromZip(zip, firstMedia),
-                    next: await makeObjectUrlFromZip(zip, nextMedia)
+                    kopImages: {
+                        first: await makeObjectUrlFromZip(zip, firstMedia),
+                        next: await makeObjectUrlFromZip(zip, nextMedia)
+                    },
+                    expectedPages: expectedPages
                 };
             } catch (error) {
-                console.warn('Kop surat tidak bisa diekstrak dari DOCX:', error);
+                console.warn('Metadata/kop surat tidak bisa diekstrak dari DOCX:', error);
 
-                return { first: null, next: null };
+                return { kopImages: { first: null, next: null }, expectedPages: null };
             }
         }
 
@@ -309,17 +325,33 @@
             return { page: nextPage, article: nextArticle };
         }
 
-        function repaginateOverflowPages(kopImages) {
+        function moveLastBlockToNextPage(page, nextArticle) {
+            const article = page.querySelector(':scope > article');
+
+            if (!article || !article.lastElementChild) {
+                return false;
+            }
+
+            nextArticle.insertBefore(article.lastElementChild, nextArticle.firstChild);
+
+            return true;
+        }
+
+        function repaginateOverflowPages(kopImages, expectedPages) {
             let guard = 0;
             let page = container.querySelector('section.docx');
+
+            expectedPages = Math.max(1, parseInt(expectedPages || 1, 10) || 1);
 
             while (page && guard < 12) {
                 guard++;
 
                 const article = page.querySelector(':scope > article');
                 const pageHeight = page.clientHeight || page.offsetHeight || 0;
+                const currentPages = container.querySelectorAll('section.docx').length;
+                const shouldForceMorePages = currentPages < expectedPages && !page.nextElementSibling;
 
-                if (!article || !pageHeight || page.scrollHeight <= pageHeight + 18) {
+                if (!article || !pageHeight || (page.scrollHeight <= pageHeight + 18 && !shouldForceMorePages)) {
                     page = page.nextElementSibling && page.nextElementSibling.matches('section.docx')
                         ? page.nextElementSibling
                         : null;
@@ -331,8 +363,8 @@
                 const nextArticle = cloned.article;
                 let moved = 0;
 
-                while (article.lastElementChild && page.scrollHeight > pageHeight + 18) {
-                    nextArticle.insertBefore(article.lastElementChild, nextArticle.firstChild);
+                while (article.lastElementChild && (page.scrollHeight > pageHeight + 18 || (shouldForceMorePages && moved < 6))) {
+                    moveLastBlockToNextPage(page, nextArticle);
                     moved++;
 
                     if (moved > 80) {
@@ -364,7 +396,8 @@
                 }
 
                 const blob = await response.blob();
-                const kopImages = await extractKopImages(blob);
+                const metadata = await extractDocxMetadata(blob);
+                const kopImages = metadata.kopImages;
                 const styleContainer = document.createElement('div');
                 document.head.appendChild(styleContainer);
                 container.innerHTML = '';
@@ -387,7 +420,7 @@
                 });
 
                 applyKopOverlay(kopImages);
-                repaginateOverflowPages(kopImages);
+                repaginateOverflowPages(kopImages, metadata.expectedPages);
 
                 loading.style.display = 'none';
             } catch (error) {
