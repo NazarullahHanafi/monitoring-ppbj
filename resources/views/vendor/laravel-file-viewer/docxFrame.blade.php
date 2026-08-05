@@ -249,8 +249,21 @@
                     }) || null;
                 };
 
-                const firstMedia = byName('kop_surat_halaman_1') || byName('kop_surat_sp') || null;
-                const nextMedia = byName('kop_surat_lanjutan') || firstMedia;
+                const kopMedia = mediaFiles.filter(function (name) {
+                    return name.toLowerCase().indexOf('kop_surat') !== -1;
+                });
+
+                const firstMedia = byName('kop_surat_halaman_1')
+                    || byName('kop_surat.')
+                    || byName('kop_surat_sp')
+                    || kopMedia[0]
+                    || null;
+                const nextMedia = byName('kop_surat_lanjutan')
+                    || byName('kop_surat2')
+                    || kopMedia.find(function (name) {
+                        return name !== firstMedia;
+                    })
+                    || firstMedia;
 
                 return {
                     first: await makeObjectUrlFromZip(zip, firstMedia),
@@ -307,8 +320,8 @@
                     ignoreHeight: false,
                     ignoreFonts: false,
                     breakPages: true,
-                    renderHeaders: true,
-                    renderFooters: true,
+                    renderHeaders: false,
+                    renderFooters: false,
                     renderFootnotes: true,
                     renderEndnotes: true,
                     useBase64URL: true,
