@@ -298,6 +298,62 @@
             });
         }
 
+        function clonePageShell(page) {
+            const nextPage = page.cloneNode(false);
+            const article = page.querySelector(':scope > article');
+            const nextArticle = article ? article.cloneNode(false) : document.createElement('article');
+
+            nextPage.innerHTML = '';
+            nextPage.appendChild(nextArticle);
+
+            return { page: nextPage, article: nextArticle };
+        }
+
+        function repaginateOverflowPages(kopImages) {
+            let guard = 0;
+            let page = container.querySelector('section.docx');
+
+            while (page && guard < 12) {
+                guard++;
+
+                const article = page.querySelector(':scope > article');
+                const pageHeight = page.clientHeight || page.offsetHeight || 0;
+
+                if (!article || !pageHeight || page.scrollHeight <= pageHeight + 18) {
+                    page = page.nextElementSibling && page.nextElementSibling.matches('section.docx')
+                        ? page.nextElementSibling
+                        : null;
+                    continue;
+                }
+
+                const cloned = clonePageShell(page);
+                const nextPage = cloned.page;
+                const nextArticle = cloned.article;
+                let moved = 0;
+
+                while (article.lastElementChild && page.scrollHeight > pageHeight + 18) {
+                    nextArticle.insertBefore(article.lastElementChild, nextArticle.firstChild);
+                    moved++;
+
+                    if (moved > 80) {
+                        break;
+                    }
+                }
+
+                if (moved === 0) {
+                    page = page.nextElementSibling && page.nextElementSibling.matches('section.docx')
+                        ? page.nextElementSibling
+                        : null;
+                    continue;
+                }
+
+                page.parentNode.insertBefore(nextPage, page.nextSibling);
+
+                applyKopOverlay(kopImages);
+                page = nextPage;
+            }
+        }
+
         async function renderDocument() {
             try {
                 const renderAsync = await getDocxRenderer();
@@ -320,6 +376,7 @@
                     ignoreHeight: false,
                     ignoreFonts: false,
                     breakPages: true,
+                    ignoreLastRenderedPageBreak: false,
                     renderHeaders: false,
                     renderFooters: false,
                     renderFootnotes: true,
@@ -330,6 +387,7 @@
                 });
 
                 applyKopOverlay(kopImages);
+                repaginateOverflowPages(kopImages);
 
                 loading.style.display = 'none';
             } catch (error) {
