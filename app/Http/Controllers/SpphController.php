@@ -49,7 +49,7 @@ class SpphController extends Controller
         $vendors = Cache::remember(
             'vendors:active',
             3600,
-            fn() => Vendor::active()->orderBy('nama_vendor')->get()
+            fn() => Vendor::active()->select(['id', 'nama_vendor'])->orderBy('nama_vendor')->get()
         );
 
         $pics = Cache::remember(
@@ -1859,7 +1859,7 @@ XML;
 
     private function vendorUsageStats(): array
     {
-        return Cache::remember('vendor:usage-stats:spph-sp:v1', 600, function () {
+        return Cache::remember('vendor:usage-stats:spph-sp:v1', 1800, function () {
             $stats = [];
 
             $ensure = function (string $vendor) use (&$stats): string {

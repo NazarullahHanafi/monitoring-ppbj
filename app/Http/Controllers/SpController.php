@@ -46,24 +46,13 @@ class SpController extends Controller
         $sampai = $request->get('sampai', '');
         $oracleMode = $this->isOracleMode($request);
 
-        $vendors = Cache::remember('vendors:active', 3600, fn() => Vendor::active()->orderBy('nama_vendor')->get());
+        $vendors = Cache::remember('vendors:active', 3600, fn() => Vendor::active()->select(['id', 'nama_vendor'])->orderBy('nama_vendor')->get());
         $pics = Cache::remember('pics:umum', 3600, fn() => User::where('department', 'umum')->orderBy('name')->pluck('name'));
         $satuans = Cache::remember('satuans:all', 3600, fn() => Satuan::orderBy('nama_satuan')->pluck('nama_satuan')->toArray());
         $lastNomor = Cache::remember('sp:last_nomor:' . ($oracleMode ? 'oracle' : 'auto'), 300, fn() => $this->spModeQuery($oracleMode)->orderBy('sequence_number', 'desc')->value('nomor_sp'));
-        $bidangIpItus = SpMasterOption::active()
-            ->where('type', 'bidang_ip_itu')
-            ->orderBy('nama')
-            ->pluck('nama');
-
-        $penandatanganScis = SpMasterOption::active()
-            ->where('type', 'penandatangan_sci')
-            ->orderBy('nama')
-            ->pluck('nama');
-
-        $jabatanScis = SpMasterOption::active()
-            ->where('type', 'jabatan_sci')
-            ->orderBy('nama')
-            ->pluck('nama');
+        $bidangIpItus = $this->activeSpMasterOptionNames('bidang_ip_itu');
+        $penandatanganScis = $this->activeSpMasterOptionNames('penandatangan_sci');
+        $jabatanScis = $this->activeSpMasterOptionNames('jabatan_sci');
 
         $baseQuery = $this->spModeQuery($oracleMode)->when($search, fn($q) => $q->where(function ($q2) use ($search) {
             $q2->where('nomor_sp', 'like', "%{$search}%")
@@ -152,21 +141,25 @@ class SpController extends Controller
         if ($ppbj->status === 'CANCELLED')
             return response()->json(['status' => 'cancelled', 'message' => 'PPBJ sudah di-CANCELLED!']);
 
-        if (!empty($ppbj->awarding_sp))
+        if (!empty($ppbj->awarding_sp)) {
+            $spphMeta = $this->spphVendorMetaForPpbj($ppbj);
             return response()->json([
                 'status' => 'already_linked',
                 'message' => "PPBJ sudah terhubung dengan SP: {$ppbj->awarding_sp}",
                 'linked_sp' => $ppbj->awarding_sp,
                 'uraian' => $ppbj->uraian,
-                'spph_nomor' => $this->spphVendorMetaForPpbj($ppbj)['spph_nomor'],
-                'spph_vendors' => $this->spphVendorMetaForPpbj($ppbj)['spph_vendors'],
+                'spph_nomor' => $spphMeta['spph_nomor'],
+                'spph_vendors' => $spphMeta['spph_vendors'],
                 'total_sebelum_ppn' => $ppbj->total_sebelum_ppn,
             ]);
+        }
 
         $warnings = [];
         if (empty($ppbj->spph_rfq_1)) {
             $warnings[] = 'PPBJ belum memiliki SPPH';
         }
+
+        $spphMeta = $this->spphVendorMetaForPpbj($ppbj);
 
         return response()->json([
             'status' => 'available',
@@ -175,11 +168,21 @@ class SpController extends Controller
             'portofolio' => $ppbj->portofolio,
             'buyer' => $ppbj->buyer,
             'has_spph' => !empty($ppbj->spph_rfq_1),
-            'spph_nomor' => $this->spphVendorMetaForPpbj($ppbj)['spph_nomor'],
-            'spph_vendors' => $this->spphVendorMetaForPpbj($ppbj)['spph_vendors'],
+            'spph_nomor' => $spphMeta['spph_nomor'],
+            'spph_vendors' => $spphMeta['spph_vendors'],
             'warnings' => $warnings,
             'total_sebelum_ppn' => $ppbj->total_sebelum_ppn,
         ]);
+    }
+
+    private function activeSpMasterOptionNames(string $type)
+    {
+        return Cache::remember("sp_master_options:{$type}:active_names", 3600, function () use ($type) {
+            return SpMasterOption::active()
+                ->where('type', $type)
+                ->orderBy('nama')
+                ->pluck('nama');
+        });
     }
 
     private function spphVendorMetaForPpbj(object $ppbj): array

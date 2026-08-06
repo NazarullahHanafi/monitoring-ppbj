@@ -158,7 +158,6 @@ class PpbjController extends Controller
 
         if ($request->filled('status_sla')) {
             $statusSla = $request->status_sla;
-            Log::info('Filter status_sla applying: ' . $statusSla);
 
             switch ($statusSla) {
                 case 'CANCELLED':
@@ -189,13 +188,10 @@ class PpbjController extends Controller
                         ->where('sisa_target_sla', '<=', 0);
                     break;
             }
-
-            Log::info('Filter status_sla applied: ' . $statusSla);
         }
 
         if ($request->filled('progress')) {
             $progress = $request->progress;
-            Log::info('Filter progress applying: ' . $progress);
 
             switch ($progress) {
                 case '0':
@@ -226,8 +222,6 @@ class PpbjController extends Controller
                     $query->where('progres', 100);  // ✅ DIPERBAIKI: dari where('100') ke where('progres', 100)
                     break;
             }
-
-            Log::info('Filter progress applied: ' . $progress);
         }
 
         if ($request->filled('date_type')) {
@@ -254,25 +248,25 @@ class PpbjController extends Controller
 
         $portofolios = Cache::remember(
             'master_portofolios',
-            60,
+            3600,
             fn() =>
             MasterPortofolio::orderBy('nama')->pluck('nama', 'id')
         );
         $buyers = Cache::remember(
             'master_buyers',
-            60,
+            3600,
             fn() =>
             MasterBuyer::orderBy('nama')->pluck('nama', 'id')
         );
         $metodePengadaans = Cache::remember(
             'master_metode_pengadaan',
-            60,
+            3600,
             fn() =>
             MasterMetodePengadaan::orderBy('nama')->pluck('nama')
         );
         $penyediaEksternals = Cache::remember(
             'master_penyedia_eksternal',
-            60,
+            3600,
             fn() =>
             MasterPenyediaEksternal::orderBy('nama')->pluck('nama')
         );
