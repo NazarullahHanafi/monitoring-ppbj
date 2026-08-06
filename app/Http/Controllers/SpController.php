@@ -1575,10 +1575,10 @@ class SpController extends Controller
                 ? \Carbon\Carbon::parse($ppbjCatatan->tgl_ppbj)->locale('id')->translatedFormat('d F Y')
                 : null;
 
-            $catPpbj = 'Memenuhi PPBJ Cabang Pekanbaru Nomor PR ' . $sp->nomor_pr;
+            $catPpbj = 'Memenuhi PR Bidang (........) PT Sucofindo Cabang Pekanbaru Sesuai Nomor PR ' . ($sp->nomor_pr) . $fb;
 
             if ($tglPpbjCatatan) {
-                $catPpbj .= ' tanggal ' . $tglPpbjCatatan;
+                $catPpbj .= ' tanggal ' . ($tglPpbjCatatan) . $fb ;
             }
         }
 
