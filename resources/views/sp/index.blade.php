@@ -3458,6 +3458,7 @@
                     const $npInput2 = selector === '.sp-ppbj-select' ? $('#nilaiPrInput') : $('#editNilaiPr');
                     if ($npInput2) $npInput2.val('');
                     renderSpphVendorRecommendation(vendorPrefix, [], null);
+                    resetSpItemsForPr(vendorPrefix === 'edit' ? 'edit' : 'add');
                     return;
                 }
                 $status.html('<span class="text-gray-400">🔄 Memeriksa...</span>');
@@ -3631,14 +3632,29 @@
             });
         }
 
-        function autoFillItemsFromSpph(mode, items) {
+        function resetSpItemsForPr(mode) {
+            const wrapper = document.getElementById(mode === 'edit' ? 'editRows' : 'addRows');
+            if (!wrapper) return;
+
+            wrapper.innerHTML = '';
+            addRow(mode, null);
+            updateGrandTotal(mode);
+        }
+
+        function autoFillItemsFromSpph(mode, items, forceSync = false) {
             const rows = Array.isArray(items)
                 ? items.filter(item => item && (item.nama_barang || item.satuan || item.jumlah))
                 : [];
             const wrapper = document.getElementById(mode === 'edit' ? 'editRows' : 'addRows');
 
-            if (!wrapper || !rows.length) return;
-            if (hasMeaningfulSpItems(mode)) return;
+            if (!wrapper) return;
+
+            if (!rows.length) {
+                if (forceSync) resetSpItemsForPr(mode);
+                return;
+            }
+
+            if (!forceSync && hasMeaningfulSpItems(mode)) return;
 
             wrapper.innerHTML = '';
             rows.forEach(item => addRow(mode, {
@@ -3655,7 +3671,7 @@
             const mode = prefix === 'edit' ? 'edit' : 'add';
             autoFillPicFromSpph(prefix, data?.spph_pic);
             autoFillVendorFromSpph(prefix, data?.spph_vendors || []);
-            autoFillItemsFromSpph(mode, data?.spph_items || []);
+            autoFillItemsFromSpph(mode, data?.spph_items || [], true);
         }
 
         function renderSpphVendorRecommendation(prefix, vendors, spphNomor) {
