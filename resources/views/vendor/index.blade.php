@@ -147,7 +147,7 @@
                         class="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm">
                 </div>
                 @if($search)
-                    <button onclick="window.location.href='/vendor'"
+                    <button onclick="window.location.href='{{ route('vendor.index') }}'"
                         class="flex items-center gap-1.5 px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 font-semibold text-sm whitespace-nowrap">
                         🔄 Reset
                     </button>
@@ -555,12 +555,13 @@
         // ===== SEARCH =====
         let searchTimer = null;
         const searchInput = document.getElementById('searchInput');
+        const vendorIndexUrl = @json(route('vendor.index'));
 
         searchInput.addEventListener('input', function () {
             clearTimeout(searchTimer);
             searchTimer = setTimeout(() => {
                 const q = this.value.trim();
-                window.location.href = q ? `/vendor?search=${encodeURIComponent(q)}` : '/vendor';
+                window.location.href = q ? `${vendorIndexUrl}?search=${encodeURIComponent(q)}` : vendorIndexUrl;
             }, 400);
         });
 
@@ -569,7 +570,7 @@
                 e.preventDefault();
                 clearTimeout(searchTimer);
                 const q = this.value.trim();
-                window.location.href = q ? `/vendor?search=${encodeURIComponent(q)}` : '/vendor';
+                window.location.href = q ? `${vendorIndexUrl}?search=${encodeURIComponent(q)}` : vendorIndexUrl;
             }
         });
 

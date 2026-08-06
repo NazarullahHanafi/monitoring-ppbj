@@ -35,6 +35,18 @@ class SpController extends Controller
         return 'sp:presence';
     }
 
+    private function findVendorByName(?string $name): ?Vendor
+    {
+        $name = trim((string) $name);
+
+        if ($name === '') {
+            return null;
+        }
+
+        return Vendor::where('nama_vendor', $name)->first()
+            ?: Vendor::whereRaw('LOWER(TRIM(nama_vendor)) = ?', [strtolower($name)])->first();
+    }
+
     // =========================================================
     // INDEX
     // =========================================================
@@ -1247,10 +1259,13 @@ class SpController extends Controller
         $section->addText('Kepada Yth,', $fs, $p0);
         $section->addText($sp->nama_vendor, $fb, $p0);
 
-        $vendor = Vendor::where('nama_vendor', $sp->nama_vendor)->first();
+        $vendor = $this->findVendorByName($sp->nama_vendor);
         $alamat = ($vendor && $vendor->alamat) ? $vendor->alamat : '-';
         $telp = ($vendor && $vendor->telepon) ? $vendor->telepon : '-';
         $fax = ($vendor && $vendor->fax) ? $vendor->fax : '-';
+        $jabatanVendor = ($vendor && trim((string) ($vendor->jabatan ?? '')) !== '')
+            ? trim((string) $vendor->jabatan)
+            : '..............................';
 
         foreach (explode("\n", $alamat) as $baris) {
             if (trim($baris))
@@ -1646,7 +1661,7 @@ class SpController extends Controller
         // Row 4: Jabatan
         $sigTbl->addRow();
         $sigTbl->addCell(4500)->addText('Pj. Kepala Bidang Dukungan Bisnis', $sigNrm, $sigPC);
-        $sigTbl->addCell(4500)->addText('Ketua', $sigNrm, $sigPC);
+        $sigTbl->addCell(4500)->addText($jabatanVendor, $sigNrm, $sigPC);
 
         // === GENERATE FILE ===
         $cleanDesc = preg_replace('/[\r\n]+/', ' ', $sp->deskripsi_pengadaan);
@@ -1719,7 +1734,7 @@ class SpController extends Controller
             'spaceBefore' => 0,
         ]);
 
-        $vendor = Vendor::where('nama_vendor', $sp->nama_vendor)->first();
+        $vendor = $this->findVendorByName($sp->nama_vendor);
         $ppbj = $sp->nomor_pr ? Ppbj::where('ppbj_no', $sp->nomor_pr)->first() : null;
 
         $vendorUp = strtoupper(trim((string) $sp->nama_vendor));
@@ -2439,7 +2454,7 @@ class SpController extends Controller
             'spaceBefore' => 0,
         ]);
 
-        $vendor = Vendor::where('nama_vendor', $sp->nama_vendor)->first();
+        $vendor = $this->findVendorByName($sp->nama_vendor);
         $ppbj = $sp->nomor_pr ? Ppbj::where('ppbj_no', $sp->nomor_pr)->first() : null;
 
         $vendorUp = strtoupper(trim((string) $sp->nama_vendor));
@@ -3152,7 +3167,7 @@ class SpController extends Controller
             'spaceBefore' => 0,
         ]);
 
-        $vendor = Vendor::where('nama_vendor', $sp->nama_vendor)->first();
+        $vendor = $this->findVendorByName($sp->nama_vendor);
         $ppbj = $sp->nomor_pr ? Ppbj::where('ppbj_no', $sp->nomor_pr)->first() : null;
         $rfqText = trim((string) ($sp->rfq ?? ''));
         $rfqText = $rfqText !== '' ? $rfqText : '.......';
