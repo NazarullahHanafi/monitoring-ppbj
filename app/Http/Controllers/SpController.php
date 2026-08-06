@@ -154,6 +154,8 @@ class SpController extends Controller
                 'uraian' => $ppbj->uraian,
                 'spph_nomor' => $spphMeta['spph_nomor'],
                 'spph_vendors' => $spphMeta['spph_vendors'],
+                'spph_pic' => $spphMeta['spph_pic'],
+                'spph_items' => $spphMeta['spph_items'],
                 'total_sebelum_ppn' => $ppbj->total_sebelum_ppn,
             ]);
         }
@@ -174,6 +176,8 @@ class SpController extends Controller
             'has_spph' => !empty($ppbj->spph_rfq_1),
             'spph_nomor' => $spphMeta['spph_nomor'],
             'spph_vendors' => $spphMeta['spph_vendors'],
+            'spph_pic' => $spphMeta['spph_pic'],
+            'spph_items' => $spphMeta['spph_items'],
             'warnings' => $warnings,
             'total_sebelum_ppn' => $ppbj->total_sebelum_ppn,
         ]);
@@ -197,17 +201,47 @@ class SpController extends Controller
             return [
                 'spph_nomor' => null,
                 'spph_vendors' => [],
+                'spph_pic' => null,
+                'spph_items' => [],
             ];
         }
 
-        $spph = Spph::select(['nomor_spph', 'nama_vendor', 'vendor_names'])
+        $spph = Spph::select(['id', 'nomor_spph', 'nama_vendor', 'vendor_names', 'pic'])
+            ->with(['items' => function ($query) {
+                $query->select(['id', 'spph_id', 'urutan', 'nama_barang', 'satuan', 'jumlah', 'tgl_pemenuhan'])
+                    ->orderBy('urutan');
+            }])
             ->where('nomor_spph', $spphNo)
             ->first();
 
         return [
             'spph_nomor' => $spphNo,
             'spph_vendors' => $spph?->print_vendor_names ?? [],
+            'spph_pic' => $spph?->pic,
+            'spph_items' => $this->formatSpphItemsForSp($spph),
         ];
+    }
+
+    private function formatSpphItemsForSp(?Spph $spph): array
+    {
+        if (!$spph) {
+            return [];
+        }
+
+        return $spph->items
+            ->map(function ($item) {
+                return [
+                    'nama_barang' => $item->nama_barang,
+                    'satuan' => $item->satuan,
+                    'jumlah' => $item->jumlah,
+                    'harga_satuan' => '',
+                    'subtotal' => 0,
+                    'tgl_pemenuhan' => optional($item->tgl_pemenuhan)->format('Y-m-d'),
+                ];
+            })
+            ->filter(fn($item) => filled($item['nama_barang']) || filled($item['satuan']) || filled($item['jumlah']))
+            ->values()
+            ->all();
     }
 
     private function spphVendorMetaMapForPpbjRows($rows)

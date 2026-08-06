@@ -3472,9 +3472,12 @@
                         if (d.total_sebelum_ppn) html += `<div><strong>Nilai PR (PPBJ):</strong> Rp ${number_format_dots(d.total_sebelum_ppn)}</div>`;
                         if (d.spph_nomor) html += `<div><strong>SPPH:</strong> <span class="font-mono">${escapedHtml(d.spph_nomor)}</span></div>`;
                         if (d.spph_vendors && d.spph_vendors.length) html += `<div><strong>Vendor SPPH:</strong> ${d.spph_vendors.map(v => escapedHtml(v)).join(', ')}</div>`;
+                        if (d.spph_pic) html += `<div><strong>PIC SPPH:</strong> ${escapedHtml(d.spph_pic)}</div>`;
+                        if (d.spph_items && d.spph_items.length) html += `<div><strong>Item SPPH:</strong> ${d.spph_items.length} item siap ditarik otomatis ke SP</div>`;
                         if (d.warnings && d.warnings.length) html += `<div class="text-amber-600 dark:text-amber-400">⚠️ ${d.warnings.join(', ')}</div>`;
                         $content.html(html);
                         renderSpphVendorRecommendation(vendorPrefix, d.spph_vendors || [], d.spph_nomor || null);
+                        applySpphAutoFill(vendorPrefix, d);
                         if ($deskripsi && d.uraian) {
                             $deskripsi.val(d.uraian);
                             showDeskBadge($badge, d.uraian);
@@ -3500,8 +3503,11 @@
                         if (d.total_sebelum_ppn) linkedHtml += `<div><strong>Nilai PR (PPBJ):</strong> Rp ${number_format_dots(d.total_sebelum_ppn)}</div>`;
                         if (d.spph_nomor) linkedHtml += `<div><strong>SPPH:</strong> <span class="font-mono">${escapedHtml(d.spph_nomor)}</span></div>`;
                         if (d.spph_vendors && d.spph_vendors.length) linkedHtml += `<div><strong>Vendor SPPH:</strong> ${d.spph_vendors.map(v => escapedHtml(v)).join(', ')}</div>`;
+                        if (d.spph_pic) linkedHtml += `<div><strong>PIC SPPH:</strong> ${escapedHtml(d.spph_pic)}</div>`;
+                        if (d.spph_items && d.spph_items.length) linkedHtml += `<div><strong>Item SPPH:</strong> ${d.spph_items.length} item siap ditarik otomatis ke SP</div>`;
                         $content.html(linkedHtml);
                         renderSpphVendorRecommendation(vendorPrefix, d.spph_vendors || [], d.spph_nomor || null);
+                        applySpphAutoFill(vendorPrefix, d);
                         if (!linkedHtml) $info.addClass('hidden');
                         if ($deskripsi && d.uraian) {
                             $deskripsi.val(d.uraian);
@@ -3556,7 +3562,12 @@
         function selectRecommendedSpphVendor(prefix, vendor) {
             const selector = prefix === 'edit' ? '#editVendorSp' : '#vendorSelectSp';
             const $select = $(selector);
-            if ($select.find(`option[value="${vendor}"]`).length === 0) {
+            let vendorOptionExists = false;
+            $select.find('option').each(function () {
+                if (String(this.value) === String(vendor)) vendorOptionExists = true;
+            });
+
+            if (!vendorOptionExists) {
                 const marker = prefix === 'edit' ? null : $select.find('option[value="__tambah__"]');
                 const option = new Option(vendor, vendor, true, true);
                 if (marker && marker.length) marker.before(option); else $select.append(option);
@@ -3564,6 +3575,87 @@
             $select.val(vendor).trigger('change');
             const input = document.getElementById(prefix === 'edit' ? 'editVendorMismatchConfirmed' : 'addVendorMismatchConfirmed');
             if (input) input.value = '0';
+        }
+
+        function ensureSelectHasValue(selector, value) {
+            const cleanValue = String(value || '').trim();
+            if (!cleanValue) return;
+
+            const $select = $(selector);
+            if (!$select.length) return;
+
+            let exists = false;
+            $select.find('option').each(function () {
+                if (String(this.value) === cleanValue) exists = true;
+            });
+
+            if (!exists) {
+                $select.append(new Option(cleanValue, cleanValue, false, false));
+            }
+
+            $select.val(cleanValue).trigger('change');
+        }
+
+        function autoFillPicFromSpph(prefix, pic) {
+            const cleanPic = String(pic || '').trim();
+            if (!cleanPic) return;
+            ensureSelectHasValue(prefix === 'edit' ? '#editPicSp' : '.pic-select-sp', cleanPic);
+        }
+
+        function autoFillVendorFromSpph(prefix, vendors) {
+            const cleanVendors = Array.isArray(vendors)
+                ? vendors.map(v => String(v || '').trim()).filter(Boolean)
+                : [];
+
+            if (cleanVendors.length === 1) {
+                selectRecommendedSpphVendor(prefix, cleanVendors[0]);
+            }
+        }
+
+        function hasMeaningfulSpItems(mode) {
+            const wrapper = document.getElementById(mode === 'edit' ? 'editRows' : 'addRows');
+            if (!wrapper) return false;
+
+            return Array.from(wrapper.querySelectorAll('.item-row')).some(row => {
+                const editor = row.querySelector('.rt-editor');
+                const editorText = (editor?.innerText || '').trim();
+                const editorHtml = (editor?.innerHTML || '')
+                    .replace(/<br\s*\/?>/gi, '')
+                    .replace(/&nbsp;/g, '')
+                    .trim();
+                const satuan = row.querySelector('select[name$="[satuan]"]')?.value || '';
+                const jumlah = row.querySelector('input[name$="[jumlah]"]')?.value || '';
+                const harga = row.querySelector('input[name$="[harga_satuan]"]')?.value || '';
+
+                return Boolean(editorText || editorHtml || satuan || jumlah || harga);
+            });
+        }
+
+        function autoFillItemsFromSpph(mode, items) {
+            const rows = Array.isArray(items)
+                ? items.filter(item => item && (item.nama_barang || item.satuan || item.jumlah))
+                : [];
+            const wrapper = document.getElementById(mode === 'edit' ? 'editRows' : 'addRows');
+
+            if (!wrapper || !rows.length) return;
+            if (hasMeaningfulSpItems(mode)) return;
+
+            wrapper.innerHTML = '';
+            rows.forEach(item => addRow(mode, {
+                nama_barang: item.nama_barang || '',
+                satuan: item.satuan || '',
+                jumlah: item.jumlah || '',
+                harga_satuan: '',
+                subtotal: 0
+            }));
+            updateGrandTotal(mode);
+        }
+
+        function applySpphAutoFill(prefix, data) {
+            const mode = prefix === 'edit' ? 'edit' : 'add';
+            autoFillPicFromSpph(prefix, data?.spph_pic);
+            autoFillVendorFromSpph(prefix, data?.spph_vendors || []);
+            autoFillItemsFromSpph(mode, data?.spph_items || []);
         }
 
         function renderSpphVendorRecommendation(prefix, vendors, spphNomor) {
