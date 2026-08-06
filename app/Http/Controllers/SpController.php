@@ -222,10 +222,12 @@ class SpController extends Controller
         $itemColumns = $this->spphItemAutoFillColumns();
 
         $spph = Spph::select(['id', 'nomor_spph', 'nama_vendor', 'vendor_names', 'pic'])
-            ->with(['items' => function ($query) use ($itemColumns) {
-                $query->select($itemColumns)
-                    ->orderBy('urutan');
-            }])
+            ->with([
+                'items' => function ($query) use ($itemColumns) {
+                    $query->select($itemColumns)
+                        ->orderBy('urutan');
+                }
+            ])
             ->where('nomor_spph', $spphNo)
             ->first();
 
@@ -363,12 +365,14 @@ class SpController extends Controller
             $selected = $this->normalizeVendorText((string) $sp->nama_vendor);
             $match = collect($vendors)->contains(fn($vendor) => $this->normalizeVendorText((string) $vendor) === $selected);
 
-            return [$sp->id => [
-                'status' => $match ? 'match' : 'mismatch',
-                'label' => $match ? 'Vendor sesuai SPPH' : 'Vendor beda SPPH',
-                'vendors' => $vendors,
-                'spph_nomor' => $spphNo,
-            ]];
+            return [
+                $sp->id => [
+                    'status' => $match ? 'match' : 'mismatch',
+                    'label' => $match ? 'Vendor sesuai SPPH' : 'Vendor beda SPPH',
+                    'vendors' => $vendors,
+                    'spph_nomor' => $spphNo,
+                ]
+            ];
         })->all();
     }
 
@@ -657,16 +661,16 @@ class SpController extends Controller
     {
         $lastId = (int) $request->get('last_id', 0);
         $rows = Sp::select([
-                'id',
-                'nomor_sp',
-                'tanggal_sp',
-                'nilai_sp',
-                'nomor_pr',
-                'nilai_pr',
-                'nama_vendor',
-                'deskripsi_pengadaan',
-                'pic',
-            ])
+            'id',
+            'nomor_sp',
+            'tanggal_sp',
+            'nilai_sp',
+            'nomor_pr',
+            'nilai_pr',
+            'nama_vendor',
+            'deskripsi_pengadaan',
+            'pic',
+        ])
             ->where(function ($query) {
                 $query->whereNull('numbering_mode')
                     ->orWhere('numbering_mode', 'auto');
@@ -781,100 +785,100 @@ class SpController extends Controller
 
         try {
             return DB::transaction(function () use ($request, $nomorPr, $oracleMode) {
-            $ppbjRecord = null;
+                $ppbjRecord = null;
 
-            if ($nomorPr) {
-                $ppbjRecord = Ppbj::where('ppbj_no', $nomorPr)->lockForUpdate()->first();
+                if ($nomorPr) {
+                    $ppbjRecord = Ppbj::where('ppbj_no', $nomorPr)->lockForUpdate()->first();
 
-                if ($ppbjRecord) {
-                    if ($ppbjRecord->status === 'CANCELLED') {
-                        return back()->withErrors(['nomor_pr' => "PPBJ \"{$nomorPr}\" sudah di-CANCELLED!"])->withInput();
-                    }
+                    if ($ppbjRecord) {
+                        if ($ppbjRecord->status === 'CANCELLED') {
+                            return back()->withErrors(['nomor_pr' => "PPBJ \"{$nomorPr}\" sudah di-CANCELLED!"])->withInput();
+                        }
 
-                    if (!empty($ppbjRecord->awarding_sp)) {
-                        return back()->withErrors(['nomor_pr' => "PPBJ sudah terhubung dengan SP: {$ppbjRecord->awarding_sp}!"])->withInput();
+                        if (!empty($ppbjRecord->awarding_sp)) {
+                            return back()->withErrors(['nomor_pr' => "PPBJ sudah terhubung dengan SP: {$ppbjRecord->awarding_sp}!"])->withInput();
+                        }
                     }
                 }
-            }
 
-            $vendorName = $request->filled('vendor_baru')
-                ? trim((string) $request->vendor_baru)
-                : $request->nama_vendor;
+                $vendorName = $request->filled('vendor_baru')
+                    ? trim((string) $request->vendor_baru)
+                    : $request->nama_vendor;
 
-            if ($vendorMismatchResponse = $this->ensureSpVendorMatchesSpph($request, $nomorPr, $vendorName)) {
-                return $vendorMismatchResponse;
-            }
-
-            if ($request->filled('vendor_baru')) {
-                $v = Vendor::firstOrCreate(['nama_vendor' => trim($request->vendor_baru)]);
-                $vendorName = $v->nama_vendor;
-                Cache::forget('vendors:active');
-            }
-
-            $seq = $oracleMode
-                ? ((int) $this->spModeQuery(true)->lockForUpdate()->max('sequence_number') + 1)
-                : ($this->extractSeq($request->nomor_sp) ?? $this->nextAvailableAutoSequence(null, (int) ($this->numberPeriodFromNomor($request->nomor_sp, 'SP')['year'] ?? now()->year)));
-
-            // Hitung total dari items jika ada
-            $items = $request->input('items', []);
-            $calculatedTotal = $this->calculateItemsTotal($items);
-            $nilaiSp = $request->nilai_sp ?: ($calculatedTotal > 0 ? $calculatedTotal : null);
-
-            $ppbjAuto = $ppbjRecord;
-
-            $nomorPemenang = $request->nomor_pemenang ?: ($ppbjAuto?->pemenang ?? null);
-            $tanggalPemenang = $request->tanggal_pemenang ?: ($ppbjAuto?->tgl_pemenang ?? null);
-
-            $sp = Sp::create([
-                'nomor_sp' => $request->nomor_sp,
-                'sequence_number' => $seq,
-                'numbering_mode' => $oracleMode ? 'oracle' : 'auto',
-                'created_by_user_id' => auth()->id(),
-                'tanggal_sp' => $request->tanggal_sp ?: null,
-                'nilai_sp' => $nilaiSp,
-                'nomor_pr' => $nomorPr,
-                'nilai_pr' => $request->nilai_pr ?: null,
-                'nama_vendor' => $vendorName,
-                'deskripsi_pengadaan' => $request->deskripsi_pengadaan,
-                'pic' => $request->pic,
-                'sph' => $request->sph ?: null,
-                'tgl_sph' => $request->tgl_sph ?: null,
-                'promised_date' => $request->promised_date ?: null,
-                'rfq' => $request->rfq ?: null,
-                'nomor_pemenang' => $nomorPemenang,
-                'tanggal_pemenang' => $tanggalPemenang,
-                'awal_kontrak' => $request->awal_kontrak ?: null,
-                'akhir_kontrak' => $request->akhir_kontrak ?: null,
-                'bidang_ip_itu' => $request->bidang_ip_itu ?: null,
-                'penandatangan_sci' => $request->penandatangan_sci ?: null,
-                'jabatan_sci' => $request->jabatan_sci ?: null,
-            ]);
-
-            $this->syncItems($sp, $items);
-
-            // Link ke PPBJ
-            if ($nomorPr) {
-                if ($ppbjRecord && $ppbjRecord->status !== 'CANCELLED' && empty($ppbjRecord->awarding_sp)) {
-                    $ppbjRecord->awarding_sp = $sp->nomor_sp;
-                    $ppbjRecord->tgl_awarding_sp = $sp->tanggal_sp;
-                    $ppbjRecord->tgl_spk = $sp->tanggal_sp;
-                    $ppbjRecord->nilai_sp_spk = $sp->nilai_sp;
-                    $ppbjRecord->sph = $sp->sph;
-                    $ppbjRecord->tgl_sph = $sp->tgl_sph;
-                    $ppbjRecord->promised_date = $request->promised_date ?: null;
-                    $ppbjRecord->save();
+                if ($vendorMismatchResponse = $this->ensureSpVendorMatchesSpph($request, $nomorPr, $vendorName)) {
+                    return $vendorMismatchResponse;
                 }
-            }
 
-            Cache::forget('sp:last_nomor');
-            Cache::forget('sp:last_nomor:auto');
-            Cache::forget('sp:last_nomor:oracle');
-            Cache::forget('sp:suggest');
-            Cache::forget('vendor:usage-stats:spph-sp:v1');
+                if ($request->filled('vendor_baru')) {
+                    $v = Vendor::firstOrCreate(['nama_vendor' => trim($request->vendor_baru)]);
+                    $vendorName = $v->nama_vendor;
+                    Cache::forget('vendors:active');
+                }
 
-            return redirect()
-                ->route('sp.index', $oracleMode ? ['mode' => 'oracle'] : [])
-                ->with('success', $oracleMode ? 'Data SP Oracle berhasil disimpan!' : 'Data SP berhasil disimpan!');
+                $seq = $oracleMode
+                    ? ((int) $this->spModeQuery(true)->lockForUpdate()->max('sequence_number') + 1)
+                    : ($this->extractSeq($request->nomor_sp) ?? $this->nextAvailableAutoSequence(null, (int) ($this->numberPeriodFromNomor($request->nomor_sp, 'SP')['year'] ?? now()->year)));
+
+                // Hitung total dari items jika ada
+                $items = $request->input('items', []);
+                $calculatedTotal = $this->calculateItemsTotal($items);
+                $nilaiSp = $request->nilai_sp ?: ($calculatedTotal > 0 ? $calculatedTotal : null);
+
+                $ppbjAuto = $ppbjRecord;
+
+                $nomorPemenang = $request->nomor_pemenang ?: ($ppbjAuto?->pemenang ?? null);
+                $tanggalPemenang = $request->tanggal_pemenang ?: ($ppbjAuto?->tgl_pemenang ?? null);
+
+                $sp = Sp::create([
+                    'nomor_sp' => $request->nomor_sp,
+                    'sequence_number' => $seq,
+                    'numbering_mode' => $oracleMode ? 'oracle' : 'auto',
+                    'created_by_user_id' => auth()->id(),
+                    'tanggal_sp' => $request->tanggal_sp ?: null,
+                    'nilai_sp' => $nilaiSp,
+                    'nomor_pr' => $nomorPr,
+                    'nilai_pr' => $request->nilai_pr ?: null,
+                    'nama_vendor' => $vendorName,
+                    'deskripsi_pengadaan' => $request->deskripsi_pengadaan,
+                    'pic' => $request->pic,
+                    'sph' => $request->sph ?: null,
+                    'tgl_sph' => $request->tgl_sph ?: null,
+                    'promised_date' => $request->promised_date ?: null,
+                    'rfq' => $request->rfq ?: null,
+                    'nomor_pemenang' => $nomorPemenang,
+                    'tanggal_pemenang' => $tanggalPemenang,
+                    'awal_kontrak' => $request->awal_kontrak ?: null,
+                    'akhir_kontrak' => $request->akhir_kontrak ?: null,
+                    'bidang_ip_itu' => $request->bidang_ip_itu ?: null,
+                    'penandatangan_sci' => $request->penandatangan_sci ?: null,
+                    'jabatan_sci' => $request->jabatan_sci ?: null,
+                ]);
+
+                $this->syncItems($sp, $items);
+
+                // Link ke PPBJ
+                if ($nomorPr) {
+                    if ($ppbjRecord && $ppbjRecord->status !== 'CANCELLED' && empty($ppbjRecord->awarding_sp)) {
+                        $ppbjRecord->awarding_sp = $sp->nomor_sp;
+                        $ppbjRecord->tgl_awarding_sp = $sp->tanggal_sp;
+                        $ppbjRecord->tgl_spk = $sp->tanggal_sp;
+                        $ppbjRecord->nilai_sp_spk = $sp->nilai_sp;
+                        $ppbjRecord->sph = $sp->sph;
+                        $ppbjRecord->tgl_sph = $sp->tgl_sph;
+                        $ppbjRecord->promised_date = $request->promised_date ?: null;
+                        $ppbjRecord->save();
+                    }
+                }
+
+                Cache::forget('sp:last_nomor');
+                Cache::forget('sp:last_nomor:auto');
+                Cache::forget('sp:last_nomor:oracle');
+                Cache::forget('sp:suggest');
+                Cache::forget('vendor:usage-stats:spph-sp:v1');
+
+                return redirect()
+                    ->route('sp.index', $oracleMode ? ['mode' => 'oracle'] : [])
+                    ->with('success', $oracleMode ? 'Data SP Oracle berhasil disimpan!' : 'Data SP berhasil disimpan!');
             });
         } catch (QueryException $e) {
             return back()
@@ -962,107 +966,107 @@ class SpController extends Controller
 
         try {
             return DB::transaction(function () use ($request, $sp, $nomorPr, $oldNomorPr, $oracleMode) {
-            $newPpbj = null;
+                $newPpbj = null;
 
-            if ($nomorPr) {
-                $newPpbj = Ppbj::where('ppbj_no', $nomorPr)->lockForUpdate()->first();
+                if ($nomorPr) {
+                    $newPpbj = Ppbj::where('ppbj_no', $nomorPr)->lockForUpdate()->first();
 
-                if ($newPpbj) {
-                    if ($newPpbj->status === 'CANCELLED') {
-                        return back()->withErrors(['nomor_pr' => "PPBJ \"{$nomorPr}\" sudah di-CANCELLED!"])->withInput();
+                    if ($newPpbj) {
+                        if ($newPpbj->status === 'CANCELLED') {
+                            return back()->withErrors(['nomor_pr' => "PPBJ \"{$nomorPr}\" sudah di-CANCELLED!"])->withInput();
+                        }
+
+                        if (!empty($newPpbj->awarding_sp) && $newPpbj->awarding_sp !== $sp->nomor_sp) {
+                            return back()->withErrors(['nomor_pr' => "PPBJ sudah terhubung dengan SP: {$newPpbj->awarding_sp}!"])->withInput();
+                        }
                     }
+                }
 
-                    if (!empty($newPpbj->awarding_sp) && $newPpbj->awarding_sp !== $sp->nomor_sp) {
-                        return back()->withErrors(['nomor_pr' => "PPBJ sudah terhubung dengan SP: {$newPpbj->awarding_sp}!"])->withInput();
+                $seq = $oracleMode
+                    ? $sp->sequence_number
+                    : ($this->extractSeq($request->nomor_sp) ?? $sp->sequence_number);
+
+                // Hitung total dari items jika ada
+                $items = $request->input('items', []);
+                $calculatedTotal = $this->calculateItemsTotal($items);
+                $nilaiSp = $request->nilai_sp ?: ($calculatedTotal > 0 ? $calculatedTotal : null);
+
+                $ppbjAuto = $newPpbj;
+
+                $nomorPemenang = $request->nomor_pemenang ?: ($ppbjAuto?->pemenang ?? null);
+                $tanggalPemenang = $request->tanggal_pemenang ?: ($ppbjAuto?->tgl_pemenang ?? null);
+
+                if ($vendorMismatchResponse = $this->ensureSpVendorMatchesSpph($request, $nomorPr, $request->nama_vendor)) {
+                    return $vendorMismatchResponse;
+                }
+
+                $sp->update([
+                    'nomor_sp' => $request->nomor_sp,
+                    'sequence_number' => $seq,
+                    'numbering_mode' => $oracleMode ? 'oracle' : 'auto',
+                    'tanggal_sp' => $request->tanggal_sp ?: null,
+                    'nilai_sp' => $nilaiSp,
+                    'nomor_pr' => $nomorPr,
+                    'nilai_pr' => $request->nilai_pr ?: null,
+                    'nama_vendor' => $request->nama_vendor,
+                    'deskripsi_pengadaan' => $request->deskripsi_pengadaan,
+                    'pic' => $request->pic,
+                    'sph' => $request->sph ?: null,
+                    'tgl_sph' => $request->tgl_sph ?: null,
+                    'promised_date' => $request->promised_date ?: null,
+                    'rfq' => $request->rfq ?: null,
+                    'nomor_pemenang' => $nomorPemenang,
+                    'tanggal_pemenang' => $tanggalPemenang,
+                    'awal_kontrak' => $request->awal_kontrak ?: null,
+                    'akhir_kontrak' => $request->akhir_kontrak ?: null,
+                    'bidang_ip_itu' => $request->bidang_ip_itu ?: null,
+                    'penandatangan_sci' => $request->penandatangan_sci ?: null,
+                    'jabatan_sci' => $request->jabatan_sci ?: null,
+                ]);
+
+                $this->syncItems($sp, $items);
+
+                // Hapus link lama dari PPBJ
+                if ($oldNomorPr && ($oldNomorPr !== $nomorPr)) {
+                    $oldPpbj = Ppbj::where('ppbj_no', $oldNomorPr)
+                        ->where('awarding_sp', $sp->nomor_sp)
+                        ->first();
+
+                    if ($oldPpbj) {
+                        $oldPpbj->awarding_sp = null;
+                        $oldPpbj->tgl_awarding_sp = null;
+                        $oldPpbj->tgl_spk = null;
+                        $oldPpbj->nilai_sp_spk = null;
+                        $oldPpbj->sph = null;
+                        $oldPpbj->tgl_sph = null;
+                        $oldPpbj->promised_date = null;
+                        $oldPpbj->save();
                     }
                 }
-            }
 
-            $seq = $oracleMode
-                ? $sp->sequence_number
-                : ($this->extractSeq($request->nomor_sp) ?? $sp->sequence_number);
-
-            // Hitung total dari items jika ada
-            $items = $request->input('items', []);
-            $calculatedTotal = $this->calculateItemsTotal($items);
-            $nilaiSp = $request->nilai_sp ?: ($calculatedTotal > 0 ? $calculatedTotal : null);
-
-            $ppbjAuto = $newPpbj;
-
-            $nomorPemenang = $request->nomor_pemenang ?: ($ppbjAuto?->pemenang ?? null);
-            $tanggalPemenang = $request->tanggal_pemenang ?: ($ppbjAuto?->tgl_pemenang ?? null);
-
-            if ($vendorMismatchResponse = $this->ensureSpVendorMatchesSpph($request, $nomorPr, $request->nama_vendor)) {
-                return $vendorMismatchResponse;
-            }
-
-            $sp->update([
-                'nomor_sp' => $request->nomor_sp,
-                'sequence_number' => $seq,
-                'numbering_mode' => $oracleMode ? 'oracle' : 'auto',
-                'tanggal_sp' => $request->tanggal_sp ?: null,
-                'nilai_sp' => $nilaiSp,
-                'nomor_pr' => $nomorPr,
-                'nilai_pr' => $request->nilai_pr ?: null,
-                'nama_vendor' => $request->nama_vendor,
-                'deskripsi_pengadaan' => $request->deskripsi_pengadaan,
-                'pic' => $request->pic,
-                'sph' => $request->sph ?: null,
-                'tgl_sph' => $request->tgl_sph ?: null,
-                'promised_date' => $request->promised_date ?: null,
-                'rfq' => $request->rfq ?: null,
-                'nomor_pemenang' => $nomorPemenang,
-                'tanggal_pemenang' => $tanggalPemenang,
-                'awal_kontrak' => $request->awal_kontrak ?: null,
-                'akhir_kontrak' => $request->akhir_kontrak ?: null,
-                'bidang_ip_itu' => $request->bidang_ip_itu ?: null,
-                'penandatangan_sci' => $request->penandatangan_sci ?: null,
-                'jabatan_sci' => $request->jabatan_sci ?: null,
-            ]);
-
-            $this->syncItems($sp, $items);
-
-            // Hapus link lama dari PPBJ
-            if ($oldNomorPr && ($oldNomorPr !== $nomorPr)) {
-                $oldPpbj = Ppbj::where('ppbj_no', $oldNomorPr)
-                    ->where('awarding_sp', $sp->nomor_sp)
-                    ->first();
-
-                if ($oldPpbj) {
-                    $oldPpbj->awarding_sp = null;
-                    $oldPpbj->tgl_awarding_sp = null;
-                    $oldPpbj->tgl_spk = null;
-                    $oldPpbj->nilai_sp_spk = null;
-                    $oldPpbj->sph = null;
-                    $oldPpbj->tgl_sph = null;
-                    $oldPpbj->promised_date = null;
-                    $oldPpbj->save();
+                // Set link baru ke PPBJ
+                if ($nomorPr) {
+                    if ($newPpbj && $newPpbj->status !== 'CANCELLED') {
+                        $newPpbj->awarding_sp = $sp->nomor_sp;
+                        $newPpbj->tgl_awarding_sp = $sp->tanggal_sp;
+                        $newPpbj->tgl_spk = $sp->tanggal_sp;
+                        $newPpbj->nilai_sp_spk = $sp->nilai_sp;
+                        $newPpbj->sph = $sp->sph;
+                        $newPpbj->tgl_sph = $sp->tgl_sph;
+                        $newPpbj->promised_date = $request->promised_date ?: null;
+                        $newPpbj->save();
+                    }
                 }
-            }
 
-            // Set link baru ke PPBJ
-            if ($nomorPr) {
-                if ($newPpbj && $newPpbj->status !== 'CANCELLED') {
-                    $newPpbj->awarding_sp = $sp->nomor_sp;
-                    $newPpbj->tgl_awarding_sp = $sp->tanggal_sp;
-                    $newPpbj->tgl_spk = $sp->tanggal_sp;
-                    $newPpbj->nilai_sp_spk = $sp->nilai_sp;
-                    $newPpbj->sph = $sp->sph;
-                    $newPpbj->tgl_sph = $sp->tgl_sph;
-                    $newPpbj->promised_date = $request->promised_date ?: null;
-                    $newPpbj->save();
-                }
-            }
+                Cache::forget('sp:last_nomor');
+                Cache::forget('sp:last_nomor:auto');
+                Cache::forget('sp:last_nomor:oracle');
+                Cache::forget('sp:suggest');
+                Cache::forget('vendor:usage-stats:spph-sp:v1');
 
-            Cache::forget('sp:last_nomor');
-            Cache::forget('sp:last_nomor:auto');
-            Cache::forget('sp:last_nomor:oracle');
-            Cache::forget('sp:suggest');
-            Cache::forget('vendor:usage-stats:spph-sp:v1');
-
-            return redirect()
-                ->route('sp.index', $oracleMode ? ['mode' => 'oracle'] : [])
-                ->with('success', $oracleMode ? 'Data SP Oracle berhasil diperbarui!' : 'Data SP berhasil diperbarui!');
+                return redirect()
+                    ->route('sp.index', $oracleMode ? ['mode' => 'oracle'] : [])
+                    ->with('success', $oracleMode ? 'Data SP Oracle berhasil diperbarui!' : 'Data SP berhasil diperbarui!');
             });
         } catch (QueryException $e) {
             return back()
@@ -1340,16 +1344,58 @@ class SpController extends Controller
             $sphInfo = ' Nomor (............................) Tanggal (............................)';
         }
 
-        $bodyText = 'Menunjuk surat penawaran harga ' . $sp->nama_vendor . $sphInfo . ' serta hasil negosiasi, bersama ini kami memesan barang dengan perincian sebagai berikut:';
+        // === BODY ===
         $bodyRun = $section->addTextRun($p0);
-        $bodyParts = preg_split('/(\(\.+\))/', $bodyText, -1, PREG_SPLIT_DELIM_CAPTURE);
-        foreach ($bodyParts as $bodyPart) {
-            if (preg_match('/^\(\.+\)$/', $bodyPart)) {
-                $bodyRun->addText($bodyPart, $fb);
-            } else {
-                $bodyRun->addText($bodyPart, $fs);
+
+        // Teks biasa
+        $bodyRun->addText(
+            'Menunjuk surat penawaran harga ',
+            $fs
+        );
+
+        // Nama vendor: bold
+        $bodyRun->addText(
+            (string) $sp->nama_vendor,
+            $fb
+        );
+
+        if ($sp->sph) {
+            // Teks "Nomor" biasa
+            $bodyRun->addText(' Nomor ', $fs);
+
+            // Nomor SPH: bold
+            $bodyRun->addText(
+                (string) $sp->sph,
+                $fb
+            );
+
+            if ($sp->tgl_sph) {
+                // Teks "Tanggal" biasa
+                $bodyRun->addText(' Tanggal ', $fs);
+
+                // Tanggal SPH: bold
+                $bodyRun->addText(
+                    \Carbon\Carbon::parse($sp->tgl_sph)
+                        ->locale('id')
+                        ->translatedFormat('d F Y'),
+                    $fb
+                );
             }
+        } else {
+            // Placeholder jika data SPH kosong
+            $bodyRun->addText(' Nomor ', $fs);
+            $bodyRun->addText('(............................)', $fb);
+
+            $bodyRun->addText(' Tanggal ', $fs);
+            $bodyRun->addText('(............................)', $fb);
         }
+
+        // Teks biasa
+        $bodyRun->addText(
+            ' serta hasil negosiasi, bersama ini kami memesan barang dengan perincian sebagai berikut:',
+            $fs
+        );
+
         $section->addTextBreak(1, $p0);
 
         // ==============================================
@@ -4623,7 +4669,7 @@ class SpController extends Controller
             }
 
             $isSuratPesananBiasa = trim((string) $nomorKontrak) === '';
-            $lanjutan = ! $isSuratPesananBiasa ? ('Lanjutan Kontrak No. ' . trim((string) $nomorKontrak)) : '';
+            $lanjutan = !$isSuratPesananBiasa ? ('Lanjutan Kontrak No. ' . trim((string) $nomorKontrak)) : '';
 
             // Posisi kop halaman pertama disamakan untuk Surat Pesanan biasa
             // dan dokumen kontrak/SP di atas Rp50 juta agar hasil cetak konsisten.
@@ -5334,7 +5380,7 @@ class SpController extends Controller
     {
         $documentType = preg_quote($documentType, '/');
 
-        if (! preg_match('/^\d+\/PKU-([IVXLCDM]+)\/' . $documentType . '\/(\d{4})$/i', trim($nomor), $matches)) {
+        if (!preg_match('/^\d+\/PKU-([IVXLCDM]+)\/' . $documentType . '\/(\d{4})$/i', trim($nomor), $matches)) {
             return null;
         }
 
@@ -5348,7 +5394,7 @@ class SpController extends Controller
     {
         $numberPeriod = $this->numberPeriodFromNomor($nomor, $documentType);
 
-        if (! $numberPeriod || ! $date) {
+        if (!$numberPeriod || !$date) {
             return null;
         }
 
@@ -5365,7 +5411,7 @@ class SpController extends Controller
     {
         $numberPeriod = $this->numberPeriodFromNomor($nomor, $documentType);
 
-        if (! $numberPeriod || ! $date) {
+        if (!$numberPeriod || !$date) {
             return trim($nomor);
         }
 
