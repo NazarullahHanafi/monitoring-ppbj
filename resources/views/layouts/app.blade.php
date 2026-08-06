@@ -4562,9 +4562,9 @@
 
             function startPoll() { if (chatTimer) return; chatTimer = setInterval(function () { loadMessages(false) }, 8000) }
             function stopPoll() { if (chatTimer) { clearInterval(chatTimer); chatTimer = null } }
-            function startReactionPoll() { if (reactionTimer) return; refreshVisibleReactions(); reactionTimer = setInterval(refreshVisibleReactions, 15000) }
+            function startReactionPoll() { if (reactionTimer) return; refreshVisibleReactions(); reactionTimer = setInterval(refreshVisibleReactions, 30000) }
             function stopReactionPoll() { if (reactionTimer) { clearInterval(reactionTimer); reactionTimer = null } }
-            function startMentionPoll() { if (mentionTimer) return; refreshMentionSummary(); mentionTimer = setInterval(refreshMentionSummary, 15000) }
+            function startMentionPoll() { if (mentionTimer) return; refreshMentionSummary(); mentionTimer = setInterval(refreshMentionSummary, 30000) }
             function stopMentionPoll() { if (mentionTimer) { clearInterval(mentionTimer); mentionTimer = null } }
             document.addEventListener('visibilitychange', function () {
                 if (document.hidden) { stopPoll(); stopReactionPoll(); if (!notifyEnabled && !soundEnabled) stopMentionPoll() }
@@ -4617,7 +4617,7 @@
 
         /* ═══ APPROVAL PR POLLING ═══ */
         @if(auth()->user()?->department === 'umum')
-            (function () { var url = '{{ route('approval.pr.pendingCount') }}', b1 = document.getElementById('badgePendingPr'), b2 = document.getElementById('badgePendingPrMobile'), t = null; function refresh() { fetch(url, { headers: { 'Accept': 'application/json' } }).then(function (r) { if (!r.ok) throw 0; return r.json() }).then(function (d) { var c = Number(d.count || 0);[b1, b2].forEach(function (b) { if (b) { b.textContent = c; if (c > 0) b.classList.remove('hidden'); else b.classList.add('hidden') } }) }).catch(function () { }) } document.addEventListener('visibilitychange', function () { if (document.hidden) { clearInterval(t); t = null } else { refresh(); t = setInterval(refresh, 30000) } }); if (!document.hidden) { refresh(); t = setInterval(refresh, 30000) } })();
+            (function () { var url = '{{ route('approval.pr.pendingCount') }}', b1 = document.getElementById('badgePendingPr'), b2 = document.getElementById('badgePendingPrMobile'), t = null; function refresh() { fetch(url, { headers: { 'Accept': 'application/json' } }).then(function (r) { if (!r.ok) throw 0; return r.json() }).then(function (d) { var c = Number(d.count || 0);[b1, b2].forEach(function (b) { if (b) { b.textContent = c; if (c > 0) b.classList.remove('hidden'); else b.classList.add('hidden') } }) }).catch(function () { }) } document.addEventListener('visibilitychange', function () { if (document.hidden) { clearInterval(t); t = null } else { refresh(); t = setInterval(refresh, 60000) } }); if (!document.hidden) { refresh(); t = setInterval(refresh, 60000) } })();
         @endif
 
         @if(auth()->user()?->isReadOnly())

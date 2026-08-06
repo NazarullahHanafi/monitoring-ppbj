@@ -101,22 +101,26 @@ class SpController extends Controller
             });
         }
 
-        $results = $query->orderBy('ppbj_no', 'desc')->limit(50)->get()
-            ->map(function ($r) {
-                $spphMeta = $this->spphVendorMetaForPpbj($r);
+        $rows = $query->orderBy('ppbj_no', 'desc')->limit(50)->get();
 
-                return [
-                    'id' => $r->ppbj_no,
-                    'text' => $r->ppbj_no . ($r->uraian ? ' - ' . Str::limit($r->uraian, 40) : ''),
-                    'uraian' => $r->uraian,
-                    'portofolio' => $r->portofolio,
-                    'buyer' => $r->buyer,
-                    'has_spph' => !empty($r->spph_rfq_1),
-                    'spph_nomor' => $spphMeta['spph_nomor'],
-                    'spph_vendors' => $spphMeta['spph_vendors'],
-                    'total_sebelum_ppn' => $r->total_sebelum_ppn,
-                ];
-            });
+        $spphByNo = $this->spphVendorMetaMapForPpbjRows($rows);
+
+        $results = $rows->map(function ($r) use ($spphByNo) {
+            $spphNo = trim((string) ($r->spph_rfq_1 ?? ''));
+            $spph = $spphNo !== '' ? $spphByNo->get($spphNo) : null;
+
+            return [
+                'id' => $r->ppbj_no,
+                'text' => $r->ppbj_no . ($r->uraian ? ' - ' . Str::limit($r->uraian, 40) : ''),
+                'uraian' => $r->uraian,
+                'portofolio' => $r->portofolio,
+                'buyer' => $r->buyer,
+                'has_spph' => !empty($r->spph_rfq_1),
+                'spph_nomor' => $spphNo !== '' ? $spphNo : null,
+                'spph_vendors' => $spph?->print_vendor_names ?? [],
+                'total_sebelum_ppn' => $r->total_sebelum_ppn,
+            ];
+        });
 
         return response()->json(['results' => $results]);
     }
@@ -204,6 +208,25 @@ class SpController extends Controller
             'spph_nomor' => $spphNo,
             'spph_vendors' => $spph?->print_vendor_names ?? [],
         ];
+    }
+
+    private function spphVendorMetaMapForPpbjRows($rows)
+    {
+        $spphNos = collect($rows)
+            ->pluck('spph_rfq_1')
+            ->map(fn($nomor) => trim((string) $nomor))
+            ->filter()
+            ->unique()
+            ->values();
+
+        if ($spphNos->isEmpty()) {
+            return collect();
+        }
+
+        return Spph::select(['nomor_spph', 'nama_vendor', 'vendor_names'])
+            ->whereIn('nomor_spph', $spphNos)
+            ->get()
+            ->keyBy('nomor_spph');
     }
 
     private function buildSpVendorAuditMap($sps): array

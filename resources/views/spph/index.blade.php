@@ -4748,13 +4748,13 @@
             document.getElementById('dariInput').addEventListener('change', doSearch);
             document.getElementById('sampaiInput').addEventListener('change', doSearch);
 
-            if (IS_FIRST && !HAS_FILTER && !document.hidden) { pollNow(); pollTimer = setInterval(pollNow, 15000); }
-            if (!document.hidden) { pollPres(); presTimer = setInterval(pollPres, 15000); }
+            if (IS_FIRST && !HAS_FILTER && !document.hidden) { pollNow(); pollTimer = setInterval(pollNow, 30000); }
+            if (!document.hidden) { pollPres(); presTimer = setInterval(pollPres, 30000); }
             document.addEventListener('visibilitychange', () => {
                 if (document.hidden) { clearInterval(pollTimer); clearInterval(presTimer); }
                 else {
-                    if (IS_FIRST && !HAS_FILTER) { pollNow(); pollTimer = setInterval(pollNow, 15000); }
-                    pollPres(); presTimer = setInterval(pollPres, 15000);
+                    if (IS_FIRST && !HAS_FILTER) { pollNow(); pollTimer = setInterval(pollNow, 30000); }
+                    pollPres(); presTimer = setInterval(pollPres, 30000);
                 }
             });
             window.addEventListener('beforeunload', () => {

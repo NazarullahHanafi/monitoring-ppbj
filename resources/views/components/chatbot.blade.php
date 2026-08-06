@@ -527,7 +527,7 @@ CHATBOT WIDGET PPBJ - MODERN VERSION WITH STARTER MESSAGES
                 }).catch(() => { });
         }
         updateNotifBadge();
-        setInterval(updateNotifBadge, 30000);
+        setInterval(updateNotifBadge, 60000);
     @endauth
 
     // =====================================================
