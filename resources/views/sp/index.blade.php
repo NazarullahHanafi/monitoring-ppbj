@@ -3664,6 +3664,7 @@
                 harga_satuan: item.harga_satuan || '',
                 subtotal: item.subtotal || 0
             }));
+            syncSingleItemPriceFromNilaiSp(mode, true);
             updateGrandTotal(mode);
         }
 
@@ -5030,6 +5031,113 @@
             updateGrandTotal(mode);
         }
 
+        function getNilaiSpNumber(mode) {
+            const inputId = mode === 'edit' ? 'editNilaiSp' : 'nilaiSpInput';
+            return parseFloat(stripRupiah(document.getElementById(inputId)?.value || '0')) || 0;
+        }
+
+        function getSpItemTotalInfo(mode) {
+            const prefix = mode === 'edit' ? 'edit' : 'add';
+            const wrapper = document.getElementById(`${prefix}Rows`);
+            let total = 0;
+            let filledRows = 0;
+            let rows = 0;
+
+            wrapper?.querySelectorAll('.item-row').forEach(row => {
+                rows++;
+                const editorText = row.querySelector('.rt-editor')?.innerText?.trim() || '';
+                const satuan = row.querySelector('select[name*="[satuan]"]')?.value?.trim() || '';
+                const jumlah = row.querySelector('input[name*="[jumlah]"]')?.value?.trim() || '';
+                const harga = row.querySelector('input[name*="[harga_satuan]"]')?.value?.trim() || '';
+                const subtotalText = row.querySelector('.subtotal-value')?.textContent || '';
+                const subtotal = parseFloat(subtotalText.replace(/[^\d]/g, '')) || 0;
+
+                if (editorText || satuan || jumlah || harga || subtotal > 0) {
+                    filledRows++;
+                }
+                total += subtotal;
+            });
+
+            return { rows, filledRows, total };
+        }
+
+        function syncSingleItemPriceFromNilaiSp(mode, force = false) {
+            const prefix = mode === 'edit' ? 'edit' : 'add';
+            const wrapper = document.getElementById(`${prefix}Rows`);
+            const rows = wrapper ? Array.from(wrapper.querySelectorAll('.item-row')) : [];
+            const nilaiSp = getNilaiSpNumber(mode);
+
+            if (rows.length !== 1 || nilaiSp <= 0) return false;
+
+            const row = rows[0];
+            const idx = row.dataset.idx;
+            const jumlahInput = document.getElementById(`${prefix}-${idx}-jumlah`);
+            const hargaInput = document.getElementById(`${prefix}-${idx}-harga`);
+            if (!jumlahInput || !hargaInput) return false;
+
+            const qty = parseFloat(String(jumlahInput.value || '').replace(/\./g, '').replace(',', '.')) || 0;
+            if (qty <= 0) return false;
+
+            const canAutoSync = force || !hargaInput.value.trim() || row.dataset.autoSpPrice === '1';
+            if (!canAutoSync) return false;
+
+            const hargaSatuan = Math.round(nilaiSp / qty);
+            hargaInput.value = formatRupiahInput(String(hargaSatuan));
+            row.dataset.autoSpPrice = '1';
+            calculateRowSubtotal(mode, idx);
+            return true;
+        }
+
+        function handleItemQuantityInput(mode, idx) {
+            const synced = syncSingleItemPriceFromNilaiSp(mode);
+            if (!synced) calculateRowSubtotal(mode, idx);
+        }
+
+        function validateSpItemsTotalBeforeSubmit(prefix, form, event) {
+            if (form.dataset.itemTotalConfirmed === '1') return false;
+
+            const info = getSpItemTotalInfo(prefix);
+            const nilaiSp = getNilaiSpNumber(prefix);
+            if (info.filledRows <= 0 || nilaiSp <= 0 || info.total <= 0) return false;
+            if (Math.abs(info.total - nilaiSp) <= 1) return false;
+
+            event.preventDefault();
+            const selisih = Math.abs(info.total - nilaiSp);
+            const itemText = info.filledRows > 1 ? `${info.filledRows} baris barang` : '1 baris barang';
+
+            Swal.fire({
+                icon: 'warning',
+                title: 'Total barang beda dari Nilai SP',
+                html: `
+                    <div class="text-left text-sm leading-relaxed space-y-3">
+                        <p>Daftar barang sudah diisi (${itemText}), tetapi totalnya belum sama dengan nilai final SP.</p>
+                        <div class="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-amber-900 dark:border-amber-600 dark:bg-amber-900/30 dark:text-amber-100">
+                            <div class="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                                <div><div class="text-[10px] font-black uppercase opacity-70">Nilai SP</div><div class="font-black">Rp ${formatRupiahInput(String(nilaiSp))}</div></div>
+                                <div><div class="text-[10px] font-black uppercase opacity-70">Total barang</div><div class="font-black">Rp ${formatRupiahInput(String(info.total))}</div></div>
+                                <div><div class="text-[10px] font-black uppercase opacity-70">Selisih</div><div class="font-black">Rp ${formatRupiahInput(String(selisih))}</div></div>
+                            </div>
+                        </div>
+                        <p class="text-slate-600 dark:text-slate-300">Saran sistem: samakan total daftar barang dengan Nilai SP agar cetakan dan audit tidak membingungkan.</p>
+                    </div>
+                `,
+                showCancelButton: true,
+                confirmButtonText: 'Tetap simpan',
+                cancelButtonText: 'Perbaiki dulu',
+                confirmButtonColor: '#f59e0b',
+                cancelButtonColor: '#2563eb',
+                background: document.documentElement.classList.contains('dark') ? '#0f172a' : '#fff',
+                color: document.documentElement.classList.contains('dark') ? '#f8fafc' : '#111827'
+            }).then(result => {
+                if (result.isConfirmed) {
+                    form.dataset.itemTotalConfirmed = '1';
+                    form.requestSubmit();
+                }
+            });
+
+            return true;
+        }
+
         function updateGrandTotal(mode) {
             const prefix = mode === 'add' ? 'add' : 'edit';
             const wrapper = document.getElementById(`${prefix}Rows`);
@@ -5110,14 +5218,14 @@
                                                         <input type="text" name="items[${idx}][jumlah]" id="${prefix}-${idx}-jumlah"
                                                                value="${jumlah}" placeholder="1"
                                                                class="m-input" style="text-align:center"
-                                                               oninput="calculateRowSubtotal('${mode}', ${idx})">
+                                                               oninput="handleItemQuantityInput('${mode}', ${idx})">
                                                     </div>
                                                     <div>
                                                         <span class="item-label">Harga Satuan</span>
                                                         <input type="text" name="items[${idx}][harga_satuan]" id="${prefix}-${idx}-harga"
                                                                value="${harga}" placeholder="0"
                                                                class="m-input harga-input"
-                                                               oninput="this.value=formatRupiahInput(this.value);calculateRowSubtotal('${mode}', ${idx})">
+                                                               oninput="this.closest('.item-row').dataset.autoSpPrice='0';this.value=formatRupiahInput(this.value);calculateRowSubtotal('${mode}', ${idx})">
                                                     </div>
                                                     <div>
                                                         <span class="item-label">Subtotal</span>
@@ -5211,10 +5319,16 @@
             initRupiahInput('editNilaiSp');
             initRupiahInput('editNilaiPr');
 
-            $('#nilaiSpInput').on('input paste', () => setTimeout(() => { updateJampelPreview('add'); updateSpModeGuard('add'); }, 0));
-            $('#editNilaiSp').on('input paste', () => setTimeout(() => { updateJampelPreview('edit'); updateSpModeGuard('edit'); }, 0));
-            $('#addFormSp').on('input change', 'input, select, textarea', () => setTimeout(() => updateOracleReadinessChecklist('add'), 0));
-            $('#editFormSp').on('input change', 'input, select, textarea', () => setTimeout(() => updateOracleReadinessChecklist('edit'), 0));
+            $('#nilaiSpInput').on('input paste', () => setTimeout(() => { syncSingleItemPriceFromNilaiSp('add'); updateJampelPreview('add'); updateSpModeGuard('add'); }, 0));
+            $('#editNilaiSp').on('input paste', () => setTimeout(() => { syncSingleItemPriceFromNilaiSp('edit'); updateJampelPreview('edit'); updateSpModeGuard('edit'); }, 0));
+            $('#addFormSp').on('input change', 'input, select, textarea', function () {
+                if (this.form) this.form.dataset.itemTotalConfirmed = '0';
+                setTimeout(() => updateOracleReadinessChecklist('add'), 0);
+            });
+            $('#editFormSp').on('input change', 'input, select, textarea', function () {
+                if (this.form) this.form.dataset.itemTotalConfirmed = '0';
+                setTimeout(() => updateOracleReadinessChecklist('edit'), 0);
+            });
             $(document).on('focus', 'select[name$="[satuan]"]', function () {
                 this.dataset.previousValue = this.value || '';
             });
@@ -5328,6 +5442,9 @@
                     });
                     return;
                 }
+                if (validateSpItemsTotalBeforeSubmit('add', this, e)) {
+                    return;
+                }
                 document.getElementById('nilaiSpInput').value = stripRupiah(document.getElementById('nilaiSpInput').value);
                 document.getElementById('nilaiPrInput').value = stripRupiah(document.getElementById('nilaiPrInput').value);
 
@@ -5375,6 +5492,9 @@
                         background: document.documentElement.classList.contains('dark') ? '#1f2937' : '#fff',
                         color: document.documentElement.classList.contains('dark') ? '#f3f4f6' : '#111827'
                     });
+                    return;
+                }
+                if (validateSpItemsTotalBeforeSubmit('edit', this, e)) {
                     return;
                 }
                 document.getElementById('editNilaiSp').value = stripRupiah(document.getElementById('editNilaiSp').value);

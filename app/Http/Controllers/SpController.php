@@ -233,11 +233,11 @@ class SpController extends Controller
             'spph_nomor' => $spphNo,
             'spph_vendors' => $spph?->print_vendor_names ?? [],
             'spph_pic' => $spph?->pic,
-            'spph_items' => $this->formatSpphItemsForSp($spph, $ppbj->total_sebelum_ppn ?? null),
+            'spph_items' => $this->formatSpphItemsForSp($spph),
         ];
     }
 
-    private function formatSpphItemsForSp(?Spph $spph, $fallbackTotal = null): array
+    private function formatSpphItemsForSp(?Spph $spph): array
     {
         if (!$spph) {
             return [];
@@ -271,17 +271,6 @@ class SpController extends Controller
             ->filter(fn($item) => filled($item['nama_barang']) || filled($item['satuan']) || filled($item['jumlah']))
             ->values()
             ->all();
-
-        $fallbackTotal = $this->moneyToFloat($fallbackTotal);
-        $hasPrice = collect($rows)->contains(fn($item) => $this->moneyToFloat($item['harga_satuan'] ?? '') > 0);
-
-        if (!$hasPrice && count($rows) === 1 && $fallbackTotal > 0) {
-            $quantity = $this->moneyToFloat($rows[0]['jumlah'] ?? '');
-            $price = $quantity > 0 ? $fallbackTotal / $quantity : $fallbackTotal;
-            $rows[0]['harga_satuan'] = $this->formatMoney($price);
-            $rows[0]['subtotal'] = $this->formatMoney($fallbackTotal);
-            $rows[0]['harga_source'] = 'total_pr';
-        }
 
         return $rows;
     }
