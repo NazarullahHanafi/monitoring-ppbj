@@ -1334,17 +1334,6 @@ class SpController extends Controller
         $section->addTextBreak(1, $p0);
 
         // === BODY ===
-        $sphInfo = '';
-        if ($sp->sph) {
-            $sphInfo = ' Nomor ' . $sp->sph;
-            if ($sp->tgl_sph) {
-                $sphInfo .= ' Tanggal ' . \Carbon\Carbon::parse($sp->tgl_sph)->locale('id')->translatedFormat('d F Y');
-            }
-        } else {
-            $sphInfo = ' Nomor (............................) Tanggal (............................)';
-        }
-
-        // === BODY ===
         $bodyRun = $section->addTextRun($p0);
 
         // Teks biasa
