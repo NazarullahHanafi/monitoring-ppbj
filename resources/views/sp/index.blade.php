@@ -3645,8 +3645,8 @@
                 nama_barang: item.nama_barang || '',
                 satuan: item.satuan || '',
                 jumlah: item.jumlah || '',
-                harga_satuan: '',
-                subtotal: 0
+                harga_satuan: item.harga_satuan || '',
+                subtotal: item.subtotal || 0
             }));
             updateGrandTotal(mode);
         }

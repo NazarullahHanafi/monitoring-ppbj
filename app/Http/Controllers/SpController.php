@@ -15,6 +15,7 @@ use Illuminate\Validation\ValidationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Carbon;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Str;
@@ -218,9 +219,11 @@ class SpController extends Controller
             ];
         }
 
+        $itemColumns = $this->spphItemAutoFillColumns();
+
         $spph = Spph::select(['id', 'nomor_spph', 'nama_vendor', 'vendor_names', 'pic'])
-            ->with(['items' => function ($query) {
-                $query->select(['id', 'spph_id', 'urutan', 'nama_barang', 'satuan', 'jumlah', 'tgl_pemenuhan'])
+            ->with(['items' => function ($query) use ($itemColumns) {
+                $query->select($itemColumns)
                     ->orderBy('urutan');
             }])
             ->where('nomor_spph', $spphNo)
@@ -230,30 +233,72 @@ class SpController extends Controller
             'spph_nomor' => $spphNo,
             'spph_vendors' => $spph?->print_vendor_names ?? [],
             'spph_pic' => $spph?->pic,
-            'spph_items' => $this->formatSpphItemsForSp($spph),
+            'spph_items' => $this->formatSpphItemsForSp($spph, $ppbj->total_sebelum_ppn ?? null),
         ];
     }
 
-    private function formatSpphItemsForSp(?Spph $spph): array
+    private function formatSpphItemsForSp(?Spph $spph, $fallbackTotal = null): array
     {
         if (!$spph) {
             return [];
         }
 
-        return $spph->items
+        $rows = $spph->items
             ->map(function ($item) {
+                $rawPrice = $item->harga_satuan
+                    ?? $item->harga
+                    ?? $item->unit_price
+                    ?? $item->price
+                    ?? null;
+                $price = $this->moneyToFloat($rawPrice);
+                $quantity = $this->moneyToFloat($item->jumlah);
+                $rawSubtotal = $item->subtotal ?? null;
+                $subtotal = $this->moneyToFloat($rawSubtotal);
+
+                if ($subtotal <= 0 && $price > 0 && $quantity > 0) {
+                    $subtotal = $price * $quantity;
+                }
+
                 return [
                     'nama_barang' => $item->nama_barang,
                     'satuan' => $item->satuan,
                     'jumlah' => $item->jumlah,
-                    'harga_satuan' => '',
-                    'subtotal' => 0,
+                    'harga_satuan' => $price > 0 ? $this->formatMoney($price) : '',
+                    'subtotal' => $subtotal > 0 ? $this->formatMoney($subtotal) : '',
                     'tgl_pemenuhan' => optional($item->tgl_pemenuhan)->format('Y-m-d'),
                 ];
             })
             ->filter(fn($item) => filled($item['nama_barang']) || filled($item['satuan']) || filled($item['jumlah']))
             ->values()
             ->all();
+
+        $fallbackTotal = $this->moneyToFloat($fallbackTotal);
+        $hasPrice = collect($rows)->contains(fn($item) => $this->moneyToFloat($item['harga_satuan'] ?? '') > 0);
+
+        if (!$hasPrice && count($rows) === 1 && $fallbackTotal > 0) {
+            $quantity = $this->moneyToFloat($rows[0]['jumlah'] ?? '');
+            $price = $quantity > 0 ? $fallbackTotal / $quantity : $fallbackTotal;
+            $rows[0]['harga_satuan'] = $this->formatMoney($price);
+            $rows[0]['subtotal'] = $this->formatMoney($fallbackTotal);
+            $rows[0]['harga_source'] = 'total_pr';
+        }
+
+        return $rows;
+    }
+
+    private function spphItemAutoFillColumns(): array
+    {
+        return Cache::remember('spph_items:auto_fill_columns:v1', 3600, function () {
+            $columns = ['id', 'spph_id', 'urutan', 'nama_barang', 'satuan', 'jumlah', 'tgl_pemenuhan'];
+
+            foreach (['harga_satuan', 'subtotal', 'harga', 'unit_price', 'price'] as $optionalColumn) {
+                if (Schema::hasColumn('spph_items', $optionalColumn)) {
+                    $columns[] = $optionalColumn;
+                }
+            }
+
+            return $columns;
+        });
     }
 
     private function spphVendorMetaMapForPpbjRows($rows)
