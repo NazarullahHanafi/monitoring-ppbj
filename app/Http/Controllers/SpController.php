@@ -1650,18 +1650,66 @@ class SpController extends Controller
             $ct->addCell(2600, ['borders' => $noBdr])->addText($key, $fs, $p0);
             $ct->addCell(100, ['borders' => $noBdr])->addText(':', $fs, $p0);
             $valCell = $ct->addCell(6544, ['borders' => $noBdr]);
-            $parts = preg_split('/(\([^)]*\))/', $val, -1, PREG_SPLIT_DELIM_CAPTURE);
-            if (count($parts) > 1) {
+
+            if ($key === 'Penyerahan barang') {
                 $run = $valCell->addTextRun($p0);
-                foreach ($parts as $part) {
-                    if (preg_match('/^\(\.+\)$/', $part)) {
-                        $run->addText($part, $fb);
-                    } else {
-                        $run->addText($part, $fs);
-                    }
+
+                // Bagian awal: font normal
+                $run->addText(
+                    'Selambat-lambatnya ',
+                    $fs
+                );
+
+                if ($sp->promised_date) {
+                    // Tanggal: font bold
+                    $tanggalPenyerahan = \Carbon\Carbon::parse($sp->promised_date)
+                        ->locale('id')
+                        ->translatedFormat('d F Y');
+
+                    $run->addText(
+                        $tanggalPenyerahan,
+                        $fb
+                    );
+                } else {
+                    // Placeholder jika tanggal kosong: bold
+                    $run->addText(
+                        '(......................)',
+                        $fb
+                    );
                 }
+
+                // Bagian akhir: font normal
+                $run->addText(
+                    ' sesuai dengan perjanjian',
+                    $fs
+                );
             } else {
-                $valCell->addText($val, $fs, $p0);
+                // Kode lama tetap digunakan untuk Denda
+                // dan Tempat Penyerahan Barang
+                $parts = preg_split(
+                    '/(\([^)]*\))/',
+                    $val,
+                    -1,
+                    PREG_SPLIT_DELIM_CAPTURE
+                );
+
+                if (count($parts) > 1) {
+                    $run = $valCell->addTextRun($p0);
+
+                    foreach ($parts as $part) {
+                        if (preg_match('/^\(\.+\)$/', $part)) {
+                            $run->addText($part, $fb);
+                        } else {
+                            $run->addText($part, $fs);
+                        }
+                    }
+                } else {
+                    $valCell->addText(
+                        $val,
+                        $fs,
+                        $p0
+                    );
+                }
             }
         }
 
