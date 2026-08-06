@@ -201,9 +201,13 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
             ->middleware('throttle:120,1')
             ->name('approval.pr.pendingCount');
 
-        Route::get('/vendor/search', [VendorController::class, 'search'])->name('vendor.search')->middleware('throttle:60,1');
-        Route::resource('vendor', VendorController::class)->except(['show', 'create', 'edit']);
-        Route::post('vendor/{vendor}/toggle', [VendorController::class, 'toggleActive'])->name('vendor.toggle');
+        // Gunakan /vendors agar tidak bentrok dengan folder asset public/vendor milik file preview.
+        Route::get('/vendors/search', [VendorController::class, 'search'])->name('vendor.search')->middleware('throttle:60,1');
+        Route::resource('vendors', VendorController::class)
+            ->names('vendor')
+            ->parameters(['vendors' => 'vendor'])
+            ->except(['show', 'create', 'edit']);
+        Route::post('vendors/{vendor}/toggle', [VendorController::class, 'toggleActive'])->name('vendor.toggle');
 
         // ==== Master Kontrak SP ====
         Route::resource('sp-master-options', SpMasterOptionController::class)

@@ -1605,10 +1605,12 @@ class SpController extends Controller
         if (file_exists($imagePath)) {
             $this->injectHeaderWatermark($tempPath, $imagePath, file_exists($imagePath2) ? $imagePath2 : null);
         }
+        $this->repairDocxXmlForMicrosoftWord($tempPath);
 
         if (!file_exists($tempPath) || filesize($tempPath) === 0) {
             $fallbackPath = storage_path('app/fallback_' . $filename);
             IOFactory::createWriter($phpWord, 'Word2007')->save($fallbackPath);
+            $this->repairDocxXmlForMicrosoftWord($fallbackPath);
             return response()->download($fallbackPath, $filename)->deleteFileAfterSend(true);
         }
 
@@ -2321,10 +2323,12 @@ class SpController extends Controller
         if ($imagePath) {
             $this->injectHeaderWatermark($tempPath, $imagePath, $imagePath2, $sp->nomor_sp);
         }
+        $this->repairDocxXmlForMicrosoftWord($tempPath);
 
         if (!file_exists($tempPath) || filesize($tempPath) === 0) {
             $fallbackPath = storage_path('app/fallback_' . $filename);
             IOFactory::createWriter($phpWord, 'Word2007')->save($fallbackPath);
+            $this->repairDocxXmlForMicrosoftWord($fallbackPath);
             return response()->download($fallbackPath, $filename)->deleteFileAfterSend(true);
         }
 
@@ -3039,10 +3043,12 @@ class SpController extends Controller
         if ($imagePath) {
             $this->injectHeaderWatermark($tempPath, $imagePath, $imagePath2, $sp->nomor_sp);
         }
+        $this->repairDocxXmlForMicrosoftWord($tempPath);
 
         if (!file_exists($tempPath) || filesize($tempPath) === 0) {
             $fallbackPath = storage_path('app/fallback_' . $filename);
             IOFactory::createWriter($phpWord, 'Word2007')->save($fallbackPath);
+            $this->repairDocxXmlForMicrosoftWord($fallbackPath);
             return response()->download($fallbackPath, $filename)->deleteFileAfterSend(true);
         }
 
@@ -3839,10 +3845,12 @@ class SpController extends Controller
         if ($imagePath) {
             $this->injectHeaderWatermark($tempPath, $imagePath, $imagePath2, $sp->nomor_sp);
         }
+        $this->repairDocxXmlForMicrosoftWord($tempPath);
 
         if (!file_exists($tempPath) || filesize($tempPath) === 0) {
             $fallbackPath = storage_path('app/fallback_' . $filename);
             IOFactory::createWriter($phpWord, 'Word2007')->save($fallbackPath);
+            $this->repairDocxXmlForMicrosoftWord($fallbackPath);
             return response()->download($fallbackPath, $filename)->deleteFileAfterSend(true);
         }
 
@@ -4158,6 +4166,73 @@ class SpController extends Controller
         $text = mb_convert_encoding($text, 'UTF-8', 'UTF-8');
         $clean = preg_replace('/[^\x09\x0A\x0D\x20-\x{D7FF}\x{E000}-\x{FFFD}]/u', '', $text);
         return ($clean !== null) ? $clean : $text;
+    }
+
+    private function repairDocxXmlForMicrosoftWord(string $docxPath): void
+    {
+        if (!file_exists($docxPath) || filesize($docxPath) === 0) {
+            return;
+        }
+
+        $zip = new \ZipArchive();
+        if ($zip->open($docxPath) !== true) {
+            return;
+        }
+
+        try {
+            for ($i = 0; $i < $zip->numFiles; $i++) {
+                $name = $zip->getNameIndex($i);
+                if (!is_string($name) || !preg_match('/\.(xml|rels)$/i', $name)) {
+                    continue;
+                }
+
+                $xml = $zip->getFromIndex($i);
+                if (!is_string($xml) || trim($xml) === '') {
+                    continue;
+                }
+
+                if ($this->isWellFormedXml($xml)) {
+                    continue;
+                }
+
+                $repaired = $this->repairRawXmlEntities($this->sanitizeXml($xml));
+                if ($repaired !== $xml && $this->isWellFormedXml($repaired)) {
+                    $zip->deleteName($name);
+                    $zip->addFromString($name, $repaired);
+                    continue;
+                }
+
+                \Log::warning('DOCX XML masih tidak valid setelah repair', [
+                    'file' => basename($docxPath),
+                    'part' => $name,
+                ]);
+            }
+        } finally {
+            $zip->close();
+        }
+    }
+
+    private function repairRawXmlEntities(string $xml): string
+    {
+        return preg_replace(
+            '/&(?!amp;|lt;|gt;|apos;|quot;|#\d+;|#x[0-9a-fA-F]+;)/',
+            '&amp;',
+            $xml
+        ) ?? $xml;
+    }
+
+    private function isWellFormedXml(string $xml): bool
+    {
+        $previous = libxml_use_internal_errors(true);
+        libxml_clear_errors();
+
+        $dom = new \DOMDocument('1.0', 'UTF-8');
+        $ok = @$dom->loadXML($xml);
+
+        libxml_clear_errors();
+        libxml_use_internal_errors($previous);
+
+        return (bool) $ok;
     }
 
     private function resolveKopSuratPath(bool $halamanLanjutan = false): ?string

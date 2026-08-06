@@ -518,7 +518,7 @@
 
         // ===== EDIT MODAL =====
         function openEditModal(id, nama, alamat, telepon, fax, email, npwp, direktur, jabatan, isActive) {
-            document.getElementById('editFormVendor').action = `/vendor/${id}`;
+            document.getElementById('editFormVendor').action = `/vendors/${id}`;
             document.getElementById('editVendorId').value = id;
             document.getElementById('editNamaVendor').value = nama;
             document.getElementById('editAlamatVendor').value = alamat || '';
