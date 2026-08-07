@@ -21,6 +21,13 @@
 @endpush
 
 @section('content')
+    @php
+        $previousUrl = url()->previous();
+        $safeBackUrl = $previousUrl && $previousUrl !== request()->fullUrl()
+            ? $previousUrl
+            : route('dashboard');
+    @endphp
+
     <div class="space-y-6">
 
         {{-- HEADER --}}
@@ -37,13 +44,24 @@
                         Total: {{ $satuans->count() }} Satuan
                     </span>
                 </div>
-                <button onclick="openModal('addModal')"
-                    class="flex items-center gap-2 bg-white text-emerald-700 font-bold px-5 py-3 rounded-xl hover:bg-emerald-50 transition-all shadow-lg whitespace-nowrap">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4" />
-                    </svg>
-                    Tambah Satuan
-                </button>
+                <div class="flex items-center gap-2.5 shrink-0">
+                    <a href="{{ $safeBackUrl }}"
+                        class="flex items-center gap-2 bg-white/20 hover:bg-white/30 text-white font-semibold px-4 py-3 rounded-xl transition-all backdrop-blur-sm border border-white/30 whitespace-nowrap group">
+                        <svg class="w-4 h-4 transition-transform duration-300 group-hover:scale-110" fill="none"
+                            stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                        </svg>
+                        <span class="text-sm">Back</span>
+                    </a>
+                    <button onclick="openModal('addModal')"
+                        class="flex items-center gap-2 bg-white text-emerald-700 font-bold px-5 py-3 rounded-xl hover:bg-emerald-50 transition-all shadow-lg whitespace-nowrap">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4" />
+                        </svg>
+                        Tambah Satuan
+                    </button>
+                </div>
             </div>
         </div>
 
