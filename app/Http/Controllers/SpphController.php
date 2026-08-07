@@ -377,11 +377,11 @@ class SpphController extends Controller
         if ($nomorPr && $nomorPrType === 'ppbj') {
             $ppbj = Ppbj::where('ppbj_no', $nomorPr)->first();
             if (!$ppbj)
-                return back()->withErrors(['nomor_pr' => "PPBJ \"{$nomorPr}\" tidak ditemukan!"])->withInput();
+                return $this->formError($request, 'nomor_pr', "PPBJ \"{$nomorPr}\" tidak ditemukan!");
             if ($ppbj->status === 'CANCELLED')
-                return back()->withErrors(['nomor_pr' => "PPBJ ini sudah di-CANCELLED!"])->withInput();
+                return $this->formError($request, 'nomor_pr', "PPBJ ini sudah di-CANCELLED!");
             if (!empty($ppbj->spph_rfq_1))
-                return back()->withErrors(['nomor_pr' => "PPBJ sudah terhubung dengan SPPH: {$ppbj->spph_rfq_1}!"])->withInput();
+                return $this->formError($request, 'nomor_pr', "PPBJ sudah terhubung dengan SPPH: {$ppbj->spph_rfq_1}!", 409, ['conflict' => true]);
         }
 
         try {
@@ -392,15 +392,15 @@ class SpphController extends Controller
                 $ppbjRecord = Ppbj::where('ppbj_no', $nomorPr)->lockForUpdate()->first();
 
                 if (!$ppbjRecord) {
-                    return back()->withErrors(['nomor_pr' => "PPBJ \"{$nomorPr}\" tidak ditemukan!"])->withInput();
+                    return $this->formError($request, 'nomor_pr', "PPBJ \"{$nomorPr}\" tidak ditemukan!");
                 }
 
                 if ($ppbjRecord->status === 'CANCELLED') {
-                    return back()->withErrors(['nomor_pr' => "PPBJ ini sudah di-CANCELLED!"])->withInput();
+                    return $this->formError($request, 'nomor_pr', "PPBJ ini sudah di-CANCELLED!");
                 }
 
                 if (!empty($ppbjRecord->spph_rfq_1)) {
-                    return back()->withErrors(['nomor_pr' => "PPBJ sudah terhubung dengan SPPH: {$ppbjRecord->spph_rfq_1}!"])->withInput();
+                    return $this->formError($request, 'nomor_pr', "PPBJ sudah terhubung dengan SPPH: {$ppbjRecord->spph_rfq_1}!", 409, ['conflict' => true]);
                 }
             }
 
@@ -435,12 +435,16 @@ class SpphController extends Controller
             Cache::forget('spph:suggest');
             Cache::forget('vendor:usage-stats:spph-sp:v1');
 
-            return redirect()->route('spph.index')->with('success', 'Data SPPH berhasil disimpan!');
+            return $this->formSuccess($request, route('spph.index'), 'Data SPPH berhasil disimpan!');
             });
         } catch (QueryException $e) {
-            return back()
-                ->withErrors(['nomor_pr' => 'Nomor SPPH atau nomor PR sudah dipakai oleh data lain. Silakan refresh halaman dan cek data terbaru.'])
-                ->withInput();
+            return $this->formError(
+                $request,
+                'nomor_pr',
+                'Nomor SPPH atau nomor PR sudah dipakai oleh data lain. Silakan ambil nomor terbaru dan cek data terbaru.',
+                409,
+                ['conflict' => true]
+            );
         }
     }
 
@@ -493,11 +497,11 @@ class SpphController extends Controller
         if ($nomorPr && $nomorPrType === 'ppbj') {
             $ppbj = Ppbj::where('ppbj_no', $nomorPr)->first();
             if (!$ppbj)
-                return back()->withErrors(['nomor_pr' => "PPBJ \"{$nomorPr}\" tidak ditemukan!"])->withInput();
+                return $this->formError($request, 'nomor_pr', "PPBJ \"{$nomorPr}\" tidak ditemukan!");
             if ($ppbj->status === 'CANCELLED')
-                return back()->withErrors(['nomor_pr' => "PPBJ sudah di-CANCELLED!"])->withInput();
+                return $this->formError($request, 'nomor_pr', "PPBJ sudah di-CANCELLED!");
             if (!empty($ppbj->spph_rfq_1) && $ppbj->spph_rfq_1 !== $spph->nomor_spph)
-                return back()->withErrors(['nomor_pr' => "PPBJ sudah terhubung dengan SPPH: {$ppbj->spph_rfq_1}!"])->withInput();
+                return $this->formError($request, 'nomor_pr', "PPBJ sudah terhubung dengan SPPH: {$ppbj->spph_rfq_1}!", 409, ['conflict' => true]);
         }
 
         try {
@@ -508,15 +512,15 @@ class SpphController extends Controller
                 $newPpbj = Ppbj::where('ppbj_no', $nomorPr)->lockForUpdate()->first();
 
                 if (!$newPpbj) {
-                    return back()->withErrors(['nomor_pr' => "PPBJ \"{$nomorPr}\" tidak ditemukan!"])->withInput();
+                    return $this->formError($request, 'nomor_pr', "PPBJ \"{$nomorPr}\" tidak ditemukan!");
                 }
 
                 if ($newPpbj->status === 'CANCELLED') {
-                    return back()->withErrors(['nomor_pr' => "PPBJ sudah di-CANCELLED!"])->withInput();
+                    return $this->formError($request, 'nomor_pr', "PPBJ sudah di-CANCELLED!");
                 }
 
                 if (!empty($newPpbj->spph_rfq_1) && $newPpbj->spph_rfq_1 !== $spph->nomor_spph) {
-                    return back()->withErrors(['nomor_pr' => "PPBJ sudah terhubung dengan SPPH: {$newPpbj->spph_rfq_1}!"])->withInput();
+                    return $this->formError($request, 'nomor_pr', "PPBJ sudah terhubung dengan SPPH: {$newPpbj->spph_rfq_1}!", 409, ['conflict' => true]);
                 }
             }
 
@@ -563,12 +567,16 @@ class SpphController extends Controller
             Cache::forget('spph:suggest');
             Cache::forget('vendor:usage-stats:spph-sp:v1');
 
-            return redirect()->route('spph.index')->with('success', 'Data SPPH berhasil diperbarui!');
+            return $this->formSuccess($request, route('spph.index'), 'Data SPPH berhasil diperbarui!');
             });
         } catch (QueryException $e) {
-            return back()
-                ->withErrors(['nomor_pr' => 'Nomor SPPH atau nomor PR sudah dipakai oleh data lain. Silakan refresh halaman dan cek data terbaru.'])
-                ->withInput();
+            return $this->formError(
+                $request,
+                'nomor_pr',
+                'Nomor SPPH atau nomor PR sudah dipakai oleh data lain. Silakan ambil nomor terbaru dan cek data terbaru.',
+                409,
+                ['conflict' => true]
+            );
         }
     }
 
@@ -2071,6 +2079,32 @@ XML;
         if ($warning) {
             throw ValidationException::withMessages([$field => $warning]);
         }
+    }
+
+    private function formError(Request $request, string $field, string $message, int $status = 422, array $extra = [])
+    {
+        if ($request->expectsJson()) {
+            return response()->json(array_merge([
+                'message' => $message,
+                'errors' => [
+                    $field => [$message],
+                ],
+            ], $extra), $status);
+        }
+
+        return back()->withErrors([$field => $message])->withInput();
+    }
+
+    private function formSuccess(Request $request, string $redirectUrl, string $message)
+    {
+        if ($request->expectsJson()) {
+            return response()->json([
+                'message' => $message,
+                'redirect' => $redirectUrl,
+            ]);
+        }
+
+        return redirect($redirectUrl)->with('success', $message);
     }
 
     private function nextAvailableSequence(?int $excludeId = null, ?int $year = null): int

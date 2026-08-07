@@ -5419,6 +5419,127 @@
             attachNomorCheck('editNomorSp', 'editNomorStatusSp', () => document.getElementById('editIdSp').value || 0, 'editTanggalSp');
             document.getElementById('tanggalSpInput')?.addEventListener('change', loadSuggestionsSp);
 
+            function swalThemeSp() {
+                const dark = document.documentElement.classList.contains('dark');
+                return {
+                    background: dark ? '#0f172a' : '#ffffff',
+                    color: dark ? '#f8fafc' : '#111827',
+                    confirmButtonColor: '#2563eb'
+                };
+            }
+
+            function ajaxErrorMessageSp(data) {
+                if (data?.errors) {
+                    const first = Object.values(data.errors).flat().find(Boolean);
+                    if (first) return first;
+                }
+                return data?.message || 'Data belum bisa disimpan. Silakan cek kembali isian form.';
+            }
+
+            async function applyLatestNumberSp(isEdit = false) {
+                const input = document.getElementById(isEdit ? 'editNomorSp' : 'nomorSpInput');
+                const status = document.getElementById(isEdit ? 'editNomorStatusSp' : 'nomorStatusSp');
+                if (!input) return null;
+
+                try {
+                    const response = await fetch(getSuggestionUrlSp(), {
+                        headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
+                    });
+                    const data = await response.json();
+                    const latest = data?.suggestions?.[0] || null;
+                    if (latest) {
+                        input.value = latest;
+                        input.dispatchEvent(new Event('input', { bubbles: true }));
+                        if (status) {
+                            status.innerHTML = '<span class="text-xs font-semibold text-blue-600 dark:text-blue-300">Nomor terbaru dipakai otomatis</span>';
+                        }
+                    }
+                    return latest;
+                } catch (error) {
+                    return null;
+                }
+            }
+
+            async function submitFormAjaxSp(form, isEdit = false) {
+                const submitBtn = form.querySelector('button[type="submit"]');
+                const originalHtml = submitBtn ? submitBtn.innerHTML : '';
+                if (submitBtn) {
+                    submitBtn.disabled = true;
+                    submitBtn.innerHTML = '⏳ Menyimpan...';
+                }
+
+                try {
+                    const response = await fetch(form.action, {
+                        method: 'POST',
+                        body: new FormData(form),
+                        headers: {
+                            'Accept': 'application/json',
+                            'X-Requested-With': 'XMLHttpRequest'
+                        }
+                    });
+
+                    const contentType = response.headers.get('content-type') || '';
+                    const data = contentType.includes('application/json') ? await response.json() : {};
+
+                    if (response.ok) {
+                        Swal.fire({
+                            title: 'Berhasil disimpan',
+                            text: data?.message || 'Data SP berhasil disimpan.',
+                            icon: 'success',
+                            timer: 900,
+                            showConfirmButton: false,
+                            ...swalThemeSp()
+                        }).then(() => {
+                            window.location.href = data?.redirect || window.location.href;
+                        });
+                        return;
+                    }
+
+                    const message = ajaxErrorMessageSp(data);
+                    if (data?.conflict || response.status === 409) {
+                        const result = await Swal.fire({
+                            title: 'Nomor bentrok / data berubah',
+                            html: `<div class="text-left leading-relaxed">${message}<br><br><strong>Solusi cepat:</strong> ambil nomor terbaru tanpa menutup form.</div>`,
+                            icon: 'warning',
+                            showCancelButton: true,
+                            confirmButtonText: 'Ambil Nomor Terbaru',
+                            cancelButtonText: 'Tetap di Form',
+                            ...swalThemeSp()
+                        });
+
+                        if (result.isConfirmed) {
+                            const latest = await applyLatestNumberSp(isEdit);
+                            Swal.fire({
+                                title: latest ? 'Nomor terbaru siap dipakai' : 'Saran nomor belum bisa dimuat',
+                                text: latest ? `Nomor diganti ke ${latest}. Silakan cek lalu simpan ulang.` : 'Silakan klik saran nomor atau refresh data jika perlu.',
+                                icon: latest ? 'success' : 'info',
+                                ...swalThemeSp()
+                            });
+                        }
+                        return;
+                    }
+
+                    Swal.fire({
+                        title: 'Simpan gagal',
+                        text: message,
+                        icon: 'error',
+                        ...swalThemeSp()
+                    });
+                } catch (error) {
+                    Swal.fire({
+                        title: 'Koneksi simpan bermasalah',
+                        text: 'Form tetap terbuka. Silakan coba lagi, data yang sudah diketik tidak hilang.',
+                        icon: 'error',
+                        ...swalThemeSp()
+                    });
+                } finally {
+                    if (submitBtn) {
+                        submitBtn.disabled = false;
+                        submitBtn.innerHTML = originalHtml;
+                    }
+                }
+            }
+
             // ── FIX BUG 4 & Guard submit TAMBAH ──
             document.getElementById('addFormSp').addEventListener('submit', function (e) {
                 const $nomorStatus = $('#nomorStatusSp');
@@ -5467,7 +5588,10 @@
                 if ($ppbjStatusEl.html().includes('❌')) {
                     e.preventDefault();
                     Swal.fire({ title: 'PPBJ Tidak Valid!', icon: 'warning', background: document.documentElement.classList.contains('dark') ? '#1f2937' : '#fff', color: document.documentElement.classList.contains('dark') ? '#f3f4f6' : '#111827' });
+                    return;
                 }
+                e.preventDefault();
+                submitFormAjaxSp(this, false);
             });
 
             // ── FIX BUG 3 & 4 & Guard submit EDIT ──
@@ -5519,7 +5643,10 @@
                 if ($editPpbjStatusEl.html().includes('❌')) {
                     e.preventDefault();
                     Swal.fire({ title: 'PPBJ Tidak Valid!', icon: 'warning', background: document.documentElement.classList.contains('dark') ? '#1f2937' : '#fff', color: document.documentElement.classList.contains('dark') ? '#f3f4f6' : '#111827' });
+                    return;
                 }
+                e.preventDefault();
+                submitFormAjaxSp(this, true);
             });
 
             // Search

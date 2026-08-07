@@ -410,11 +410,11 @@ class SpController extends Controller
             return null;
         }
 
-        return back()
-            ->withErrors([
-                'nama_vendor' => 'Vendor SP berbeda dari vendor pada SPPH ' . ($meta['spph_nomor'] ?? '-') . '. Pilih vendor rekomendasi atau konfirmasi jika memang berbeda.',
-            ])
-            ->withInput();
+        return $this->formError(
+            $request,
+            'nama_vendor',
+            'Vendor SP berbeda dari vendor pada SPPH ' . ($meta['spph_nomor'] ?? '-') . '. Pilih vendor rekomendasi atau konfirmasi jika memang berbeda.'
+        );
     }
 
     // =========================================================
@@ -775,12 +775,12 @@ class SpController extends Controller
             $ppbjCheck = DB::table('ppbj')->where('ppbj_no', $nomorPr)->first();
             if ($ppbjCheck) {
                 if ($ppbjCheck->status === 'CANCELLED') {
-                    return back()->withErrors(['nomor_pr' => "PPBJ \"{$nomorPr}\" sudah di-CANCELLED!"])->withInput();
+                    return $this->formError($request, 'nomor_pr', "PPBJ \"{$nomorPr}\" sudah di-CANCELLED!");
                 }
                 if (!empty($ppbjCheck->awarding_sp)) {
-                    return back()->withErrors(['nomor_pr' => "PPBJ sudah terhubung dengan SP: {$ppbjCheck->awarding_sp}!"])->withInput();
+                    return $this->formError($request, 'nomor_pr', "PPBJ sudah terhubung dengan SP: {$ppbjCheck->awarding_sp}!", 409, ['conflict' => true]);
+                    }
                 }
-            }
         }
 
         try {
@@ -792,11 +792,11 @@ class SpController extends Controller
 
                     if ($ppbjRecord) {
                         if ($ppbjRecord->status === 'CANCELLED') {
-                            return back()->withErrors(['nomor_pr' => "PPBJ \"{$nomorPr}\" sudah di-CANCELLED!"])->withInput();
+                            return $this->formError($request, 'nomor_pr', "PPBJ \"{$nomorPr}\" sudah di-CANCELLED!");
                         }
 
                         if (!empty($ppbjRecord->awarding_sp)) {
-                            return back()->withErrors(['nomor_pr' => "PPBJ sudah terhubung dengan SP: {$ppbjRecord->awarding_sp}!"])->withInput();
+                            return $this->formError($request, 'nomor_pr', "PPBJ sudah terhubung dengan SP: {$ppbjRecord->awarding_sp}!", 409, ['conflict' => true]);
                         }
                     }
                 }
@@ -876,14 +876,20 @@ class SpController extends Controller
                 Cache::forget('sp:suggest');
                 Cache::forget('vendor:usage-stats:spph-sp:v1');
 
-                return redirect()
-                    ->route('sp.index', $oracleMode ? ['mode' => 'oracle'] : [])
-                    ->with('success', $oracleMode ? 'Data SP Oracle berhasil disimpan!' : 'Data SP berhasil disimpan!');
+                return $this->formSuccess(
+                    $request,
+                    route('sp.index', $oracleMode ? ['mode' => 'oracle'] : []),
+                    $oracleMode ? 'Data SP Oracle berhasil disimpan!' : 'Data SP berhasil disimpan!'
+                );
             });
         } catch (QueryException $e) {
-            return back()
-                ->withErrors(['nomor_pr' => 'Nomor SP atau nomor PR sudah dipakai oleh data lain. Silakan refresh halaman dan cek data terbaru.'])
-                ->withInput();
+            return $this->formError(
+                $request,
+                'nomor_pr',
+                'Nomor SP atau nomor PR sudah dipakai oleh data lain. Silakan ambil nomor terbaru dan cek data terbaru.',
+                409,
+                ['conflict' => true]
+            );
         }
     }
 
@@ -956,10 +962,10 @@ class SpController extends Controller
             $ppbjCheck = DB::table('ppbj')->where('ppbj_no', $nomorPr)->first();
             if ($ppbjCheck) {
                 if ($ppbjCheck->status === 'CANCELLED') {
-                    return back()->withErrors(['nomor_pr' => "PPBJ \"{$nomorPr}\" sudah di-CANCELLED!"])->withInput();
+                    return $this->formError($request, 'nomor_pr', "PPBJ \"{$nomorPr}\" sudah di-CANCELLED!");
                 }
                 if (!empty($ppbjCheck->awarding_sp) && $ppbjCheck->awarding_sp !== $sp->nomor_sp) {
-                    return back()->withErrors(['nomor_pr' => "PPBJ sudah terhubung dengan SP: {$ppbjCheck->awarding_sp}!"])->withInput();
+                    return $this->formError($request, 'nomor_pr', "PPBJ sudah terhubung dengan SP: {$ppbjCheck->awarding_sp}!", 409, ['conflict' => true]);
                 }
             }
         }
@@ -973,11 +979,11 @@ class SpController extends Controller
 
                     if ($newPpbj) {
                         if ($newPpbj->status === 'CANCELLED') {
-                            return back()->withErrors(['nomor_pr' => "PPBJ \"{$nomorPr}\" sudah di-CANCELLED!"])->withInput();
+                            return $this->formError($request, 'nomor_pr', "PPBJ \"{$nomorPr}\" sudah di-CANCELLED!");
                         }
 
                         if (!empty($newPpbj->awarding_sp) && $newPpbj->awarding_sp !== $sp->nomor_sp) {
-                            return back()->withErrors(['nomor_pr' => "PPBJ sudah terhubung dengan SP: {$newPpbj->awarding_sp}!"])->withInput();
+                            return $this->formError($request, 'nomor_pr', "PPBJ sudah terhubung dengan SP: {$newPpbj->awarding_sp}!", 409, ['conflict' => true]);
                         }
                     }
                 }
@@ -1064,14 +1070,20 @@ class SpController extends Controller
                 Cache::forget('sp:suggest');
                 Cache::forget('vendor:usage-stats:spph-sp:v1');
 
-                return redirect()
-                    ->route('sp.index', $oracleMode ? ['mode' => 'oracle'] : [])
-                    ->with('success', $oracleMode ? 'Data SP Oracle berhasil diperbarui!' : 'Data SP berhasil diperbarui!');
+                return $this->formSuccess(
+                    $request,
+                    route('sp.index', $oracleMode ? ['mode' => 'oracle'] : []),
+                    $oracleMode ? 'Data SP Oracle berhasil diperbarui!' : 'Data SP berhasil diperbarui!'
+                );
             });
         } catch (QueryException $e) {
-            return back()
-                ->withErrors(['nomor_pr' => 'Nomor SP atau nomor PR sudah dipakai oleh data lain. Silakan refresh halaman dan cek data terbaru.'])
-                ->withInput();
+            return $this->formError(
+                $request,
+                'nomor_pr',
+                'Nomor SP atau nomor PR sudah dipakai oleh data lain. Silakan ambil nomor terbaru dan cek data terbaru.',
+                409,
+                ['conflict' => true]
+            );
         }
     }
 
@@ -5468,6 +5480,32 @@ class SpController extends Controller
         if ($warning) {
             throw ValidationException::withMessages([$field => $warning]);
         }
+    }
+
+    private function formError(Request $request, string $field, string $message, int $status = 422, array $extra = [])
+    {
+        if ($request->expectsJson()) {
+            return response()->json(array_merge([
+                'message' => $message,
+                'errors' => [
+                    $field => [$message],
+                ],
+            ], $extra), $status);
+        }
+
+        return back()->withErrors([$field => $message])->withInput();
+    }
+
+    private function formSuccess(Request $request, string $redirectUrl, string $message)
+    {
+        if ($request->expectsJson()) {
+            return response()->json([
+                'message' => $message,
+                'redirect' => $redirectUrl,
+            ]);
+        }
+
+        return redirect($redirectUrl)->with('success', $message);
     }
 
     // =========================================================
