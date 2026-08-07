@@ -2960,12 +2960,30 @@
                     <a href="{{ route('sp.index') }}"
                         class="nav-item group flex items-center gap-3 px-4 py-3 rounded-xl {{ (request()->is('sp') || request()->is('sp/*')) ? 'active' : 'text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-blue-600 dark:hover:text-blue-400' }}"><span
                             class="icon-box text-xl">📝</span><span class="nav-text font-medium">Penomoran SP</span></a>
-                    <a href="{{ route('sp-master-options.index') }}"
-                        class="nav-item group flex items-center gap-3 px-4 py-3 rounded-xl {{ request()->is('sp-master-options*') ? 'active' : 'text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-blue-600 dark:hover:text-blue-400' }}">
-                        <span class="icon-box text-xl">⚙️</span>
-                        <span class="nav-text font-medium">Master Kontrak SP</span>
-                    </a>
-
+                    <div class="pt-3 mt-2 border-t border-gray-200/50 dark:border-gray-800/50">
+                        <div
+                            class="flex items-center gap-3 px-4 py-2 text-[11px] font-extrabold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">
+                            <span class="icon-box text-lg">MD</span>
+                            <span class="nav-text">Master Data</span>
+                            <span
+                                class="nav-text ml-auto rounded-full bg-emerald-100 px-2 py-0.5 text-[9px] font-black text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-200">Referensi</span>
+                        </div>
+                        <a href="{{ route('sp-master-options.index') }}"
+                            class="nav-item group flex items-center gap-3 px-4 py-2.5 rounded-xl {{ request()->is('sp-master-options*') ? 'active' : 'text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-blue-600 dark:hover:text-blue-400' }}">
+                            <span class="icon-box text-xl">⚙️</span>
+                            <span class="nav-text font-medium">Master Kontrak SP</span>
+                        </a>
+                        <a href="{{ route('vendor.index') }}"
+                            class="nav-item group flex items-center gap-3 px-4 py-2.5 rounded-xl {{ request()->is('vendors*') ? 'active' : 'text-gray-700 dark:text-gray-300 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 hover:text-emerald-600 dark:hover:text-emerald-300' }}">
+                            <span class="icon-box text-xl">🏢</span>
+                            <span class="nav-text font-medium">Vendor</span>
+                        </a>
+                        <a href="{{ route('satuan.index') }}"
+                            class="nav-item group flex items-center gap-3 px-4 py-2.5 rounded-xl {{ request()->is('satuan*') ? 'active' : 'text-gray-700 dark:text-gray-300 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 hover:text-emerald-600 dark:hover:text-emerald-300' }}">
+                            <span class="icon-box text-xl">📦</span>
+                            <span class="nav-text font-medium">Satuan</span>
+                        </a>
+                    </div>
                     <a href="{{ route('approval.pr.index') }}"
                         class="nav-item group flex items-center justify-between gap-3 px-4 py-3 rounded-xl {{ request()->is('approval/pr-receipts*') ? 'active' : 'text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-blue-600 dark:hover:text-blue-400' }}">
                         <div class="flex items-center gap-3"><span class="icon-box text-xl">✅</span><span
@@ -3064,6 +3082,29 @@
                             class="nav-item block px-4 py-3 rounded-xl {{ request()->is('sp') || request()->is('sp/*') ? 'active' : 'text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-blue-900/20' }}"><span
                                 class="flex items-center gap-3"><span class="text-xl">📝</span><span
                                     class="font-medium">Penomoran SP</span></span></a>
+                        <div class="pt-3 mt-2 border-t border-gray-200/70 dark:border-gray-700/70">
+                            <div
+                                class="flex items-center justify-between px-4 py-2 text-[11px] font-extrabold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">
+                                <span>Master Data</span>
+                                <span
+                                    class="rounded-full bg-emerald-100 px-2 py-0.5 text-[9px] font-black text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-200">Referensi</span>
+                            </div>
+                            <a href="{{ route('sp-master-options.index') }}"
+                                class="nav-item block px-4 py-2.5 rounded-xl {{ request()->is('sp-master-options*') ? 'active' : 'text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-blue-900/20' }}">
+                                <span class="flex items-center gap-3"><span class="text-xs font-black">SP</span><span
+                                        class="font-medium">Master Kontrak SP</span></span>
+                            </a>
+                            <a href="{{ route('vendor.index') }}"
+                                class="nav-item block px-4 py-2.5 rounded-xl {{ request()->is('vendors*') ? 'active' : 'text-gray-700 dark:text-gray-300 hover:bg-emerald-50 dark:hover:bg-emerald-900/20' }}">
+                                <span class="flex items-center gap-3"><span class="text-xs font-black">VD</span><span
+                                        class="font-medium">Vendor</span></span>
+                            </a>
+                            <a href="{{ route('satuan.index') }}"
+                                class="nav-item block px-4 py-2.5 rounded-xl {{ request()->is('satuan*') ? 'active' : 'text-gray-700 dark:text-gray-300 hover:bg-emerald-50 dark:hover:bg-emerald-900/20' }}">
+                                <span class="flex items-center gap-3"><span class="text-xs font-black">ST</span><span
+                                        class="font-medium">Satuan</span></span>
+                            </a>
+                        </div>
                         <a href="{{ route('approval.pr.index') }}"
                             class="nav-item flex items-center justify-between px-4 py-3 rounded-xl {{ request()->is('approval/pr-receipts*') ? 'active' : 'text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-blue-900/20' }}"><span
                                 class="flex items-center gap-3"><span class="text-xl">✅</span><span
