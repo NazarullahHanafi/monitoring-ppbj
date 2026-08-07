@@ -2051,8 +2051,8 @@ class SpController extends Controller
         }
 
         $catatanPr = $sp->nomor_pr
-            ? 'Memenuhi Permintaan Bidang Dukungan Bisnis sesuai PR No. ' . $sp->nomor_pr . ' tanggal ' . $tglPr . '.'
-            : 'Memenuhi Permintaan Bidang Dukungan Bisnis sesuai PR No. (....................) tanggal (....................).';
+            ? 'Memenuhi Permintaan Bidang (....................) sesuai PR No. ' . $sp->nomor_pr . ' tanggal ' . $tglPr . '.'
+            : 'Memenuhi Permintaan Bidang .................... sesuai PR No. (....................) tanggal (....................).';
 
         // Summary: kolom Catatan dibuat vertical merge 3 baris supaya tidak muncul garis
         // tepat di bawah tanggal catatan saat baris kanan berisi Harga / PPN / Total.
