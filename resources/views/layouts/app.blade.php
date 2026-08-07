@@ -2974,12 +2974,12 @@
                             <span class="nav-text font-medium">Master Kontrak SP</span>
                         </a>
                         <a href="{{ route('vendor.index') }}"
-                            class="nav-item group flex items-center gap-3 px-4 py-2.5 rounded-xl {{ request()->is('vendors*') ? 'active' : 'text-gray-700 dark:text-gray-300 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 hover:text-emerald-600 dark:hover:text-emerald-300' }}">
+                            class="nav-item group flex items-center gap-3 px-4 py-2.5 rounded-xl {{ request()->is('vendors*') ? 'active' : 'text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-blue-600 dark:hover:text-blue-400' }}">
                             <span class="icon-box text-xl">🏢</span>
                             <span class="nav-text font-medium">Vendor</span>
                         </a>
                         <a href="{{ route('satuan.index') }}"
-                            class="nav-item group flex items-center gap-3 px-4 py-2.5 rounded-xl {{ request()->is('satuan*') ? 'active' : 'text-gray-700 dark:text-gray-300 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 hover:text-emerald-600 dark:hover:text-emerald-300' }}">
+                            class="nav-item group flex items-center gap-3 px-4 py-2.5 rounded-xl {{ request()->is('satuan*') ? 'active' : 'text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-blue-600 dark:hover:text-blue-400' }}">
                             <span class="icon-box text-xl">📦</span>
                             <span class="nav-text font-medium">Satuan</span>
                         </a>
