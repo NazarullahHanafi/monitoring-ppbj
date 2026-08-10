@@ -151,7 +151,7 @@ class PresenceController extends Controller
 
         $previousLastSeen = null;
         $shouldNotifyOnlineReturn = false;
-        $shouldNotifyAppEntry = $this->shouldNotifyAppEntry($user);
+        $shouldNotifyAppEntry = false;
 
         if (Schema::hasColumn('users', 'last_seen_at')) {
             $previousLastSeen = DB::table('users')
@@ -161,8 +161,8 @@ class PresenceController extends Controller
             $shouldNotifyOnlineReturn = $this->shouldNotifyOnlineReturn($user, $previousLastSeen);
         }
 
-        if ($shouldNotifyAppEntry) {
-            $shouldNotifyOnlineReturn = false;
+        if (! $shouldNotifyOnlineReturn) {
+            $shouldNotifyAppEntry = $this->shouldNotifyAppEntry($user);
         }
 
         $updates = [];

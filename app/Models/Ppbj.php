@@ -60,6 +60,12 @@ class Ppbj extends Model
 
         'persentase_realisasi',
         'promised_date',
+        'goods_arrived_at',
+        'goods_arrived_by_user_id',
+        'goods_arrived_note',
+        'goods_confirmed_at',
+        'goods_confirmed_by_user_id',
+        'goods_confirmed_note',
         'time_left',
 
         'do_no',
@@ -86,6 +92,11 @@ class Ppbj extends Model
         'cancel_verified_by_user_id',
     ];
 
+    protected $casts = [
+        'goods_arrived_at' => 'datetime',
+        'goods_confirmed_at' => 'datetime',
+    ];
+
     public function createdBy()
     {
         return $this->belongsTo(User::class, 'created_by_user_id');
@@ -99,6 +110,16 @@ class Ppbj extends Model
     public function cancelVerifiedBy()
     {
         return $this->belongsTo(User::class, 'cancel_verified_by_user_id');
+    }
+
+    public function goodsArrivedBy()
+    {
+        return $this->belongsTo(User::class, 'goods_arrived_by_user_id');
+    }
+
+    public function goodsConfirmedBy()
+    {
+        return $this->belongsTo(User::class, 'goods_confirmed_by_user_id');
     }
 
     public function getIsCancelledAttribute(): bool

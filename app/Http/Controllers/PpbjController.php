@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Ppbj;
+use App\Models\Torpr;
 use App\Models\PrReceiptApproval;  // ← TAMBAHAN: import model approval
 use Illuminate\Http\Request;
 use App\Models\User;
@@ -24,6 +25,7 @@ use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Style\Border;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use App\Services\PrArchiveService;
+use App\Services\ProcurementJourneyService;
 
 class PpbjController extends Controller
 {
@@ -62,6 +64,12 @@ class PpbjController extends Controller
                 'nilai_sp_spk',
                 'persentase_realisasi',
                 'promised_date',
+                'goods_arrived_at',
+                'goods_arrived_by_user_id',
+                'goods_arrived_note',
+                'goods_confirmed_at',
+                'goods_confirmed_by_user_id',
+                'goods_confirmed_note',
                 'time_left',
                 'do_no',
                 'bpg_no',
@@ -87,6 +95,8 @@ class PpbjController extends Controller
                 'updated_at',
                 DB::raw('(select name from users where users.id = ppbj.cancelled_by_user_id limit 1) as cancelled_by_name'),
                 DB::raw('(select name from users where users.id = ppbj.cancel_verified_by_user_id limit 1) as cancel_verified_by_name'),
+                DB::raw('(select name from users where users.id = ppbj.goods_arrived_by_user_id limit 1) as goods_arrived_by_name'),
+                DB::raw('(select name from users where users.id = ppbj.goods_confirmed_by_user_id limit 1) as goods_confirmed_by_name'),
             ]);
 
         // ── Search + deteksi field yang cocok ──────────────────────────────────
@@ -294,6 +304,123 @@ class PpbjController extends Controller
             'ppbj_no' => $ppbj->ppbj_no,
             'nomor_pr' => $ppbj->ppbj_no,
         ], $archive), 200, [], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    }
+
+    public function markGoodsArrived(Request $request, $id, ProcurementJourneyService $journey)
+    {
+        $validated = $request->validate([
+            'note' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        $ppbj = Ppbj::findOrFail($id);
+
+        if (($ppbj->status ?? 'ACTIVE') === 'CANCELLED') {
+            return response()->json(['message' => 'Data sudah CANCELLED, tidak bisa ditandai barang datang.'], 422);
+        }
+
+        $ppbj->forceFill([
+            'goods_arrived_at' => now(),
+            'goods_arrived_by_user_id' => $request->user()?->id,
+            'goods_arrived_note' => $validated['note'] ?? null,
+            'goods_confirmed_at' => null,
+            'goods_confirmed_by_user_id' => null,
+            'goods_confirmed_note' => null,
+        ])->save();
+
+        DashboardController::clearCache();
+        $this->clearProcurementTrackingCache($ppbj->ppbj_no);
+
+        $journey->notifyByPrNumber(
+            $ppbj->ppbj_no,
+            'goods_arrived',
+            'Barang / pekerjaan sudah datang',
+            'Bagian Umum menandai barang atau pekerjaan sudah datang. Operasional bisa cek fisik dan konfirmasi penerimaan.',
+            [
+                'progress' => 'Barang datang',
+                'document_no' => $ppbj->awarding_sp ?: $ppbj->spph_rfq_1,
+                'promised_date' => $ppbj->promised_date,
+                'note' => $validated['note'] ?? null,
+            ],
+            $request->user()
+        );
+
+        return response()->json([
+            'message' => 'Barang/pekerjaan berhasil ditandai sudah datang.',
+            'goods_arrived_at' => optional($ppbj->goods_arrived_at)->toIso8601String(),
+            'goods_arrived_by_name' => $request->user()?->name ?? $request->user()?->email,
+        ]);
+    }
+
+    public function confirmGoodsArrival(Request $request, $id, ProcurementJourneyService $journey)
+    {
+        $validated = $request->validate([
+            'note' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        $ppbj = Ppbj::findOrFail($id);
+
+        if (($ppbj->status ?? 'ACTIVE') === 'CANCELLED') {
+            return response()->json(['message' => 'Data sudah CANCELLED, tidak bisa dikonfirmasi.'], 422);
+        }
+
+        if (blank($ppbj->goods_arrived_at)) {
+            return response()->json(['message' => 'Barang/pekerjaan belum ditandai datang oleh Umum.'], 422);
+        }
+
+        $user = $request->user();
+        $isOperationalSuperadmin = strcasecmp((string) ($user?->role ?? ''), 'superadmin') === 0
+            && strcasecmp((string) ($user?->department ?? ''), 'operasional') === 0;
+        $isPrCreator = Torpr::where('nomor_pr', $ppbj->ppbj_no)
+            ->where('created_by_user_id', $user?->id)
+            ->exists();
+
+        if (! $isOperationalSuperadmin && ! $isPrCreator) {
+            return response()->json([
+                'message' => 'Konfirmasi penerimaan hanya untuk pembuat PR atau superadmin Operasional.',
+            ], 403);
+        }
+
+        $ppbj->forceFill([
+            'goods_confirmed_at' => now(),
+            'goods_confirmed_by_user_id' => $user?->id,
+            'goods_confirmed_note' => $validated['note'] ?? null,
+        ])->save();
+
+        DashboardController::clearCache();
+        $this->clearProcurementTrackingCache($ppbj->ppbj_no);
+
+        $journey->notifyByPrNumber(
+            $ppbj->ppbj_no,
+            'goods_confirmed',
+            'Barang / pekerjaan dikonfirmasi Operasional',
+            'Operasional sudah mengonfirmasi penerimaan barang atau pekerjaan untuk PR ini.',
+            [
+                'progress' => 'Diterima Operasional',
+                'document_no' => $ppbj->awarding_sp ?: $ppbj->spph_rfq_1,
+                'note' => $validated['note'] ?? null,
+            ],
+            $user
+        );
+
+        return response()->json([
+            'message' => 'Penerimaan berhasil dikonfirmasi Operasional.',
+            'goods_confirmed_at' => optional($ppbj->goods_confirmed_at)->toIso8601String(),
+            'goods_confirmed_by_name' => $user?->name ?? $user?->email,
+        ]);
+    }
+
+    private function clearProcurementTrackingCache(?string $nomor): void
+    {
+        $nomor = trim((string) $nomor);
+
+        if ($nomor === '') {
+            return;
+        }
+
+        foreach (range(1, 10) as $version) {
+            Cache::forget('tracking_pr_' . md5(strtolower($nomor)) . '_v' . $version);
+            Cache::forget('tracking_ppbj_' . md5(strtolower($nomor)) . '_v' . $version);
+        }
     }
 
     // =====================

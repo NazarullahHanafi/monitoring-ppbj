@@ -838,6 +838,71 @@
                     </div>
                 </div>
 
+                @if(!empty($ppbj->goods_arrived_at) || !empty($ppbj->promised_date))
+                    <div class="px-6 pb-6 border-b border-gray-200 dark:border-gray-700">
+                        <div class="rounded-2xl border border-indigo-200 bg-indigo-50/70 p-4 dark:border-indigo-800/60 dark:bg-indigo-950/25">
+                            <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                                <div>
+                                    <div class="text-[11px] font-black uppercase tracking-[0.18em] text-indigo-600 dark:text-indigo-300">Status Barang / Pekerjaan</div>
+                                    <div class="mt-1 text-base font-black text-gray-900 dark:text-white">
+                                        @if(!empty($ppbj->goods_confirmed_at))
+                                            Sudah dikonfirmasi diterima Operasional
+                                        @elseif(!empty($ppbj->goods_arrived_at))
+                                            Umum sudah menandai barang/pekerjaan datang
+                                        @elseif(!empty($ppbj->promised_date))
+                                            Menunggu target kedatangan/penyelesaian
+                                        @else
+                                            Status kedatangan belum tersedia
+                                        @endif
+                                    </div>
+                                    <div class="mt-2 flex flex-wrap gap-2 text-xs text-gray-600 dark:text-gray-300">
+                                        @if(!empty($ppbj->promised_date))
+                                            <span class="rounded-full bg-white px-3 py-1 font-semibold ring-1 ring-indigo-100 dark:bg-gray-900/60 dark:ring-indigo-800/50">
+                                                Target: {{ $ppbj->promised_date->translatedFormat('d F Y') }}
+                                            </span>
+                                        @endif
+                                        @if(!empty($ppbj->goods_arrived_at))
+                                            <span class="rounded-full bg-white px-3 py-1 font-semibold ring-1 ring-emerald-100 dark:bg-gray-900/60 dark:ring-emerald-800/50">
+                                                Datang: {{ $ppbj->goods_arrived_at->format('d M Y H:i') }}
+                                                @if(!empty($ppbj->goods_arrived_by_name))
+                                                    oleh {{ $ppbj->goods_arrived_by_name }}
+                                                @endif
+                                            </span>
+                                        @endif
+                                        @if(!empty($ppbj->goods_confirmed_at))
+                                            <span class="rounded-full bg-white px-3 py-1 font-semibold ring-1 ring-blue-100 dark:bg-gray-900/60 dark:ring-blue-800/50">
+                                                Konfirmasi: {{ $ppbj->goods_confirmed_at->format('d M Y H:i') }}
+                                                @if(!empty($ppbj->goods_confirmed_by_name))
+                                                    oleh {{ $ppbj->goods_confirmed_by_name }}
+                                                @endif
+                                            </span>
+                                        @endif
+                                    </div>
+                                    @if(!empty($ppbj->goods_arrived_note) || !empty($ppbj->goods_confirmed_note))
+                                        <div class="mt-3 rounded-xl border border-indigo-100 bg-white/80 p-3 text-xs leading-relaxed text-gray-700 dark:border-indigo-800/50 dark:bg-gray-900/50 dark:text-gray-200">
+                                            @if(!empty($ppbj->goods_arrived_note))
+                                                <div><span class="font-bold">Catatan Umum:</span> {{ $ppbj->goods_arrived_note }}</div>
+                                            @endif
+                                            @if(!empty($ppbj->goods_confirmed_note))
+                                                <div class="mt-1"><span class="font-bold">Catatan Operasional:</span> {{ $ppbj->goods_confirmed_note }}</div>
+                                            @endif
+                                        </div>
+                                    @endif
+                                </div>
+
+                                @if(!empty($ppbj->goods_arrived_at) && empty($ppbj->goods_confirmed_at))
+                                    <button type="button"
+                                        onclick="confirmGoodsArrival({{ (int) $ppbj->id }}, @js($ppbj->ppbj_no))"
+                                        class="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 px-4 py-3 text-sm font-black text-white shadow-lg shadow-emerald-500/20 transition hover:-translate-y-0.5 hover:shadow-xl">
+                                        <span>✓</span>
+                                        Konfirmasi Diterima
+                                    </button>
+                                @endif
+                            </div>
+                        </div>
+                    </div>
+                @endif
+
                 {{-- Tabs --}}
                 <div class="border-b border-gray-200 dark:border-gray-700">
                     <div class="flex">
@@ -1364,6 +1429,65 @@
 
 @push('scripts')
     <script>
+        window.confirmGoodsArrival = async function (id, ppbjNo) {
+            const safeText = (value) => {
+                const div = document.createElement('div');
+                div.textContent = value || '';
+                return div.innerHTML;
+            };
+
+            const result = await Swal.fire({
+                title: 'Konfirmasi barang diterima?',
+                html: `
+                    <div class="text-left rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-100">
+                        <div class="font-black">PR/PPBJ: ${safeText(ppbjNo)}</div>
+                        <div class="mt-1 text-xs leading-relaxed opacity-80">Konfirmasi ini akan masuk ke timeline tracking dan memberi tahu Bagian Umum melalui chat tim.</div>
+                    </div>
+                `,
+                input: 'textarea',
+                inputPlaceholder: 'Catatan opsional, contoh: barang diterima lengkap oleh user...',
+                showCancelButton: true,
+                confirmButtonText: 'Ya, sudah diterima',
+                cancelButtonText: 'Batal',
+                confirmButtonColor: '#10b981',
+                cancelButtonColor: '#64748b',
+                reverseButtons: true,
+            });
+
+            if (!result.isConfirmed) return;
+
+            try {
+                const response = await fetch(`/ppbj/${id}/goods-confirmed`, {
+                    method: 'PATCH',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || '',
+                    },
+                    body: JSON.stringify({ note: result.value || '' }),
+                });
+                const data = await response.json().catch(() => ({}));
+
+                if (!response.ok || !data.ok) {
+                    throw new Error(data.message || 'Konfirmasi gagal disimpan.');
+                }
+
+                await Swal.fire({
+                    icon: 'success',
+                    title: 'Sudah dikonfirmasi',
+                    text: 'Operasional sudah mengonfirmasi barang/pekerjaan diterima.',
+                    timer: 1700,
+                    showConfirmButton: false,
+                });
+                window.location.reload();
+            } catch (error) {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Gagal konfirmasi',
+                    text: error.message || 'Terjadi kendala saat menyimpan konfirmasi.',
+                });
+            }
+        };
 
         function clearSearch() {
             const input = document.getElementById('qInput');

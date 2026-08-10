@@ -20,6 +20,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Str;
 use App\Traits\HasPresence;
+use App\Services\ProcurementJourneyService;
 use PhpOffice\PhpWord\PhpWord;
 use PhpOffice\PhpWord\IOFactory;
 use App\Models\SpMasterOption;
@@ -868,6 +869,21 @@ class SpController extends Controller
                         $ppbjRecord->promised_date = $request->promised_date ?: null;
                         $ppbjRecord->save();
                     }
+
+                    app(ProcurementJourneyService::class)->notifyByPrNumber(
+                        $nomorPr,
+                        'sp_created',
+                        'Surat Pesanan dibuat',
+                        "Umum membuat SP {$sp->nomor_sp} untuk vendor {$vendorName}.",
+                        [
+                            'progress' => 'SP/Kontrak',
+                            'document_no' => $sp->nomor_sp,
+                            'vendors' => [$vendorName],
+                            'nilai' => $sp->nilai_sp,
+                            'promised_date' => $sp->promised_date,
+                        ],
+                        $request->user()
+                    );
                 }
 
                 Cache::forget('sp:last_nomor');
@@ -1062,6 +1078,21 @@ class SpController extends Controller
                         $newPpbj->promised_date = $request->promised_date ?: null;
                         $newPpbj->save();
                     }
+
+                    app(ProcurementJourneyService::class)->notifyByPrNumber(
+                        $nomorPr,
+                        'sp_updated',
+                        'Surat Pesanan diperbarui',
+                        "Data SP {$sp->nomor_sp} diperbarui oleh Umum.",
+                        [
+                            'progress' => 'Update SP/Kontrak',
+                            'document_no' => $sp->nomor_sp,
+                            'vendors' => [$sp->nama_vendor],
+                            'nilai' => $sp->nilai_sp,
+                            'promised_date' => $sp->promised_date,
+                        ],
+                        $request->user()
+                    );
                 }
 
                 Cache::forget('sp:last_nomor');

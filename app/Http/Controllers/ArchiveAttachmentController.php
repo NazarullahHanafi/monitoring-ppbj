@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Sp;
 use App\Models\Spph;
+use App\Services\ProcurementJourneyService;
 use App\Services\PrArchiveService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -53,6 +54,22 @@ class ArchiveAttachmentController extends Controller
 
         $this->logUploadResult('SP', $sp->id, $result);
 
+        if (($result['state'] ?? null) === 'uploaded') {
+            app(ProcurementJourneyService::class)->notifyByPrNumber(
+                $sp->nomor_pr,
+                'sp_attachment_uploaded',
+                'Lampiran SP masuk Arsip',
+                "Lampiran {$validated['document_type']} untuk SP {$sp->nomor_sp} berhasil masuk sistem arsip.",
+                [
+                    'progress' => 'Lampiran arsip',
+                    'document_no' => $sp->nomor_sp,
+                    'vendors' => [$sp->nama_vendor],
+                    'note' => $validated['notes'] ?? null,
+                ],
+                $request->user()
+            );
+        }
+
         return response()->json($result, $this->statusCode($result));
     }
 
@@ -80,6 +97,22 @@ class ArchiveAttachmentController extends Controller
         ], $request->file('document_file'));
 
         $this->logUploadResult('SPPH', $spph->id, $result);
+
+        if (($result['state'] ?? null) === 'uploaded') {
+            app(ProcurementJourneyService::class)->notifyByPrNumber(
+                $spph->nomor_pr,
+                'spph_attachment_uploaded',
+                'Lampiran SPPH masuk Arsip',
+                "Lampiran {$validated['document_type']} untuk SPPH {$spph->nomor_spph} berhasil masuk sistem arsip.",
+                [
+                    'progress' => 'Lampiran arsip',
+                    'document_no' => $spph->nomor_spph,
+                    'vendors' => $spph->print_vendor_names,
+                    'note' => $validated['notes'] ?? null,
+                ],
+                $request->user()
+            );
+        }
 
         return response()->json($result, $this->statusCode($result));
     }

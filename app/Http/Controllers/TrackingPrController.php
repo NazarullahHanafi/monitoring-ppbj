@@ -272,7 +272,7 @@ class TrackingPrController extends Controller
      */
     private function trackByPpbj(string $nomor)
     {
-        $cacheKey = 'tracking_ppbj_' . md5(strtolower($nomor)) . '_v7';
+        $cacheKey = 'tracking_ppbj_' . md5(strtolower($nomor)) . '_v8';
         $cached = Cache::get($cacheKey);
         if ($cached !== null) return $cached;
 
@@ -282,6 +282,15 @@ class TrackingPrController extends Controller
                 ->first();
 
             if (!$ppbj) return null;
+
+            $goodsUserIds = collect([
+                $ppbj->goods_arrived_by_user_id ?? null,
+                $ppbj->goods_confirmed_by_user_id ?? null,
+            ])->filter()->unique()->values();
+
+            $goodsUsers = $goodsUserIds->isNotEmpty()
+                ? DB::table('users')->whereIn('id', $goodsUserIds)->pluck('name', 'id')
+                : collect();
 
             // ✅ FIX: Pakai buyer, fallback "UMUM"
             $buyerName = !empty($ppbj->buyer) ? $ppbj->buyer : 'UMUM';
@@ -343,6 +352,12 @@ class TrackingPrController extends Controller
                 'tgl_spk' => $this->parseDate($ppbj->tgl_spk ?? null),
                 'nilai_sp_spk' => $ppbj->nilai_sp_spk ?? null,
                 'promised_date' => $this->parseDate($ppbj->promised_date ?? null),
+                'goods_arrived_at' => $this->parseDate($ppbj->goods_arrived_at ?? null),
+                'goods_arrived_by_name' => $goodsUsers[$ppbj->goods_arrived_by_user_id ?? null] ?? null,
+                'goods_arrived_note' => $ppbj->goods_arrived_note ?? null,
+                'goods_confirmed_at' => $this->parseDate($ppbj->goods_confirmed_at ?? null),
+                'goods_confirmed_by_name' => $goodsUsers[$ppbj->goods_confirmed_by_user_id ?? null] ?? null,
+                'goods_confirmed_note' => $ppbj->goods_confirmed_note ?? null,
                 'bpg_no' => $ppbj->bpg_no ?? null,
                 'nilai_bpg' => $ppbj->nilai_bpg ?? null,
                 'tgl_bpg' => $this->parseDate($ppbj->tgl_bpg ?? null),
@@ -382,7 +397,11 @@ class TrackingPrController extends Controller
                     'id', 'ppbj_no', 'tgl_ppbj', 'tgl_terima_pr', 'tgl_diserahkan',
                     'uraian', 'buyer', 'portofolio', 'metode_pengadaan', 'penyedia_eksternal',
                     'spph_rfq_1', 'tgl_spph', 'sph', 'tgl_sph', 'awarding_sp', 'tgl_awarding_sp',
-                    'tgl_spk', 'nilai_sp_spk', 'bpg_no', 'tgl_bpg', 'no_invoice', 'tgl_invoice',
+                    'tgl_spk', 'nilai_sp_spk', 'promised_date',
+                    'goods_arrived_at', 'goods_arrived_note', 'goods_confirmed_at', 'goods_confirmed_note',
+                    DB::raw('(select name from users where users.id = ppbj.goods_arrived_by_user_id limit 1) as goods_arrived_by_name'),
+                    DB::raw('(select name from users where users.id = ppbj.goods_confirmed_by_user_id limit 1) as goods_confirmed_by_name'),
+                    'bpg_no', 'tgl_bpg', 'no_invoice', 'tgl_invoice',
                     'progres', 'status_sla', 'sisa_target_sla', 'status', 'cancel_reason',
                     'created_at', 'updated_at',
                 ])
@@ -395,7 +414,8 @@ class TrackingPrController extends Controller
 
             foreach ([
                 'tgl_ppbj', 'tgl_terima_pr', 'tgl_diserahkan', 'tgl_spph', 'tgl_sph',
-                'tgl_awarding_sp', 'tgl_spk', 'tgl_bpg', 'tgl_invoice', 'created_at', 'updated_at',
+                'tgl_awarding_sp', 'tgl_spk', 'promised_date', 'goods_arrived_at', 'goods_confirmed_at',
+                'tgl_bpg', 'tgl_invoice', 'created_at', 'updated_at',
             ] as $field) {
                 $ppbj->{$field} = $this->parseDate($ppbj->{$field} ?? null);
             }
@@ -474,6 +494,19 @@ class TrackingPrController extends Controller
             }
             if ($ppbj->awarding_sp) {
                 $add($ppbj->tgl_awarding_sp, 'Surat Pesanan tercatat', 'Nomor: ' . $ppbj->awarding_sp . '.');
+            }
+            if (!empty($ppbj->promised_date)) {
+                $add($ppbj->promised_date, 'Target barang/pekerjaan', 'Target kedatangan atau penyelesaian: ' . $ppbj->promised_date->translatedFormat('d F Y') . '.', 'pending');
+            }
+            if (!empty($ppbj->goods_arrived_at)) {
+                $arrivedBy = $ppbj->goods_arrived_by_name ?: 'Bagian Umum';
+                $note = $ppbj->goods_arrived_note ? ' Catatan: ' . $ppbj->goods_arrived_note : '';
+                $add($ppbj->goods_arrived_at, 'Barang/pekerjaan sudah datang', 'Ditandai oleh ' . $arrivedBy . '.' . $note);
+            }
+            if (!empty($ppbj->goods_confirmed_at)) {
+                $confirmedBy = $ppbj->goods_confirmed_by_name ?: 'Operasional';
+                $note = $ppbj->goods_confirmed_note ? ' Catatan: ' . $ppbj->goods_confirmed_note : '';
+                $add($ppbj->goods_confirmed_at, 'Penerimaan dikonfirmasi Operasional', 'Dikonfirmasi oleh ' . $confirmedBy . '.' . $note);
             }
             if ($ppbj->progres >= 100 || $ppbj->bpg_no || $ppbj->no_invoice) {
                 $add($ppbj->updated_at, 'Proses PPBJ selesai/siap rekap', 'Progress ' . $ppbj->progres . '% dengan status SLA ' . ($ppbj->status_sla ?: '-') . '.');

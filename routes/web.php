@@ -156,6 +156,9 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
         Route::post('/ppbj', [PpbjController::class, 'store'])->name('ppbj.store');
         Route::put('/ppbj/{id}', [PpbjController::class, 'update'])->name('ppbj.update');
         Route::put('/ppbj/{id}/cancel', [PpbjController::class, 'cancel'])->name('ppbj.cancel');
+        Route::patch('/ppbj/{id}/goods-arrived', [PpbjController::class, 'markGoodsArrived'])
+            ->name('ppbj.goodsArrived')
+            ->middleware('throttle:20,1');
 
         // ========================
         // SUPERADMIN MENU (Khusus Umum)
@@ -445,6 +448,9 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
         Route::get('/tracking-pr/history/{nomorPr}', [TrackingPrController::class, 'history'])->middleware('throttle:60,1');
         Route::get('/tracking-pr/statistics', [TrackingPrController::class, 'statistics'])->middleware('throttle:60,1');
         Route::delete('/tracking-pr/cache', [TrackingPrController::class, 'clearCache'])->middleware('throttle:10,1');
+        Route::patch('/ppbj/{id}/goods-confirmed', [PpbjController::class, 'confirmGoodsArrival'])
+            ->name('ppbj.goodsConfirmed')
+            ->middleware('throttle:20,1');
 
         Route::get('/torpr/export/full', [TorprController::class, 'exportFull'])
             ->name('torpr.export.full')

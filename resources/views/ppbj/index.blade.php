@@ -536,6 +536,22 @@
                                         <span class="h-1 w-1 rounded-full bg-slate-400"></span>
                                         Cek Arsip
                                     </button>
+                                    @if(!empty($row->goods_confirmed_at))
+                                        <span class="inline-flex items-center gap-1 rounded-md bg-emerald-100 px-1.5 py-0.5 text-[9px] font-bold leading-none text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-900/40 dark:text-emerald-200 dark:ring-emerald-700/60"
+                                            title="Dikonfirmasi oleh {{ $row->goods_confirmed_by_name ?: 'Operasional' }}">
+                                            ✓ Diterima OP
+                                        </span>
+                                    @elseif(!empty($row->goods_arrived_at))
+                                        <span class="inline-flex items-center gap-1 rounded-md bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold leading-none text-amber-700 ring-1 ring-amber-200 dark:bg-amber-900/40 dark:text-amber-200 dark:ring-amber-700/60"
+                                            title="Ditandai oleh {{ $row->goods_arrived_by_name ?: 'Umum' }}">
+                                            📦 Menunggu OP
+                                        </span>
+                                    @elseif(!$isCancelled)
+                                        <button type="button" onclick="markGoodsArrived({{ $row->id }}, @js($row->ppbj_no))"
+                                            class="inline-flex items-center gap-0.5 rounded-md bg-cyan-50 px-1.5 py-0.5 text-[9px] font-bold leading-none text-cyan-700 ring-1 ring-cyan-200 transition hover:bg-cyan-100 dark:bg-cyan-900/30 dark:text-cyan-200 dark:ring-cyan-700/60">
+                                            📦 Barang datang
+                                        </button>
+                                    @endif
                                 </div>
                             </td>
 
@@ -1076,6 +1092,71 @@
                     toastOk('Export dimulai', 'File akan segera didownload');
                 }
             });
+        };
+
+        window.markGoodsArrived = async function (id, ppbjNo) {
+            if (!window.Swal) return;
+
+            const result = await Swal.fire({
+                title: 'Barang/pekerjaan sudah datang?',
+                html: `
+                    <div class="text-left space-y-3">
+                        <div class="rounded-2xl border border-cyan-200 bg-cyan-50 p-3 text-sm text-cyan-900 dark:border-cyan-700/60 dark:bg-cyan-900/30 dark:text-cyan-100">
+                            <div class="text-xs font-black uppercase tracking-widest opacity-70">PPBJ / PR</div>
+                            <div class="mt-1 font-black">${escapeHtml(ppbjNo || '-')}</div>
+                            <div class="mt-2 text-xs leading-relaxed">Status ini akan terlihat oleh Operasional dan masuk ke timeline tracking.</div>
+                        </div>
+                    </div>
+                `,
+                input: 'textarea',
+                inputLabel: 'Catatan singkat (opsional)',
+                inputPlaceholder: 'Contoh: Barang sudah diterima di gudang / pekerjaan sudah selesai di lokasi...',
+                inputAttributes: {
+                    maxlength: 500,
+                },
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonText: 'Ya, tandai datang',
+                cancelButtonText: 'Batal',
+                confirmButtonColor: '#0891b2',
+                cancelButtonColor: '#64748b',
+                preConfirm: async (note) => {
+                    try {
+                        const response = await fetch(`/ppbj/${id}/goods-arrived`, {
+                            method: 'PATCH',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Accept': 'application/json',
+                                'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                                'X-Requested-With': 'XMLHttpRequest',
+                            },
+                            body: JSON.stringify({ note: note || '' }),
+                        });
+
+                        const data = await response.json().catch(() => ({}));
+
+                        if (!response.ok) {
+                            throw new Error(data.message || 'Gagal menandai barang datang.');
+                        }
+
+                        return data;
+                    } catch (error) {
+                        Swal.showValidationMessage(error.message);
+                        return false;
+                    }
+                },
+            });
+
+            if (result.isConfirmed) {
+                await Swal.fire({
+                    icon: 'success',
+                    title: 'Progress dikirim',
+                    text: result.value?.message || 'Barang/pekerjaan sudah ditandai datang.',
+                    timer: 1800,
+                    showConfirmButton: false,
+                });
+                window.location.reload();
+            }
         };
 
         // ==========================================
@@ -2017,6 +2098,8 @@
                     'sla_running_days',
                     'sla_target_date_label',
                     'sla_explanation',
+                    'goods_arrived_by_user_id',
+                    'goods_confirmed_by_user_id',
                 ]);
                 const detailLabelMap = {
                     ppbj_no: 'Nomor PPBJ / PR',
@@ -2036,6 +2119,15 @@
                     penyedia_eksternal: 'Penyedia Eksternal',
                     nilai_sp_spk: 'Nilai SP/SPK',
                     nilai_bpg: 'Nilai BPG',
+                    promised_date: 'Target Barang / Pekerjaan',
+                    goods_arrived_at: 'Barang / Pekerjaan Datang',
+                    goods_arrived_by_user_id: 'ID Penanda Barang Datang',
+                    goods_arrived_by_name: 'Ditandai Datang Oleh',
+                    goods_arrived_note: 'Catatan Barang Datang',
+                    goods_confirmed_at: 'Dikonfirmasi Operasional',
+                    goods_confirmed_by_user_id: 'ID Konfirmasi Operasional',
+                    goods_confirmed_by_name: 'Dikonfirmasi Oleh',
+                    goods_confirmed_note: 'Catatan Konfirmasi Operasional',
                 };
                 const slaResultLabel = d.sla_outcome_label || (d.sla_is_complete ? 'SLA berhenti' : d.sla_final_label || '-');
                 const slaRemainingValue = Number((d.sla_current_remaining_days ?? d.sisa_target_sla) || 0);

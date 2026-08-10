@@ -19,6 +19,7 @@ use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use App\Traits\HasPresence;
 use App\Support\PrintPreviewFile;
+use App\Services\ProcurementJourneyService;
 use PhpOffice\PhpWord\PhpWord;
 use PhpOffice\PhpWord\Settings;
 use PhpOffice\PhpWord\Shared\Html as PhpWordHtml;
@@ -429,6 +430,19 @@ class SpphController extends Controller
                     $ppbjRecord->penyedia_eksternal = $vendorName;
                     $ppbjRecord->save();
                 }
+
+                app(ProcurementJourneyService::class)->notifyByPrNumber(
+                    $nomorPr,
+                    'spph_created',
+                    'SPPH dibuat oleh Umum',
+                    "Umum membuat SPPH {$spph->nomor_spph} untuk proses permintaan penawaran harga.",
+                    [
+                        'progress' => 'SPPH/RFQ',
+                        'document_no' => $spph->nomor_spph,
+                        'vendors' => $vendorNames,
+                    ],
+                    $request->user()
+                );
             }
 
             Cache::forget('spph:last_nomor');
