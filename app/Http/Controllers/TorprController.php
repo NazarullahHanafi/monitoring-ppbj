@@ -14,6 +14,7 @@ use Illuminate\Database\QueryException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use App\Services\NotificationService;
+use App\Services\PrArchiveService;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Hash;
@@ -250,6 +251,218 @@ class TorprController extends Controller
             'outgoingEditRequests',
             'editPermissionLogs'
         ));
+    }
+
+    public function myProgress(Request $request)
+    {
+        $user = $request->user();
+        abort_unless($user, 403);
+
+        $limit = min(max((int) $request->integer('limit', 50), 10), 80);
+
+        $torprs = DB::table('torprs as t')
+            ->select([
+                't.id',
+                't.nomor_pr',
+                't.tujuan_pengadaan',
+                't.portofolio',
+                't.jumlah_pr',
+                't.tanggal_pr',
+                't.tgl_ttd_kabid_pr',
+                't.tgl_ttd_kacab_pr',
+                't.received_at',
+                't.created_at',
+                't.updated_at',
+            ])
+            ->where('t.created_by_user_id', $user->id)
+            ->orderByDesc('t.id')
+            ->limit($limit)
+            ->get();
+
+        $nomorPrs = $torprs
+            ->pluck('nomor_pr')
+            ->filter(fn ($value) => filled($value))
+            ->map(fn ($value) => trim((string) $value))
+            ->unique()
+            ->values();
+
+        $ppbjByNumber = $nomorPrs->isEmpty()
+            ? collect()
+            : DB::table('ppbj')
+                ->select([
+                    'id',
+                    'ppbj_no',
+                    'uraian',
+                    'buyer',
+                    'portofolio',
+                    'penyedia_eksternal',
+                    'spph_rfq_1',
+                    'tgl_spph',
+                    'awarding_sp',
+                    'tgl_awarding_sp',
+                    'nilai_sp_spk',
+                    'promised_date',
+                    'goods_arrived_at',
+                    'goods_confirmed_at',
+                    'bpg_no',
+                    'no_invoice',
+                    'progres',
+                    'status_sla',
+                    'sisa_target_sla',
+                    'status',
+                    'cancel_reason',
+                    'updated_at',
+                ])
+                ->whereIn('ppbj_no', $nomorPrs)
+                ->get()
+                ->keyBy(fn ($row) => trim((string) $row->ppbj_no));
+
+        $approvalByTorpr = $torprs->isEmpty()
+            ? collect()
+            : DB::table('pr_receipt_approvals as pra')
+                ->select([
+                    'pra.torpr_id',
+                    'pra.status',
+                    'pra.requested_at',
+                    'pra.approved_at',
+                    'pra.rejected_at',
+                    'pra.rejected_reason',
+                ])
+                ->join(DB::raw('(
+                    SELECT torpr_id, MAX(id) as max_id
+                    FROM pr_receipt_approvals
+                    GROUP BY torpr_id
+                ) latest_pra'), function ($join) {
+                    $join->on('pra.torpr_id', '=', 'latest_pra.torpr_id')
+                        ->on('pra.id', '=', 'latest_pra.max_id');
+                })
+                ->whereIn('pra.torpr_id', $torprs->pluck('id')->all())
+                ->get()
+                ->keyBy('torpr_id');
+
+        $formatDate = fn ($value) => filled($value)
+            ? Carbon::parse($value)->timezone(config('app.timezone'))->format('d M Y H:i')
+            : null;
+
+        $items = $torprs->map(function ($torpr) use ($ppbjByNumber, $approvalByTorpr, $formatDate) {
+            $nomorPr = trim((string) ($torpr->nomor_pr ?? ''));
+            $ppbj = $nomorPr !== '' ? $ppbjByNumber->get($nomorPr) : null;
+            $approval = $approvalByTorpr->get($torpr->id);
+            $progress = (int) round((float) ($ppbj->progres ?? 0));
+
+            if ($progress <= 0) {
+                $progress = filled($torpr->received_at) || ($approval?->status === 'APPROVED')
+                    ? 20
+                    : (filled($torpr->tgl_ttd_kabid_pr) && filled($torpr->tgl_ttd_kacab_pr) ? 15 : 5);
+            }
+
+            $statusLabel = 'Draft Operasional';
+            $statusTone = 'slate';
+            $needsFollowUp = false;
+
+            if (($ppbj->status ?? null) === 'CANCELLED') {
+                $statusLabel = 'Dibatalkan';
+                $statusTone = 'red';
+            } elseif ($ppbj && ((int) $progress >= 100 || ($ppbj->status_sla ?? '') === 'LENGKAP')) {
+                $statusLabel = 'Selesai';
+                $statusTone = 'emerald';
+            } elseif ($ppbj) {
+                $statusLabel = $ppbj->status_sla ?: 'Diproses Umum';
+                $statusTone = in_array($statusLabel, ['OVERDUE', 'WARNING'], true) ? 'amber' : 'blue';
+                $needsFollowUp = in_array($statusLabel, ['OVERDUE', 'WARNING'], true);
+            } elseif ($approval?->status === 'PENDING') {
+                $statusLabel = 'Menunggu Umum';
+                $statusTone = 'amber';
+                $needsFollowUp = true;
+            } elseif ($approval?->status === 'REJECTED') {
+                $statusLabel = 'Ditolak Umum';
+                $statusTone = 'red';
+                $needsFollowUp = true;
+            } elseif ($approval?->status === 'APPROVED' || filled($torpr->received_at)) {
+                $statusLabel = 'Diterima Umum';
+                $statusTone = 'blue';
+            } elseif (blank($torpr->nomor_pr) || blank($torpr->tujuan_pengadaan) || blank($torpr->portofolio)) {
+                $statusLabel = 'Perlu Lengkapi Data';
+                $statusTone = 'amber';
+                $needsFollowUp = true;
+            }
+
+            $stages = [
+                ['label' => 'Input PR', 'done' => true, 'at' => $formatDate($torpr->tanggal_pr ?? $torpr->created_at)],
+                ['label' => 'TTD Kabid', 'done' => filled($torpr->tgl_ttd_kabid_pr), 'at' => $formatDate($torpr->tgl_ttd_kabid_pr)],
+                ['label' => 'TTD Kacab', 'done' => filled($torpr->tgl_ttd_kacab_pr), 'at' => $formatDate($torpr->tgl_ttd_kacab_pr)],
+                ['label' => 'Umum Terima', 'done' => filled($torpr->received_at) || ($approval?->status === 'APPROVED'), 'at' => $formatDate($torpr->received_at ?? $approval?->approved_at)],
+                ['label' => 'SPPH', 'done' => filled($ppbj->spph_rfq_1 ?? null), 'at' => $formatDate($ppbj->tgl_spph ?? null)],
+                ['label' => 'SP/Kontrak', 'done' => filled($ppbj->awarding_sp ?? null), 'at' => $formatDate($ppbj->tgl_awarding_sp ?? null)],
+                ['label' => 'Barang Datang', 'done' => filled($ppbj->goods_arrived_at ?? null), 'at' => $formatDate($ppbj->goods_arrived_at ?? null)],
+                ['label' => 'Invoice', 'done' => filled($ppbj->no_invoice ?? null), 'at' => null],
+            ];
+
+            return [
+                'id' => (int) $torpr->id,
+                'nomor_pr' => $nomorPr !== '' ? $nomorPr : 'Nomor PR belum diisi',
+                'tujuan' => $torpr->tujuan_pengadaan ?: '-',
+                'portofolio' => $ppbj->portofolio ?? $torpr->portofolio ?? '-',
+                'nilai_pr' => (float) ($torpr->jumlah_pr ?? 0),
+                'nilai_pr_label' => 'Rp ' . number_format((float) ($torpr->jumlah_pr ?? 0), 0, ',', '.'),
+                'tanggal_pr' => $formatDate($torpr->tanggal_pr),
+                'status_label' => $statusLabel,
+                'status_tone' => $statusTone,
+                'progress' => min(100, max(0, $progress)),
+                'sisa_sla' => $ppbj?->sisa_target_sla,
+                'buyer' => $ppbj->buyer ?? '-',
+                'vendor' => $ppbj->penyedia_eksternal ?? '-',
+                'spph' => $ppbj->spph_rfq_1 ?? null,
+                'sp' => $ppbj->awarding_sp ?? null,
+                'promised_date' => $formatDate($ppbj->promised_date ?? null),
+                'goods_arrived_at' => $formatDate($ppbj->goods_arrived_at ?? null),
+                'invoice' => $ppbj->no_invoice ?? null,
+                'ppbj_id' => $ppbj?->id,
+                'linked_ppbj' => (bool) $ppbj,
+                'needs_follow_up' => $needsFollowUp,
+                'tracking_url' => $nomorPr !== '' ? route('tracking.index', ['q' => $nomorPr]) : null,
+                'stages' => $stages,
+                'updated_at' => $formatDate($ppbj->updated_at ?? $torpr->updated_at),
+            ];
+        })->values();
+
+        $summary = [
+            'total' => $items->count(),
+            'need_follow_up' => $items->where('needs_follow_up', true)->count(),
+            'waiting_umum' => $items->where('status_label', 'Menunggu Umum')->count(),
+            'in_progress' => $items->filter(fn ($item) => $item['linked_ppbj'] && $item['progress'] < 100)->count(),
+            'done' => $items->where('status_label', 'Selesai')->count(),
+        ];
+
+        return response()->json([
+            'summary' => $summary,
+            'items' => $items,
+            'limit' => $limit,
+            'generated_at' => now()->timezone(config('app.timezone'))->format('d M Y H:i:s'),
+        ], 200, [], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    }
+
+    public function myProgressArchive(Request $request, PrArchiveService $archiveService)
+    {
+        $validated = $request->validate([
+            'nomor_pr' => ['required', 'string', 'max:100'],
+        ]);
+
+        $nomorPr = trim($validated['nomor_pr']);
+        abort_if($nomorPr === '' || $nomorPr === 'Nomor PR belum diisi', 422, 'Nomor PR belum tersedia.');
+
+        $exists = Torpr::query()
+            ->where('created_by_user_id', $request->user()->id)
+            ->where('nomor_pr', $nomorPr)
+            ->exists();
+
+        abort_unless($exists, 403);
+
+        $archive = $archiveService->findByPrNumber($nomorPr, $request->boolean('refresh'));
+
+        return response()->json(array_merge([
+            'nomor_pr' => $nomorPr,
+        ], $archive), 200, [], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     }
 
     public function requestEditAccess(Request $request, $id)

@@ -413,6 +413,12 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
 
         // ==== TORPR CRUD ====
         Route::get('/torpr', [TorprController::class, 'index'])->name('torpr.index');
+        Route::get('/torpr/my-progress', [TorprController::class, 'myProgress'])
+            ->name('torpr.myProgress')
+            ->middleware('throttle:30,1');
+        Route::get('/torpr/my-progress/archive', [TorprController::class, 'myProgressArchive'])
+            ->name('torpr.myProgressArchive')
+            ->middleware('throttle:40,1');
         Route::post('/torpr', [TorprController::class, 'store'])->name('torpr.store');
         Route::put('/torpr/{id}', [TorprController::class, 'update'])->name('torpr.update');
         Route::delete('/torpr/{id}', [TorprController::class, 'destroy'])

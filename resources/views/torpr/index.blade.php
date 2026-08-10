@@ -1098,6 +1098,441 @@
             box-shadow: 0 10px 22px rgba(0, 0, 0, .38);
         }
 
+        .torpr-my-button {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: .55rem;
+            border-radius: .9rem;
+            padding: .72rem 1rem;
+            font-weight: 900;
+            letter-spacing: -.01em;
+            color: #fff;
+            background: linear-gradient(135deg, #06b6d4, #2563eb 55%, #8b5cf6);
+            box-shadow: 0 18px 35px rgba(37, 99, 235, .22);
+            transition: transform .18s ease, box-shadow .18s ease, filter .18s ease;
+            white-space: nowrap;
+        }
+
+        .torpr-my-button:hover {
+            transform: translateY(-1px);
+            filter: saturate(1.08);
+            box-shadow: 0 22px 42px rgba(37, 99, 235, .3);
+        }
+
+        .torpr-my-button.is-soft {
+            color: #0f172a;
+            background: linear-gradient(135deg, #f0f9ff, #e0f2fe 45%, #ede9fe);
+            border: 1px solid rgba(59, 130, 246, .18);
+        }
+
+        .dark .torpr-my-button.is-soft {
+            color: #e5f4ff;
+            background: linear-gradient(135deg, rgba(14, 165, 233, .18), rgba(37, 99, 235, .22), rgba(139, 92, 246, .22));
+            border-color: rgba(147, 197, 253, .25);
+        }
+
+        .torpr-my-popup {
+            border-radius: 28px !important;
+            padding: 0 !important;
+            background: #f8fbff !important;
+            color: #0f172a !important;
+            overflow: hidden !important;
+        }
+
+        .dark .torpr-my-popup {
+            background: #0f172a !important;
+            color: #e5e7eb !important;
+        }
+
+        .torpr-my-html {
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+
+        .torpr-my-wrap {
+            font-family: 'Montserrat', ui-sans-serif, system-ui, sans-serif;
+            text-align: left;
+            max-height: 76vh;
+            overflow: auto;
+            background:
+                radial-gradient(circle at 0 0, rgba(34, 211, 238, .18), transparent 32%),
+                radial-gradient(circle at 100% 0, rgba(168, 85, 247, .16), transparent 32%),
+                #f8fbff;
+        }
+
+        .dark .torpr-my-wrap {
+            background:
+                radial-gradient(circle at 0 0, rgba(34, 211, 238, .16), transparent 32%),
+                radial-gradient(circle at 100% 0, rgba(168, 85, 247, .14), transparent 32%),
+                #0f172a;
+        }
+
+        .torpr-my-hero {
+            padding: 28px;
+            color: #fff;
+            background: linear-gradient(135deg, #2563eb, #7c3aed 55%, #db2777);
+        }
+
+        .torpr-my-hero h2 {
+            margin: 0;
+            font-size: clamp(1.45rem, 2.5vw, 2.2rem);
+            font-weight: 1000;
+            letter-spacing: -.04em;
+        }
+
+        .torpr-my-hero p {
+            margin: .55rem 0 0;
+            max-width: 760px;
+            color: rgba(255, 255, 255, .86);
+            font-weight: 650;
+            line-height: 1.55;
+        }
+
+        .torpr-my-content {
+            padding: 22px;
+        }
+
+        .torpr-my-stats {
+            display: grid;
+            grid-template-columns: repeat(5, minmax(0, 1fr));
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .torpr-my-stat {
+            border-radius: 18px;
+            padding: 15px;
+            border: 1px solid rgba(148, 163, 184, .26);
+            background: rgba(255, 255, 255, .82);
+            box-shadow: 0 15px 35px rgba(15, 23, 42, .06);
+        }
+
+        .dark .torpr-my-stat {
+            background: rgba(15, 23, 42, .72);
+            border-color: rgba(148, 163, 184, .18);
+        }
+
+        .torpr-my-stat span {
+            display: block;
+            font-size: .67rem;
+            font-weight: 1000;
+            letter-spacing: .08em;
+            text-transform: uppercase;
+            color: #64748b;
+        }
+
+        .dark .torpr-my-stat span {
+            color: #94a3b8;
+        }
+
+        .torpr-my-stat strong {
+            display: block;
+            margin-top: 6px;
+            font-size: 1.65rem;
+            line-height: 1;
+            font-weight: 1000;
+            color: #0f172a;
+        }
+
+        .dark .torpr-my-stat strong {
+            color: #f8fafc;
+        }
+
+        .torpr-my-toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            align-items: center;
+            justify-content: space-between;
+            margin: 0 0 16px;
+            padding: 14px;
+            border-radius: 18px;
+            background: rgba(255, 255, 255, .78);
+            border: 1px solid rgba(148, 163, 184, .24);
+        }
+
+        .dark .torpr-my-toolbar {
+            background: rgba(15, 23, 42, .74);
+            border-color: rgba(148, 163, 184, .18);
+        }
+
+        .torpr-my-search {
+            min-width: min(360px, 100%);
+            flex: 1;
+            border: 1px solid rgba(148, 163, 184, .35);
+            background: #fff;
+            color: #0f172a;
+            border-radius: 14px;
+            padding: 11px 14px;
+            font-weight: 750;
+            outline: none;
+        }
+
+        .dark .torpr-my-search {
+            background: rgba(2, 6, 23, .72);
+            color: #f8fafc;
+            border-color: rgba(148, 163, 184, .24);
+        }
+
+        .torpr-my-mini-btn {
+            border-radius: 14px;
+            padding: 10px 13px;
+            font-size: .78rem;
+            font-weight: 950;
+            color: #1d4ed8;
+            background: #eff6ff;
+            border: 1px solid #bfdbfe;
+            transition: .18s ease;
+        }
+
+        .torpr-my-mini-btn:hover {
+            background: #dbeafe;
+            transform: translateY(-1px);
+        }
+
+        .dark .torpr-my-mini-btn {
+            color: #bfdbfe;
+            background: rgba(37, 99, 235, .16);
+            border-color: rgba(96, 165, 250, .25);
+        }
+
+        .torpr-my-list {
+            display: grid;
+            gap: 14px;
+        }
+
+        .torpr-my-card {
+            border-radius: 22px;
+            padding: 16px;
+            background: rgba(255, 255, 255, .88);
+            border: 1px solid rgba(148, 163, 184, .24);
+            box-shadow: 0 18px 36px rgba(15, 23, 42, .07);
+        }
+
+        .dark .torpr-my-card {
+            background: rgba(15, 23, 42, .82);
+            border-color: rgba(148, 163, 184, .18);
+            box-shadow: 0 18px 36px rgba(0, 0, 0, .28);
+        }
+
+        .torpr-my-card-head {
+            display: flex;
+            gap: 12px;
+            align-items: flex-start;
+            justify-content: space-between;
+        }
+
+        .torpr-my-number {
+            font-size: .92rem;
+            font-weight: 1000;
+            color: #1d4ed8;
+        }
+
+        .dark .torpr-my-number {
+            color: #93c5fd;
+        }
+
+        .torpr-my-title {
+            margin-top: 4px;
+            color: #0f172a;
+            font-weight: 1000;
+            font-size: 1.02rem;
+            line-height: 1.35;
+        }
+
+        .dark .torpr-my-title {
+            color: #f8fafc;
+        }
+
+        .torpr-my-meta {
+            margin-top: 7px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 7px;
+            color: #475569;
+            font-weight: 750;
+            font-size: .78rem;
+        }
+
+        .dark .torpr-my-meta {
+            color: #cbd5e1;
+        }
+
+        .torpr-my-badge {
+            display: inline-flex;
+            align-items: center;
+            border-radius: 999px;
+            padding: 7px 10px;
+            font-size: .72rem;
+            font-weight: 1000;
+            white-space: nowrap;
+        }
+
+        .torpr-my-badge.blue { background: #dbeafe; color: #1d4ed8; }
+        .torpr-my-badge.emerald { background: #dcfce7; color: #047857; }
+        .torpr-my-badge.amber { background: #fef3c7; color: #b45309; }
+        .torpr-my-badge.red { background: #fee2e2; color: #b91c1c; }
+        .torpr-my-badge.slate { background: #e2e8f0; color: #334155; }
+
+        .dark .torpr-my-badge.blue { background: rgba(37, 99, 235, .18); color: #bfdbfe; }
+        .dark .torpr-my-badge.emerald { background: rgba(16, 185, 129, .16); color: #a7f3d0; }
+        .dark .torpr-my-badge.amber { background: rgba(245, 158, 11, .16); color: #fde68a; }
+        .dark .torpr-my-badge.red { background: rgba(239, 68, 68, .18); color: #fecaca; }
+        .dark .torpr-my-badge.slate { background: rgba(100, 116, 139, .24); color: #e2e8f0; }
+
+        .torpr-my-progress {
+            margin-top: 14px;
+            height: 10px;
+            border-radius: 999px;
+            overflow: hidden;
+            background: #e2e8f0;
+        }
+
+        .dark .torpr-my-progress {
+            background: rgba(148, 163, 184, .18);
+        }
+
+        .torpr-my-progress > span {
+            display: block;
+            height: 100%;
+            border-radius: inherit;
+            background: linear-gradient(90deg, #06b6d4, #2563eb, #8b5cf6);
+        }
+
+        .torpr-my-stage-grid {
+            margin-top: 13px;
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 8px;
+        }
+
+        .torpr-my-stage {
+            border-radius: 14px;
+            padding: 9px;
+            background: #f8fafc;
+            border: 1px dashed rgba(148, 163, 184, .45);
+            color: #64748b;
+            font-size: .7rem;
+            font-weight: 850;
+        }
+
+        .torpr-my-stage.is-done {
+            border-style: solid;
+            background: #ecfdf5;
+            border-color: #bbf7d0;
+            color: #047857;
+        }
+
+        .dark .torpr-my-stage {
+            background: rgba(2, 6, 23, .45);
+            border-color: rgba(148, 163, 184, .22);
+            color: #94a3b8;
+        }
+
+        .dark .torpr-my-stage.is-done {
+            background: rgba(16, 185, 129, .12);
+            border-color: rgba(52, 211, 153, .25);
+            color: #a7f3d0;
+        }
+
+        .torpr-my-actions {
+            margin-top: 14px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 9px;
+        }
+
+        .torpr-my-action {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 7px;
+            border-radius: 14px;
+            padding: 10px 12px;
+            font-size: .75rem;
+            font-weight: 1000;
+            transition: .18s ease;
+        }
+
+        .torpr-my-action:hover {
+            transform: translateY(-1px);
+        }
+
+        .torpr-my-action.primary {
+            background: #2563eb;
+            color: #fff;
+        }
+
+        .torpr-my-action.chat {
+            background: #eef2ff;
+            color: #4338ca;
+            border: 1px solid #c7d2fe;
+        }
+
+        .torpr-my-action.archive {
+            background: #ecfeff;
+            color: #0e7490;
+            border: 1px solid #a5f3fc;
+        }
+
+        .dark .torpr-my-action.chat {
+            background: rgba(99, 102, 241, .16);
+            color: #c7d2fe;
+            border-color: rgba(165, 180, 252, .22);
+        }
+
+        .dark .torpr-my-action.archive {
+            background: rgba(6, 182, 212, .14);
+            color: #a5f3fc;
+            border-color: rgba(103, 232, 249, .2);
+        }
+
+        .torpr-my-archive-box {
+            margin-top: 12px;
+            border-radius: 16px;
+            padding: 12px;
+            border: 1px solid rgba(148, 163, 184, .22);
+            background: #f8fafc;
+            color: #334155;
+            font-size: .78rem;
+            font-weight: 750;
+        }
+
+        .dark .torpr-my-archive-box {
+            background: rgba(2, 6, 23, .5);
+            color: #cbd5e1;
+            border-color: rgba(148, 163, 184, .18);
+        }
+
+        .torpr-my-empty {
+            border-radius: 22px;
+            padding: 28px;
+            text-align: center;
+            background: rgba(255, 255, 255, .86);
+            color: #475569;
+            border: 1px dashed rgba(148, 163, 184, .4);
+            font-weight: 850;
+        }
+
+        .dark .torpr-my-empty {
+            background: rgba(15, 23, 42, .75);
+            color: #cbd5e1;
+            border-color: rgba(148, 163, 184, .2);
+        }
+
+        @media (max-width: 900px) {
+            .torpr-my-stats,
+            .torpr-my-stage-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+
+            .torpr-my-card-head {
+                flex-direction: column;
+            }
+        }
+
     </style>
 @endpush
 
@@ -1118,6 +1553,18 @@
         </div>
 
         <div class="flex flex-col sm:flex-row gap-2 sm:items-center">
+            <button type="button" onclick="openMyPrCenter('data')"
+                class="torpr-my-button active:scale-95">
+                <span>👤</span>
+                <span>Lihat Data Saya</span>
+            </button>
+
+            <button type="button" onclick="openMyPrCenter('tracking')"
+                class="torpr-my-button is-soft active:scale-95">
+                <span>🧭</span>
+                <span>Tracking Data Saya</span>
+            </button>
+
             <button type="button" onclick="openTorprEditRequestCenter()"
                 class="torpr-request-center-button group active:scale-95">
                 <span class="text-lg">🔐</span>
@@ -2684,6 +3131,281 @@
                 '"': '&quot;',
                 "'": '&#039;'
             }[m]));
+        }
+
+        const torprMyProgressUrl = @json(route('torpr.myProgress'));
+        const torprMyProgressArchiveUrl = @json(route('torpr.myProgressArchive'));
+        let torprMyProgressCache = null;
+
+        function torprMyBadgeTone(tone) {
+            return ['blue', 'emerald', 'amber', 'red', 'slate'].includes(tone) ? tone : 'slate';
+        }
+
+        function torprMySafeSelector(value) {
+            return String(value ?? '').replace(/[^a-zA-Z0-9_-]/g, '_');
+        }
+
+        function renderTorprMyCenter(data, mode = 'data') {
+            const summary = data.summary || {};
+            const items = Array.isArray(data.items) ? data.items : [];
+            const isTracking = mode === 'tracking';
+
+            const stat = (label, value, icon) => `
+                <div class="torpr-my-stat">
+                    <span>${escapeHtml(label)}</span>
+                    <strong>${escapeHtml(value ?? 0)}</strong>
+                    <small class="text-[11px] font-black text-slate-400 dark:text-slate-500">${escapeHtml(icon)}</small>
+                </div>
+            `;
+
+            const itemHtml = items.length ? items.map((item, index) => {
+                const progress = Math.max(0, Math.min(100, Number(item.progress || 0)));
+                const rowKey = torprMySafeSelector(`${index}_${item.id}`);
+                const stages = (item.stages || []).map(stage => `
+                    <div class="torpr-my-stage ${stage.done ? 'is-done' : ''}" title="${escapeHtml(stage.at || '-')}">
+                        <div>${stage.done ? '✅' : '○'} ${escapeHtml(stage.label)}</div>
+                        <div class="mt-1 text-[10px] opacity-75">${escapeHtml(stage.at || 'belum')}</div>
+                    </div>
+                `).join('');
+
+                return `
+                    <article class="torpr-my-card" data-my-pr-card data-search="${escapeHtml(`${item.nomor_pr} ${item.tujuan} ${item.portofolio} ${item.buyer} ${item.vendor}`.toLowerCase())}">
+                        <div class="torpr-my-card-head">
+                            <div class="min-w-0">
+                                <div class="torpr-my-number">${escapeHtml(item.nomor_pr)}</div>
+                                <div class="torpr-my-title">${escapeHtml(item.tujuan)}</div>
+                                <div class="torpr-my-meta">
+                                    <span>🧩 ${escapeHtml(item.portofolio || '-')}</span>
+                                    <span>💰 ${escapeHtml(item.nilai_pr_label || 'Rp 0')}</span>
+                                    <span>👤 Buyer: ${escapeHtml(item.buyer || '-')}</span>
+                                    <span>🏢 Vendor: ${escapeHtml(item.vendor || '-')}</span>
+                                    <span>🕒 Update: ${escapeHtml(item.updated_at || '-')}</span>
+                                </div>
+                            </div>
+                            <span class="torpr-my-badge ${torprMyBadgeTone(item.status_tone)}">${escapeHtml(item.status_label)}</span>
+                        </div>
+
+                        <div class="torpr-my-progress" aria-label="Progress ${progress}%">
+                            <span style="width:${progress}%"></span>
+                        </div>
+                        <div class="mt-2 text-xs font-black text-slate-500 dark:text-slate-300">${progress}% proses berjalan</div>
+
+                        <div class="torpr-my-stage-grid">
+                            ${stages}
+                        </div>
+
+                        <div class="torpr-my-actions">
+                            ${item.tracking_url ? `
+                                <a href="${escapeHtml(item.tracking_url)}" target="_blank" rel="noopener" class="torpr-my-action primary">
+                                    🧭 Buka Tracking
+                                </a>
+                            ` : ''}
+                            <button type="button" class="torpr-my-action chat" data-my-pr-follow-up="${Number(item.id)}">
+                                💬 Follow Up Chat
+                            </button>
+                            ${item.nomor_pr && item.nomor_pr !== 'Nomor PR belum diisi' ? `
+                                <button type="button" class="torpr-my-action archive" data-my-pr-archive="${escapeHtml(item.nomor_pr)}" data-my-pr-archive-target="myPrArchive${rowKey}">
+                                    📎 Muat Lampiran
+                                </button>
+                            ` : ''}
+                        </div>
+
+                        <div id="myPrArchive${rowKey}" class="torpr-my-archive-box hidden"></div>
+                    </article>
+                `;
+            }).join('') : `
+                <div class="torpr-my-empty">
+                    <div class="text-4xl mb-2">🧾</div>
+                    Belum ada PR yang tercatat sebagai data kamu. Kalau baru input, coba refresh halaman atau cek filter pemilik data.
+                </div>
+            `;
+
+            return `
+                <div class="torpr-my-wrap">
+                    <div class="torpr-my-hero">
+                        <div class="text-xs font-black uppercase tracking-[.22em] opacity-80">Cockpit personal operasional</div>
+                        <h2>${isTracking ? 'Tracking Data Saya' : 'PR Saya'}</h2>
+                        <p>
+                            Semua PR yang kamu buat diringkas di sini: status umum, progress pengadaan,
+                            vendor, SPPH/SP, estimasi barang datang, invoice, sampai lampiran arsip per nomor PR.
+                        </p>
+                    </div>
+                    <div class="torpr-my-content">
+                        <div class="torpr-my-stats">
+                            ${stat('Total PR Saya', summary.total, 'semua data')}
+                            ${stat('Perlu Follow Up', summary.need_follow_up, 'prioritas')}
+                            ${stat('Menunggu Umum', summary.waiting_umum, 'approval')}
+                            ${stat('Sedang Jalan', summary.in_progress, 'progress')}
+                            ${stat('Selesai', summary.done, 'done')}
+                        </div>
+
+                        <div class="torpr-my-toolbar">
+                            <input id="torprMySearch" class="torpr-my-search" type="search"
+                                placeholder="Cari PR saya: nomor, vendor, portofolio, buyer..."
+                                autocomplete="off">
+                            <div class="flex flex-wrap gap-2">
+                                <button type="button" class="torpr-my-mini-btn" onclick="filterTorprToMine()">👤 Filter halaman ke data saya</button>
+                                <button type="button" class="torpr-my-mini-btn" onclick="reloadMyPrCenter('${escapeHtml(mode)}')">🔄 Refresh ringkasan</button>
+                            </div>
+                        </div>
+
+                        <div class="mb-3 rounded-2xl border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm font-bold text-cyan-900 dark:border-cyan-400/20 dark:bg-cyan-400/10 dark:text-cyan-100">
+                            ✨ Fitur masa depan: sistem memberi tanda “Perlu Follow Up” otomatis untuk PR yang menunggu umum, warning SLA, overdue, atau data belum lengkap. Jadi user nggak perlu nebak-nebak lagi.
+                        </div>
+
+                        <div id="torprMyPrList" class="torpr-my-list">
+                            ${itemHtml}
+                        </div>
+
+                        <div class="mt-4 text-center text-xs font-bold text-slate-500 dark:text-slate-400">
+                            Data dibuat: ${escapeHtml(data.generated_at || '-')} • Maksimal ${escapeHtml(data.limit || 50)} PR terbaru agar performa tetap ringan.
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        window.openMyPrCenter = async function (mode = 'data', force = false) {
+            try {
+                if (!torprMyProgressCache || force) {
+                    Swal.fire({
+                        title: 'Memuat PR Saya...',
+                        text: 'Sebentar ya, saya rangkum data pribadi kamu dulu.',
+                        allowOutsideClick: false,
+                        didOpen: () => Swal.showLoading(),
+                    });
+
+                    const response = await fetch(torprMyProgressUrl, {
+                        headers: {
+                            'Accept': 'application/json',
+                            'X-Requested-With': 'XMLHttpRequest',
+                        },
+                    });
+
+                    if (!response.ok) {
+                        throw new Error('Gagal memuat PR Saya.');
+                    }
+
+                    torprMyProgressCache = await response.json();
+                }
+
+                Swal.fire({
+                    html: renderTorprMyCenter(torprMyProgressCache, mode),
+                    width: 'min(1180px, 96vw)',
+                    showConfirmButton: false,
+                    showCloseButton: true,
+                    customClass: {
+                        popup: 'torpr-my-popup',
+                        htmlContainer: 'torpr-my-html',
+                    },
+                    didOpen: () => {
+                        const search = document.getElementById('torprMySearch');
+                        search?.addEventListener('input', () => {
+                            const keyword = search.value.trim().toLowerCase();
+                            document.querySelectorAll('[data-my-pr-card]').forEach(card => {
+                                const text = card.getAttribute('data-search') || '';
+                                card.classList.toggle('hidden', keyword && !text.includes(keyword));
+                            });
+                        });
+
+                        document.querySelectorAll('[data-my-pr-follow-up]').forEach(btn => {
+                            btn.addEventListener('click', () => {
+                                const id = Number(btn.getAttribute('data-my-pr-follow-up'));
+                                if (window.shareRecordToChat) {
+                                    shareRecordToChat('pr', id);
+                                }
+                            });
+                        });
+
+                        document.querySelectorAll('[data-my-pr-archive]').forEach(btn => {
+                            btn.addEventListener('click', () => loadMyPrArchive(btn));
+                        });
+                    },
+                });
+            } catch (error) {
+                Swal.fire('Gagal', error.message || 'PR Saya belum bisa dimuat.', 'error');
+            }
+        }
+
+        window.reloadMyPrCenter = function (mode = 'data') {
+            torprMyProgressCache = null;
+            openMyPrCenter(mode, true);
+        }
+
+        window.filterTorprToMine = function () {
+            const url = new URL(window.location.href);
+            url.searchParams.set('data_owner', 'me');
+            url.searchParams.delete('page');
+            window.location.href = url.toString();
+        }
+
+        async function loadMyPrArchive(button) {
+            const nomorPr = button.getAttribute('data-my-pr-archive');
+            const targetId = button.getAttribute('data-my-pr-archive-target');
+            const target = document.getElementById(targetId);
+
+            if (!target || !nomorPr) return;
+
+            target.classList.remove('hidden');
+            target.innerHTML = '⏳ Mengecek lampiran di Sistem Arsip...';
+            button.disabled = true;
+
+            try {
+                const url = new URL(torprMyProgressArchiveUrl, window.location.origin);
+                url.searchParams.set('nomor_pr', nomorPr);
+
+                const response = await fetch(url.toString(), {
+                    headers: {
+                        'Accept': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest',
+                    },
+                });
+
+                const data = await response.json().catch(() => ({}));
+
+                if (!response.ok) {
+                    throw new Error(data.message || 'Lampiran belum bisa dicek.');
+                }
+
+                const docs = Array.isArray(data.documents) ? data.documents : [];
+                const packages = Array.isArray(data.packages) ? data.packages : [];
+
+                if (data.status !== 'available' || (!docs.length && !packages.length)) {
+                    target.innerHTML = `📭 ${escapeHtml(data.message || 'Belum ada lampiran arsip untuk PR ini.')}`;
+                    return;
+                }
+
+                const docHtml = docs.map(doc => `
+                    <div class="mt-2 flex flex-col gap-2 rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900">
+                        <div class="font-black text-slate-900 dark:text-white">📄 ${escapeHtml(doc.name || 'Dokumen')}</div>
+                        <div class="text-xs text-slate-500 dark:text-slate-400">
+                            ${escapeHtml(doc.type || 'Dokumen')} • ${escapeHtml(doc.uploaded_at || doc.date || '-')}
+                            ${doc.location ? ` • ${escapeHtml(doc.location)}` : ''}
+                        </div>
+                        <div class="flex flex-wrap gap-2">
+                            ${doc.preview_url ? `<a class="torpr-my-mini-btn" target="_blank" rel="noopener" href="${escapeHtml(doc.preview_url)}">Lihat</a>` : ''}
+                            ${doc.download_url ? `<a class="torpr-my-mini-btn" target="_blank" rel="noopener" href="${escapeHtml(doc.download_url)}">Unduh</a>` : ''}
+                        </div>
+                    </div>
+                `).join('');
+
+                const packageHtml = packages.map(pkg => `
+                    <div class="mt-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-emerald-900 dark:border-emerald-400/20 dark:bg-emerald-400/10 dark:text-emerald-100">
+                        📦 ${escapeHtml(pkg.name || 'Paket arsip')} • ${escapeHtml(pkg.file_count || 0)} file
+                        ${pkg.package_download_url ? `<a class="ml-2 underline font-black" target="_blank" rel="noopener" href="${escapeHtml(pkg.package_download_url)}">Unduh Paket</a>` : ''}
+                    </div>
+                `).join('');
+
+                target.innerHTML = `
+                    <div class="font-black text-slate-900 dark:text-white">📎 ${escapeHtml(data.message || 'Lampiran ditemukan.')}</div>
+                    ${docHtml}
+                    ${packageHtml}
+                `;
+            } catch (error) {
+                target.innerHTML = `⚠️ ${escapeHtml(error.message || 'Gagal memuat lampiran.')}`;
+            } finally {
+                button.disabled = false;
+            }
         }
 
         function initTorprSelect2() {
