@@ -3581,10 +3581,6 @@
                             </div>
                         </div>
 
-                        <div class="mb-3 rounded-2xl border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm font-bold text-cyan-900 dark:border-cyan-400/20 dark:bg-cyan-400/10 dark:text-cyan-100">
-                            ✨ Fitur masa depan: sistem memberi tanda “Perlu Follow Up” otomatis untuk PR yang menunggu umum, warning SLA, overdue, atau data belum lengkap. Jadi user nggak perlu nebak-nebak lagi.
-                        </div>
-
                         <div id="torprMyPrList" class="torpr-my-list">
                             ${itemHtml}
                         </div>
@@ -3815,10 +3811,6 @@
 
                         <div id="torprMyResultCount" class="torpr-my-result-count">
                             📌 Menampilkan ${items.length} data
-                        </div>
-
-                        <div class="torpr-my-mode-note">
-                            ✨ Fitur masa depan aktif: <b>Prediksi Risiko PR</b>. Sistem memberi sinyal Aman, Perlu Dipantau, atau Risiko Tinggi berdasarkan progress, SLA, status, dan data follow up. Jadi pembuat PR bisa gerak duluan sebelum pekerjaan benar-benar macet.
                         </div>
 
                         <div id="torprMyPrList" class="torpr-my-list">
