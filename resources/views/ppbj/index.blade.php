@@ -420,7 +420,29 @@
                             $progress = max(0, min(100, $progress));
                             $isCancelled = (strtoupper((string) ($row->status ?? 'ACTIVE')) === 'CANCELLED');
                             $isSlaComplete = method_exists($row, 'isSlaComplete') ? $row->isSlaComplete() : ($progress === 100 && !empty($row->no_invoice));
-                            $slaMainLabel = method_exists($row, 'slaFinalLabel') ? $row->slaFinalLabel() : (($isSlaComplete || $isCancelled) ? ($isCancelled ? 'Dibatalkan' : 'Selesai') : (($row->sisa_target_sla ?? 0) . ' hari'));
+                            $parseRowSlaDate = function ($date) {
+                                if (! $date) return null;
+                                try {
+                                    return \Carbon\Carbon::parse($date)->startOfDay();
+                                } catch (\Throwable) {
+                                    return null;
+                                }
+                            };
+                            $rowSlaStart = $parseRowSlaDate($row->tgl_diserahkan ?? null)
+                                ?: ($parseRowSlaDate($row->tgl_terima_pr ?? null)
+                                    ?: $parseRowSlaDate($row->tgl_ppbj ?? null));
+                            $rowTargetDays = (int) ($row->target_sla_hari ?? 0);
+                            $rowRunningDays = ($rowSlaStart && $rowTargetDays > 0)
+                                ? max(0, (int) $rowSlaStart->diffInDays(now()->startOfDay()))
+                                : null;
+                            $rowLiveRemaining = ($rowRunningDays !== null && $rowTargetDays > 0)
+                                ? $rowTargetDays - $rowRunningDays
+                                : null;
+                            $slaMainLabel = method_exists($row, 'slaFinalLabel')
+                                ? $row->slaFinalLabel()
+                                : (($isSlaComplete || $isCancelled)
+                                    ? ($isCancelled ? 'Dibatalkan' : 'Selesai')
+                                    : (($rowLiveRemaining ?? (int) ($row->sisa_target_sla ?? 0)) . ' hari'));
                             $slaOutcomeLabel = method_exists($row, 'slaOutcomeLabel') ? $row->slaOutcomeLabel() : null;
                             $slaOutcomeClass = method_exists($row, 'slaOutcomeColorClass')
                                 ? $row->slaOutcomeColorClass()
@@ -440,7 +462,7 @@
                             } else {
                                 $sisaSla = method_exists($row, 'slaCurrentRemainingDays')
                                     ? ($row->slaCurrentRemainingDays() ?? (int) ($row->sisa_target_sla ?? 0))
-                                    : (int) ($row->sisa_target_sla ?? 0);
+                                    : ($rowLiveRemaining ?? (int) ($row->sisa_target_sla ?? 0));
                                 if ($sisaSla <= 0) {
                                     $displayStatusSla = 'OVERDUE';
                                     $statusColor = 'bg-red-600';
@@ -1438,9 +1460,12 @@
                     $finishDate = $parseDate($finishRaw);
                     $targetDays = (int) ($data['target_sla_hari'] ?? 0);
                     $targetDate = ($startDate && $targetDays > 0) ? $startDate->copy()->addDays($targetDays) : null;
-                    $runningDays = $startDate ? max(0, (int) $startDate->diffInDays(now())) : null;
+                    $runningDays = $startDate ? max(0, (int) $startDate->copy()->startOfDay()->diffInDays(now()->startOfDay())) : null;
                     $usedDays = ($startDate && $finishDate) ? max(0, (int) $startDate->diffInDays($finishDate)) : null;
                     $finalRemainingDays = $usedDays !== null ? $targetDays - $usedDays : null;
+                    $currentRemainingDays = (! $isSlaComplete && $runningDays !== null && $targetDays > 0)
+                        ? $targetDays - $runningDays
+                        : $finalRemainingDays;
                     $outcomeLabel = null;
 
                     if ($isSlaComplete) {
@@ -1470,7 +1495,7 @@
                                     : 'selesai tepat sesuai target SLA');
                             $slaExplanation = 'SLA dihitung dari ' . $startLabel . ' (' . $startDate->translatedFormat('d F Y') . ') sampai ' . $finishLabel . ' (' . $finishDate->translatedFormat('d F Y') . '). Target ' . $targetDays . ' hari.' . $targetText . ' Realisasi ' . $usedDays . ' hari, sehingga ' . $result . '.';
                         } elseif (! $isSlaComplete) {
-                            $remaining = (int) ($data['sisa_target_sla'] ?? 0);
+                            $remaining = $currentRemainingDays ?? (int) ($data['sisa_target_sla'] ?? 0);
                             $slaExplanation = 'SLA masih berjalan dari ' . $startLabel . ' (' . $startDate->translatedFormat('d F Y') . ') sampai hari ini. Target ' . $targetDays . ' hari.' . $targetText . ' Sudah berjalan ' . ($runningDays ?? 0) . ' hari, ' . ($remaining < 0 ? 'sehingga terlambat ' . abs($remaining) . ' hari.' : 'sisa ' . $remaining . ' hari.');
                         }
                     }
@@ -1479,12 +1504,13 @@
                     $data['sla_is_complete'] = $isSlaComplete;
                     $data['sla_final_label'] = method_exists($item, 'slaFinalLabel')
                         ? $item->slaFinalLabel()
-                        : ($isSlaComplete ? 'Selesai' : ((int) ($data['sisa_target_sla'] ?? 0)) . ' hari');
+                        : ($isSlaComplete ? 'Selesai' : (($currentRemainingDays ?? (int) ($data['sisa_target_sla'] ?? 0)) . ' hari'));
                     $data['sla_outcome_label'] = method_exists($item, 'slaOutcomeLabel')
                         ? $item->slaOutcomeLabel()
                         : $outcomeLabel;
                     $data['sla_used_days'] = method_exists($item, 'slaUsedDays') ? $item->slaUsedDays() : $usedDays;
                     $data['sla_final_remaining_days'] = method_exists($item, 'slaFinalRemainingDays') ? $item->slaFinalRemainingDays() : $finalRemainingDays;
+                    $data['sla_current_remaining_days'] = method_exists($item, 'slaCurrentRemainingDays') ? $item->slaCurrentRemainingDays() : $currentRemainingDays;
                     $data['sla_start_source_label'] = method_exists($item, 'slaStartSourceLabel') ? $item->slaStartSourceLabel() : $startLabel;
                     $data['sla_finish_source_label'] = method_exists($item, 'slaFinishSourceLabel') ? $item->slaFinishSourceLabel() : $finishLabel;
                     $data['sla_running_days'] = method_exists($item, 'slaRunningDays') ? $item->slaRunningDays() : $runningDays;
@@ -1985,6 +2011,7 @@
                     'sla_outcome_label',
                     'sla_used_days',
                     'sla_final_remaining_days',
+                    'sla_current_remaining_days',
                     'sla_start_source_label',
                     'sla_finish_source_label',
                     'sla_running_days',
@@ -2011,9 +2038,10 @@
                     nilai_bpg: 'Nilai BPG',
                 };
                 const slaResultLabel = d.sla_outcome_label || (d.sla_is_complete ? 'SLA berhenti' : d.sla_final_label || '-');
+                const slaRemainingValue = Number((d.sla_current_remaining_days ?? d.sisa_target_sla) || 0);
                 const slaResultClass = d.sla_is_complete
                     ? 'bg-blue-50 text-blue-700 ring-blue-200 dark:bg-blue-500/15 dark:text-blue-200 dark:ring-blue-500/30'
-                    : (Number(d.sisa_target_sla || 0) < 0
+                    : (slaRemainingValue < 0
                         ? 'bg-rose-50 text-rose-700 ring-rose-200 dark:bg-rose-500/15 dark:text-rose-200 dark:ring-rose-500/30'
                         : 'bg-emerald-50 text-emerald-700 ring-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-200 dark:ring-emerald-500/30');
 
