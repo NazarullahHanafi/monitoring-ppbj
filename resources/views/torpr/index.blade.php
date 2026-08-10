@@ -1737,6 +1737,58 @@
             border-color: rgba(148, 163, 184, .2);
         }
 
+        .torpr-my-card.hidden,
+        .torpr-my-empty.hidden {
+            display: none !important;
+        }
+
+        .torpr-my-chipbar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin: -4px 0 14px;
+        }
+
+        .torpr-my-filter-chip {
+            border-radius: 999px;
+            padding: 8px 11px;
+            font-size: .72rem;
+            font-weight: 1000;
+            color: #334155;
+            background: #fff;
+            border: 1px solid rgba(148, 163, 184, .32);
+            box-shadow: 0 10px 20px rgba(15, 23, 42, .05);
+            transition: .18s ease;
+        }
+
+        .torpr-my-filter-chip:hover,
+        .torpr-my-filter-chip.is-active {
+            color: #fff;
+            background: linear-gradient(135deg, #2563eb, #8b5cf6);
+            border-color: transparent;
+            transform: translateY(-1px);
+        }
+
+        .dark .torpr-my-filter-chip {
+            color: #cbd5e1;
+            background: rgba(15, 23, 42, .78);
+            border-color: rgba(148, 163, 184, .18);
+        }
+
+        .dark .torpr-my-filter-chip:hover,
+        .dark .torpr-my-filter-chip.is-active {
+            color: #fff;
+            background: linear-gradient(135deg, #2563eb, #7c3aed);
+        }
+
+        .torpr-my-no-result {
+            display: none;
+        }
+
+        .torpr-my-no-result.is-visible {
+            display: block;
+        }
+
         @media (max-width: 900px) {
             .torpr-my-stats,
             .torpr-my-stage-grid {
@@ -3368,6 +3420,37 @@
             return String(value ?? '').replace(/[^a-zA-Z0-9_-]/g, '_');
         }
 
+        function torprMyNormalize(value) {
+            return String(value ?? '')
+                .toLowerCase()
+                .normalize('NFKD')
+                .replace(/[\u0300-\u036f]/g, '')
+                .replace(/[^a-z0-9]+/g, ' ')
+                .trim();
+        }
+
+        function torprMySearchText(item, extra = '') {
+            return torprMyNormalize([
+                item.nomor_pr,
+                item.tujuan,
+                item.portofolio,
+                item.buyer,
+                item.vendor,
+                item.spph,
+                item.sp,
+                item.status_label,
+                item.sisa_sla,
+                item.invoice,
+                item.promised_date,
+                item.goods_arrived_at,
+                extra,
+            ].filter(Boolean).join(' '));
+        }
+
+        function torprMyCompact(value) {
+            return torprMyNormalize(value).replace(/\s+/g, '');
+        }
+
         function renderTorprMyCenter(data, mode = 'data') {
             const summary = data.summary || {};
             const items = Array.isArray(data.items) ? data.items : [];
@@ -3552,7 +3635,7 @@
                 const risk = riskInfo(item);
 
                 return `
-                    <article class="torpr-my-card torpr-my-data-card" data-my-pr-card data-search="${escapeHtml(`${item.nomor_pr} ${item.tujuan} ${item.portofolio} ${item.buyer} ${item.vendor} ${item.spph} ${item.sp}`.toLowerCase())}">
+                    <article class="torpr-my-card torpr-my-data-card" data-my-pr-card data-search="${escapeHtml(torprMySearchText(item, `${risk.label} ${risk.text}`))}">
                         <div class="min-w-0">
                             <div class="torpr-my-card-head">
                                 <div class="min-w-0">
@@ -3608,7 +3691,7 @@
                 `).join('');
 
                 return `
-                    <article class="torpr-my-card torpr-my-timeline-card" data-my-pr-card data-search="${escapeHtml(`${item.nomor_pr} ${item.tujuan} ${item.portofolio} ${item.buyer} ${item.vendor} ${item.spph} ${item.sp}`.toLowerCase())}">
+                    <article class="torpr-my-card torpr-my-timeline-card" data-my-pr-card data-search="${escapeHtml(torprMySearchText(item, `${risk.label} ${risk.text} ${stages.map(stage => stage.label).join(' ')}`))}">
                         <div class="torpr-my-card-head">
                             <div class="min-w-0">
                                 <div class="torpr-my-number">${escapeHtml(item.nomor_pr)}</div>
@@ -3680,12 +3763,27 @@
                             </div>
                         </div>
 
+                        <div class="torpr-my-chipbar" aria-label="Filter cepat PR saya">
+                            <button type="button" class="torpr-my-filter-chip is-active" data-my-filter="">Semua</button>
+                            <button type="button" class="torpr-my-filter-chip" data-my-filter="risiko tinggi">Risiko Tinggi</button>
+                            <button type="button" class="torpr-my-filter-chip" data-my-filter="perlu dipantau">Perlu Dipantau</button>
+                            <button type="button" class="torpr-my-filter-chip" data-my-filter="on track">On Track</button>
+                            <button type="button" class="torpr-my-filter-chip" data-my-filter="aman selesai lengkap">Selesai</button>
+                            <button type="button" class="torpr-my-filter-chip" data-my-filter="spph">Ada SPPH</button>
+                            <button type="button" class="torpr-my-filter-chip" data-my-filter="sp kontrak">Ada SP</button>
+                        </div>
+
                         <div class="torpr-my-mode-note">
                             ✨ Fitur masa depan aktif: <b>Prediksi Risiko PR</b>. Sistem memberi sinyal Aman, Perlu Dipantau, atau Risiko Tinggi berdasarkan progress, SLA, status, dan data follow up. Jadi pembuat PR bisa gerak duluan sebelum pekerjaan benar-benar macet.
                         </div>
 
                         <div id="torprMyPrList" class="torpr-my-list">
                             ${isTracking ? trackingHtml : dataHtml}
+                        </div>
+
+                        <div id="torprMyNoResult" class="torpr-my-empty torpr-my-no-result mt-3">
+                            <div class="text-4xl mb-2">🔎</div>
+                            Tidak ada PR yang cocok. Coba cari nomor belakang, vendor, buyer, portofolio, status, SPPH, atau SP.
                         </div>
 
                         <div class="mt-4 text-center text-xs font-bold text-slate-500 dark:text-slate-400">
@@ -3731,13 +3829,47 @@
                     },
                     didOpen: () => {
                         const search = document.getElementById('torprMySearch');
-                        search?.addEventListener('input', () => {
-                            const keyword = search.value.trim().toLowerCase();
+                        let activeMyFilter = '';
+
+                        const applyMyPrFilter = () => {
+                            const rawKeyword = search?.value || '';
+                            const keyword = torprMyNormalize(rawKeyword);
+                            const compactKeyword = torprMyCompact(rawKeyword);
+                            const filter = torprMyNormalize(activeMyFilter);
+                            let visibleCount = 0;
+
                             document.querySelectorAll('[data-my-pr-card]').forEach(card => {
                                 const text = card.getAttribute('data-search') || '';
-                                card.classList.toggle('hidden', keyword && !text.includes(keyword));
+                                const compactText = text.replace(/\s+/g, '');
+                                const keywordMatch = !keyword
+                                    || text.includes(keyword)
+                                    || (compactKeyword && compactText.includes(compactKeyword));
+                                const filterMatch = !filter
+                                    || filter.split(/\s+/).some(part => part && text.includes(part));
+                                const show = keywordMatch && filterMatch;
+
+                                card.classList.toggle('hidden', !show);
+                                if (show) {
+                                    visibleCount += 1;
+                                }
+                            });
+
+                            document.getElementById('torprMyNoResult')?.classList.toggle('is-visible', visibleCount === 0);
+                        };
+
+                        search?.addEventListener('input', applyMyPrFilter);
+
+                        document.querySelectorAll('[data-my-filter]').forEach(chip => {
+                            chip.addEventListener('click', () => {
+                                activeMyFilter = chip.getAttribute('data-my-filter') || '';
+                                document.querySelectorAll('[data-my-filter]').forEach(item => {
+                                    item.classList.toggle('is-active', item === chip);
+                                });
+                                applyMyPrFilter();
                             });
                         });
+
+                        applyMyPrFilter();
 
                         document.querySelectorAll('[data-my-pr-follow-up]').forEach(btn => {
                             btn.addEventListener('click', () => {
