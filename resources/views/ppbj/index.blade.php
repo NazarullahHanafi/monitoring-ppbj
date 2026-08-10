@@ -438,7 +438,9 @@
                                 $displayStatusSla = 'LENGKAP';
                                 $statusColor = 'bg-blue-600';
                             } else {
-                                $sisaSla = (int) ($row->sisa_target_sla ?? 0);
+                                $sisaSla = method_exists($row, 'slaCurrentRemainingDays')
+                                    ? ($row->slaCurrentRemainingDays() ?? (int) ($row->sisa_target_sla ?? 0))
+                                    : (int) ($row->sisa_target_sla ?? 0);
                                 if ($sisaSla <= 0) {
                                     $displayStatusSla = 'OVERDUE';
                                     $statusColor = 'bg-red-600';

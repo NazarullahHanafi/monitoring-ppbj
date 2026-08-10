@@ -133,11 +133,13 @@ class Ppbj extends Model
             return 'LENGKAP';
         }
 
-        if ($this->sisa_target_sla <= 0) {
+        $remaining = $this->slaCurrentRemainingDays();
+
+        if ($remaining !== null && $remaining <= 0) {
             return 'OVERDUE';
         }
 
-        if ($this->sisa_target_sla <= 2) {
+        if ($remaining !== null && $remaining <= 2) {
             return 'WARNING';
         }
 
@@ -230,6 +232,22 @@ class Ppbj extends Model
         return (int) ($this->target_sla_hari ?? 0) - $usedDays;
     }
 
+    public function slaCurrentRemainingDays(): ?int
+    {
+        if ($this->isSlaComplete()) {
+            return $this->slaFinalRemainingDays();
+        }
+
+        $runningDays = $this->slaRunningDays();
+        $target = (int) ($this->target_sla_hari ?? 0);
+
+        if ($runningDays === null || $target <= 0) {
+            return null;
+        }
+
+        return $target - $runningDays;
+    }
+
     public function slaFinalLabel(): string
     {
         if ($this->is_cancelled) {
@@ -237,7 +255,9 @@ class Ppbj extends Model
         }
 
         if (! $this->isSlaComplete()) {
-            return ((int) ($this->sisa_target_sla ?? 0)) . ' hari';
+            $remaining = $this->slaCurrentRemainingDays();
+
+            return ($remaining ?? (int) ($this->sisa_target_sla ?? 0)) . ' hari';
         }
 
         return 'Selesai';
@@ -251,7 +271,7 @@ class Ppbj extends Model
             return null;
         }
 
-        return max(0, (int) $start->diffInDays(now()));
+        return max(0, (int) $start->copy()->startOfDay()->diffInDays(now()->startOfDay()));
     }
 
     public function slaTargetDate(): ?Carbon
@@ -352,9 +372,13 @@ class Ppbj extends Model
         }
 
         $runningDays = $this->slaRunningDays();
-        $remaining = (int) ($this->sisa_target_sla ?? 0);
+        $remaining = $this->slaCurrentRemainingDays();
         $startDate = $start->translatedFormat('d F Y');
         $targetText = $targetDate ? " Target selesai maksimal {$targetDate}." : '';
+
+        if ($remaining === null) {
+            return "SLA masih berjalan dari {$startLabel} ({$startDate}) sampai hari ini. Target {$target} hari.{$targetText} Hari berjalan belum bisa dihitung lengkap karena data tanggal belum lengkap.";
+        }
 
         if ($remaining < 0) {
             return "SLA masih berjalan dari {$startLabel} ({$startDate}) sampai hari ini. Target {$target} hari.{$targetText} Sudah berjalan {$runningDays} hari, sehingga terlambat " . abs($remaining) . " hari.";
@@ -495,7 +519,7 @@ class Ppbj extends Model
             return 0;
         }
 
-        $dipakai = Carbon::parse($tglDiserahkan)->diffInDays(now());
+        $dipakai = Carbon::parse($tglDiserahkan)->startOfDay()->diffInDays(now()->startOfDay());
 
         return $targetSla - $dipakai;
     }
