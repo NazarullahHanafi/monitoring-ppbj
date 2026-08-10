@@ -34,7 +34,10 @@ class ProcurementJourneyService
         Cache::put($dedupeKey, true, now()->addSeconds(90));
 
         $actor = $actor ?: auth()->user() ?: $torpr->createdBy;
-        $message = $this->buildMessage($safePrNumber, $title, $body, $meta);
+        $description = $this->cleanText($torpr->tujuan_pengadaan) ?: 'Deskripsi pengadaan belum diisi';
+        $creatorName = $this->cleanText($torpr->createdBy->name) ?: 'Pembuat PR';
+        $nextAction = $this->nextActionHint($eventType, $meta);
+        $message = $this->buildMessage($safePrNumber, $title, $body, $meta, $torpr, $nextAction);
 
         $payload = [
             'user_id' => $actor?->id ?: $torpr->createdBy->id,
@@ -48,7 +51,7 @@ class ProcurementJourneyService
             'mentions' => json_encode([[
                 'id' => $torpr->createdBy->id,
                 'name' => $torpr->createdBy->name,
-            ]]),
+            ]], JSON_UNESCAPED_UNICODE),
             'created_at' => now(),
         ];
 
@@ -63,12 +66,23 @@ class ProcurementJourneyService
         if (Schema::hasColumn('chat_messages', 'share_data')) {
             $payload['share_data'] = json_encode([
                 'label' => 'Update Progress PR',
-                'title' => $title,
+                'number' => $safePrNumber,
+                'title' => $description,
                 'nomor_pr' => $safePrNumber,
-                'tujuan' => $torpr->tujuan_pengadaan,
+                'tujuan' => $description,
+                'description' => $description,
+                'creator' => $creatorName,
+                'status' => $title,
+                'next_action' => $nextAction,
                 'event_type' => $eventType,
                 'meta' => $meta,
-            ]);
+                'fields' => array_values(array_filter([
+                    ['label' => 'Pembuat PR', 'value' => '@'.$creatorName],
+                    ['label' => 'Status', 'value' => $title],
+                    ['label' => 'Progress', 'value' => $this->cleanText($meta['progress'] ?? null) ?: '-'],
+                    ['label' => 'Dokumen', 'value' => $this->cleanText($meta['document_no'] ?? null) ?: '-'],
+                ], fn ($field) => ($field['value'] ?? '-') !== '-')),
+            ], JSON_UNESCAPED_UNICODE);
         }
 
         try {
@@ -99,9 +113,31 @@ class ProcurementJourneyService
             ->first();
     }
 
-    private function buildMessage(string $prNumber, string $title, string $body, array $meta): string
+    private function buildMessage(
+        string $prNumber,
+        string $title,
+        string $body,
+        array $meta,
+        ?Torpr $torpr = null,
+        ?string $nextAction = null
+    ): string
     {
-        $parts = ["Update Progress: {$title}", "PR/PPBJ: {$prNumber}", $body];
+        $creatorName = $this->cleanText($torpr?->createdBy?->name);
+        $description = $this->cleanText($torpr?->tujuan_pengadaan);
+
+        $parts = ["Update Progress: {$title}"];
+
+        if ($creatorName) {
+            $parts[] = 'Untuk: @'.$creatorName;
+        }
+
+        $parts[] = "PR/PPBJ: {$prNumber}";
+
+        if ($description) {
+            $parts[] = 'Deskripsi: '.$description;
+        }
+
+        $parts[] = $body;
 
         if (! empty($meta['progress'])) {
             $parts[] = 'Progress: ' . $meta['progress'];
@@ -119,7 +155,29 @@ class ProcurementJourneyService
             $parts[] = 'Catatan: ' . $meta['note'];
         }
 
+        if ($nextAction) {
+            $parts[] = 'Aksi berikutnya: '.$nextAction;
+        }
+
         return implode("\n", array_filter($parts));
+    }
+
+    private function nextActionHint(string $eventType, array $meta): string
+    {
+        $needle = mb_strtolower($eventType.' '.(string) ($meta['progress'] ?? '').' '.(string) ($meta['document_no'] ?? ''));
+
+        return match (true) {
+            str_contains($needle, 'spph') => 'Cek penawaran vendor, pilih kandidat terbaik, lalu lanjutkan ke SP jika sudah siap.',
+            str_contains($needle, 'sp') || str_contains($needle, 'kontrak') => 'Pantau estimasi barang/jasa datang dan lengkapi invoice atau lampiran saat pekerjaan selesai.',
+            str_contains($needle, 'barang') || str_contains($needle, 'arriv') => 'Konfirmasi penerimaan di operasional agar status PR tercatat lengkap sampai serah terima.',
+            str_contains($needle, 'arsip') || str_contains($needle, 'lampiran') => 'Review lampiran di arsip dan pastikan dokumen pendukung sudah sesuai kebutuhan audit.',
+            default => 'Pantau tracking PR dan gunakan follow up chat kalau progress mulai berhenti terlalu lama.',
+        };
+    }
+
+    private function cleanText(mixed $value): string
+    {
+        return trim(preg_replace('/\s+/u', ' ', (string) $value) ?? '');
     }
 
     private function safePrNumber(?string $number): string
