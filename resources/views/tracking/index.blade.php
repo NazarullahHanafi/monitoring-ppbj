@@ -240,6 +240,115 @@
             border-color: rgba(75, 85, 99, 0.5);
         }
 
+        .tracking-story-shell {
+            border: 1px solid rgba(147, 197, 253, 0.55);
+            background:
+                radial-gradient(circle at top left, rgba(59, 130, 246, 0.14), transparent 30%),
+                linear-gradient(135deg, rgba(255, 255, 255, 0.92), rgba(239, 246, 255, 0.82));
+            border-radius: 1.25rem;
+            padding: 1rem;
+            box-shadow: 0 16px 38px rgba(37, 99, 235, 0.08);
+        }
+
+        .dark .tracking-story-shell {
+            border-color: rgba(96, 165, 250, 0.34);
+            background:
+                radial-gradient(circle at top left, rgba(37, 99, 235, 0.22), transparent 32%),
+                linear-gradient(135deg, rgba(15, 23, 42, 0.94), rgba(17, 24, 39, 0.9));
+            box-shadow: 0 16px 42px rgba(0, 0, 0, 0.28);
+        }
+
+        .tracking-story-strip {
+            display: flex;
+            gap: 0.85rem;
+            overflow-x: auto;
+            padding: 0.25rem 0.1rem 0.35rem;
+            scroll-snap-type: x proximity;
+        }
+
+        .tracking-story-strip::-webkit-scrollbar {
+            height: 7px;
+        }
+
+        .tracking-story-strip::-webkit-scrollbar-thumb {
+            background: rgba(96, 165, 250, 0.45);
+            border-radius: 999px;
+        }
+
+        .tracking-story-card {
+            min-width: 168px;
+            scroll-snap-align: start;
+            border: 1px solid rgba(226, 232, 240, 0.95);
+            background: rgba(255, 255, 255, 0.88);
+            border-radius: 1rem;
+            padding: 0.85rem;
+            cursor: pointer;
+            transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+        }
+
+        .tracking-story-card:hover {
+            transform: translateY(-3px);
+            border-color: rgba(59, 130, 246, 0.55);
+            box-shadow: 0 14px 28px rgba(37, 99, 235, 0.13);
+        }
+
+        .dark .tracking-story-card {
+            border-color: rgba(71, 85, 105, 0.85);
+            background: rgba(30, 41, 59, 0.86);
+        }
+
+        .tracking-story-ring {
+            width: 46px;
+            height: 46px;
+            border-radius: 999px;
+            padding: 3px;
+            background: linear-gradient(135deg, #2563eb, #8b5cf6, #ec4899);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 10px 24px rgba(79, 70, 229, 0.25);
+        }
+
+        .tracking-story-ring.is-pending {
+            background: linear-gradient(135deg, #f59e0b, #fb923c, #ef4444);
+        }
+
+        .tracking-story-ring.is-rejected {
+            background: linear-gradient(135deg, #ef4444, #be123c, #7f1d1d);
+        }
+
+        .tracking-story-inner {
+            width: 100%;
+            height: 100%;
+            border-radius: 999px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: #ffffff;
+            color: #1d4ed8;
+            font-size: 0.95rem;
+            font-weight: 900;
+        }
+
+        .dark .tracking-story-inner {
+            background: #0f172a;
+            color: #bfdbfe;
+        }
+
+        .tracking-story-progress {
+            height: 5px;
+            overflow: hidden;
+            border-radius: 999px;
+            background: rgba(148, 163, 184, 0.22);
+        }
+
+        .tracking-story-progress span {
+            display: block;
+            height: 100%;
+            border-radius: inherit;
+            background: linear-gradient(90deg, #2563eb, #22c55e);
+        }
+
         @keyframes countUp {
             from {
                 opacity: 0;
@@ -838,6 +947,47 @@
                     </div>
                 </div>
 
+                {{-- Story Progress ala status WhatsApp --}}
+                @if(!empty($ppbjEvents))
+                    <div class="px-6 py-6 border-b border-gray-200 dark:border-gray-700">
+                        <div class="tracking-story-shell">
+                            <div class="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+                                <div>
+                                    <div class="text-[11px] font-black uppercase tracking-[0.18em] text-purple-600 dark:text-purple-300">Story Progress</div>
+                                    <div class="text-lg font-black text-gray-900 dark:text-white">Status berjalan dari awal sampai selesai</div>
+                                </div>
+                                <div class="text-xs font-semibold text-gray-500 dark:text-gray-300">Ringkas, cepat, dan mudah dibaca user</div>
+                            </div>
+                            <div class="tracking-story-strip mt-4">
+                                @foreach($ppbjEvents as $storyIndex => $story)
+                                    @php
+                                        $plainDesc = trim(preg_replace('/\s+/', ' ', strip_tags((string) ($story['desc'] ?? ''))));
+                                        $storyRingClass = match ($story['status'] ?? 'done') {
+                                            'pending' => 'is-pending',
+                                            'rejected' => 'is-rejected',
+                                            default => '',
+                                        };
+                                        $storyWidth = count($ppbjEvents) > 0 ? min(100, max(18, (int) round((($storyIndex + 1) / count($ppbjEvents)) * 100))) : 0;
+                                    @endphp
+                                    <button type="button" class="tracking-story-card text-left"
+                                        onclick="showTrackingStory(@js($story['title'] ?? 'Story Progress'), @js($story['time'] ?? '-'), @js($plainDesc ?: 'Belum ada detail tambahan.'))">
+                                        <div class="flex items-start gap-3">
+                                            <span class="tracking-story-ring {{ $storyRingClass }}">
+                                                <span class="tracking-story-inner">{{ $storyIndex + 1 }}</span>
+                                            </span>
+                                            <span class="min-w-0 flex-1">
+                                                <span class="block text-sm font-black text-gray-900 dark:text-white line-clamp-2">{{ $story['title'] ?? '-' }}</span>
+                                                <span class="mt-1 block text-[11px] font-semibold text-gray-500 dark:text-gray-300">{{ $story['time'] ?? '-' }}</span>
+                                            </span>
+                                        </div>
+                                        <div class="tracking-story-progress mt-3"><span style="width: {{ $storyWidth }}%"></span></div>
+                                    </button>
+                                @endforeach
+                            </div>
+                        </div>
+                    </div>
+                @endif
+
                 @if(!empty($ppbj->goods_arrived_at) || !empty($ppbj->promised_date))
                     <div class="px-6 pb-6 border-b border-gray-200 dark:border-gray-700">
                         <div class="rounded-2xl border border-indigo-200 bg-indigo-50/70 p-4 dark:border-indigo-800/60 dark:bg-indigo-950/25">
@@ -1318,6 +1468,47 @@
                     @endif
                 </div>
 
+                {{-- Story Progress ala status WhatsApp --}}
+                @if(!empty($events))
+                    <div class="px-6 pt-6">
+                        <div class="tracking-story-shell">
+                            <div class="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+                                <div>
+                                    <div class="text-[11px] font-black uppercase tracking-[0.18em] text-blue-600 dark:text-blue-300">Story Progress</div>
+                                    <div class="text-lg font-black text-gray-900 dark:text-white">Cerita singkat perjalanan PR ini</div>
+                                </div>
+                                <div class="text-xs font-semibold text-gray-500 dark:text-gray-300">Klik kartu untuk lihat ringkasannya</div>
+                            </div>
+                            <div class="tracking-story-strip mt-4">
+                                @foreach($events as $storyIndex => $story)
+                                    @php
+                                        $plainDesc = trim(preg_replace('/\s+/', ' ', strip_tags((string) ($story['desc'] ?? ''))));
+                                        $storyRingClass = match ($story['status'] ?? 'done') {
+                                            'pending' => 'is-pending',
+                                            'rejected' => 'is-rejected',
+                                            default => '',
+                                        };
+                                        $storyWidth = count($events) > 0 ? min(100, max(18, (int) round((($storyIndex + 1) / count($events)) * 100))) : 0;
+                                    @endphp
+                                    <button type="button" class="tracking-story-card text-left"
+                                        onclick="showTrackingStory(@js($story['title'] ?? 'Story Progress'), @js($story['time'] ?? '-'), @js($plainDesc ?: 'Belum ada detail tambahan.'))">
+                                        <div class="flex items-start gap-3">
+                                            <span class="tracking-story-ring {{ $storyRingClass }}">
+                                                <span class="tracking-story-inner">{{ $storyIndex + 1 }}</span>
+                                            </span>
+                                            <span class="min-w-0 flex-1">
+                                                <span class="block text-sm font-black text-gray-900 dark:text-white line-clamp-2">{{ $story['title'] ?? '-' }}</span>
+                                                <span class="mt-1 block text-[11px] font-semibold text-gray-500 dark:text-gray-300">{{ $story['time'] ?? '-' }}</span>
+                                            </span>
+                                        </div>
+                                        <div class="tracking-story-progress mt-3"><span style="width: {{ $storyWidth }}%"></span></div>
+                                    </button>
+                                @endforeach
+                            </div>
+                        </div>
+                    </div>
+                @endif
+
                 {{-- Reminder PR Macet --}}
                 @if(!empty($row->stuck_reminders))
                     <div class="px-6 pt-6">
@@ -1429,6 +1620,32 @@
 
 @push('scripts')
     <script>
+        window.showTrackingStory = function (title, time, description) {
+            const safe = (value) => {
+                const div = document.createElement('div');
+                div.textContent = value || '';
+                return div.innerHTML;
+            };
+
+            Swal.fire({
+                title: safe(title),
+                html: `
+                    <div class="text-left rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950 dark:border-blue-800 dark:bg-blue-950/45 dark:text-blue-100">
+                        <div class="mb-3 inline-flex items-center rounded-full bg-white px-3 py-1 text-xs font-black text-blue-700 ring-1 ring-blue-100 dark:bg-gray-900 dark:text-blue-200 dark:ring-blue-800">
+                            ${safe(time)}
+                        </div>
+                        <div class="leading-relaxed">${safe(description)}</div>
+                    </div>
+                `,
+                confirmButtonText: 'Oke, paham',
+                confirmButtonColor: '#2563eb',
+                customClass: {
+                    popup: 'rounded-3xl',
+                    title: 'text-gray-900 dark:text-white',
+                },
+            });
+        };
+
         window.confirmGoodsArrival = async function (id, ppbjNo) {
             const safeText = (value) => {
                 const div = document.createElement('div');

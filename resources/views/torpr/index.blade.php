@@ -1639,6 +1639,17 @@
                                         </svg>
                                         Log
                                     </button>
+                                    @if(!empty($r->nomor_pr))
+                                        <a href="{{ route('tracking.index', ['q' => $r->nomor_pr]) }}" target="_blank" rel="noopener"
+                                            class="inline-flex items-center gap-1 px-2 py-1 rounded bg-blue-50 text-blue-700 ring-1 ring-blue-100 hover:bg-blue-100 dark:bg-blue-500/15 dark:text-blue-200 dark:ring-blue-400/30 dark:hover:bg-blue-500/25 text-xs font-bold transition-all active:scale-95"
+                                            title="Buka tracking untuk {{ $r->nomor_pr }}">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                    d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+                                            </svg>
+                                            Tracking
+                                        </a>
+                                    @endif
                                     <button type="button" onclick="shareRecordToChat('pr', {{ $r->id }})"
                                         class="inline-flex items-center gap-1 px-2 py-1 rounded bg-indigo-600 dark:text-white hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-400 text-xs font-bold transition-all active:scale-95"
                                         title="Kirim follow up cepat PR ini ke Chat Tim">
