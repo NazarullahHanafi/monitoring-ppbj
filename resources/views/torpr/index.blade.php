@@ -1789,6 +1789,27 @@
             display: block;
         }
 
+        .torpr-my-result-count {
+            display: inline-flex;
+            align-items: center;
+            width: fit-content;
+            gap: 6px;
+            margin: -4px 0 14px;
+            padding: 8px 12px;
+            border-radius: 999px;
+            font-size: .74rem;
+            font-weight: 1000;
+            color: #1d4ed8;
+            background: rgba(219, 234, 254, .86);
+            border: 1px solid rgba(96, 165, 250, .32);
+        }
+
+        .dark .torpr-my-result-count {
+            color: #bfdbfe;
+            background: rgba(30, 64, 175, .22);
+            border-color: rgba(96, 165, 250, .24);
+        }
+
         @media (max-width: 900px) {
             .torpr-my-stats,
             .torpr-my-stage-grid {
@@ -3451,6 +3472,11 @@
             return torprMyNormalize(value).replace(/\s+/g, '');
         }
 
+        function torprMyHasFilled(value) {
+            const text = String(value ?? '').trim();
+            return Boolean(text && text !== '-' && text.toLowerCase() !== 'belum ada');
+        }
+
         function renderTorprMyCenter(data, mode = 'data') {
             const summary = data.summary || {};
             const items = Array.isArray(data.items) ? data.items : [];
@@ -3635,7 +3661,14 @@
                 const risk = riskInfo(item);
 
                 return `
-                    <article class="torpr-my-card torpr-my-data-card" data-my-pr-card data-search="${escapeHtml(torprMySearchText(item, `${risk.label} ${risk.text}`))}">
+                    <article class="torpr-my-card torpr-my-data-card"
+                        data-my-pr-card
+                        data-search="${escapeHtml(torprMySearchText(item, `${risk.label} ${risk.text}`))}"
+                        data-my-risk="${escapeHtml(risk.tone)}"
+                        data-my-progress="${progress}"
+                        data-my-status="${escapeHtml(torprMyNormalize(item.status_label))}"
+                        data-my-has-spph="${torprMyHasFilled(item.spph) ? '1' : '0'}"
+                        data-my-has-sp="${torprMyHasFilled(item.sp) ? '1' : '0'}">
                         <div class="min-w-0">
                             <div class="torpr-my-card-head">
                                 <div class="min-w-0">
@@ -3691,7 +3724,14 @@
                 `).join('');
 
                 return `
-                    <article class="torpr-my-card torpr-my-timeline-card" data-my-pr-card data-search="${escapeHtml(torprMySearchText(item, `${risk.label} ${risk.text} ${stages.map(stage => stage.label).join(' ')}`))}">
+                    <article class="torpr-my-card torpr-my-timeline-card"
+                        data-my-pr-card
+                        data-search="${escapeHtml(torprMySearchText(item, `${risk.label} ${risk.text} ${stages.map(stage => stage.label).join(' ')}`))}"
+                        data-my-risk="${escapeHtml(risk.tone)}"
+                        data-my-progress="${progress}"
+                        data-my-status="${escapeHtml(torprMyNormalize(item.status_label))}"
+                        data-my-has-spph="${torprMyHasFilled(item.spph) ? '1' : '0'}"
+                        data-my-has-sp="${torprMyHasFilled(item.sp) ? '1' : '0'}">
                         <div class="torpr-my-card-head">
                             <div class="min-w-0">
                                 <div class="torpr-my-number">${escapeHtml(item.nomor_pr)}</div>
@@ -3764,13 +3804,17 @@
                         </div>
 
                         <div class="torpr-my-chipbar" aria-label="Filter cepat PR saya">
-                            <button type="button" class="torpr-my-filter-chip is-active" data-my-filter="">Semua</button>
-                            <button type="button" class="torpr-my-filter-chip" data-my-filter="risiko tinggi">Risiko Tinggi</button>
-                            <button type="button" class="torpr-my-filter-chip" data-my-filter="perlu dipantau">Perlu Dipantau</button>
-                            <button type="button" class="torpr-my-filter-chip" data-my-filter="on track">On Track</button>
-                            <button type="button" class="torpr-my-filter-chip" data-my-filter="aman selesai lengkap">Selesai</button>
-                            <button type="button" class="torpr-my-filter-chip" data-my-filter="spph">Ada SPPH</button>
-                            <button type="button" class="torpr-my-filter-chip" data-my-filter="sp kontrak">Ada SP</button>
+                            <button type="button" class="torpr-my-filter-chip is-active" data-my-filter="all">Semua</button>
+                            <button type="button" class="torpr-my-filter-chip" data-my-filter="risk_high">Risiko Tinggi</button>
+                            <button type="button" class="torpr-my-filter-chip" data-my-filter="watch">Perlu Dipantau</button>
+                            <button type="button" class="torpr-my-filter-chip" data-my-filter="on_track">On Track</button>
+                            <button type="button" class="torpr-my-filter-chip" data-my-filter="done">Selesai</button>
+                            <button type="button" class="torpr-my-filter-chip" data-my-filter="has_spph">Ada SPPH</button>
+                            <button type="button" class="torpr-my-filter-chip" data-my-filter="has_sp">Ada SP</button>
+                        </div>
+
+                        <div id="torprMyResultCount" class="torpr-my-result-count">
+                            📌 Menampilkan ${items.length} data
                         </div>
 
                         <div class="torpr-my-mode-note">
@@ -3829,23 +3873,41 @@
                     },
                     didOpen: () => {
                         const search = document.getElementById('torprMySearch');
-                        let activeMyFilter = '';
+                        let activeMyFilter = 'all';
 
                         const applyMyPrFilter = () => {
                             const rawKeyword = search?.value || '';
                             const keyword = torprMyNormalize(rawKeyword);
                             const compactKeyword = torprMyCompact(rawKeyword);
-                            const filter = torprMyNormalize(activeMyFilter);
                             let visibleCount = 0;
 
                             document.querySelectorAll('[data-my-pr-card]').forEach(card => {
                                 const text = card.getAttribute('data-search') || '';
                                 const compactText = text.replace(/\s+/g, '');
+                                const risk = card.getAttribute('data-my-risk') || '';
+                                const progress = Number(card.getAttribute('data-my-progress') || 0);
+                                const status = card.getAttribute('data-my-status') || '';
+                                const hasSpph = card.getAttribute('data-my-has-spph') === '1';
+                                const hasSp = card.getAttribute('data-my-has-sp') === '1';
                                 const keywordMatch = !keyword
                                     || text.includes(keyword)
                                     || (compactKeyword && compactText.includes(compactKeyword));
-                                const filterMatch = !filter
-                                    || filter.split(/\s+/).some(part => part && text.includes(part));
+
+                                let filterMatch = true;
+                                if (activeMyFilter === 'risk_high') {
+                                    filterMatch = risk === 'red';
+                                } else if (activeMyFilter === 'watch') {
+                                    filterMatch = risk === 'amber';
+                                } else if (activeMyFilter === 'on_track') {
+                                    filterMatch = risk === 'blue';
+                                } else if (activeMyFilter === 'done') {
+                                    filterMatch = progress >= 100 || status.includes('lengkap') || status.includes('selesai');
+                                } else if (activeMyFilter === 'has_spph') {
+                                    filterMatch = hasSpph;
+                                } else if (activeMyFilter === 'has_sp') {
+                                    filterMatch = hasSp;
+                                }
+
                                 const show = keywordMatch && filterMatch;
 
                                 card.classList.toggle('hidden', !show);
@@ -3855,6 +3917,10 @@
                             });
 
                             document.getElementById('torprMyNoResult')?.classList.toggle('is-visible', visibleCount === 0);
+                            const resultCount = document.getElementById('torprMyResultCount');
+                            if (resultCount) {
+                                resultCount.textContent = `📌 Menampilkan ${visibleCount} data`;
+                            }
                         };
 
                         search?.addEventListener('input', applyMyPrFilter);
