@@ -1506,6 +1506,221 @@
             border-color: rgba(148, 163, 184, .18);
         }
 
+        .torpr-my-mode-note {
+            margin-bottom: 14px;
+            border-radius: 20px;
+            padding: 14px 16px;
+            border: 1px solid rgba(59, 130, 246, .18);
+            background: linear-gradient(135deg, rgba(239, 246, 255, .95), rgba(240, 253, 250, .92));
+            color: #1e3a8a;
+            font-size: .84rem;
+            font-weight: 850;
+            line-height: 1.55;
+        }
+
+        .dark .torpr-my-mode-note {
+            border-color: rgba(125, 211, 252, .2);
+            background: linear-gradient(135deg, rgba(37, 99, 235, .14), rgba(20, 184, 166, .12));
+            color: #dbeafe;
+        }
+
+        .torpr-my-data-card {
+            display: grid;
+            grid-template-columns: minmax(0, 1.1fr) minmax(220px, .9fr);
+            gap: 16px;
+        }
+
+        .torpr-my-data-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 9px;
+            margin-top: 14px;
+        }
+
+        .torpr-my-data-cell {
+            border-radius: 15px;
+            padding: 10px 12px;
+            background: #f8fafc;
+            border: 1px solid rgba(148, 163, 184, .22);
+        }
+
+        .dark .torpr-my-data-cell {
+            background: rgba(2, 6, 23, .45);
+            border-color: rgba(148, 163, 184, .16);
+        }
+
+        .torpr-my-data-cell span {
+            display: block;
+            font-size: .62rem;
+            font-weight: 1000;
+            text-transform: uppercase;
+            letter-spacing: .08em;
+            color: #64748b;
+        }
+
+        .dark .torpr-my-data-cell span {
+            color: #94a3b8;
+        }
+
+        .torpr-my-data-cell strong {
+            display: block;
+            margin-top: 5px;
+            color: #0f172a;
+            font-size: .82rem;
+            font-weight: 950;
+            line-height: 1.35;
+        }
+
+        .dark .torpr-my-data-cell strong {
+            color: #f8fafc;
+        }
+
+        .torpr-my-risk {
+            border-radius: 18px;
+            padding: 13px;
+            border: 1px solid rgba(148, 163, 184, .22);
+            background: linear-gradient(135deg, #f8fafc, #fff);
+        }
+
+        .dark .torpr-my-risk {
+            background: linear-gradient(135deg, rgba(15, 23, 42, .9), rgba(30, 41, 59, .78));
+            border-color: rgba(148, 163, 184, .16);
+        }
+
+        .torpr-my-risk h4 {
+            margin: 0 0 8px;
+            color: #0f172a;
+            font-size: .9rem;
+            font-weight: 1000;
+        }
+
+        .dark .torpr-my-risk h4 {
+            color: #f8fafc;
+        }
+
+        .torpr-my-risk p {
+            margin: 8px 0 0;
+            color: #475569;
+            font-size: .75rem;
+            font-weight: 750;
+            line-height: 1.45;
+        }
+
+        .dark .torpr-my-risk p {
+            color: #cbd5e1;
+        }
+
+        .torpr-my-timeline-card {
+            position: relative;
+            overflow: hidden;
+        }
+
+        .torpr-my-timeline-card::before {
+            content: '';
+            position: absolute;
+            inset: 0 auto 0 0;
+            width: 7px;
+            background: linear-gradient(180deg, #06b6d4, #2563eb, #8b5cf6);
+        }
+
+        .torpr-my-current-stage {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 10px;
+            border-radius: 999px;
+            padding: 8px 11px;
+            color: #0f172a;
+            background: #fef3c7;
+            border: 1px solid #fde68a;
+            font-size: .75rem;
+            font-weight: 1000;
+        }
+
+        .dark .torpr-my-current-stage {
+            color: #fde68a;
+            background: rgba(245, 158, 11, .14);
+            border-color: rgba(251, 191, 36, .22);
+        }
+
+        .torpr-my-timeline {
+            position: relative;
+            display: grid;
+            gap: 10px;
+            margin-top: 15px;
+            padding-left: 24px;
+        }
+
+        .torpr-my-timeline::before {
+            content: '';
+            position: absolute;
+            left: 9px;
+            top: 10px;
+            bottom: 10px;
+            width: 2px;
+            background: rgba(148, 163, 184, .28);
+        }
+
+        .torpr-my-timeline-step {
+            position: relative;
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 10px;
+            align-items: center;
+            border-radius: 16px;
+            padding: 11px 12px;
+            background: #f8fafc;
+            border: 1px solid rgba(148, 163, 184, .22);
+        }
+
+        .dark .torpr-my-timeline-step {
+            background: rgba(2, 6, 23, .45);
+            border-color: rgba(148, 163, 184, .16);
+        }
+
+        .torpr-my-timeline-step::before {
+            content: '';
+            position: absolute;
+            left: -21px;
+            top: 50%;
+            width: 12px;
+            height: 12px;
+            transform: translateY(-50%);
+            border-radius: 999px;
+            background: #cbd5e1;
+            border: 3px solid #fff;
+            box-shadow: 0 0 0 1px rgba(148, 163, 184, .35);
+        }
+
+        .dark .torpr-my-timeline-step::before {
+            border-color: #0f172a;
+        }
+
+        .torpr-my-timeline-step.is-done::before {
+            background: #10b981;
+            box-shadow: 0 0 0 4px rgba(16, 185, 129, .12);
+        }
+
+        .torpr-my-timeline-step strong {
+            color: #0f172a;
+            font-size: .82rem;
+            font-weight: 1000;
+        }
+
+        .dark .torpr-my-timeline-step strong {
+            color: #f8fafc;
+        }
+
+        .torpr-my-timeline-step small {
+            color: #64748b;
+            font-size: .68rem;
+            font-weight: 800;
+        }
+
+        .dark .torpr-my-timeline-step small {
+            color: #94a3b8;
+        }
+
         .torpr-my-empty {
             border-radius: 22px;
             padding: 28px;
@@ -1530,6 +1745,14 @@
 
             .torpr-my-card-head {
                 flex-direction: column;
+            }
+
+            .torpr-my-data-card {
+                grid-template-columns: 1fr;
+            }
+
+            .torpr-my-data-grid {
+                grid-template-columns: 1fr;
             }
         }
 
@@ -3265,6 +3488,214 @@
             `;
         }
 
+        function renderTorprMyCenterV2(data, mode = 'data') {
+            const summary = data.summary || {};
+            const items = Array.isArray(data.items) ? data.items : [];
+            const isTracking = mode === 'tracking';
+
+            const stat = (label, value, icon) => `
+                <div class="torpr-my-stat">
+                    <span>${escapeHtml(label)}</span>
+                    <strong>${escapeHtml(value ?? 0)}</strong>
+                    <small class="text-[11px] font-black text-slate-400 dark:text-slate-500">${escapeHtml(icon)}</small>
+                </div>
+            `;
+
+            const riskInfo = (item) => {
+                const progress = Number(item.progress || 0);
+                const sisa = String(item.sisa_sla || '').toLowerCase();
+
+                if (String(item.status_label || '').toLowerCase().includes('lengkap') || progress >= 100) {
+                    return { tone: 'emerald', label: 'Aman / selesai', text: 'PR sudah lengkap, tinggal dipakai sebagai bukti tracking dan audit.' };
+                }
+
+                if (item.needs_follow_up || sisa.includes('-') || String(item.status_tone || '') === 'red') {
+                    return { tone: 'red', label: 'Risiko tinggi', text: 'Perlu follow up cepat. Sistem membaca PR ini berpotensi macet atau melewati SLA.' };
+                }
+
+                if (progress < 40 || String(item.status_tone || '') === 'amber') {
+                    return { tone: 'amber', label: 'Perlu dipantau', text: 'Masih tahap awal. Cocok untuk ditanyakan progresnya sebelum mendekati batas SLA.' };
+                }
+
+                return { tone: 'blue', label: 'On track', text: 'Progress masih berjalan normal. Tetap pantau SPPH, SP, barang datang, dan invoice.' };
+            };
+
+            const actions = (item, rowKey) => `
+                <div class="torpr-my-actions">
+                    ${item.tracking_url ? `
+                        <a href="${escapeHtml(item.tracking_url)}" target="_blank" rel="noopener" class="torpr-my-action primary">
+                            🧭 Buka Tracking
+                        </a>
+                    ` : ''}
+                    <button type="button" class="torpr-my-action chat" data-my-pr-follow-up="${Number(item.id)}">
+                        💬 Follow Up Chat
+                    </button>
+                    ${item.nomor_pr && item.nomor_pr !== 'Nomor PR belum diisi' ? `
+                        <button type="button" class="torpr-my-action archive" data-my-pr-archive="${escapeHtml(item.nomor_pr)}" data-my-pr-archive-target="myPrArchive${rowKey}">
+                            📎 Muat Lampiran
+                        </button>
+                    ` : ''}
+                </div>
+                <div id="myPrArchive${rowKey}" class="torpr-my-archive-box hidden"></div>
+            `;
+
+            const emptyHtml = `
+                <div class="torpr-my-empty">
+                    <div class="text-4xl mb-2">🧾</div>
+                    Belum ada PR yang tercatat sebagai data kamu. Kalau baru input, coba refresh halaman atau cek filter pemilik data.
+                </div>
+            `;
+
+            const dataHtml = items.length ? items.map((item, index) => {
+                const progress = Math.max(0, Math.min(100, Number(item.progress || 0)));
+                const rowKey = torprMySafeSelector(`data_${index}_${item.id}`);
+                const risk = riskInfo(item);
+
+                return `
+                    <article class="torpr-my-card torpr-my-data-card" data-my-pr-card data-search="${escapeHtml(`${item.nomor_pr} ${item.tujuan} ${item.portofolio} ${item.buyer} ${item.vendor} ${item.spph} ${item.sp}`.toLowerCase())}">
+                        <div class="min-w-0">
+                            <div class="torpr-my-card-head">
+                                <div class="min-w-0">
+                                    <div class="torpr-my-number">${escapeHtml(item.nomor_pr)}</div>
+                                    <div class="torpr-my-title">${escapeHtml(item.tujuan)}</div>
+                                    <div class="torpr-my-meta">
+                                        <span>🧩 ${escapeHtml(item.portofolio || '-')}</span>
+                                        <span>💰 ${escapeHtml(item.nilai_pr_label || 'Rp 0')}</span>
+                                        <span>🕒 Update: ${escapeHtml(item.updated_at || '-')}</span>
+                                    </div>
+                                </div>
+                                <span class="torpr-my-badge ${torprMyBadgeTone(item.status_tone)}">${escapeHtml(item.status_label)}</span>
+                            </div>
+
+                            <div class="torpr-my-data-grid">
+                                <div class="torpr-my-data-cell"><span>Buyer</span><strong>${escapeHtml(item.buyer || '-')}</strong></div>
+                                <div class="torpr-my-data-cell"><span>Vendor</span><strong>${escapeHtml(item.vendor || '-')}</strong></div>
+                                <div class="torpr-my-data-cell"><span>SPPH</span><strong>${escapeHtml(item.spph || '-')}</strong></div>
+                                <div class="torpr-my-data-cell"><span>SP / Kontrak</span><strong>${escapeHtml(item.sp || '-')}</strong></div>
+                                <div class="torpr-my-data-cell"><span>Estimasi Datang</span><strong>${escapeHtml(item.promised_date || '-')}</strong></div>
+                                <div class="torpr-my-data-cell"><span>Invoice</span><strong>${escapeHtml(item.invoice || '-')}</strong></div>
+                            </div>
+
+                            ${actions(item, rowKey)}
+                        </div>
+
+                        <aside class="torpr-my-risk">
+                            <span class="torpr-my-badge ${torprMyBadgeTone(risk.tone)}">${escapeHtml(risk.label)}</span>
+                            <h4>Prediksi Risiko PR</h4>
+                            <div class="torpr-my-progress" aria-label="Progress ${progress}%">
+                                <span style="width:${progress}%"></span>
+                            </div>
+                            <p>${progress}% proses berjalan. ${escapeHtml(risk.text)}</p>
+                        </aside>
+                    </article>
+                `;
+            }).join('') : emptyHtml;
+
+            const trackingHtml = items.length ? items.map((item, index) => {
+                const progress = Math.max(0, Math.min(100, Number(item.progress || 0)));
+                const rowKey = torprMySafeSelector(`tracking_${index}_${item.id}`);
+                const risk = riskInfo(item);
+                const stages = Array.isArray(item.stages) ? item.stages : [];
+                const nextStage = stages.find(stage => !stage.done);
+                const timeline = stages.map(stage => `
+                    <div class="torpr-my-timeline-step ${stage.done ? 'is-done' : ''}">
+                        <div>
+                            <strong>${stage.done ? '✅' : '⏳'} ${escapeHtml(stage.label)}</strong>
+                            <small>${escapeHtml(stage.at || (stage.done ? 'selesai' : 'menunggu'))}</small>
+                        </div>
+                        <span class="torpr-my-badge ${stage.done ? 'emerald' : 'slate'}">${stage.done ? 'Done' : 'Next'}</span>
+                    </div>
+                `).join('');
+
+                return `
+                    <article class="torpr-my-card torpr-my-timeline-card" data-my-pr-card data-search="${escapeHtml(`${item.nomor_pr} ${item.tujuan} ${item.portofolio} ${item.buyer} ${item.vendor} ${item.spph} ${item.sp}`.toLowerCase())}">
+                        <div class="torpr-my-card-head">
+                            <div class="min-w-0">
+                                <div class="torpr-my-number">${escapeHtml(item.nomor_pr)}</div>
+                                <div class="torpr-my-title">${escapeHtml(item.tujuan)}</div>
+                                <div class="torpr-my-meta">
+                                    <span>🧩 ${escapeHtml(item.portofolio || '-')}</span>
+                                    <span>👤 Buyer: ${escapeHtml(item.buyer || '-')}</span>
+                                    <span>🏢 Vendor: ${escapeHtml(item.vendor || '-')}</span>
+                                    <span>📅 Barang: ${escapeHtml(item.goods_arrived_at || item.promised_date || '-')}</span>
+                                </div>
+                                <div class="torpr-my-current-stage">
+                                    ${progress >= 100 ? '🏁 Selesai' : `📍 Tahap berikutnya: ${escapeHtml(nextStage?.label || 'monitoring progress')}`}
+                                </div>
+                            </div>
+                            <div class="flex flex-col items-end gap-2">
+                                <span class="torpr-my-badge ${torprMyBadgeTone(item.status_tone)}">${escapeHtml(item.status_label)}</span>
+                                <span class="torpr-my-badge ${torprMyBadgeTone(risk.tone)}">🔮 ${escapeHtml(risk.label)}</span>
+                            </div>
+                        </div>
+
+                        <div class="torpr-my-progress" aria-label="Progress ${progress}%">
+                            <span style="width:${progress}%"></span>
+                        </div>
+                        <div class="mt-2 text-xs font-black text-slate-500 dark:text-slate-300">
+                            ${progress}% • ${escapeHtml(item.sisa_sla || 'SLA belum dihitung')} • ${escapeHtml(risk.text)}
+                        </div>
+
+                        <div class="torpr-my-timeline">
+                            ${timeline}
+                        </div>
+
+                        ${actions(item, rowKey)}
+                    </article>
+                `;
+            }).join('') : emptyHtml;
+
+            return `
+                <div class="torpr-my-wrap">
+                    <div class="torpr-my-hero">
+                        <div class="text-xs font-black uppercase tracking-[.22em] opacity-80">
+                            ${isTracking ? 'Timeline personal operasional' : 'Cockpit data pribadi'}
+                        </div>
+                        <h2>${isTracking ? 'Tracking Data Saya' : 'Lihat Data Saya'}</h2>
+                        <p>
+                            ${isTracking
+                                ? 'Mode ini fokus ke perjalanan PR: tahap mana yang sudah selesai, apa tahap berikutnya, dan PR mana yang perlu segera difollow up.'
+                                : 'Mode ini fokus ke daftar PR pribadi: nomor, nilai, buyer, vendor, SPPH/SP, estimasi barang, invoice, dan lampiran arsip.'}
+                        </p>
+                    </div>
+                    <div class="torpr-my-content">
+                        <div class="torpr-my-stats">
+                            ${stat('Total PR Saya', summary.total, 'semua data')}
+                            ${stat('Perlu Follow Up', summary.need_follow_up, 'prioritas')}
+                            ${stat('Menunggu Umum', summary.waiting_umum, 'approval')}
+                            ${stat('Sedang Jalan', summary.in_progress, 'progress')}
+                            ${stat('Selesai', summary.done, 'done')}
+                        </div>
+
+                        <div class="torpr-my-toolbar">
+                            <input id="torprMySearch" class="torpr-my-search" type="search"
+                                placeholder="${isTracking ? 'Cari timeline: nomor PR, vendor, tahap, buyer...' : 'Cari data saya: nomor, vendor, portofolio, buyer...'}"
+                                autocomplete="off">
+                            <div class="flex flex-wrap gap-2">
+                                <button type="button" class="torpr-my-mini-btn" onclick="filterTorprToMine()">👤 Filter halaman ke data saya</button>
+                                <button type="button" class="torpr-my-mini-btn" onclick="reloadMyPrCenter('${escapeHtml(mode)}')">🔄 Refresh ringkasan</button>
+                                <button type="button" class="torpr-my-mini-btn" onclick="openMyPrCenter('${isTracking ? 'data' : 'tracking'}')">
+                                    ${isTracking ? '📋 Pindah ke Data Saya' : '🧭 Pindah ke Tracking'}
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="torpr-my-mode-note">
+                            ✨ Fitur masa depan aktif: <b>Prediksi Risiko PR</b>. Sistem memberi sinyal Aman, Perlu Dipantau, atau Risiko Tinggi berdasarkan progress, SLA, status, dan data follow up. Jadi pembuat PR bisa gerak duluan sebelum pekerjaan benar-benar macet.
+                        </div>
+
+                        <div id="torprMyPrList" class="torpr-my-list">
+                            ${isTracking ? trackingHtml : dataHtml}
+                        </div>
+
+                        <div class="mt-4 text-center text-xs font-bold text-slate-500 dark:text-slate-400">
+                            Data dibuat: ${escapeHtml(data.generated_at || '-')} • Maksimal ${escapeHtml(data.limit || 50)} PR terbaru agar performa tetap ringan.
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
         window.openMyPrCenter = async function (mode = 'data', force = false) {
             try {
                 if (!torprMyProgressCache || force) {
@@ -3290,7 +3721,7 @@
                 }
 
                 Swal.fire({
-                    html: renderTorprMyCenter(torprMyProgressCache, mode),
+                    html: renderTorprMyCenterV2(torprMyProgressCache, mode),
                     width: 'min(1180px, 96vw)',
                     showConfirmButton: false,
                     showCloseButton: true,
