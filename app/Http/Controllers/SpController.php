@@ -884,6 +884,21 @@ class SpController extends Controller
                         ],
                         $request->user()
                     );
+                } else {
+                    app(ProcurementJourneyService::class)->notifyGeneral(
+                        'sp_created_without_pr',
+                        'Surat Pesanan dibuat tanpa nomor PR',
+                        "Umum membuat SP {$sp->nomor_sp} untuk vendor {$vendorName}.",
+                        [
+                            'progress' => 'SP/Kontrak Manual',
+                            'document_no' => $sp->nomor_sp,
+                            'description' => $sp->deskripsi_pengadaan,
+                            'vendors' => [$vendorName],
+                            'nilai' => $sp->nilai_sp,
+                            'promised_date' => $sp->promised_date,
+                        ],
+                        $request->user()
+                    );
                 }
 
                 Cache::forget('sp:last_nomor');
@@ -1087,6 +1102,21 @@ class SpController extends Controller
                         [
                             'progress' => 'Update SP/Kontrak',
                             'document_no' => $sp->nomor_sp,
+                            'vendors' => [$sp->nama_vendor],
+                            'nilai' => $sp->nilai_sp,
+                            'promised_date' => $sp->promised_date,
+                        ],
+                        $request->user()
+                    );
+                } else {
+                    app(ProcurementJourneyService::class)->notifyGeneral(
+                        'sp_updated_without_pr',
+                        'Surat Pesanan tanpa nomor PR diperbarui',
+                        "Data SP {$sp->nomor_sp} diperbarui oleh Umum.",
+                        [
+                            'progress' => 'Update SP/Kontrak Manual',
+                            'document_no' => $sp->nomor_sp,
+                            'description' => $sp->deskripsi_pengadaan,
                             'vendors' => [$sp->nama_vendor],
                             'nilai' => $sp->nilai_sp,
                             'promised_date' => $sp->promised_date,

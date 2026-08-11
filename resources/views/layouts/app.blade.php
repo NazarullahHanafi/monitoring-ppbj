@@ -1484,6 +1484,7 @@
             font-size: .82rem;
             line-height: 1.45;
             word-break: break-word;
+            white-space: pre-line;
             cursor: default;
             background: #f3f4f6;
             color: #111827;

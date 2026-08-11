@@ -43,14 +43,47 @@ class ProcurementJourneyNotificationTest extends TestCase
 
         $message = DB::table('chat_messages')->first();
         $this->assertNotNull($message);
-        $this->assertStringContainsString('Untuk: @Zikri', $message->message);
-        $this->assertStringContainsString('Deskripsi: Pengadaan printer operasional', $message->message);
-        $this->assertStringContainsString('Aksi berikutnya:', $message->message);
+        $this->assertStringContainsString('👤 Untuk: @Zikri', $message->message);
+        $this->assertStringContainsString('📝 Deskripsi: Pengadaan printer operasional', $message->message);
+        $this->assertStringContainsString('📄 Dokumen: 366/PKU-VIII/SP/2026', $message->message);
+        $this->assertStringContainsString('🏷️ Tag cepat: #PR0466 #SP366', $message->message);
+        $this->assertStringContainsString('➡️ Aksi berikutnya:', $message->message);
 
         $shareData = json_decode($message->share_data, true);
         $this->assertSame('Update Progress PR', $shareData['label']);
         $this->assertSame('PKB/PR-26/CON/0466', $shareData['number']);
         $this->assertSame('Pengadaan printer operasional', $shareData['title']);
         $this->assertSame('@Zikri', $shareData['fields'][0]['value']);
+    }
+
+    public function test_general_sp_notification_is_sent_when_pr_number_is_empty(): void
+    {
+        $actor = User::factory()->create(['name' => 'Umum']);
+
+        $sent = app(ProcurementJourneyService::class)->notifyGeneral(
+            'sp_created_without_pr',
+            'Surat Pesanan dibuat tanpa nomor PR',
+            'Umum membuat SP 371/PKU-VIII/KONT/2026 untuk vendor Koperasi.',
+            [
+                'progress' => 'SP/Kontrak Manual',
+                'document_no' => '371/PKU-VIII/KONT/2026',
+                'description' => 'Kontrak manual tanpa nomor PR',
+                'vendors' => ['Koperasi'],
+            ],
+            $actor
+        );
+
+        $this->assertTrue($sent);
+
+        $message = DB::table('chat_messages')->first();
+        $this->assertNotNull($message);
+        $this->assertStringContainsString('📣 Update Progress: Surat Pesanan dibuat tanpa nomor PR', $message->message);
+        $this->assertStringContainsString('📄 Dokumen: 371/PKU-VIII/KONT/2026', $message->message);
+        $this->assertStringContainsString('📝 Deskripsi: Kontrak manual tanpa nomor PR', $message->message);
+        $this->assertStringContainsString('🏷️ Tag cepat: #SP371', $message->message);
+
+        $shareData = json_decode($message->share_data, true);
+        $this->assertSame('Update SP Manual', $shareData['label']);
+        $this->assertSame('371/PKU-VIII/KONT/2026', $shareData['number']);
     }
 }
