@@ -2606,9 +2606,6 @@
                             class="text-red-500">*</span></label>
                     <select name="nama_vendor" id="vendorSelectSp" required class="vendor-select-sp w-full">
                         <option value="">-- Pilih Vendor --</option>
-                        @foreach($vendors as $v)<option value="{{ $v->nama_vendor }}">{{ $v->nama_vendor }}</option>
-                        @endforeach
-                        <option value="__tambah__">➕ Tambah Vendor Baru...</option>
                     </select>
                     <div id="addSpphVendorRecommendation" class="hidden mt-2"></div>
                     <div class="mt-2">
@@ -2923,9 +2920,6 @@
                             class="text-red-500">*</span></label>
                     <select name="nama_vendor" id="editVendorSp" required class="edit-vendor-sp w-full">
                         <option value="">-- Pilih Vendor --</option>
-                        @foreach($vendors as $v)
-                            <option value="{{ $v->nama_vendor }}">{{ $v->nama_vendor }}</option>
-                        @endforeach
                     </select>
                     <div id="editSpphVendorRecommendation" class="hidden mt-2"></div>
                 </div>
@@ -3318,6 +3312,7 @@
         const PRESENCE_STOP = '{{ route('sp.presence.stop') }}';
         const PPBJ_OPTIONS_URL = '{{ route('sp.ppbj-options') }}';
         const PPBJ_CHECK_URL = '{{ route('sp.check-ppbj') }}';
+        const VENDOR_SEARCH_URL = '{{ route('vendor.search') }}';
         const ORACLE_MODE_SP = {{ $oracleMode ? 'true' : 'false' }};
         const SP_AUTO_URL = @json($normalSpUrl);
         const SP_ORACLE_URL = @json($oracleSpUrl);
@@ -4681,7 +4676,9 @@
                     setVendorStatus('❌ ' + msgs, 'error'); return;
                 }
                 const newOption = new Option(data.nama_vendor, data.nama_vendor, true, true);
-                $('#vendorSelectSp').find('option[value="__tambah__"]').before(newOption);
+                const $vendorSelectSp = $('#vendorSelectSp');
+                const $addVendorMarker = $vendorSelectSp.find('option[value="__tambah__"]');
+                if ($addVendorMarker.length) $addVendorMarker.before(newOption); else $vendorSelectSp.append(newOption);
                 $('#vendorSelectSp').val(data.nama_vendor).trigger('change');
                 document.getElementById('newVendorBoxSp').classList.add('hidden');
                 resetNewVendorForm();
@@ -5203,7 +5200,7 @@
             }
 
             if (countEl) countEl.textContent = `${itemCount} item${itemCount !== 1 ? 's' : ''}`;
-            updateSpModeGuard(mode);
+            scheduleSpModeGuard(mode);
         }
 
         function addRow(mode, item = null) {
@@ -5233,7 +5230,7 @@
                                                     <div class="rt-editor" contenteditable="true" id="${edId}"
                                                          data-ph="Ketik nama barang / jasa..."
                                                          onfocus="rtSaveSel('${edId}')"
-                                                         oninput="updateOracleReadinessChecklist('${mode}'); updateSpModeGuard('${mode}')"></div>
+                                                         oninput="updateOracleReadinessChecklist('${mode}'); scheduleSpModeGuard('${mode}')"></div>
                                                     <input type="hidden" name="items[${idx}][nama_barang]" id="hid-${edId}">
                                                 </div>
 
@@ -5333,12 +5330,56 @@
         // ═══════════════════════════════════════
         // INIT
         // ═══════════════════════════════════════
+        function initVendorAjaxSelectSp(selector, placeholder) {
+            const $select = $(selector);
+            $select.select2({
+                placeholder,
+                allowClear: true,
+                width: '100%',
+                minimumInputLength: 0,
+                ajax: {
+                    url: VENDOR_SEARCH_URL,
+                    dataType: 'json',
+                    delay: 250,
+                    data: params => ({ q: params.term || '' }),
+                    processResults: data => ({
+                        results: (Array.isArray(data) ? data : (data.results || [])).map(vendor => {
+                            const name = vendor.nama_vendor || vendor.text || vendor.id || '';
+                            return {
+                                id: name,
+                                text: name,
+                                alamat: vendor.alamat || '',
+                                telepon: vendor.telepon || '',
+                                email: vendor.email || '',
+                                jabatan: vendor.jabatan || ''
+                            };
+                        })
+                    }),
+                    cache: true
+                },
+                templateResult: item => {
+                    if (item.loading) return 'Mencari vendor...';
+                    const $row = $('<div class="py-1">')
+                        .append($('<div class="font-semibold text-gray-900 dark:text-gray-100">').text(item.text || '-'));
+                    const meta = [item.jabatan, item.telepon, item.email].filter(Boolean).join(' • ');
+                    if (meta) $row.append($('<div class="text-[11px] text-gray-500 dark:text-gray-400">').text(meta));
+                    return $row;
+                },
+                templateSelection: item => item.text || item.id || ''
+            });
+        }
+
+        const spModeGuardTimers = {};
+        function scheduleSpModeGuard(prefix, delay = 120) {
+            clearTimeout(spModeGuardTimers[prefix]);
+            spModeGuardTimers[prefix] = setTimeout(() => updateSpModeGuard(prefix), delay);
+        }
+
         $(document).ready(function () {
             const cfg = ph => ({ placeholder: ph, allowClear: true, width: '100%' });
-            $('#vendorSelectSp option[value="__tambah__"]').remove();
-            $('.vendor-select-sp').select2(cfg('-- Pilih Vendor --'));
+            initVendorAjaxSelectSp('#vendorSelectSp', '-- Pilih Vendor --');
             $('.pic-select-sp').select2(cfg('-- Pilih PIC --'));
-            $('.edit-vendor-sp').select2(cfg('-- Pilih Vendor --'));
+            initVendorAjaxSelectSp('#editVendorSp', '-- Pilih Vendor --');
             $('.edit-pic-sp').select2(cfg('-- Pilih PIC --'));
 
             // Init PPBJ Select2
@@ -5351,20 +5392,20 @@
             initRupiahInput('editNilaiSp');
             initRupiahInput('editNilaiPr');
 
-            $('#nilaiSpInput').on('input paste', () => setTimeout(() => { syncSingleItemPriceFromNilaiSp('add'); updateJampelPreview('add'); updateSpModeGuard('add'); }, 0));
-            $('#editNilaiSp').on('input paste', () => setTimeout(() => { syncSingleItemPriceFromNilaiSp('edit'); updateJampelPreview('edit'); updateSpModeGuard('edit'); }, 0));
+            $('#nilaiSpInput').on('input paste', () => setTimeout(() => { syncSingleItemPriceFromNilaiSp('add'); updateJampelPreview('add'); scheduleSpModeGuard('add', 80); }, 0));
+            $('#editNilaiSp').on('input paste', () => setTimeout(() => { syncSingleItemPriceFromNilaiSp('edit'); updateJampelPreview('edit'); scheduleSpModeGuard('edit', 80); }, 0));
             $('#addFormSp').on('input change', 'input, select, textarea', function () {
                 if (this.form) this.form.dataset.itemTotalConfirmed = '0';
                 setTimeout(() => {
                     updateOracleReadinessChecklist('add');
-                    updateSpModeGuard('add');
+                    scheduleSpModeGuard('add');
                 }, 0);
             });
             $('#editFormSp').on('input change', 'input, select, textarea', function () {
                 if (this.form) this.form.dataset.itemTotalConfirmed = '0';
                 setTimeout(() => {
                     updateOracleReadinessChecklist('edit');
-                    updateSpModeGuard('edit');
+                    scheduleSpModeGuard('edit');
                 }, 0);
             });
             $(document).on('focus', 'select[name$="[satuan]"]', function () {
@@ -5392,8 +5433,8 @@
                     setTimeout(() => {
                         updateOracleReadinessChecklist('add');
                         updateOracleReadinessChecklist('edit');
-                        updateSpModeGuard('add');
-                        updateSpModeGuard('edit');
+                        scheduleSpModeGuard('add');
+                        scheduleSpModeGuard('edit');
                     }, 0);
                 });
 
@@ -5700,16 +5741,26 @@
             document.getElementById('dariInput').addEventListener('change', doSearch);
             document.getElementById('sampaiInput').addEventListener('change', doSearch);
 
-            // Polling
-            if (IS_FIRST_PAGE && !HAS_FILTER && !document.hidden) { pollNow(); pollTimer = setInterval(pollNow, 30000); }
+            // Polling: mulai setelah render awal supaya halaman SP tidak terasa berat saat pertama dibuka.
+            if (IS_FIRST_PAGE && !HAS_FILTER && !document.hidden) {
+                setTimeout(() => {
+                    if (!document.hidden) pollNow();
+                    pollTimer = setInterval(pollNow, 45000);
+                }, 2500);
+            }
 
-            // Presence
-            if (!document.hidden) { pollPresence(); presenceTimer = setInterval(pollPresence, 30000); }
+            // Presence: ditunda sebentar agar tidak berebut dengan render tabel/modal.
+            if (!document.hidden) {
+                setTimeout(() => {
+                    if (!document.hidden) pollPresence();
+                    presenceTimer = setInterval(pollPresence, 45000);
+                }, 3000);
+            }
             document.addEventListener('visibilitychange', () => {
                 if (document.hidden) { clearInterval(pollTimer); clearInterval(presenceTimer); }
                 else {
-                    if (IS_FIRST_PAGE && !HAS_FILTER) { pollNow(); pollTimer = setInterval(pollNow, 30000); }
-                    pollPresence(); presenceTimer = setInterval(pollPresence, 30000);
+                    if (IS_FIRST_PAGE && !HAS_FILTER) { pollNow(); pollTimer = setInterval(pollNow, 45000); }
+                    pollPresence(); presenceTimer = setInterval(pollPresence, 45000);
                 }
             });
             window.addEventListener('beforeunload', () => {

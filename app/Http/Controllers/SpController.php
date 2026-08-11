@@ -60,7 +60,6 @@ class SpController extends Controller
         $sampai = $request->get('sampai', '');
         $oracleMode = $this->isOracleMode($request);
 
-        $vendors = Cache::remember('vendors:active', 3600, fn() => Vendor::active()->select(['id', 'nama_vendor'])->orderBy('nama_vendor')->get());
         $pics = Cache::remember('pics:umum', 3600, fn() => User::where('department', 'umum')->orderBy('name')->pluck('name'));
         $satuans = Cache::remember('satuans:all', 3600, fn() => Satuan::orderBy('nama_satuan')->pluck('nama_satuan')->toArray());
         $lastNomor = Cache::remember('sp:last_nomor:' . ($oracleMode ? 'oracle' : 'auto'), 300, fn() => $this->spModeQuery($oracleMode)->orderBy('sequence_number', 'desc')->value('nomor_sp'));
@@ -90,7 +89,7 @@ class SpController extends Controller
 
         $spVendorAuditMap = $this->buildSpVendorAuditMap($sps->getCollection());
 
-        return view('sp.index', compact('vendors', 'pics', 'satuans', 'sps', 'lastNomor', 'search', 'pic', 'dari', 'sampai', 'stats', 'bidangIpItus', 'penandatanganScis', 'jabatanScis', 'oracleMode', 'spVendorAuditMap'));
+        return view('sp.index', compact('pics', 'satuans', 'sps', 'lastNomor', 'search', 'pic', 'dari', 'sampai', 'stats', 'bidangIpItus', 'penandatanganScis', 'jabatanScis', 'oracleMode', 'spVendorAuditMap'));
     }
 
     // =========================================================
