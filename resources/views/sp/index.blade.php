@@ -4047,9 +4047,11 @@
             const isEdit = prefix === 'edit';
             const descId = isEdit ? 'editDeskripsiSp' : 'addDeskripsi';
             const rowsId = isEdit ? 'editRows' : 'addRows';
+            const vendorSelect = document.getElementById(isEdit ? 'editVendorSp' : 'vendorSelectSp');
             const texts = [
                 document.getElementById(descId)?.value || '',
-                document.getElementById(isEdit ? 'editVendorSp' : 'vendorSelectSp')?.value || ''
+                vendorSelect?.value || '',
+                vendorSelect?.selectedOptions ? Array.from(vendorSelect.selectedOptions).map(option => option.textContent || '').join(' ') : ''
             ];
 
             document.getElementById(rowsId)?.querySelectorAll('.rt-editor').forEach(editor => {
@@ -5231,7 +5233,7 @@
                                                     <div class="rt-editor" contenteditable="true" id="${edId}"
                                                          data-ph="Ketik nama barang / jasa..."
                                                          onfocus="rtSaveSel('${edId}')"
-                                                         oninput="updateOracleReadinessChecklist('${mode}')"></div>
+                                                         oninput="updateOracleReadinessChecklist('${mode}'); updateSpModeGuard('${mode}')"></div>
                                                     <input type="hidden" name="items[${idx}][nama_barang]" id="hid-${edId}">
                                                 </div>
 
@@ -5353,11 +5355,17 @@
             $('#editNilaiSp').on('input paste', () => setTimeout(() => { syncSingleItemPriceFromNilaiSp('edit'); updateJampelPreview('edit'); updateSpModeGuard('edit'); }, 0));
             $('#addFormSp').on('input change', 'input, select, textarea', function () {
                 if (this.form) this.form.dataset.itemTotalConfirmed = '0';
-                setTimeout(() => updateOracleReadinessChecklist('add'), 0);
+                setTimeout(() => {
+                    updateOracleReadinessChecklist('add');
+                    updateSpModeGuard('add');
+                }, 0);
             });
             $('#editFormSp').on('input change', 'input, select, textarea', function () {
                 if (this.form) this.form.dataset.itemTotalConfirmed = '0';
-                setTimeout(() => updateOracleReadinessChecklist('edit'), 0);
+                setTimeout(() => {
+                    updateOracleReadinessChecklist('edit');
+                    updateSpModeGuard('edit');
+                }, 0);
             });
             $(document).on('focus', 'select[name$="[satuan]"]', function () {
                 this.dataset.previousValue = this.value || '';
@@ -5384,6 +5392,8 @@
                     setTimeout(() => {
                         updateOracleReadinessChecklist('add');
                         updateOracleReadinessChecklist('edit');
+                        updateSpModeGuard('add');
+                        updateSpModeGuard('edit');
                     }, 0);
                 });
 
