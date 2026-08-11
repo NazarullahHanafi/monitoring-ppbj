@@ -205,6 +205,15 @@ class ChatHistoryEditingSharingTest extends TestCase
             ->assertJsonPath('error', 'Read receipt hanya tersedia untuk pengirim pesan');
     }
 
+    public function test_invalid_read_receipt_id_does_not_hit_controller_type_error(): void
+    {
+        $sender = User::factory()->create();
+
+        $this->actingAs($sender)
+            ->getJson('/chat/NaN/reads')
+            ->assertNotFound();
+    }
+
     public function test_authorized_departments_can_share_pr_spph_and_sp_snapshots(): void
     {
         $operasional = User::factory()->create(['department' => 'operasional']);

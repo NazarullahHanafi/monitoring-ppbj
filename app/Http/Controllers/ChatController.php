@@ -797,8 +797,16 @@ class ChatController extends Controller
     /**
      * Daftar pengguna yang membaca pesan tertentu, selain pengirim.
      */
-    public function getReads(int $id)
+    public function getReads($id)
     {
+        $id = filter_var($id, FILTER_VALIDATE_INT, [
+            'options' => ['min_range' => 1],
+        ]);
+
+        if (! $id) {
+            return response()->json(['error' => 'ID pesan tidak valid'], 422);
+        }
+
         $message = DB::table('chat_messages')->find($id);
 
         if (! $message) {

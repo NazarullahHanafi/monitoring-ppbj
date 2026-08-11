@@ -122,7 +122,9 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
     });
 
     Route::post('/chat/read', [ChatController::class, 'markRead'])->name('chat.read');
-    Route::get('/chat/{id}/reads', [ChatController::class, 'getReads'])->name('chat.reads');
+    Route::get('/chat/{id}/reads', [ChatController::class, 'getReads'])
+        ->whereNumber('id')
+        ->name('chat.reads');
     Route::get('/chat/users', [ChatController::class, 'getUsers'])->name('chat.users');
 
     Route::middleware('owner')->group(function () {

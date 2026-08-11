@@ -4201,7 +4201,7 @@
                 messagesEl.addEventListener('click', function (e) {
                     var older = e.target.closest('.cp-load-older'); if (older) { e.stopPropagation(); loadOlderMessages(); return }
                     var db = e.target.closest('.msg-del'); if (db) { e.stopPropagation(); doDelete(parseInt(db.getAttribute('data-del-id'))); return }
-                    var ck = e.target.closest('.msg-checks'); if (ck) { e.stopPropagation(); toggleReadPopup(ck, parseInt(ck.getAttribute('data-check-id'))); return }
+                    var ck = e.target.closest('.msg-checks'); if (ck) { e.stopPropagation(); var readId = parseInt(ck.getAttribute('data-check-id'), 10); if (Number.isFinite(readId) && readId > 0) toggleReadPopup(ck, readId); return }
                     var reaction = e.target.closest('.msg-reaction'); if (reaction) { e.stopPropagation(); doReact(parseInt(reaction.getAttribute('data-reaction-id')), reaction.getAttribute('data-reaction-emoji')); return }
                     var addReaction = e.target.closest('.msg-react-add'); if (addReaction) { e.stopPropagation(); var aw = addReaction.closest('.msg-wrap'), ar = addReaction.getBoundingClientRect(); showCtx(ar.left, ar.bottom + 6, messageDataFromWrap(aw)); return }
                     var bu = e.target.closest('.msg-bubble'); if (bu) { var wr = bu.closest('.msg-wrap'); if (wr && !wr.classList.contains('mine')) { doStartReply(parseInt(bu.getAttribute('data-msg-id')), bu.getAttribute('data-preview') || '', bu.getAttribute('data-name') || '') } }
@@ -4275,6 +4275,11 @@
             }
 
             function toggleReadPopup(checkEl, msgId) {
+                msgId = parseInt(msgId, 10);
+                if (!Number.isFinite(msgId) || msgId <= 0) {
+                    if (checkEl) checkEl.style.opacity = '';
+                    return;
+                }
                 if (activeReadPopup) {
                     var sameAnchor = activeReadAnchor === checkEl;
                     closeReadPopup();
