@@ -2384,7 +2384,7 @@
                                     </button>
                                     @if(!empty($r->nomor_pr))
                                         <a href="{{ route('tracking.index', ['q' => $r->nomor_pr]) }}" target="_blank" rel="noopener"
-                                            class="inline-flex items-center gap-1 px-2 py-1 rounded bg-blue-50 text-blue-700 ring-1 ring-blue-100 hover:bg-blue-100 dark:bg-blue-500/15 dark:text-blue-200 dark:ring-blue-400/30 dark:hover:bg-blue-500/25 text-xs font-bold transition-all active:scale-95"
+                                            class="inline-flex items-center gap-1 px-2 py-1 rounded bg-blue-50 text-blue-700 ring-1 ring-blue-100 hover:bg-blue-100 dark:bg-blue-500 dark:text-blue-200 dark:ring-blue-400/30 dark:hover:bg-blue-500/25 text-xs font-bold transition-all active:scale-95"
                                             title="Buka tracking untuk {{ $r->nomor_pr }}">
                                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
