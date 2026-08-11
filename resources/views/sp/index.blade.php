@@ -4043,6 +4043,25 @@
             return itemsTotal;
         }
 
+        function isCalibrationSpDraft(prefix) {
+            const isEdit = prefix === 'edit';
+            const descId = isEdit ? 'editDeskripsiSp' : 'addDeskripsi';
+            const rowsId = isEdit ? 'editRows' : 'addRows';
+            const texts = [
+                document.getElementById(descId)?.value || '',
+                document.getElementById(isEdit ? 'editVendorSp' : 'vendorSelectSp')?.value || ''
+            ];
+
+            document.getElementById(rowsId)?.querySelectorAll('.rt-editor').forEach(editor => {
+                texts.push(editor.textContent || '');
+            });
+
+            return texts
+                .join(' ')
+                .toLowerCase()
+                .match(/\b(kalibrasi|calibration|calibrate)\b/) !== null;
+        }
+
         function updateSpModeGuard(prefix) {
             const box = document.getElementById(prefix === 'edit' ? 'editModeGuardSp' : 'addModeGuardSp');
             if (!box) return true;
@@ -4260,12 +4279,23 @@
                 return false;
             }
 
+            if (!ORACLE_MODE_SP && value > 50000000 && isCalibrationSpDraft(prefix)) {
+                setSpModeGuardBox(
+                    box,
+                    'success',
+                    'Khusus kalibrasi boleh memakai SP biasa',
+                    'Nilai di atas Rp50.000.000 terdeteksi sebagai pengadaan kalibrasi, sehingga boleh tetap memakai penomoran SP otomatis sesuai arahan user.'
+                );
+                updateOracleReadinessChecklist(prefix);
+                return true;
+            }
+
             if (!ORACLE_MODE_SP && value > 50000000) {
                 setSpModeGuardBox(
                     box,
                     'warning',
                     'Nilai masuk kategori Oracle ERP',
-                    'SP di atas Rp50.000.000 sebaiknya memakai nomor dari Oracle ERP. Klik tombol di bawah untuk pindah mode tanpa kehilangan draft yang sudah diisi.',
+                    'SP di atas Rp50.000.000 sebaiknya memakai nomor dari Oracle ERP. Khusus pengadaan kalibrasi boleh tetap memakai SP biasa. Klik tombol di bawah untuk pindah mode tanpa kehilangan draft yang sudah diisi.',
                     'Pindah ke Mode Oracle',
                     'oracle',
                     prefix
@@ -5556,7 +5586,7 @@
                     e.preventDefault();
                     Swal.fire({
                         title: 'Mode penomoran tidak sesuai',
-                        text: ORACLE_MODE_SP ? 'Nilai SP harus di atas Rp50.000.000 karena Anda berada di mode Oracle ERP.' : 'Nilai SP di atas Rp50.000.000 harus dibuat melalui mode Oracle ERP.',
+                        text: ORACLE_MODE_SP ? 'Nilai SP harus di atas Rp50.000.000 karena Anda berada di mode Oracle ERP.' : 'Nilai SP di atas Rp50.000.000 harus dibuat melalui mode Oracle ERP. Khusus kalibrasi boleh tetap memakai SP biasa.',
                         icon: 'warning',
                         background: document.documentElement.classList.contains('dark') ? '#1f2937' : '#fff',
                         color: document.documentElement.classList.contains('dark') ? '#f3f4f6' : '#111827'
@@ -5611,7 +5641,7 @@
                     e.preventDefault();
                     Swal.fire({
                         title: 'Mode penomoran tidak sesuai',
-                        text: ORACLE_MODE_SP ? 'Nilai SP harus di atas Rp50.000.000 karena Anda berada di mode Oracle ERP.' : 'Nilai SP di atas Rp50.000.000 harus dibuat melalui mode Oracle ERP.',
+                        text: ORACLE_MODE_SP ? 'Nilai SP harus di atas Rp50.000.000 karena Anda berada di mode Oracle ERP.' : 'Nilai SP di atas Rp50.000.000 harus dibuat melalui mode Oracle ERP. Khusus kalibrasi boleh tetap memakai SP biasa.',
                         icon: 'warning',
                         background: document.documentElement.classList.contains('dark') ? '#1f2937' : '#fff',
                         color: document.documentElement.classList.contains('dark') ? '#f3f4f6' : '#111827'

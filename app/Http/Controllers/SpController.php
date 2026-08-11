@@ -5382,6 +5382,7 @@ class SpController extends Controller
         $inputValue = (float) ($request->input('nilai_sp') ?: 0);
         $itemsTotal = $this->calculateItemsTotal($request->input('items', []));
         $finalValue = $inputValue > 0 ? $inputValue : $itemsTotal;
+        $isCalibrationProcurement = $this->isCalibrationProcurement($request);
 
         if ($oracleMode && $finalValue <= 50000000) {
             throw ValidationException::withMessages([
@@ -5389,11 +5390,32 @@ class SpController extends Controller
             ]);
         }
 
-        if (!$oracleMode && $finalValue > 50000000) {
+        if (!$oracleMode && $finalValue > 50000000 && !$isCalibrationProcurement) {
             throw ValidationException::withMessages([
-                'nilai_sp' => 'Nilai SP di atas Rp50.000.000 harus dibuat melalui mode Oracle ERP agar tidak tercampur dengan penomoran SP otomatis.',
+                'nilai_sp' => 'Nilai SP di atas Rp50.000.000 harus dibuat melalui mode Oracle ERP agar tidak tercampur dengan penomoran SP otomatis. Khusus pengadaan kalibrasi boleh tetap memakai mode SP biasa.',
             ]);
         }
+    }
+
+    private function isCalibrationProcurement(Request $request): bool
+    {
+        $texts = [
+            $request->input('deskripsi_pengadaan'),
+            $request->input('nama_vendor'),
+        ];
+
+        foreach ((array) $request->input('items', []) as $item) {
+            $texts[] = data_get($item, 'nama_barang');
+        }
+
+        $haystack = mb_strtolower(implode(' ', array_filter(array_map(
+            fn($text) => html_entity_decode(strip_tags((string) $text), ENT_QUOTES | ENT_HTML5, 'UTF-8'),
+            $texts
+        ))), 'UTF-8');
+
+        return str_contains($haystack, 'kalibrasi')
+            || str_contains($haystack, 'calibration')
+            || str_contains($haystack, 'calibrate');
     }
 
     private function nextAvailableAutoSequence(?int $excludeId = null, ?int $year = null): int

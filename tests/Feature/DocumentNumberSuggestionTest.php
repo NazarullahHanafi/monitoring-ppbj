@@ -367,4 +367,31 @@ class DocumentNumberSuggestionTest extends TestCase
             'nomor_sp' => '022/PKU-VII/SP/2026',
         ]);
     }
+
+    public function test_auto_sp_mode_allows_calibration_procurement_above_50_million(): void
+    {
+        $user = User::factory()->create([
+            'department' => 'umum',
+            'role' => 'superadmin',
+            'name' => 'Nazar',
+        ]);
+
+        $this->actingAs($user)
+            ->from(route('sp.index'))
+            ->post(route('sp.store'), [
+                'nomor_sp' => '023/PKU-VII/SP/2026',
+                'tanggal_sp' => '2026-07-10',
+                'nilai_sp' => '93000000',
+                'nama_vendor' => 'PT Wiralab Analitika Solusindo',
+                'deskripsi_pengadaan' => 'Jasa Kalibrasi Alat GCMS dan GCFID Thermo Scientific',
+                'pic' => 'Nazar',
+            ])
+            ->assertRedirect(route('sp.index'));
+
+        $this->assertDatabaseHas('sps', [
+            'nomor_sp' => '023/PKU-VII/SP/2026',
+            'nama_vendor' => 'PT Wiralab Analitika Solusindo',
+            'numbering_mode' => 'auto',
+        ]);
+    }
 }
