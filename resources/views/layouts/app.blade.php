@@ -10,6 +10,51 @@
     @vite(['resources/css/app.css', 'resources/js/app.js'])
     <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script>
+        (function () {
+            function installSweetAlertDurationGuard() {
+                if (!window.Swal || window.Swal.__simonprDurationGuard) return;
+
+                var originalFire = window.Swal.fire.bind(window.Swal);
+
+                window.Swal.fire = function () {
+                    var args = Array.prototype.slice.call(arguments);
+
+                    if (args.length === 1 && args[0] && typeof args[0] === 'object') {
+                        var options = Object.assign({}, args[0]);
+                        var icon = String(options.icon || '').toLowerCase();
+                        var currentTimer = Number(options.timer || 0);
+
+                        if (options.toast === true) {
+                            var toastMinimum = (icon === 'error' || icon === 'warning') ? 6500 : 4500;
+                            if (!currentTimer || currentTimer < toastMinimum) {
+                                options.timer = toastMinimum;
+                            }
+                            if (options.timerProgressBar !== false) {
+                                options.timerProgressBar = true;
+                            }
+                        } else if (icon && options.showConfirmButton === false && currentTimer > 0) {
+                            var modalMinimum = (icon === 'error' || icon === 'warning') ? 6500 : 4500;
+                            if (currentTimer < modalMinimum) {
+                                options.timer = modalMinimum;
+                            }
+                            if (options.timerProgressBar !== false) {
+                                options.timerProgressBar = true;
+                            }
+                        }
+
+                        args[0] = options;
+                    }
+
+                    return originalFire.apply(window.Swal, args);
+                };
+
+                window.Swal.__simonprDurationGuard = true;
+            }
+
+            installSweetAlertDurationGuard();
+        })();
+    </script>
     <link rel="icon" href="{{ asset('images/logo4.png') }}" type="image/x-icon">
     <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
     <script>
