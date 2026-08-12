@@ -49,6 +49,49 @@ class SpController extends Controller
             ?: Vendor::whereRaw('LOWER(TRIM(nama_vendor)) = ?', [strtolower($name)])->first();
     }
 
+    private function ppbjRegistrationNote(?Ppbj $ppbj): string
+    {
+        if (! $ppbj || blank($ppbj->general_registration_number ?? null)) {
+            return '';
+        }
+
+        $registeredAt = '';
+
+        if (! empty($ppbj->general_registered_at)) {
+            try {
+                $registeredAt = Carbon::parse($ppbj->general_registered_at)
+                    ->locale('id')
+                    ->translatedFormat('d F Y');
+            } catch (\Throwable) {
+                $registeredAt = '';
+            }
+        }
+
+        $note = ' Registrasi Umum Nomor ' . $ppbj->general_registration_number;
+
+        if ($registeredAt !== '') {
+            $note .= ' tanggal ' . $registeredAt;
+        }
+
+        return $note . '.';
+    }
+
+    private function ppbjRegistrationNoteByPr(?string $nomorPr): string
+    {
+        $nomorPr = trim((string) $nomorPr);
+
+        if ($nomorPr === '') {
+            return '';
+        }
+
+        $ppbj = Ppbj::query()
+            ->select(['ppbj_no', 'general_registration_number', 'general_registered_at'])
+            ->where('ppbj_no', $nomorPr)
+            ->first();
+
+        return $this->ppbjRegistrationNote($ppbj);
+    }
+
     // =========================================================
     // INDEX
     // =========================================================
@@ -1652,6 +1695,8 @@ class SpController extends Controller
             if ($tglPpbjCatatan) {
                 $catPpbj .= ' tanggal ' . $tglPpbjCatatan;
             }
+
+            $catPpbj .= $this->ppbjRegistrationNote($ppbjCatatan);
         }
 
         $pSumL = ['alignment' => 'left', 'spaceAfter' => 0, 'spaceBefore' => 0];
@@ -2125,6 +2170,7 @@ class SpController extends Controller
         $catatanPr = $sp->nomor_pr
             ? 'Memenuhi Permintaan Bidang (....................) sesuai PR No. ' . $sp->nomor_pr . ' tanggal ' . $tglPr . '.'
             : 'Memenuhi Permintaan Bidang .................... sesuai PR No. (....................) tanggal (....................).';
+        $catatanPr .= $this->ppbjRegistrationNoteByPr($sp->nomor_pr);
 
         // Summary: kolom Catatan dibuat vertical merge 3 baris supaya tidak muncul garis
         // tepat di bawah tanggal catatan saat baris kanan berisi Harga / PPN / Total.
@@ -2845,6 +2891,7 @@ class SpController extends Controller
         $catatanPr = $sp->nomor_pr
             ? 'Memenuhi Permintaan Bidang Dukungan Bisnis sesuai PR No. ' . $sp->nomor_pr . ' tanggal ' . $tglPr . '.'
             : 'Memenuhi Permintaan Bidang Dukungan Bisnis sesuai PR No. (....................) tanggal (....................).';
+        $catatanPr .= $this->ppbjRegistrationNoteByPr($sp->nomor_pr);
 
         // Summary: kolom Catatan dibuat vertical merge 3 baris supaya tidak muncul garis
         // tepat di bawah tanggal catatan saat baris kanan berisi Harga / PPN / Total.
@@ -3589,6 +3636,7 @@ class SpController extends Controller
         $catatanPr = $sp->nomor_pr
             ? 'Memenuhi PR Bidang Dukungan Bisnis PT Sucofindo Cabang Pekanbaru sesuai PR No. ' . $sp->nomor_pr . ' tanggal ' . $tglPrText
             : 'Memenuhi PR Bidang Dukungan Bisnis PT Sucofindo Cabang Pekanbaru sesuai PR No. (....................) tanggal (....................)';
+        $catatanPr .= $this->ppbjRegistrationNoteByPr($sp->nomor_pr);
 
         $tbl->addRow();
         $catCell = $tbl->addCell(6325, [

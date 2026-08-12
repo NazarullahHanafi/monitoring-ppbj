@@ -45,6 +45,9 @@ class PpbjController extends Controller
                 'note',
                 'portofolio',
                 'buyer',
+                'general_registration_number',
+                'general_registered_at',
+                'general_registered_by_user_id',
                 'penyedia_eksternal',
                 'total_sebelum_ppn',
                 'metode_pengadaan',
@@ -97,6 +100,7 @@ class PpbjController extends Controller
                 DB::raw('(select name from users where users.id = ppbj.cancel_verified_by_user_id limit 1) as cancel_verified_by_name'),
                 DB::raw('(select name from users where users.id = ppbj.goods_arrived_by_user_id limit 1) as goods_arrived_by_name'),
                 DB::raw('(select name from users where users.id = ppbj.goods_confirmed_by_user_id limit 1) as goods_confirmed_by_name'),
+                DB::raw('(select name from users where users.id = ppbj.general_registered_by_user_id limit 1) as general_registered_by_name'),
             ]);
 
         // ── Search + deteksi field yang cocok ──────────────────────────────────

@@ -120,6 +120,10 @@ class PrReceiptApprovalController extends Controller
                             $existingUpdates['tgl_ppbj'] = $tanggalPpbj;
                         }
 
+                        if (blank($existingPpbj->general_registration_number ?? null)) {
+                            $existingUpdates = array_merge($existingUpdates, $this->generalRegistrationPayload());
+                        }
+
                         if ($existingUpdates) {
                             $existingUpdates['updated_at'] = now();
 
@@ -138,7 +142,10 @@ class PrReceiptApprovalController extends Controller
                         ];
                     }
 
-                    DB::table('ppbj')->insert($this->ppbjPayloadFromTorpr($torpr, $buyerName));
+                    DB::table('ppbj')->insert(array_merge(
+                        $this->ppbjPayloadFromTorpr($torpr, $buyerName),
+                        $this->generalRegistrationPayload()
+                    ));
 
                 } catch (QueryException $e) {
                     // fallback kalau race-condition unique
@@ -231,6 +238,43 @@ class PrReceiptApprovalController extends Controller
         return collect($payload)
             ->filter(fn($value, $column) => Schema::hasColumn('ppbj', $column))
             ->all();
+    }
+
+    private function generalRegistrationPayload(): array
+    {
+        if (! Schema::hasColumn('ppbj', 'general_registration_number')) {
+            return [];
+        }
+
+        $now = now();
+        $payload = [
+            'general_registration_number' => $this->nextGeneralRegistrationNumber((int) $now->year),
+            'general_registered_at' => $now,
+            'general_registered_by_user_id' => auth()->id(),
+        ];
+
+        return collect($payload)
+            ->filter(fn($value, $column) => Schema::hasColumn('ppbj', $column))
+            ->all();
+    }
+
+    private function nextGeneralRegistrationNumber(int $year): string
+    {
+        $prefix = 'REG-UMUM/' . $year . '/';
+
+        $lastNumber = DB::table('ppbj')
+            ->where('general_registration_number', 'like', $prefix . '%')
+            ->lockForUpdate()
+            ->orderByRaw("CAST(SUBSTRING_INDEX(general_registration_number, '/', -1) AS UNSIGNED) DESC")
+            ->value('general_registration_number');
+
+        $next = 1;
+
+        if ($lastNumber && preg_match('/(\d+)$/', (string) $lastNumber, $matches)) {
+            $next = ((int) $matches[1]) + 1;
+        }
+
+        return $prefix . str_pad((string) $next, 3, '0', STR_PAD_LEFT);
     }
 
     private function tanggalPpbjFromTorpr($torpr): ?string

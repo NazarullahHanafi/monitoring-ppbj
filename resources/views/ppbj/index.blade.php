@@ -481,6 +481,26 @@
                             <td class="px-4 py-3 font-semibold text-gray-900 dark:text-white">
                                 <span class="ppbj-no">{!! hlText($row->ppbj_no, $hlKw) !!}</span>
 
+                                @if(!empty($row->general_registration_number))
+                                    @php
+                                        $generalRegisteredAtLabel = '';
+                                        try {
+                                            $generalRegisteredAtLabel = $row->general_registered_at
+                                                ? \Carbon\Carbon::parse($row->general_registered_at)->locale('id')->translatedFormat('d M Y H:i')
+                                                : '';
+                                        } catch (\Throwable) {
+                                            $generalRegisteredAtLabel = (string) $row->general_registered_at;
+                                        }
+                                    @endphp
+                                    <div class="mt-1">
+                                        <span class="inline-flex max-w-full items-center gap-1 rounded-lg bg-indigo-50 px-2 py-1 text-[10px] font-extrabold text-indigo-700 ring-1 ring-indigo-200 dark:bg-indigo-950/50 dark:text-indigo-100 dark:ring-indigo-700/70"
+                                            title="Registrasi Umum oleh {{ $row->general_registered_by_name ?: 'Umum' }}{{ $generalRegisteredAtLabel ? ' pada ' . $generalRegisteredAtLabel : '' }}">
+                                            <span>🧾</span>
+                                            <span class="truncate">{{ $row->general_registration_number }}</span>
+                                        </span>
+                                    </div>
+                                @endif
+
                                 @if($isCancelled)
                                     <span
                                         class="ml-2 inline-flex items-center rounded-full bg-gray-200 dark:bg-gray-600 px-2 py-0.5 text-[10px] font-bold text-gray-700 dark:text-gray-300 cancelled-pill">
@@ -1600,6 +1620,16 @@
                         ? $item->slaExplanation()
                         : $slaExplanation;
 
+                    if (! empty($data['general_registered_at'])) {
+                        try {
+                            $data['general_registered_at'] = \Carbon\Carbon::parse($data['general_registered_at'])
+                                ->locale('id')
+                                ->translatedFormat('d F Y H:i');
+                        } catch (\Throwable) {
+                            // Biarkan apa adanya jika format tanggal dari database tidak bisa dibaca.
+                        }
+                    }
+
                     return $data;
                 });
             @endphp
@@ -2100,6 +2130,7 @@
                     'sla_explanation',
                     'goods_arrived_by_user_id',
                     'goods_confirmed_by_user_id',
+                    'general_registered_by_user_id',
                 ]);
                 const detailLabelMap = {
                     ppbj_no: 'Nomor PPBJ / PR',
@@ -2108,6 +2139,9 @@
                     uraian: 'Uraian',
                     portofolio: 'Portofolio',
                     buyer: 'Buyer',
+                    general_registration_number: 'Nomor Registrasi Umum',
+                    general_registered_at: 'Tanggal Registrasi Umum',
+                    general_registered_by_name: 'Diregistrasi Oleh',
                     total_sebelum_ppn: 'Nilai PR',
                     target_sla_hari: 'Target SLA',
                     sisa_target_sla: 'Sisa SLA',

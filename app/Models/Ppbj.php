@@ -29,6 +29,9 @@ class Ppbj extends Model
         'portofolio',
         'buyer',
         'created_by_user_id',
+        'general_registration_number',
+        'general_registered_at',
+        'general_registered_by_user_id',
         'total_sebelum_ppn',
 
         'target_sla_hari',
@@ -93,6 +96,7 @@ class Ppbj extends Model
     ];
 
     protected $casts = [
+        'general_registered_at' => 'datetime',
         'goods_arrived_at' => 'datetime',
         'goods_confirmed_at' => 'datetime',
     ];
@@ -100,6 +104,11 @@ class Ppbj extends Model
     public function createdBy()
     {
         return $this->belongsTo(User::class, 'created_by_user_id');
+    }
+
+    public function generalRegisteredBy()
+    {
+        return $this->belongsTo(User::class, 'general_registered_by_user_id');
     }
 
     public function cancelledBy()
