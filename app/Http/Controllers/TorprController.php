@@ -84,7 +84,7 @@ class TorprController extends Controller
             ->leftJoin('users as gu', 'p.general_registered_by_user_id', '=', 'gu.id');
 
         // ✅ SEARCH
-        if ($search = trim($request->get('q'))) {
+        if ($search = trim((string) $request->get('q', ''))) {
             $query->where(function ($q) use ($search) {
                 // UBAH 'like', $search . '%' MENJADI 'like', '%' . $search . '%'
                 // Agar bisa mencari angka di tengah atau belakang (contoh: mencari '001' di 'PR/2026/001')
