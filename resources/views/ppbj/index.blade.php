@@ -1103,7 +1103,7 @@
                 title: title || 'Berhasil',
                 text: text || '',
                 showConfirmButton: false,
-                timer: 2200,
+                timer: 3000,
                 timerProgressBar: true
             });
         }
@@ -1112,22 +1112,15 @@
             if (!window.Swal) return;
             let iconType = 'error';
             if (title === 'Sukses') iconType = 'success';
-            const messageText = `${title || ''} ${text || ''}`.toLowerCase();
-            const isImportant = messageText.includes('too many') ||
-                messageText.includes('terlalu banyak') ||
-                messageText.includes('attempt') ||
-                messageText.includes('dikunci') ||
-                messageText.includes('coba lagi');
-
             Swal.fire({
                 toast: true,
                 position: 'top-end',
                 icon: iconType,
                 title: title || 'Gagal',
                 text: text || '',
-                showConfirmButton: isImportant,
+                showConfirmButton: false,
                 confirmButtonText: 'Mengerti',
-                timer: isImportant ? 12000 : 6500,
+                timer: iconType === 'success' ? 3000 : 5000,
                 timerProgressBar: true
             });
         }
