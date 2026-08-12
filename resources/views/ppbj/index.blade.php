@@ -1112,6 +1112,12 @@
             if (!window.Swal) return;
             let iconType = 'error';
             if (title === 'Sukses') iconType = 'success';
+            const messageText = `${title || ''} ${text || ''}`.toLowerCase();
+            const isImportant = messageText.includes('too many') ||
+                messageText.includes('terlalu banyak') ||
+                messageText.includes('attempt') ||
+                messageText.includes('dikunci') ||
+                messageText.includes('coba lagi');
 
             Swal.fire({
                 toast: true,
@@ -1119,8 +1125,9 @@
                 icon: iconType,
                 title: title || 'Gagal',
                 text: text || '',
-                showConfirmButton: false,
-                timer: 2600,
+                showConfirmButton: isImportant,
+                confirmButtonText: 'Mengerti',
+                timer: isImportant ? 12000 : 6500,
                 timerProgressBar: true
             });
         }
