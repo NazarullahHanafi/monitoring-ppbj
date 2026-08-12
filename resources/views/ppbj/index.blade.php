@@ -1228,29 +1228,33 @@
                     <form id="realTrackingManualForm" class="mt-4 rounded-3xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-950/40">
                         <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
                             <label class="block">
-                                <span class="text-xs font-black uppercase tracking-wide text-slate-500 dark:text-slate-300">Judul custom</span>
+                                <span class="text-xs font-black uppercase tracking-wide text-slate-600 dark:text-slate-200">Judul tracking</span>
                                 <input name="title" maxlength="180" placeholder="Contoh: Submit dokumen ke vendor"
                                     class="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-900 outline-none focus:border-blue-500 dark:border-slate-700 dark:bg-slate-900 dark:text-white">
                             </label>
                             <label class="block">
-                                <span class="text-xs font-black uppercase tracking-wide text-slate-500 dark:text-slate-300">Tanggal kejadian</span>
+                                <span class="text-xs font-black uppercase tracking-wide text-slate-600 dark:text-slate-200">Tanggal kejadian</span>
                                 <input name="event_date" type="date"
                                     class="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-900 outline-none focus:border-blue-500 dark:border-slate-700 dark:bg-slate-900 dark:text-white">
                             </label>
                             <label class="block">
-                                <span class="text-xs font-black uppercase tracking-wide text-slate-500 dark:text-slate-300">Reminder follow up</span>
+                                <span class="text-xs font-black uppercase tracking-wide text-slate-600 dark:text-slate-200">Reminder follow up</span>
                                 <input name="reminder_date" type="date"
                                     class="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-900 outline-none focus:border-blue-500 dark:border-slate-700 dark:bg-slate-900 dark:text-white">
                             </label>
                             <label class="block md:col-span-2">
-                                <span class="text-xs font-black uppercase tracking-wide text-slate-500 dark:text-slate-300">Catatan</span>
+                                <span class="text-xs font-black uppercase tracking-wide text-slate-600 dark:text-slate-200">Catatan</span>
                                 <textarea name="description" rows="3" maxlength="1000" placeholder="Tambahkan catatan proses singkat..."
                                     class="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-900 outline-none focus:border-blue-500 dark:border-slate-700 dark:bg-slate-900 dark:text-white"></textarea>
                             </label>
                         </div>
-                        <button type="submit" class="mt-3 rounded-2xl bg-blue-600 px-5 py-3 text-sm font-black text-white shadow-lg shadow-blue-500/20 hover:bg-blue-700">
-                            Simpan Tracking Custom
+                        <button id="realTrackingSubmitBtn" type="submit" disabled
+                            class="mt-3 rounded-2xl bg-blue-600 px-5 py-3 text-sm font-black text-white shadow-lg shadow-blue-500/20 transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500 disabled:shadow-none dark:disabled:bg-slate-700 dark:disabled:text-slate-400">
+                            Simpan Tracking
                         </button>
+                        <div id="realTrackingEmptyHint" class="mt-2 text-xs font-bold text-slate-500 dark:text-slate-400">
+                            Isi minimal salah satu kolom custom agar tombol simpan aktif.
+                        </div>
                     </form>
 
                     <div class="mt-5 border-l-2 border-cyan-200 pl-4 dark:border-cyan-700">
@@ -1276,10 +1280,44 @@
                     },
                     didOpen: () => {
                         const form = document.getElementById('realTrackingManualForm');
+                        const submitBtn = document.getElementById('realTrackingSubmitBtn');
+                        const emptyHint = document.getElementById('realTrackingEmptyHint');
+                        const originalSubmitText = submitBtn?.textContent?.trim() || 'Simpan Tracking';
+                        const hasCustomValue = () => {
+                            if (!form) return false;
+                            const formData = new FormData(form);
+                            return ['title', 'event_date', 'reminder_date', 'description'].some((key) => String(formData.get(key) || '').trim() !== '');
+                        };
+                        const syncSubmitState = () => {
+                            const ready = hasCustomValue();
+                            if (submitBtn) submitBtn.disabled = !ready;
+                            if (emptyHint) {
+                                emptyHint.textContent = ready
+                                    ? 'Siap disimpan. Sistem juga mencegah tracking yang sama tersimpan dua kali.'
+                                    : 'Isi minimal salah satu kolom custom agar tombol simpan aktif.';
+                                emptyHint.className = ready
+                                    ? 'mt-2 text-xs font-bold text-emerald-600 dark:text-emerald-300'
+                                    : 'mt-2 text-xs font-bold text-slate-500 dark:text-slate-400';
+                            }
+                        };
+                        form?.querySelectorAll('input, textarea').forEach((field) => {
+                            field.addEventListener('input', syncSubmitState);
+                            field.addEventListener('change', syncSubmitState);
+                        });
+                        syncSubmitState();
+
                         form?.addEventListener('submit', async (event) => {
                             event.preventDefault();
+                            if (!hasCustomValue()) {
+                                syncSubmitState();
+                                return;
+                            }
                             const formData = new FormData(form);
                             try {
+                                if (submitBtn) {
+                                    submitBtn.disabled = true;
+                                    submitBtn.textContent = 'Menyimpan...';
+                                }
                                 await fetchJson(`/ppbj/${id}/real-tracking`, {
                                     method: 'POST',
                                     body: JSON.stringify(Object.fromEntries(formData.entries()))
@@ -1288,6 +1326,10 @@
                                 window.openRealTracking(id);
                             } catch (error) {
                                 toastErr('Gagal simpan', error.message);
+                                if (submitBtn) {
+                                    submitBtn.textContent = originalSubmitText;
+                                }
+                                syncSubmitState();
                             }
                         });
                     }

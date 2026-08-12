@@ -18,6 +18,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Database\QueryException;
 use Carbon\Carbon;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
@@ -458,13 +459,46 @@ class PpbjController extends Controller
             return response()->json(['message' => 'Tanggal wajib dipilih untuk status ini.'], 422);
         }
 
+        $customTitle = trim((string) ($validated['title'] ?? ''));
+        $customDescription = trim((string) ($validated['description'] ?? ''));
+        $eventDate = $validated['event_date'] ?? now()->toDateString();
+        $reminderDate = $validated['reminder_date'] ?? null;
+
+        if (! $template && $customTitle === '' && $customDescription === '' && empty($validated['event_date']) && empty($validated['reminder_date'])) {
+            return response()->json([
+                'message' => 'Isi minimal judul, tanggal, reminder, atau catatan untuk tracking custom.',
+            ], 422);
+        }
+
+        $title = $customTitle !== '' ? $customTitle : ($template['title'] ?? 'Update proses');
+        $description = $customDescription !== '' ? $customDescription : ($template['description'] ?? null);
+
+        $duplicateQuery = PpbjRealTracking::query()
+            ->where('ppbj_id', $ppbj->id)
+            ->where('title', $title)
+            ->whereDate('event_date', $eventDate);
+
+        $key === null
+            ? $duplicateQuery->whereNull('status_key')
+            : $duplicateQuery->where('status_key', $key);
+
+        $description === null
+            ? $duplicateQuery->whereNull('description')
+            : $duplicateQuery->where('description', $description);
+
+        if ($duplicateQuery->exists()) {
+            return response()->json([
+                'message' => 'Tracking ini sudah tercatat. Gunakan edit jika ingin memperbarui riwayat yang sama.',
+            ], 422);
+        }
+
         $tracking = PpbjRealTracking::create([
             'ppbj_id' => $ppbj->id,
             'status_key' => $key,
-            'title' => trim((string) ($validated['title'] ?? '')) ?: ($template['title'] ?? 'Update proses'),
-            'description' => trim((string) ($validated['description'] ?? '')) ?: ($template['description'] ?? null),
-            'event_date' => $validated['event_date'] ?? now()->toDateString(),
-            'reminder_date' => $validated['reminder_date'] ?? null,
+            'title' => $title,
+            'description' => $description,
+            'event_date' => $eventDate,
+            'reminder_date' => $reminderDate,
             'created_by_user_id' => $request->user()?->id,
             'updated_by_user_id' => $request->user()?->id,
         ]);
@@ -645,18 +679,61 @@ class PpbjController extends Controller
         ]);
 
         try {
-            $data = $request->only(Ppbj::manualFields());
-            $data['created_by_user_id'] = auth()->id();
-            Ppbj::create($data);
+            DB::transaction(function () use ($request) {
+                $data = $request->only(Ppbj::manualFields());
+                $data['created_by_user_id'] = auth()->id();
+                $data = array_merge($data, $this->generalRegistrationPayload($request));
+
+                Ppbj::create($data);
+            });
         } catch (QueryException $e) {
             return response()->json([
-                'message' => 'No PPBJ sudah dipakai oleh data lain. Silakan refresh halaman dan cek data terbaru.',
+                'message' => str_contains($e->getMessage(), 'general_registration_number')
+                    ? 'Nomor registrasi umum bentrok karena ada input bersamaan. Silakan klik simpan ulang.'
+                    : 'No PPBJ sudah dipakai oleh data lain. Silakan refresh halaman dan cek data terbaru.',
             ], 422);
         }
 
         DashboardController::clearCache();
 
         return response()->json(['message' => 'Data berhasil disimpan']);
+    }
+
+    private function generalRegistrationPayload(Request $request): array
+    {
+        if (! Schema::hasColumn('ppbj', 'general_registration_number')) {
+            return [];
+        }
+
+        $now = now();
+        $payload = [
+            'general_registration_number' => $this->nextGeneralRegistrationNumber((int) $now->year),
+            'general_registered_at' => $now,
+            'general_registered_by_user_id' => $request->user()?->id ?? auth()->id(),
+        ];
+
+        return collect($payload)
+            ->filter(fn ($value, $column) => Schema::hasColumn('ppbj', $column))
+            ->all();
+    }
+
+    private function nextGeneralRegistrationNumber(int $year): string
+    {
+        $prefix = 'REG-UMUM/' . $year . '/';
+
+        $lastNumber = DB::table('ppbj')
+            ->where('general_registration_number', 'like', $prefix . '%')
+            ->lockForUpdate()
+            ->orderByRaw("CAST(SUBSTRING_INDEX(general_registration_number, '/', -1) AS UNSIGNED) DESC")
+            ->value('general_registration_number');
+
+        $next = 1;
+
+        if ($lastNumber && preg_match('/(\d+)$/', (string) $lastNumber, $matches)) {
+            $next = ((int) $matches[1]) + 1;
+        }
+
+        return $prefix . str_pad((string) $next, 3, '0', STR_PAD_LEFT);
     }
 
     // =====================
