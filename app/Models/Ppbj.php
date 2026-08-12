@@ -97,6 +97,7 @@ class Ppbj extends Model
 
     protected $casts = [
         'general_registered_at' => 'datetime',
+        'promised_date' => 'date',
         'goods_arrived_at' => 'datetime',
         'goods_confirmed_at' => 'datetime',
     ];
@@ -129,6 +130,11 @@ class Ppbj extends Model
     public function goodsConfirmedBy()
     {
         return $this->belongsTo(User::class, 'goods_confirmed_by_user_id');
+    }
+
+    public function realTrackings()
+    {
+        return $this->hasMany(PpbjRealTracking::class, 'ppbj_id');
     }
 
     public function getIsCancelledAttribute(): bool

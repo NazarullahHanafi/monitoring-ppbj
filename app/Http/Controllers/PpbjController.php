@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Ppbj;
+use App\Models\PpbjRealTracking;
 use App\Models\Torpr;
 use App\Models\PrReceiptApproval;  // ← TAMBAHAN: import model approval
 use Illuminate\Http\Request;
@@ -322,6 +323,196 @@ class PpbjController extends Controller
             'ppbj_no' => $ppbj->ppbj_no,
             'nomor_pr' => $ppbj->ppbj_no,
         ], $archive), 200, [], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    }
+
+    private function realTrackingTemplates(): array
+    {
+        return [
+            'submit_kak' => [
+                'title' => 'Submit KAK',
+                'description' => 'KAK sudah disubmit pada tanggal yang dipilih.',
+                'requires_date' => true,
+                'emoji' => '📅',
+            ],
+            'sp_waiting_signature' => [
+                'title' => 'SP/Kontrak menunggu TTD Kabid/Kacab',
+                'description' => 'Dokumen SP/Kontrak sedang menunggu proses tanda tangan.',
+                'requires_date' => false,
+                'emoji' => '✍️',
+            ],
+            'sp_to_vendor' => [
+                'title' => 'SP/Kontrak sudah ke Vendor',
+                'description' => 'SP/Kontrak sudah dikirim atau diinformasikan kepada vendor.',
+                'requires_date' => false,
+                'emoji' => '📨',
+            ],
+            'bpg_bpb_finance' => [
+                'title' => 'BPG/BPB sudah ke Keuangan',
+                'description' => 'BPG/BPB sudah diteruskan ke Keuangan untuk proses lanjutan.',
+                'requires_date' => false,
+                'emoji' => '💳',
+            ],
+            'invoice_complete' => [
+                'title' => 'Invoice lengkap',
+                'description' => 'Invoice atau dokumen pembayaran sudah lengkap.',
+                'requires_date' => false,
+                'emoji' => '✅',
+            ],
+            'vendor_follow_up' => [
+                'title' => 'Follow up Vendor',
+                'description' => 'Vendor sudah difollow up untuk percepatan proses.',
+                'requires_date' => false,
+                'emoji' => '📞',
+            ],
+        ];
+    }
+
+    private function ensureGeneralDepartment(Request $request): void
+    {
+        abort_unless(
+            strcasecmp((string) ($request->user()?->department ?? ''), 'umum') === 0,
+            403,
+            'Tracking real hanya bisa dikelola Department Umum.'
+        );
+    }
+
+    public function realTracking(Request $request, $id)
+    {
+        $ppbj = Ppbj::select([
+            'id',
+            'ppbj_no',
+            'uraian',
+            'buyer',
+            'portofolio',
+            'penyedia_eksternal',
+            'awarding_sp',
+            'spph_rfq_1',
+            'promised_date',
+            'progres',
+            'status_sla',
+        ])->findOrFail($id);
+
+        $items = PpbjRealTracking::with(['createdBy:id,name,email', 'updatedBy:id,name,email'])
+            ->where('ppbj_id', $ppbj->id)
+            ->orderByDesc(DB::raw('COALESCE(event_date, DATE(created_at))'))
+            ->orderByDesc('id')
+            ->limit(80)
+            ->get()
+            ->map(function (PpbjRealTracking $tracking) {
+                return [
+                    'id' => $tracking->id,
+                    'status_key' => $tracking->status_key,
+                    'title' => $tracking->title,
+                    'description' => $tracking->description,
+                    'event_date' => optional($tracking->event_date)->format('Y-m-d'),
+                    'event_date_label' => optional($tracking->event_date)->translatedFormat('d F Y'),
+                    'reminder_date' => optional($tracking->reminder_date)->format('Y-m-d'),
+                    'reminder_date_label' => optional($tracking->reminder_date)->translatedFormat('d F Y'),
+                    'created_by' => $tracking->createdBy?->name ?: $tracking->createdBy?->email ?: 'Umum',
+                    'updated_by' => $tracking->updatedBy?->name ?: $tracking->updatedBy?->email,
+                    'created_at' => optional($tracking->created_at)->timezone('Asia/Jakarta')->translatedFormat('l, d F Y H:i'),
+                ];
+            });
+
+        return response()->json([
+            'ppbj' => [
+                'id' => $ppbj->id,
+                'ppbj_no' => $ppbj->ppbj_no,
+                'uraian' => $ppbj->uraian,
+                'buyer' => $ppbj->buyer,
+                'portofolio' => $ppbj->portofolio,
+                'vendor' => $ppbj->penyedia_eksternal,
+                'sp' => $ppbj->awarding_sp,
+                'spph' => $ppbj->spph_rfq_1,
+                'promised_date' => $ppbj->promised_date ? Carbon::parse($ppbj->promised_date)->format('Y-m-d') : null,
+                'progress' => $ppbj->progres,
+                'status_sla' => $ppbj->status_sla,
+            ],
+            'templates' => $this->realTrackingTemplates(),
+            'items' => $items,
+        ]);
+    }
+
+    public function storeRealTracking(Request $request, $id)
+    {
+        $this->ensureGeneralDepartment($request);
+
+        $ppbj = Ppbj::findOrFail($id);
+        if (($ppbj->status ?? 'ACTIVE') === 'CANCELLED') {
+            return response()->json(['message' => 'Data CANCELLED tidak bisa ditambah tracking real.'], 422);
+        }
+
+        $validated = $request->validate([
+            'status_key' => ['nullable', 'string', 'max:80'],
+            'title' => ['nullable', 'string', 'max:180'],
+            'description' => ['nullable', 'string', 'max:1000'],
+            'event_date' => ['nullable', 'date'],
+            'reminder_date' => ['nullable', 'date'],
+        ]);
+
+        $templates = $this->realTrackingTemplates();
+        $key = $validated['status_key'] ?? null;
+        $template = $key && isset($templates[$key]) ? $templates[$key] : null;
+
+        if (($template['requires_date'] ?? false) && empty($validated['event_date'])) {
+            return response()->json(['message' => 'Tanggal wajib dipilih untuk status ini.'], 422);
+        }
+
+        $tracking = PpbjRealTracking::create([
+            'ppbj_id' => $ppbj->id,
+            'status_key' => $key,
+            'title' => trim((string) ($validated['title'] ?? '')) ?: ($template['title'] ?? 'Update proses'),
+            'description' => trim((string) ($validated['description'] ?? '')) ?: ($template['description'] ?? null),
+            'event_date' => $validated['event_date'] ?? now()->toDateString(),
+            'reminder_date' => $validated['reminder_date'] ?? null,
+            'created_by_user_id' => $request->user()?->id,
+            'updated_by_user_id' => $request->user()?->id,
+        ]);
+
+        DashboardController::clearCache();
+        $this->clearProcurementTrackingCache($ppbj->ppbj_no);
+
+        return response()->json([
+            'message' => 'Tracking real berhasil ditambahkan.',
+            'id' => $tracking->id,
+        ]);
+    }
+
+    public function updateRealTracking(Request $request, PpbjRealTracking $tracking)
+    {
+        $this->ensureGeneralDepartment($request);
+
+        $validated = $request->validate([
+            'title' => ['required', 'string', 'max:180'],
+            'description' => ['nullable', 'string', 'max:1000'],
+            'event_date' => ['nullable', 'date'],
+            'reminder_date' => ['nullable', 'date'],
+        ]);
+
+        $tracking->forceFill([
+            'title' => $validated['title'],
+            'description' => $validated['description'] ?? null,
+            'event_date' => $validated['event_date'] ?? null,
+            'reminder_date' => $validated['reminder_date'] ?? null,
+            'updated_by_user_id' => $request->user()?->id,
+        ])->save();
+
+        DashboardController::clearCache();
+        $this->clearProcurementTrackingCache($tracking->ppbj?->ppbj_no);
+
+        return response()->json(['message' => 'Tracking real berhasil diperbarui.']);
+    }
+
+    public function destroyRealTracking(Request $request, PpbjRealTracking $tracking)
+    {
+        $this->ensureGeneralDepartment($request);
+        $nomor = $tracking->ppbj?->ppbj_no;
+        $tracking->delete();
+
+        DashboardController::clearCache();
+        $this->clearProcurementTrackingCache($nomor);
+
+        return response()->json(['message' => 'Tracking real berhasil dihapus.']);
     }
 
     public function markGoodsArrived(Request $request, $id, ProcurementJourneyService $journey)

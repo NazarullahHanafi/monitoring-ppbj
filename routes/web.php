@@ -158,6 +158,10 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
 
         Route::get('/ppbj', [PpbjController::class, 'index'])->name('ppbj.index');
         Route::get('/ppbj/{id}/archive', [PpbjController::class, 'archiveStatus'])->name('ppbj.archive');
+        Route::get('/ppbj/{id}/real-tracking', [PpbjController::class, 'realTracking'])->name('ppbj.realTracking')->middleware('throttle:60,1');
+        Route::post('/ppbj/{id}/real-tracking', [PpbjController::class, 'storeRealTracking'])->name('ppbj.realTracking.store')->middleware('throttle:20,1');
+        Route::patch('/ppbj-real-tracking/{tracking}', [PpbjController::class, 'updateRealTracking'])->name('ppbj.realTracking.update')->middleware('throttle:20,1');
+        Route::delete('/ppbj-real-tracking/{tracking}', [PpbjController::class, 'destroyRealTracking'])->name('ppbj.realTracking.destroy')->middleware('throttle:20,1');
         Route::post('/ppbj', [PpbjController::class, 'store'])->name('ppbj.store');
         Route::put('/ppbj/{id}', [PpbjController::class, 'update'])->name('ppbj.update');
         Route::put('/ppbj/{id}/cancel', [PpbjController::class, 'cancel'])->name('ppbj.cancel');

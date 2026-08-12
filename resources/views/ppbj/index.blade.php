@@ -588,6 +588,10 @@
                                         <span class="h-1 w-1 rounded-full bg-slate-400"></span>
                                         Cek Arsip
                                     </button>
+                                    <button type="button" onclick="openRealTracking({{ $row->id }})"
+                                        class="inline-flex items-center gap-0.5 rounded-md bg-cyan-50 px-1.5 py-0.5 text-[9px] font-bold leading-none text-cyan-700 ring-1 ring-cyan-200 transition hover:bg-cyan-100 dark:bg-cyan-900/30 dark:text-cyan-200 dark:ring-cyan-700/60">
+                                        <span>Tracking Real</span>
+                                    </button>
                                     @if(!empty($row->goods_confirmed_at))
                                         <span class="inline-flex items-center gap-1 rounded-md bg-emerald-100 px-1.5 py-0.5 text-[9px] font-bold leading-none text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-900/40 dark:text-emerald-200 dark:ring-emerald-700/60"
                                             title="Dikonfirmasi oleh {{ $row->goods_confirmed_by_name ?: 'Operasional' }}">
@@ -1120,6 +1124,285 @@
                 timerProgressBar: true
             });
         }
+
+        const ppbjCsrfToken = @json(csrf_token());
+
+        async function fetchJson(url, options = {}) {
+            const response = await fetch(url, {
+                headers: {
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                    ...(options.body ? { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': ppbjCsrfToken } : {}),
+                    ...(options.headers || {})
+                },
+                ...options
+            });
+
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                throw new Error(data.message || 'Permintaan gagal diproses.');
+            }
+
+            return data;
+        }
+
+        function formatRealTrackingDate(dateValue) {
+            if (!dateValue) return '-';
+            try {
+                return new Intl.DateTimeFormat('id-ID', {
+                    weekday: 'long',
+                    day: '2-digit',
+                    month: 'long',
+                    year: 'numeric'
+                }).format(new Date(`${dateValue}T00:00:00`));
+            } catch (_) {
+                return dateValue;
+            }
+        }
+
+        function renderRealTrackingItems(items, ppbjId) {
+            if (!items?.length) {
+                return `
+                    <div class="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-5 text-center text-sm font-semibold text-slate-500 dark:border-slate-700 dark:bg-slate-950/40 dark:text-slate-300">
+                        Belum ada tracking real. Klik tombol cepat di atas untuk mulai mencatat proses lapangan.
+                    </div>
+                `;
+            }
+
+            return items.map((item) => `
+                <div class="relative rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-950/70">
+                    <div class="absolute -left-2 top-5 h-4 w-4 rounded-full border-2 border-white bg-cyan-500 shadow dark:border-slate-900"></div>
+                    <div class="flex flex-wrap items-start justify-between gap-3">
+                        <div class="min-w-0">
+                            <div class="text-[11px] font-black uppercase tracking-[0.18em] text-cyan-600 dark:text-cyan-300">${escapeHtml(item.event_date_label || formatRealTrackingDate(item.event_date))}</div>
+                            <div class="mt-1 text-base font-black text-slate-900 dark:text-white">${escapeHtml(item.title || 'Update proses')}</div>
+                            <p class="mt-1 text-sm font-semibold leading-relaxed text-slate-600 dark:text-slate-300">${escapeHtml(item.description || '-')}</p>
+                            <div class="mt-2 flex flex-wrap gap-2 text-[11px] font-bold text-slate-500 dark:text-slate-400">
+                                <span>Dibuat: ${escapeHtml(item.created_by || 'Umum')}</span>
+                                <span>${escapeHtml(item.created_at || '')}</span>
+                                ${item.reminder_date_label ? `<span class="rounded-full bg-amber-50 px-2 py-0.5 text-amber-700 ring-1 ring-amber-200 dark:bg-amber-500/15 dark:text-amber-200 dark:ring-amber-500/30">Reminder: ${escapeHtml(item.reminder_date_label)}</span>` : ''}
+                            </div>
+                        </div>
+                        <div class="flex shrink-0 gap-2">
+                            <button type="button" onclick="editRealTracking(${ppbjId}, ${item.id})"
+                                class="rounded-xl bg-amber-50 px-3 py-2 text-xs font-black text-amber-700 ring-1 ring-amber-200 hover:bg-amber-100 dark:bg-amber-500/15 dark:text-amber-200 dark:ring-amber-500/30">Edit</button>
+                            <button type="button" onclick="deleteRealTracking(${ppbjId}, ${item.id})"
+                                class="rounded-xl bg-rose-50 px-3 py-2 text-xs font-black text-rose-700 ring-1 ring-rose-200 hover:bg-rose-100 dark:bg-rose-500/15 dark:text-rose-200 dark:ring-rose-500/30">Hapus</button>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function realTrackingModalHtml(data) {
+            const ppbj = data.ppbj || {};
+            window.realTrackingItemsByPpbj = window.realTrackingItemsByPpbj || {};
+            window.realTrackingItemsByPpbj[ppbj.id] = data.items || [];
+            const quickButtons = Object.entries(data.templates || {}).map(([key, template]) => `
+                <button type="button" onclick="addRealTrackingQuick(${ppbj.id}, '${key}', ${template.requires_date ? 'true' : 'false'})"
+                    class="rounded-2xl border border-slate-200 bg-white px-3 py-3 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-cyan-300 hover:shadow-lg dark:border-slate-700 dark:bg-slate-950/60 dark:hover:border-cyan-500">
+                    <div class="text-lg">${escapeHtml(template.emoji || '•')}</div>
+                    <div class="mt-1 text-xs font-black text-slate-900 dark:text-white">${escapeHtml(template.title)}</div>
+                </button>
+            `).join('');
+
+            return `
+                <div class="text-left font-[Montserrat,system-ui,sans-serif]">
+                    <div class="rounded-3xl bg-gradient-to-r from-blue-600 via-violet-600 to-cyan-500 p-5 text-white shadow-xl">
+                        <div class="text-[11px] font-black uppercase tracking-[0.22em] text-white/75">Tracking Real PPBJ</div>
+                        <div class="mt-1 text-2xl font-black">${escapeHtml(ppbj.ppbj_no || '-')}</div>
+                        <div class="mt-1 text-sm font-semibold text-white/85">${escapeHtml(ppbj.uraian || '-')}</div>
+                        <div class="mt-3 flex flex-wrap gap-2 text-[11px] font-bold">
+                            <span class="rounded-full bg-white/15 px-3 py-1">Buyer: ${escapeHtml(ppbj.buyer || '-')}</span>
+                            <span class="rounded-full bg-white/15 px-3 py-1">Progress: ${escapeHtml(ppbj.progress ?? 0)}%</span>
+                            <span class="rounded-full bg-white/15 px-3 py-1">Vendor: ${escapeHtml(ppbj.vendor || '-')}</span>
+                        </div>
+                    </div>
+
+                    <div class="mt-4 rounded-3xl border border-cyan-200 bg-cyan-50 p-4 text-sm font-semibold leading-relaxed text-cyan-900 dark:border-cyan-500/30 dark:bg-cyan-500/10 dark:text-cyan-100">
+                        Fitur masa depan aktif: setiap update bisa diberi <b>tanggal reminder</b>, jadi PPBJ yang butuh follow up bisa ditandai sejak awal.
+                    </div>
+
+                    <div class="mt-4 grid grid-cols-2 gap-3 md:grid-cols-3">${quickButtons}</div>
+
+                    <form id="realTrackingManualForm" class="mt-4 rounded-3xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-950/40">
+                        <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
+                            <label class="block">
+                                <span class="text-xs font-black uppercase tracking-wide text-slate-500 dark:text-slate-300">Judul custom</span>
+                                <input name="title" maxlength="180" placeholder="Contoh: Submit dokumen ke vendor"
+                                    class="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-900 outline-none focus:border-blue-500 dark:border-slate-700 dark:bg-slate-900 dark:text-white">
+                            </label>
+                            <label class="block">
+                                <span class="text-xs font-black uppercase tracking-wide text-slate-500 dark:text-slate-300">Tanggal kejadian</span>
+                                <input name="event_date" type="date"
+                                    class="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-900 outline-none focus:border-blue-500 dark:border-slate-700 dark:bg-slate-900 dark:text-white">
+                            </label>
+                            <label class="block">
+                                <span class="text-xs font-black uppercase tracking-wide text-slate-500 dark:text-slate-300">Reminder follow up</span>
+                                <input name="reminder_date" type="date"
+                                    class="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-900 outline-none focus:border-blue-500 dark:border-slate-700 dark:bg-slate-900 dark:text-white">
+                            </label>
+                            <label class="block md:col-span-2">
+                                <span class="text-xs font-black uppercase tracking-wide text-slate-500 dark:text-slate-300">Catatan</span>
+                                <textarea name="description" rows="3" maxlength="1000" placeholder="Tambahkan catatan proses singkat..."
+                                    class="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-900 outline-none focus:border-blue-500 dark:border-slate-700 dark:bg-slate-900 dark:text-white"></textarea>
+                            </label>
+                        </div>
+                        <button type="submit" class="mt-3 rounded-2xl bg-blue-600 px-5 py-3 text-sm font-black text-white shadow-lg shadow-blue-500/20 hover:bg-blue-700">
+                            Simpan Tracking Custom
+                        </button>
+                    </form>
+
+                    <div class="mt-5 border-l-2 border-cyan-200 pl-4 dark:border-cyan-700">
+                        <div class="mb-3 text-sm font-black text-slate-900 dark:text-white">Riwayat Tracking Real</div>
+                        <div class="space-y-3">${renderRealTrackingItems(data.items || [], ppbj.id)}</div>
+                    </div>
+                </div>
+            `;
+        }
+
+        window.openRealTracking = async function (id) {
+            try {
+                const data = await fetchJson(`/ppbj/${id}/real-tracking`);
+                await Swal.fire({
+                    title: '',
+                    html: realTrackingModalHtml(data),
+                    width: 980,
+                    padding: '1rem',
+                    showConfirmButton: false,
+                    showCloseButton: true,
+                    customClass: {
+                        popup: 'rounded-3xl dark:bg-slate-900',
+                    },
+                    didOpen: () => {
+                        const form = document.getElementById('realTrackingManualForm');
+                        form?.addEventListener('submit', async (event) => {
+                            event.preventDefault();
+                            const formData = new FormData(form);
+                            try {
+                                await fetchJson(`/ppbj/${id}/real-tracking`, {
+                                    method: 'POST',
+                                    body: JSON.stringify(Object.fromEntries(formData.entries()))
+                                });
+                                toastOk('Tracking tersimpan', 'Riwayat proses berhasil ditambahkan.');
+                                window.openRealTracking(id);
+                            } catch (error) {
+                                toastErr('Gagal simpan', error.message);
+                            }
+                        });
+                    }
+                });
+            } catch (error) {
+                toastErr('Tracking gagal dibuka', error.message);
+            }
+        };
+
+        window.addRealTrackingQuick = async function (id, key, needsDate) {
+            const payload = { status_key: key };
+
+            if (needsDate) {
+                const result = await Swal.fire({
+                    title: 'Pilih tanggal Submit KAK',
+                    text: 'Tanggal ini akan langsung tersimpan di tracking real PPBJ.',
+                    input: 'date',
+                    inputValue: new Date().toISOString().slice(0, 10),
+                    showCancelButton: true,
+                    confirmButtonText: 'Simpan tanggal',
+                    cancelButtonText: 'Batal',
+                    customClass: { popup: 'rounded-3xl' },
+                    inputValidator: (value) => !value ? 'Tanggal wajib dipilih.' : undefined
+                });
+
+                if (!result.isConfirmed) {
+                    window.openRealTracking(id);
+                    return;
+                }
+
+                payload.event_date = result.value;
+            }
+
+            try {
+                await fetchJson(`/ppbj/${id}/real-tracking`, {
+                    method: 'POST',
+                    body: JSON.stringify(payload)
+                });
+                toastOk('Tracking real tersimpan', needsDate ? 'Tanggal Submit KAK sudah dicatat.' : 'Status cepat sudah dicatat.');
+                window.openRealTracking(id);
+            } catch (error) {
+                toastErr('Gagal simpan', error.message);
+                window.openRealTracking(id);
+            }
+        };
+
+        window.editRealTracking = async function (ppbjId, trackingId) {
+            const item = (window.realTrackingItemsByPpbj?.[ppbjId] || []).find((row) => Number(row.id) === Number(trackingId)) || {};
+            const result = await Swal.fire({
+                title: 'Edit tracking real',
+                html: `
+                    <div class="space-y-3 text-left">
+                        <input id="rtTitle" class="w-full rounded-xl border px-3 py-2 text-sm" value="${escapeHtml(item.title || '')}" placeholder="Judul">
+                        <input id="rtDate" type="date" class="w-full rounded-xl border px-3 py-2 text-sm" value="${escapeHtml(item.event_date || '')}">
+                        <input id="rtReminder" type="date" class="w-full rounded-xl border px-3 py-2 text-sm" value="${escapeHtml(item.reminder_date || '')}">
+                        <textarea id="rtDesc" rows="4" class="w-full rounded-xl border px-3 py-2 text-sm" placeholder="Catatan">${escapeHtml(item.description || '')}</textarea>
+                    </div>
+                `,
+                showCancelButton: true,
+                confirmButtonText: 'Simpan perubahan',
+                cancelButtonText: 'Batal',
+                preConfirm: () => ({
+                    title: document.getElementById('rtTitle')?.value || '',
+                    event_date: document.getElementById('rtDate')?.value || null,
+                    reminder_date: document.getElementById('rtReminder')?.value || null,
+                    description: document.getElementById('rtDesc')?.value || '',
+                })
+            });
+
+            if (!result.isConfirmed) {
+                window.openRealTracking(ppbjId);
+                return;
+            }
+
+            try {
+                await fetchJson(`/ppbj-real-tracking/${trackingId}`, {
+                    method: 'PATCH',
+                    body: JSON.stringify(result.value)
+                });
+                toastOk('Tracking diperbarui', 'Perubahan sudah disimpan.');
+                window.openRealTracking(ppbjId);
+            } catch (error) {
+                toastErr('Gagal update', error.message);
+                window.openRealTracking(ppbjId);
+            }
+        };
+
+        window.deleteRealTracking = async function (ppbjId, trackingId) {
+            const confirm = await Swal.fire({
+                title: 'Hapus tracking ini?',
+                text: 'Riwayat tracking yang dihapus tidak tampil lagi di PPBJ ini.',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: 'Ya, hapus',
+                cancelButtonText: 'Batal',
+                confirmButtonColor: '#dc2626',
+            });
+
+            if (!confirm.isConfirmed) {
+                window.openRealTracking(ppbjId);
+                return;
+            }
+
+            try {
+                await fetchJson(`/ppbj-real-tracking/${trackingId}`, {
+                    method: 'DELETE',
+                    body: JSON.stringify({})
+                });
+                toastOk('Tracking dihapus', 'Riwayat berhasil dihapus.');
+                window.openRealTracking(ppbjId);
+            } catch (error) {
+                toastErr('Gagal hapus', error.message);
+                window.openRealTracking(ppbjId);
+            }
+        };
 
         window.copyGeneralRegistration = async function (number) {
             const value = String(number || '').trim();
