@@ -2238,6 +2238,24 @@
                                 : '';
 
                             // ✅ Sama seperti filter Kelengkapan Data: hanya Superadmin Operasional
+                            $generalRegistrationNumber = trim((string) ($r->general_registration_number ?? ''));
+                            $hasGeneralRegistration = $generalRegistrationNumber !== '';
+                            $generalRegisteredAtLabel = '';
+                            if ($hasGeneralRegistration && !empty($r->general_registered_at)) {
+                                try {
+                                    $generalRegisteredAtLabel = \Carbon\Carbon::parse($r->general_registered_at)
+                                        ->timezone('Asia/Jakarta')
+                                        ->locale('id')
+                                        ->translatedFormat('d M Y H:i') . ' WIB';
+                                } catch (\Throwable) {
+                                    $generalRegisteredAtLabel = (string) $r->general_registered_at;
+                                }
+                            }
+                            $generalRegisteredByLabel = $r->general_registered_by_name ?: 'Umum';
+                            $generalRegistrationTitle = $hasGeneralRegistration
+                                ? 'Registrasi Umum ' . $generalRegistrationNumber . ' oleh ' . $generalRegisteredByLabel . ($generalRegisteredAtLabel ? ' pada ' . $generalRegisteredAtLabel : '')
+                                : 'PR ini belum memiliki nomor registrasi umum';
+
                             $canRequestUmum = auth()->check()
                                 && auth()->user()->department === 'operasional'
                                 && auth()->user()->role === 'superadmin';
@@ -2293,6 +2311,20 @@
                                         <span class="font-mono font-semibold text-gray-900 dark:text-white">
                                             {{ $r->nomor_pr ?? '—' }}
                                         </span>
+                                        @if($hasGeneralRegistration)
+                                            <button type="button"
+                                                onclick="copyTorprText(@js($generalRegistrationNumber), 'Nomor registrasi umum disalin')"
+                                                title="{{ $generalRegistrationTitle }}"
+                                                class="inline-flex w-fit max-w-[210px] cursor-pointer items-center gap-1 rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-black text-indigo-700 ring-1 ring-indigo-200 transition hover:-translate-y-0.5 hover:bg-indigo-600 hover:text-white hover:shadow-md hover:shadow-indigo-500/20 dark:bg-indigo-950/60 dark:text-indigo-100 dark:ring-indigo-600/70 dark:hover:bg-indigo-500 dark:hover:text-white">
+                                                <span>Reg Umum</span>
+                                                <span class="truncate">{{ $generalRegistrationNumber }}</span>
+                                            </button>
+                                        @else
+                                            <span title="{{ $generalRegistrationTitle }}"
+                                                class="inline-flex w-fit items-center gap-1 rounded-full bg-slate-50 px-2 py-0.5 text-[10px] font-bold text-slate-500 ring-1 ring-slate-200 dark:bg-slate-900/70 dark:text-slate-300 dark:ring-slate-700">
+                                                Belum Reg
+                                            </span>
+                                        @endif
                                         @if($editPermissionLog)
                                             <span title="{{ $editPermissionTitle }}"
                                                 class="inline-flex w-fit items-center gap-1 rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-black text-violet-700 ring-1 ring-violet-200 dark:bg-violet-950/70 dark:text-violet-100 dark:ring-violet-500/60">
@@ -3429,6 +3461,48 @@
             }[m]));
         }
 
+        async function copyTorprText(value, title = 'Berhasil disalin') {
+            const text = String(value ?? '').trim();
+            if (!text) return;
+
+            try {
+                if (navigator.clipboard && window.isSecureContext) {
+                    await navigator.clipboard.writeText(text);
+                } else {
+                    const temp = document.createElement('textarea');
+                    temp.value = text;
+                    temp.setAttribute('readonly', '');
+                    temp.style.position = 'fixed';
+                    temp.style.opacity = '0';
+                    document.body.appendChild(temp);
+                    temp.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(temp);
+                }
+
+                Swal.fire({
+                    toast: true,
+                    position: 'top-end',
+                    icon: 'success',
+                    title,
+                    text,
+                    showConfirmButton: false,
+                    timer: 1800,
+                    timerProgressBar: true,
+                });
+            } catch (error) {
+                Swal.fire({
+                    toast: true,
+                    position: 'top-end',
+                    icon: 'error',
+                    title: 'Gagal menyalin',
+                    text: 'Silakan blok dan copy manual.',
+                    showConfirmButton: false,
+                    timer: 2200,
+                });
+            }
+        }
+
         const torprMyProgressUrl = @json(route('torpr.myProgress'));
         const torprMyProgressArchiveUrl = @json(route('torpr.myProgressArchive'));
         let torprMyProgressCache = null;
@@ -3459,6 +3533,7 @@
                 item.vendor,
                 item.spph,
                 item.sp,
+                item.general_registration_number,
                 item.status_label,
                 item.sisa_sla,
                 item.invoice,
@@ -3682,6 +3757,7 @@
                             <div class="torpr-my-data-grid">
                                 <div class="torpr-my-data-cell"><span>Buyer</span><strong>${escapeHtml(item.buyer || '-')}</strong></div>
                                 <div class="torpr-my-data-cell"><span>Vendor</span><strong>${escapeHtml(item.vendor || '-')}</strong></div>
+                                <div class="torpr-my-data-cell"><span>Reg Umum</span><strong>${escapeHtml(item.general_registration_number || '-')}</strong></div>
                                 <div class="torpr-my-data-cell"><span>SPPH</span><strong>${escapeHtml(item.spph || '-')}</strong></div>
                                 <div class="torpr-my-data-cell"><span>SP / Kontrak</span><strong>${escapeHtml(item.sp || '-')}</strong></div>
                                 <div class="torpr-my-data-cell"><span>Estimasi Datang</span><strong>${escapeHtml(item.promised_date || '-')}</strong></div>

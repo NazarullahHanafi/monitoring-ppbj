@@ -518,16 +518,12 @@
                                 @endphp
                                 <div class="mt-1 flex max-w-[210px] items-center gap-1">
                                     @if(!empty($row->general_registration_number))
-                                        <span class="inline-flex min-w-0 flex-1 items-center gap-1 rounded-lg bg-indigo-50 px-2 py-1 text-[10px] font-extrabold text-indigo-700 ring-1 ring-indigo-200 dark:bg-indigo-950/50 dark:text-indigo-100 dark:ring-indigo-700/70"
+                                        <button type="button"
+                                            onclick="copyGeneralRegistration(@js($row->general_registration_number))"
+                                            class="inline-flex min-w-0 max-w-full cursor-pointer items-center gap-1 rounded-lg bg-indigo-50 px-2 py-1 text-[10px] font-extrabold text-indigo-700 ring-1 ring-indigo-200 transition hover:-translate-y-0.5 hover:bg-indigo-600 hover:text-white hover:shadow-md hover:shadow-indigo-500/20 dark:bg-indigo-950/50 dark:text-indigo-100 dark:ring-indigo-700/70 dark:hover:bg-indigo-500 dark:hover:text-white"
                                             title="Registrasi Umum oleh {{ $row->general_registered_by_name ?: 'Umum' }}{{ $generalRegisteredAtLabel ? ' pada ' . $generalRegisteredAtLabel : '' }}">
                                             <span>Reg</span>
                                             <span class="truncate">{!! hlText($row->general_registration_number, $hlKw) !!}</span>
-                                        </span>
-                                        <button type="button"
-                                            onclick="copyGeneralRegistration(@js($row->general_registration_number))"
-                                            class="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-white text-indigo-600 ring-1 ring-indigo-200 transition hover:bg-indigo-600 hover:text-white dark:bg-gray-900 dark:text-indigo-200 dark:ring-indigo-700 dark:hover:bg-indigo-600"
-                                            title="Copy nomor registrasi umum">
-                                            Copy
                                         </button>
                                     @else
                                         <span class="inline-flex items-center gap-1 rounded-lg bg-gray-50 px-2 py-1 text-[10px] font-bold text-gray-500 ring-1 ring-gray-200 dark:bg-gray-900/60 dark:text-gray-300 dark:ring-gray-700"

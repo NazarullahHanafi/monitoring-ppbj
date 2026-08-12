@@ -58,6 +58,9 @@ class TorprController extends Controller
                 'u2.name as received_by_name',
                 'u3.name as creator_name',
                 'u3.email as creator_email',
+                'p.general_registration_number',
+                'p.general_registered_at',
+                'gu.name as general_registered_by_name',
             ])
             ->leftJoin(DB::raw('(
             SELECT pra1.* 
@@ -70,7 +73,9 @@ class TorprController extends Controller
         ) as pra'), 'pra.torpr_id', '=', 'torprs.id')
             ->leftJoin('users as u1', 'pra.approved_by_user_id', '=', 'u1.id')
             ->leftJoin('users as u2', 'torprs.received_by_umum_user_id', '=', 'u2.id')
-            ->leftJoin('users as u3', 'torprs.created_by_user_id', '=', 'u3.id');
+            ->leftJoin('users as u3', 'torprs.created_by_user_id', '=', 'u3.id')
+            ->leftJoin('ppbj as p', 'p.ppbj_no', '=', 'torprs.nomor_pr')
+            ->leftJoin('users as gu', 'p.general_registered_by_user_id', '=', 'gu.id');
 
         // ✅ SEARCH
         if ($search = trim($request->get('q'))) {
@@ -79,7 +84,8 @@ class TorprController extends Controller
                 // Agar bisa mencari angka di tengah atau belakang (contoh: mencari '001' di 'PR/2026/001')
                 $q->where('torprs.nomor_pr', 'like', '%' . $search . '%')
                     ->orWhere('torprs.tujuan_pengadaan', 'like', '%' . $search . '%')
-                    ->orWhere('torprs.portofolio', 'like', '%' . $search . '%');
+                    ->orWhere('torprs.portofolio', 'like', '%' . $search . '%')
+                    ->orWhere('p.general_registration_number', 'like', '%' . $search . '%');
             });
         }
 
@@ -311,6 +317,8 @@ class TorprController extends Controller
                     'sisa_target_sla',
                     'status',
                     'cancel_reason',
+                    'general_registration_number',
+                    'general_registered_at',
                     'updated_at',
                 ])
                 ->whereIn('ppbj_no', $nomorPrs)
@@ -414,6 +422,8 @@ class TorprController extends Controller
                 'vendor' => $ppbj->penyedia_eksternal ?? '-',
                 'spph' => $ppbj->spph_rfq_1 ?? null,
                 'sp' => $ppbj->awarding_sp ?? null,
+                'general_registration_number' => $ppbj->general_registration_number ?? null,
+                'general_registered_at' => $formatDate($ppbj->general_registered_at ?? null),
                 'promised_date' => $formatDate($ppbj->promised_date ?? null),
                 'goods_arrived_at' => $formatDate($ppbj->goods_arrived_at ?? null),
                 'invoice' => $ppbj->no_invoice ?? null,
