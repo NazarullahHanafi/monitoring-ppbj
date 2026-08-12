@@ -119,7 +119,8 @@ class PpbjController extends Controller
                     ->orWhere('do_no', 'like', $likeKeyword)  // No. DO / Delivery Order
                     ->orWhere('bpg_no', 'like', $likeKeyword)  // No. BPG (Bukti Penerimaan Gudang)
                     ->orWhere('bpb_no', 'like', $likeKeyword)  // No. BPB (Bukti Pengeluaran Barang)
-                    ->orWhere('no_invoice', 'like', $likeKeyword); // No. Invoice
+                    ->orWhere('no_invoice', 'like', $likeKeyword) // No. Invoice
+                    ->orWhere('general_registration_number', 'like', $likeKeyword); // No. Registrasi Umum
             });
 
             $fieldMap = [
@@ -132,6 +133,7 @@ class PpbjController extends Controller
                 'bpg_no' => 'No. BPG (Bukti Penerimaan Gudang)',
                 'bpb_no' => 'No. BPB (Bukti Pengeluaran Barang)',
                 'no_invoice' => 'No. Invoice',
+                'general_registration_number' => 'No. Registrasi Umum',
             ];
 
             $matchSelects = [];
@@ -168,6 +170,18 @@ class PpbjController extends Controller
         }
         if ($request->filled('penyedia_eksternal')) {
             $query->where('penyedia_eksternal', $request->penyedia_eksternal);
+        }
+
+        if ($request->filled('general_registration')) {
+            match ($request->general_registration) {
+                'registered' => $query->whereNotNull('general_registration_number')
+                    ->where('general_registration_number', '!=', ''),
+                'unregistered' => $query->where(function ($q) {
+                    $q->whereNull('general_registration_number')
+                        ->orWhere('general_registration_number', '');
+                }),
+                default => null,
+            };
         }
 
         if ($request->filled('status_sla')) {

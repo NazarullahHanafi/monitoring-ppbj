@@ -38,7 +38,7 @@
             <label class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Pencarian</label>
             <div class="relative">
                 <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">🔍</div>
-                <input type="text" name="search" placeholder="Cari uraian, No. PPBJ, SPH, DO, BPG, invoice..."
+                <input type="text" name="search" placeholder="Cari uraian, No. PPBJ, registrasi, SPH, DO, BPG, invoice..."
                     value="{{ request('search') }}"
                     class="pl-10 px-3 py-2 w-full border border-gray-300 dark:border-gray-600 rounded-lg
                                            bg-white dark:bg-gray-700 text-gray-900 dark:text-white
@@ -46,7 +46,7 @@
                                            focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm transition-all">
             </div>
             <p class="text-[10px] text-gray-400 dark:text-gray-500 leading-tight">
-                Mencari di: Uraian · No. PPBJ · SPH · Awarding/SP · SPPH/RFQ 1 · No. DO · No. BPG · No. BPB · No. Invoice
+                Mencari di: Uraian · No. PPBJ · Registrasi Umum · SPH · Awarding/SP · SPPH/RFQ 1 · No. DO · No. BPG · No. BPB · No. Invoice
             </p>
         </div>
 
@@ -178,8 +178,23 @@
             </select>
         </div>
 
-        {{-- 9. Tombol --}}
-        <div class="lg:col-span-3 sm:col-span-2 flex items-end gap-2 mt-1">
+        {{-- 9. Registrasi Umum --}}
+        <div class="lg:col-span-2 sm:col-span-1 flex flex-col gap-1">
+            <label class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Registrasi Umum</label>
+            <select name="general_registration" class="px-3 py-2 w-full border border-gray-300 dark:border-gray-600 rounded-lg
+                   bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100
+                   focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm cursor-pointer">
+                <option value="">Semua Registrasi</option>
+                <option value="registered" {{ request('general_registration') === 'registered' ? 'selected' : '' }}>Sudah Registrasi</option>
+                <option value="unregistered" {{ request('general_registration') === 'unregistered' ? 'selected' : '' }}>Belum Registrasi</option>
+            </select>
+            <p class="text-[10px] text-gray-400 dark:text-gray-500 leading-tight">
+                Data lama tanpa nomor tetap tampil sebagai strip.
+            </p>
+        </div>
+
+        {{-- 10. Tombol --}}
+        <div class="lg:col-span-1 sm:col-span-2 flex items-end gap-2 mt-1">
             <button type="submit"
                 class="flex-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 font-semibold shadow-sm transition-all active:scale-95 flex items-center justify-center gap-2">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -222,6 +237,13 @@
             $activeFilters[] = ['label' => 'Progress', 'value' => $progressLabels[request('progress')] ?? request('progress'), 'param' => 'progress'];
         if (request('penyedia_eksternal'))
             $activeFilters[] = ['label' => 'Penyedia', 'value' => request('penyedia_eksternal'), 'param' => 'penyedia_eksternal'];
+        if (request('general_registration')) {
+            $activeFilters[] = [
+                'label' => 'Registrasi',
+                'value' => request('general_registration') === 'registered' ? 'Sudah Registrasi' : 'Belum Registrasi',
+                'param' => 'general_registration',
+            ];
+        }
         if (request('date_type') && (request('date_day') || request('date_month') || request('date_year') || request('date_start'))) {
             $dateVal = match (request('date_type')) {
                 'daily' => request('date_day'),
@@ -255,6 +277,7 @@
                             'status_sla' => ['status_sla'],
                             'progress' => ['progress'],
                             'penyedia_eksternal' => ['penyedia_eksternal'],
+                            'general_registration' => ['general_registration'],
                             'date_type' => ['date_type', 'date_day', 'date_month', 'date_year', 'date_start', 'date_end'],
                             default => [$f['param']],
                         }
@@ -481,9 +504,9 @@
                             <td class="px-4 py-3 font-semibold text-gray-900 dark:text-white">
                                 <span class="ppbj-no">{!! hlText($row->ppbj_no, $hlKw) !!}</span>
 
-                                @if(!empty($row->general_registration_number))
-                                    @php
-                                        $generalRegisteredAtLabel = '';
+                                @php
+                                    $generalRegisteredAtLabel = '';
+                                    if (!empty($row->general_registration_number)) {
                                         try {
                                             $generalRegisteredAtLabel = $row->general_registered_at
                                                 ? \Carbon\Carbon::parse($row->general_registered_at)->locale('id')->translatedFormat('d M Y H:i')
@@ -491,15 +514,28 @@
                                         } catch (\Throwable) {
                                             $generalRegisteredAtLabel = (string) $row->general_registered_at;
                                         }
-                                    @endphp
-                                    <div class="mt-1">
-                                        <span class="inline-flex max-w-full items-center gap-1 rounded-lg bg-indigo-50 px-2 py-1 text-[10px] font-extrabold text-indigo-700 ring-1 ring-indigo-200 dark:bg-indigo-950/50 dark:text-indigo-100 dark:ring-indigo-700/70"
+                                    }
+                                @endphp
+                                <div class="mt-1 flex max-w-[210px] items-center gap-1">
+                                    @if(!empty($row->general_registration_number))
+                                        <span class="inline-flex min-w-0 flex-1 items-center gap-1 rounded-lg bg-indigo-50 px-2 py-1 text-[10px] font-extrabold text-indigo-700 ring-1 ring-indigo-200 dark:bg-indigo-950/50 dark:text-indigo-100 dark:ring-indigo-700/70"
                                             title="Registrasi Umum oleh {{ $row->general_registered_by_name ?: 'Umum' }}{{ $generalRegisteredAtLabel ? ' pada ' . $generalRegisteredAtLabel : '' }}">
-                                            <span>🧾</span>
-                                            <span class="truncate">{{ $row->general_registration_number }}</span>
+                                            <span>Reg</span>
+                                            <span class="truncate">{!! hlText($row->general_registration_number, $hlKw) !!}</span>
                                         </span>
-                                    </div>
-                                @endif
+                                        <button type="button"
+                                            onclick="copyGeneralRegistration(@js($row->general_registration_number))"
+                                            class="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-white text-indigo-600 ring-1 ring-indigo-200 transition hover:bg-indigo-600 hover:text-white dark:bg-gray-900 dark:text-indigo-200 dark:ring-indigo-700 dark:hover:bg-indigo-600"
+                                            title="Copy nomor registrasi umum">
+                                            Copy
+                                        </button>
+                                    @else
+                                        <span class="inline-flex items-center gap-1 rounded-lg bg-gray-50 px-2 py-1 text-[10px] font-bold text-gray-500 ring-1 ring-gray-200 dark:bg-gray-900/60 dark:text-gray-300 dark:ring-gray-700"
+                                            title="Data lama atau belum diregistrasi umum">
+                                            <span>Reg: —</span>
+                                        </span>
+                                    @endif
+                                </div>
 
                                 @if($isCancelled)
                                     <span
@@ -1088,6 +1124,31 @@
                 timerProgressBar: true
             });
         }
+
+        window.copyGeneralRegistration = async function (number) {
+            const value = String(number || '').trim();
+            if (!value) return;
+
+            try {
+                if (navigator.clipboard && window.isSecureContext) {
+                    await navigator.clipboard.writeText(value);
+                } else {
+                    const temp = document.createElement('textarea');
+                    temp.value = value;
+                    temp.setAttribute('readonly', '');
+                    temp.style.position = 'fixed';
+                    temp.style.left = '-9999px';
+                    document.body.appendChild(temp);
+                    temp.select();
+                    document.execCommand('copy');
+                    temp.remove();
+                }
+
+                toastOk('Nomor disalin', value);
+            } catch (error) {
+                toastErr('Gagal copy', 'Silakan copy nomor registrasi secara manual.');
+            }
+        };
 
         // ==========================================
         // EXPORT FUNCTIONALITY
