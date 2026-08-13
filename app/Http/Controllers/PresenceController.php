@@ -41,10 +41,7 @@ class PresenceController extends Controller
             self::PRESENCE_TTL
         );
 
-        $registry = Cache::get(self::REGISTRY_KEY, []);
-        $registry[] = $user->id;
-        $registry = array_values(array_unique($registry));
-        Cache::put(self::REGISTRY_KEY, $registry, self::REGISTRY_TTL);
+        $registry = $this->registerOnlineUser((int) $user->id);
 
         $online = [];
         foreach ($registry as $uid) {
@@ -131,6 +128,38 @@ class PresenceController extends Controller
             '#a855f7',
         ];
         return $colors[$id % count($colors)];
+    }
+
+    /**
+     * Perbarui registry secara atomik agar heartbeat serentak tidak saling
+     * menimpa daftar user online. ID kedaluwarsa ikut dibersihkan supaya
+     * ukuran registry tetap kecil meskipun aplikasi dipakai banyak user.
+     *
+     * @return array<int, int>
+     */
+    private function registerOnlineUser(int $userId): array
+    {
+        try {
+            return Cache::lock(self::REGISTRY_KEY.':lock', 5)->block(2, function () use ($userId) {
+                $registry = array_map('intval', (array) Cache::get(self::REGISTRY_KEY, []));
+                $registry[] = $userId;
+
+                $registry = array_values(array_filter(
+                    array_unique($registry),
+                    fn (int $id) => $id === $userId || Cache::has(self::CACHE_PREFIX.$id)
+                ));
+
+                Cache::put(self::REGISTRY_KEY, $registry, self::REGISTRY_TTL);
+
+                return $registry;
+            });
+        } catch (\Throwable) {
+            // Heartbeat tidak boleh gagal hanya karena lock registry sedang sibuk.
+            $registry = array_map('intval', (array) Cache::get(self::REGISTRY_KEY, []));
+            $registry[] = $userId;
+
+            return array_values(array_unique($registry));
+        }
     }
 
     private function markLastSeen($user): void

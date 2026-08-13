@@ -954,7 +954,7 @@ class SpController extends Controller
                     route('sp.index', $oracleMode ? ['mode' => 'oracle'] : []),
                     $oracleMode ? 'Data SP Oracle berhasil disimpan!' : 'Data SP berhasil disimpan!'
                 );
-            });
+            }, 3);
         } catch (QueryException $e) {
             return $this->formError(
                 $request,
@@ -1178,7 +1178,7 @@ class SpController extends Controller
                     route('sp.index', $oracleMode ? ['mode' => 'oracle'] : []),
                     $oracleMode ? 'Data SP Oracle berhasil diperbarui!' : 'Data SP berhasil diperbarui!'
                 );
-            });
+            }, 3);
         } catch (QueryException $e) {
             return $this->formError(
                 $request,
@@ -1295,7 +1295,7 @@ class SpController extends Controller
             Cache::forget('sp:last_nomor:oracle');
             Cache::forget('sp:suggest');
             Cache::forget('vendor:usage-stats:spph-sp:v1');
-        });
+        }, 3);
 
         return response()->json([
             'ok' => true,

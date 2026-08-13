@@ -710,7 +710,7 @@ class PpbjController extends Controller
                 $data = array_merge($data, $this->generalRegistrationPayload($request));
 
                 Ppbj::create($data);
-            });
+            }, 3);
         } catch (QueryException $e) {
             return response()->json([
                 'message' => str_contains($e->getMessage(), 'general_registration_number')
@@ -953,7 +953,7 @@ class PpbjController extends Controller
                     ],
                 ]);
             }
-        });
+        }, 3);
 
         DashboardController::clearCache();
 

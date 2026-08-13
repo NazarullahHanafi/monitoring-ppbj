@@ -450,7 +450,7 @@ class SpphController extends Controller
             Cache::forget('vendor:usage-stats:spph-sp:v1');
 
             return $this->formSuccess($request, route('spph.index'), 'Data SPPH berhasil disimpan!');
-            });
+            }, 3);
         } catch (QueryException $e) {
             return $this->formError(
                 $request,
@@ -582,7 +582,7 @@ class SpphController extends Controller
             Cache::forget('vendor:usage-stats:spph-sp:v1');
 
             return $this->formSuccess($request, route('spph.index'), 'Data SPPH berhasil diperbarui!');
-            });
+            }, 3);
         } catch (QueryException $e) {
             return $this->formError(
                 $request,
@@ -692,7 +692,7 @@ class SpphController extends Controller
             Cache::forget('spph:last_nomor');
             Cache::forget('spph:suggest');
             Cache::forget('vendor:usage-stats:spph-sp:v1');
-        });
+        }, 3);
 
         return response()->json([
             'ok' => true,

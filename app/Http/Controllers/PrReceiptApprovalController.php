@@ -166,7 +166,7 @@ class PrReceiptApprovalController extends Controller
                     'type' => 'success',
                     'msg' => 'PR berhasil dikonfirmasi diterima Umum dan PPBJ berhasil dibuat.'
                 ];
-            });
+            }, 3);
 
             if ($result['type'] === 'success') {
                 return back()->with('success', $result['msg']);

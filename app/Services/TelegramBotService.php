@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Jobs\SendTelegramNotification;
 use App\Models\ActivityLog;
 use App\Models\ContactMessage;
 use App\Models\Ppbj;
@@ -1217,6 +1218,11 @@ class TelegramBotService
     }
 
     private function sendNotification(string $text): void
+    {
+        SendTelegramNotification::dispatch($text);
+    }
+
+    public function sendAutomaticNotificationNow(string $text): void
     {
         foreach ($this->notificationChatIds() as $chatId) {
             if (! $this->sendMessage($chatId, $text)) {

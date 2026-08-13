@@ -64,6 +64,8 @@ return [
         'webhook_secret' => env('TELEGRAM_WEBHOOK_SECRET'),
         'connect_timeout' => env('TELEGRAM_CONNECT_TIMEOUT', 5),
         'timeout' => env('TELEGRAM_TIMEOUT', 15),
+        'queue_connection' => env('TELEGRAM_QUEUE_CONNECTION', env('QUEUE_CONNECTION', 'database')),
+        'queue' => env('TELEGRAM_QUEUE', 'telegram'),
     ],
 
 ];

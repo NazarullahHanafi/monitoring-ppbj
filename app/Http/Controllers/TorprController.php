@@ -1176,7 +1176,7 @@ class TorprController extends Controller
             ]);
 
             $torpr->delete();
-        });
+        }, 3);
 
         $this->forgetTorprJsonCache((int) $id);
         if ($oldNomorPr) {
