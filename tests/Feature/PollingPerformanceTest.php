@@ -76,4 +76,164 @@ class PollingPerformanceTest extends TestCase
             'Pencarian tidak boleh menjalankan aggregate full-table scan tambahan.'
         );
     }
+
+    public function test_ppbj_month_filter_keeps_date_index_usable(): void
+    {
+        $user = User::factory()->create([
+            'department' => 'umum',
+            'role' => 'user',
+        ]);
+
+        foreach (['2026-07-31', '2026-08-01', '2026-08-31', '2026-09-01'] as $index => $date) {
+            DB::table('ppbj')->insert([
+                'ppbj_no' => sprintf('PKB/PR-26/CON/%04d', 5000 + $index),
+                'tgl_ppbj' => $date,
+                'uraian' => 'Uji filter tanggal '.$date,
+                'total_sebelum_ppn' => 1000000,
+                'status' => 'ACTIVE',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        }
+
+        $queries = [];
+        DB::listen(function ($query) use (&$queries) {
+            if (str_contains(strtolower($query->sql), 'from "ppbj"')) {
+                $queries[] = strtolower($query->sql);
+            }
+        });
+
+        $response = $this->actingAs($user)->get(route('ppbj.index', [
+            'date_type' => 'monthly',
+            'date_month' => '2026-08',
+        ]));
+
+        $response->assertOk()
+            ->assertSee('PKB/PR-26/CON/5001')
+            ->assertSee('PKB/PR-26/CON/5002')
+            ->assertDontSee('PKB/PR-26/CON/5000')
+            ->assertDontSee('PKB/PR-26/CON/5003');
+
+        $this->assertFalse(
+            collect($queries)->contains(fn ($sql) => str_contains($sql, 'strftime') || str_contains($sql, 'extract(')),
+            'Filter bulan harus memakai date range agar indeks tanggal tetap dapat digunakan.'
+        );
+    }
+
+    public function test_torpr_month_filter_keeps_date_index_usable(): void
+    {
+        $user = User::factory()->create([
+            'department' => 'operasional',
+            'role' => 'user',
+        ]);
+
+        $outsideCurrentMonth = now()->subMonthNoOverflow()->startOfMonth()->toDateString();
+        $insideCurrentMonth = now()->startOfMonth()->addDays(9)->toDateString();
+
+        foreach ([$outsideCurrentMonth, $insideCurrentMonth] as $index => $date) {
+            DB::table('torprs')->insert([
+                'nomor_pr' => sprintf('PKB/PR-26/CON/%04d', 6000 + $index),
+                'tujuan_pengadaan' => 'Uji TORPR '.$date,
+                'tanggal_pr' => $date,
+                'jumlah_pr' => 1000000,
+                'created_by_user_id' => $user->id,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        }
+
+        $queries = [];
+        DB::listen(function ($query) use (&$queries) {
+            if (str_contains(strtolower($query->sql), 'from "torprs"')) {
+                $queries[] = strtolower($query->sql);
+            }
+        });
+
+        $response = $this->actingAs($user)->get(route('torpr.index', [
+            'date_filter' => 'this_month',
+        ]));
+
+        $response->assertOk()
+            ->assertSee('PKB/PR-26/CON/6001')
+            ->assertDontSee('PKB/PR-26/CON/6000');
+
+        $this->assertFalse(
+            collect($queries)->contains(fn ($sql) => str_contains($sql, 'strftime') || str_contains($sql, 'extract(')),
+            'Filter bulan TORPR harus memakai date range agar indeks tanggal tetap dapat digunakan.'
+        );
+    }
+
+    public function test_ppbj_index_query_count_stays_constant_with_thousands_of_rows(): void
+    {
+        $user = User::factory()->create([
+            'department' => 'umum',
+            'role' => 'user',
+        ]);
+
+        foreach (array_chunk(range(1, 2000), 400) as $numbers) {
+            DB::table('ppbj')->insert(array_map(fn (int $number) => [
+                'ppbj_no' => sprintf('LOAD/PR-26/CON/%05d', $number),
+                'tgl_ppbj' => '2026-08-01',
+                'uraian' => 'Pengujian pagination PPBJ '.$number,
+                'total_sebelum_ppn' => 1000000,
+                'status' => 'ACTIVE',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ], $numbers));
+        }
+
+        $ppbjSelects = [];
+        DB::listen(function ($query) use (&$ppbjSelects) {
+            if (str_contains(strtolower($query->sql), 'from "ppbj"')) {
+                $ppbjSelects[] = strtolower($query->sql);
+            }
+        });
+
+        $response = $this->actingAs($user)->get(route('ppbj.index', ['per_page' => 25]));
+
+        $response->assertOk();
+        $this->assertCount(25, $response->viewData('ppbj')->items());
+        $this->assertCount(
+            2,
+            $ppbjSelects,
+            'Dua ribu data tetap cukup memakai query count dan satu query halaman.'
+        );
+    }
+
+    public function test_torpr_index_only_hydrates_current_page_with_thousands_of_rows(): void
+    {
+        $user = User::factory()->create([
+            'department' => 'operasional',
+            'role' => 'user',
+        ]);
+
+        foreach (array_chunk(range(1, 1500), 300) as $numbers) {
+            DB::table('torprs')->insert(array_map(fn (int $number) => [
+                'nomor_pr' => sprintf('LOAD/PR-26/CON/%05d', $number),
+                'tujuan_pengadaan' => 'Pengujian pagination TORPR '.$number,
+                'tanggal_pr' => '2026-08-01',
+                'jumlah_pr' => 1000000,
+                'created_by_user_id' => $user->id,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ], $numbers));
+        }
+
+        $torprSelects = [];
+        DB::listen(function ($query) use (&$torprSelects) {
+            if (str_contains(strtolower($query->sql), 'from "torprs"')) {
+                $torprSelects[] = strtolower($query->sql);
+            }
+        });
+
+        $response = $this->actingAs($user)->get(route('torpr.index', ['per_page' => 25]));
+
+        $response->assertOk();
+        $this->assertCount(25, $response->viewData('rows')->items());
+        $this->assertLessThanOrEqual(
+            4,
+            count($torprSelects),
+            'Daftar TORPR tidak boleh memuat seluruh record ketika tabel membesar.'
+        );
+    }
 }

@@ -11,6 +11,7 @@ use App\Models\Spph;
 use App\Models\Torpr;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -23,9 +24,34 @@ class OwnerController extends Controller
         $ownerEmails = config('app.owner_emails', []);
         $user = auth()->user();
         $auditFilters = $this->auditFilters($request);
+        $dashboardSummary = Cache::remember('owner:dashboard-summary:v2', now()->addMinute(), function () {
+            return [
+                'users' => User::count(),
+                'ppbj' => $this->safeCount(Ppbj::class, 'ppbj'),
+                'torpr' => $this->safeCount(Torpr::class, 'torprs'),
+                'spph' => $this->safeCount(Spph::class, 'spphs'),
+                'sp' => $this->safeCount(Sp::class, 'sps'),
+                'pending_approvals' => Schema::hasTable('pr_receipt_approvals')
+                    ? PrReceiptApproval::where('status', 'PENDING')->count()
+                    : 0,
+                'unread_contact_messages' => Schema::hasTable('contact_messages')
+                    ? ContactMessage::whereNull('read_at')->count()
+                    : 0,
+                'user_breakdown' => [
+                    'superadmin' => User::where('role', 'superadmin')->count(),
+                    'user' => User::where('role', 'user')->count(),
+                    'viewer' => User::where('role', 'viewer')->count(),
+                    'umum' => User::where('department', 'umum')->count(),
+                    'operasional' => User::where('department', 'operasional')->count(),
+                ],
+                'audit_summary' => $this->auditSummary(),
+                'audit_actions' => $this->auditActions(),
+                'user_activity_insights' => $this->userActivityInsights(),
+            ];
+        });
 
         $stats = [
-            'users' => User::count(),
+            'users' => $dashboardSummary['users'],
             'database' => DB::connection()->getDatabaseName(),
             'environment' => app()->environment(),
             'debug' => config('app.debug') ? 'ON' : 'OFF',
@@ -35,25 +61,15 @@ class OwnerController extends Controller
             'department' => $user->department,
             'backup_email' => config('app.owner_backup_email'),
             'backup_schedule' => 'Setiap Jumat, pukul 02:00 WIB',
-            'ppbj' => $this->safeCount(Ppbj::class, 'ppbj'),
-            'torpr' => $this->safeCount(Torpr::class, 'torprs'),
-            'spph' => $this->safeCount(Spph::class, 'spphs'),
-            'sp' => $this->safeCount(Sp::class, 'sps'),
-            'pending_approvals' => Schema::hasTable('pr_receipt_approvals')
-                ? PrReceiptApproval::where('status', 'PENDING')->count()
-                : 0,
-            'unread_contact_messages' => Schema::hasTable('contact_messages')
-                ? ContactMessage::whereNull('read_at')->count()
-                : 0,
+            'ppbj' => $dashboardSummary['ppbj'],
+            'torpr' => $dashboardSummary['torpr'],
+            'spph' => $dashboardSummary['spph'],
+            'sp' => $dashboardSummary['sp'],
+            'pending_approvals' => $dashboardSummary['pending_approvals'],
+            'unread_contact_messages' => $dashboardSummary['unread_contact_messages'],
         ];
 
-        $userBreakdown = [
-            'superadmin' => User::where('role', 'superadmin')->count(),
-            'user' => User::where('role', 'user')->count(),
-            'viewer' => User::where('role', 'viewer')->count(),
-            'umum' => User::where('department', 'umum')->count(),
-            'operasional' => User::where('department', 'operasional')->count(),
-        ];
+        $userBreakdown = $dashboardSummary['user_breakdown'];
 
         $healthChecks = $this->healthChecks();
 
@@ -92,16 +108,16 @@ class OwnerController extends Controller
                 ->get()
             : collect();
 
-        $auditSummary = $this->auditSummary();
+        $auditSummary = $dashboardSummary['audit_summary'];
         $auditFilterCount = Schema::hasTable('activity_logs')
             ? $this->filteredAuditQuery($auditFilters)->count()
             : 0;
-        $auditActions = $this->auditActions();
-        $auditUsers = User::query()
+        $auditActions = $dashboardSummary['audit_actions'];
+        $auditUsers = Cache::remember('owner:audit-users:v1', now()->addMinute(), fn () => User::query()
             ->select('id', 'name', 'email')
             ->orderBy('name')
-            ->get();
-        $userActivityInsights = $this->userActivityInsights();
+            ->get());
+        $userActivityInsights = $dashboardSummary['user_activity_insights'];
         $systemEvents = $this->latestSystemEvents();
         $backupFiles = $this->latestBackupFiles();
 
@@ -313,11 +329,11 @@ class OwnerController extends Controller
         }
 
         if (filled($filters['date_from'] ?? null)) {
-            $query->whereDate('created_at', '>=', $filters['date_from']);
+            $query->where('created_at', '>=', Carbon::parse($filters['date_from'])->startOfDay());
         }
 
         if (filled($filters['date_to'] ?? null)) {
-            $query->whereDate('created_at', '<=', $filters['date_to']);
+            $query->where('created_at', '<=', Carbon::parse($filters['date_to'])->endOfDay());
         }
 
         if (filled($filters['q'] ?? null)) {
@@ -425,10 +441,10 @@ class OwnerController extends Controller
 
         return [
             'active_today' => $hasLogs
-                ? ActivityLog::query()->whereDate('created_at', today())->distinct('user_id')->count('user_id')
+                ? ActivityLog::query()->whereBetween('created_at', [today()->startOfDay(), today()->endOfDay()])->distinct('user_id')->count('user_id')
                 : 0,
             'events_today' => $hasLogs
-                ? ActivityLog::query()->whereDate('created_at', today())->count()
+                ? ActivityLog::query()->whereBetween('created_at', [today()->startOfDay(), today()->endOfDay()])->count()
                 : 0,
             'events_week' => $hasLogs
                 ? ActivityLog::query()->where('created_at', '>=', now()->subDays(7))->count()

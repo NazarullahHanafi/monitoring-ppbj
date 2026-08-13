@@ -403,19 +403,18 @@
 
     @php
         $hlKw = $searchContext['keyword'] ?? null;
-
-        function hlText($text, $keyword): string
-        {
-            if (!$keyword || trim($keyword) === '')
+        $hlText = static function ($text, $keyword): string {
+            if (!$keyword || trim($keyword) === '') {
                 return e($text);
+            }
             $safe = e($text);
             $safeKw = preg_quote(e($keyword), '/');
-            return preg_replace(
+            return (string) preg_replace(
                 '/(' . $safeKw . ')/i',
                 '<mark class="search-hl">$1</mark>',
                 $safe
             );
-        }
+        };
     @endphp
 
     {{-- ================= TABLE (RESPONSIVE) ================= --}}
@@ -502,7 +501,7 @@
                         <tr id="row_{{ $row->id }}"
                             class="bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition">
                             <td class="px-4 py-3 font-semibold text-gray-900 dark:text-white">
-                                <span class="ppbj-no">{!! hlText($row->ppbj_no, $hlKw) !!}</span>
+                                <span class="ppbj-no">{!! $hlText($row->ppbj_no, $hlKw) !!}</span>
 
                                 @php
                                     $generalRegisteredAtLabel = '';
@@ -523,7 +522,7 @@
                                             class="inline-flex min-w-0 max-w-full cursor-pointer items-center gap-1 rounded-lg bg-indigo-50 px-2 py-1 text-[10px] font-extrabold text-indigo-700 ring-1 ring-indigo-200 transition hover:-translate-y-0.5 hover:bg-indigo-600 hover:text-white hover:shadow-md hover:shadow-indigo-500/20 dark:bg-indigo-950/50 dark:text-indigo-100 dark:ring-indigo-700/70 dark:hover:bg-indigo-500 dark:hover:text-white"
                                             title="Registrasi Umum oleh {{ $row->general_registered_by_name ?: 'Umum' }}{{ $generalRegisteredAtLabel ? ' pada ' . $generalRegisteredAtLabel : '' }}">
                                             <span>Reg</span>
-                                            <span class="truncate">{!! hlText($row->general_registration_number, $hlKw) !!}</span>
+                                            <span class="truncate">{!! $hlText($row->general_registration_number, $hlKw) !!}</span>
                                         </button>
                                     @else
                                         <span class="inline-flex items-center gap-1 rounded-lg bg-gray-50 px-2 py-1 text-[10px] font-bold text-gray-500 ring-1 ring-gray-200 dark:bg-gray-900/60 dark:text-gray-300 dark:ring-gray-700"
@@ -546,7 +545,7 @@
                                 @endif
                             </td>
 
-                            <td class="px-4 py-3 text-gray-700 dark:text-gray-300">{!! hlText($row->uraian, $hlKw) !!}</td>
+                            <td class="px-4 py-3 text-gray-700 dark:text-gray-300">{!! $hlText($row->uraian, $hlKw) !!}</td>
                             <td class="px-4 py-3 text-gray-700 dark:text-gray-300">{{ $row->portofolio }}</td>
                             <td class="px-4 py-3 text-gray-700 dark:text-gray-300">{{ $row->buyer }}</td>
 

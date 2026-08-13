@@ -234,15 +234,21 @@ class PpbjController extends Controller
         if ($request->filled('date_type')) {
             $dateType = $request->date_type;
             if ($dateType === 'daily' && $request->filled('date_day')) {
-                $query->whereDate('tgl_ppbj', $request->date_day);
+                $query->where('tgl_ppbj', $request->date_day);
             } elseif ($dateType === 'monthly' && $request->filled('date_month')) {
                 try {
                     $date = Carbon::parse($request->date_month);
-                    $query->whereYear('tgl_ppbj', $date->year)->whereMonth('tgl_ppbj', $date->month);
+                    $query->whereBetween('tgl_ppbj', [
+                        $date->copy()->startOfMonth()->toDateString(),
+                        $date->copy()->endOfMonth()->toDateString(),
+                    ]);
                 } catch (\Exception $e) {
                 }
             } elseif ($dateType === 'yearly' && $request->filled('date_year')) {
-                $query->whereYear('tgl_ppbj', $request->date_year);
+                $year = (int) $request->date_year;
+                if ($year >= 2000 && $year <= 2100) {
+                    $query->whereBetween('tgl_ppbj', ["{$year}-01-01", "{$year}-12-31"]);
+                }
             } elseif ($dateType === 'range' && $request->filled('date_start') && $request->filled('date_end')) {
                 $query->whereBetween('tgl_ppbj', [$request->date_start, $request->date_end]);
             }
@@ -1141,15 +1147,21 @@ class PpbjController extends Controller
             if ($request->filled('date_type')) {
                 $dateType = $request->date_type;
                 if ($dateType === 'daily' && $request->filled('date_day')) {
-                    $query->whereDate('tgl_ppbj', $request->date_day);
+                    $query->where('tgl_ppbj', $request->date_day);
                 } elseif ($dateType === 'monthly' && $request->filled('date_month')) {
                     try {
                         $date = Carbon::parse($request->date_month);
-                        $query->whereYear('tgl_ppbj', $date->year)->whereMonth('tgl_ppbj', $date->month);
+                        $query->whereBetween('tgl_ppbj', [
+                            $date->copy()->startOfMonth()->toDateString(),
+                            $date->copy()->endOfMonth()->toDateString(),
+                        ]);
                     } catch (\Exception $e) {
                     }
                 } elseif ($dateType === 'yearly' && $request->filled('date_year')) {
-                    $query->whereYear('tgl_ppbj', $request->date_year);
+                    $year = (int) $request->date_year;
+                    if ($year >= 2000 && $year <= 2100) {
+                        $query->whereBetween('tgl_ppbj', ["{$year}-01-01", "{$year}-12-31"]);
+                    }
                 } elseif ($dateType === 'range' && $request->filled('date_start') && $request->filled('date_end')) {
                     $query->whereBetween('tgl_ppbj', [$request->date_start, $request->date_end]);
                 }
@@ -1959,12 +1971,23 @@ class PpbjController extends Controller
         $endDate = $request->get('end_date');
 
         if ($period === 'daily' && $startDate) {
-            $query->whereDate('created_at', $startDate);
+            $d = Carbon::parse($startDate);
+            $query->whereBetween('created_at', [
+                $d->copy()->startOfDay(),
+                $d->copy()->endOfDay(),
+            ]);
         } elseif ($period === 'monthly' && $startDate) {
             $d = Carbon::parse($startDate);
-            $query->whereYear('created_at', $d->year)->whereMonth('created_at', $d->month);
+            $query->whereBetween('created_at', [
+                $d->copy()->startOfMonth(),
+                $d->copy()->endOfMonth(),
+            ]);
         } elseif ($period === 'yearly' && $startDate) {
-            $query->whereYear('created_at', Carbon::parse($startDate)->year);
+            $d = Carbon::parse($startDate);
+            $query->whereBetween('created_at', [
+                $d->copy()->startOfYear(),
+                $d->copy()->endOfYear(),
+            ]);
         } elseif ($period === 'custom' && $startDate && $endDate) {
             $query->whereBetween('created_at', [
                 Carbon::parse($startDate)->startOfDay(),

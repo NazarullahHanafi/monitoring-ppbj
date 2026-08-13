@@ -142,11 +142,11 @@ class TorprController extends Controller
         if ($dateFilter) {
             switch ($dateFilter) {
                 case 'today':
-                    $query->whereDate('torprs.tanggal_pr', Carbon::today());
+                    $query->where('torprs.tanggal_pr', Carbon::today()->toDateString());
                     break;
 
                 case 'yesterday':
-                    $query->whereDate('torprs.tanggal_pr', Carbon::yesterday());
+                    $query->where('torprs.tanggal_pr', Carbon::yesterday()->toDateString());
                     break;
 
                 case 'last7days':
@@ -164,18 +164,27 @@ class TorprController extends Controller
                     break;
 
                 case 'this_month':
-                    $query->whereYear('torprs.tanggal_pr', Carbon::now()->year)
-                        ->whereMonth('torprs.tanggal_pr', Carbon::now()->month);
+                    $now = Carbon::now();
+                    $query->whereBetween('torprs.tanggal_pr', [
+                        $now->copy()->startOfMonth()->toDateString(),
+                        $now->copy()->endOfMonth()->toDateString(),
+                    ]);
                     break;
 
                 case 'last_month':
                     $lastMonth = Carbon::now()->subMonth();
-                    $query->whereYear('torprs.tanggal_pr', $lastMonth->year)
-                        ->whereMonth('torprs.tanggal_pr', $lastMonth->month);
+                    $query->whereBetween('torprs.tanggal_pr', [
+                        $lastMonth->copy()->startOfMonth()->toDateString(),
+                        $lastMonth->copy()->endOfMonth()->toDateString(),
+                    ]);
                     break;
 
                 case 'this_year':
-                    $query->whereYear('torprs.tanggal_pr', Carbon::now()->year);
+                    $now = Carbon::now();
+                    $query->whereBetween('torprs.tanggal_pr', [
+                        $now->copy()->startOfYear()->toDateString(),
+                        $now->copy()->endOfYear()->toDateString(),
+                    ]);
                     break;
 
                 case 'custom':
@@ -188,9 +197,9 @@ class TorprController extends Controller
                             Carbon::parse($dateTo)->endOfDay()
                         ]);
                     } elseif ($dateFrom) {
-                        $query->whereDate('torprs.tanggal_pr', '>=', Carbon::parse($dateFrom));
+                        $query->where('torprs.tanggal_pr', '>=', Carbon::parse($dateFrom)->toDateString());
                     } elseif ($dateTo) {
-                        $query->whereDate('torprs.tanggal_pr', '<=', Carbon::parse($dateTo));
+                        $query->where('torprs.tanggal_pr', '<=', Carbon::parse($dateTo)->toDateString());
                     }
                     break;
             }
