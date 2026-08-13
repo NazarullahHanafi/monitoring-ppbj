@@ -74,13 +74,7 @@ class TorprController extends Controller
             ->leftJoin('users as u1', 'pra.approved_by_user_id', '=', 'u1.id')
             ->leftJoin('users as u2', 'torprs.received_by_umum_user_id', '=', 'u2.id')
             ->leftJoin('users as u3', 'torprs.created_by_user_id', '=', 'u3.id')
-            ->leftJoin('ppbj as p', function ($join) {
-                $join->on(
-                    DB::raw('CONVERT(p.ppbj_no USING utf8mb4) COLLATE utf8mb4_unicode_ci'),
-                    '=',
-                    DB::raw('CONVERT(torprs.nomor_pr USING utf8mb4) COLLATE utf8mb4_unicode_ci')
-                );
-            })
+            ->leftJoin('ppbj as p', 'p.ppbj_no', '=', 'torprs.nomor_pr')
             ->leftJoin('users as gu', 'p.general_registered_by_user_id', '=', 'gu.id');
 
         // ✅ SEARCH

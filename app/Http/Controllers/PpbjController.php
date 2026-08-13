@@ -98,14 +98,22 @@ class PpbjController extends Controller
                 'keterangan',
                 'created_at',
                 'updated_at',
-                DB::raw('(select name from users where users.id = ppbj.cancelled_by_user_id limit 1) as cancelled_by_name'),
-                DB::raw('(select name from users where users.id = ppbj.cancel_verified_by_user_id limit 1) as cancel_verified_by_name'),
-                DB::raw('(select name from users where users.id = ppbj.goods_arrived_by_user_id limit 1) as goods_arrived_by_name'),
-                DB::raw('(select name from users where users.id = ppbj.goods_confirmed_by_user_id limit 1) as goods_confirmed_by_name'),
-                DB::raw('(select name from users where users.id = ppbj.general_registered_by_user_id limit 1) as general_registered_by_name'),
             ]);
 
-        // ── Search + deteksi field yang cocok ──────────────────────────────────
+        $searchFieldMap = [
+            'uraian' => 'Uraian',
+            'ppbj_no' => 'No. PPBJ',
+            'awarding_sp' => 'Awarding / SP / Kontrak',
+            'sph' => 'SPH',
+            'spph_rfq_1' => 'SPPH / RFQ 1',
+            'do_no' => 'No. DO (Delivery Order)',
+            'bpg_no' => 'No. BPG (Bukti Penerimaan Gudang)',
+            'bpb_no' => 'No. BPB (Bukti Pengeluaran Barang)',
+            'no_invoice' => 'No. Invoice',
+            'general_registration_number' => 'No. Registrasi Umum',
+        ];
+
+        // Search tetap mencakup semua field bisnis, tanpa scan kedua untuk label hasil.
         $searchContext = null;
 
         if ($request->filled('search')) {
@@ -125,41 +133,10 @@ class PpbjController extends Controller
                     ->orWhere('general_registration_number', 'like', $likeKeyword); // No. Registrasi Umum
             });
 
-            $fieldMap = [
-                'uraian' => 'Uraian',
-                'ppbj_no' => 'No. PPBJ',
-                'awarding_sp' => 'Awarding / SP / Kontrak',
-                'sph' => 'SPH',
-                'spph_rfq_1' => 'SPPH / RFQ 1',
-                'do_no' => 'No. DO (Delivery Order)',
-                'bpg_no' => 'No. BPG (Bukti Penerimaan Gudang)',
-                'bpb_no' => 'No. BPB (Bukti Pengeluaran Barang)',
-                'no_invoice' => 'No. Invoice',
-                'general_registration_number' => 'No. Registrasi Umum',
-            ];
-
-            $matchSelects = [];
-            $matchBindings = [];
-            foreach (array_keys($fieldMap) as $col) {
-                $matchSelects[] = "MAX(CASE WHEN {$col} LIKE ? THEN 1 ELSE 0 END) as match_{$col}";
-                $matchBindings[] = $likeKeyword;
-            }
-
-            $matchRow = DB::table('ppbj')
-                ->selectRaw(implode(', ', $matchSelects), $matchBindings)
-                ->first();
-
-            $matchedFields = [];
-            foreach ($fieldMap as $col => $label) {
-                if ((int) ($matchRow?->{"match_{$col}"} ?? 0) === 1) {
-                    $matchedFields[] = $label;
-                }
-            }
-
             $searchContext = [
                 'keyword' => $keyword,
-                'matched_fields' => $matchedFields,
-                'all_fields' => array_values($fieldMap),
+                'matched_fields' => [],
+                'all_fields' => array_values($searchFieldMap),
             ];
         }
 
@@ -275,6 +252,54 @@ class PpbjController extends Controller
         $perPage = in_array($perPage, [10, 25, 50, 100]) ? $perPage : 10;
         $query->orderBy('id', 'desc');
         $ppbj = $query->paginate($perPage)->withQueryString();
+
+        // Ambil seluruh nama user yang diperlukan dalam satu query untuk halaman aktif.
+        // Ini menggantikan lima correlated subquery yang sebelumnya dijalankan per baris.
+        $userNameColumns = [
+            'cancelled_by_user_id' => 'cancelled_by_name',
+            'cancel_verified_by_user_id' => 'cancel_verified_by_name',
+            'goods_arrived_by_user_id' => 'goods_arrived_by_name',
+            'goods_confirmed_by_user_id' => 'goods_confirmed_by_name',
+            'general_registered_by_user_id' => 'general_registered_by_name',
+        ];
+
+        $userIds = collect($ppbj->items())
+            ->flatMap(fn ($row) => array_map(
+                fn ($column) => $row->{$column} ?? null,
+                array_keys($userNameColumns)
+            ))
+            ->filter()
+            ->unique()
+            ->values();
+
+        $userNames = $userIds->isEmpty()
+            ? collect()
+            : User::query()->whereIn('id', $userIds)->pluck('name', 'id');
+
+        foreach ($ppbj->items() as $row) {
+            foreach ($userNameColumns as $idColumn => $nameColumn) {
+                $row->{$nameColumn} = $userNames->get($row->{$idColumn} ?? null);
+            }
+        }
+
+        // Informasi "ditemukan di kolom" dihitung dari data halaman yang sudah dimuat,
+        // sehingga pencarian tidak lagi melakukan full-table scan tambahan.
+        if ($searchContext !== null) {
+            $needle = mb_strtolower($searchContext['keyword']);
+            $matchedFields = [];
+
+            foreach ($searchFieldMap as $column => $label) {
+                $matched = collect($ppbj->items())->contains(function ($row) use ($column, $needle) {
+                    return str_contains(mb_strtolower((string) ($row->{$column} ?? '')), $needle);
+                });
+
+                if ($matched) {
+                    $matchedFields[] = $label;
+                }
+            }
+
+            $searchContext['matched_fields'] = $matchedFields;
+        }
 
         $portofolios = Cache::remember(
             'master_portofolios',

@@ -39,7 +39,7 @@ class PollingPerformanceTest extends TestCase
             ->assertJsonPath('rows.49.id', 50);
     }
 
-    public function test_ppbj_search_context_uses_single_safe_aggregate_query(): void
+    public function test_ppbj_search_does_not_run_a_second_full_table_scan(): void
     {
         $user = User::factory()->create([
             'department' => 'umum',
@@ -58,9 +58,22 @@ class PollingPerformanceTest extends TestCase
             'updated_at' => now(),
         ]);
 
+        $ppbjSelects = [];
+        DB::listen(function ($query) use (&$ppbjSelects) {
+            if (str_contains(strtolower($query->sql), 'from "ppbj"')) {
+                $ppbjSelects[] = strtolower($query->sql);
+            }
+        });
+
         $this->actingAs($user)
             ->get(route('ppbj.index', ['search' => '0401']))
             ->assertOk()
             ->assertSee('Management PPBJ');
+
+        $this->assertCount(2, $ppbjSelects, 'Pencarian cukup memakai query count dan data pagination.');
+        $this->assertFalse(
+            collect($ppbjSelects)->contains(fn ($sql) => str_contains($sql, 'max(case when')),
+            'Pencarian tidak boleh menjalankan aggregate full-table scan tambahan.'
+        );
     }
 }

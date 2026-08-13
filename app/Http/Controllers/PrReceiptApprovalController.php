@@ -265,7 +265,9 @@ class PrReceiptApprovalController extends Controller
         $lastNumber = DB::table('ppbj')
             ->where('general_registration_number', 'like', $prefix . '%')
             ->lockForUpdate()
-            ->orderByRaw("CAST(SUBSTRING_INDEX(general_registration_number, '/', -1) AS UNSIGNED) DESC")
+            // Nomor selalu zero-padded, sehingga urutan string sama dengan urutan angka.
+            // Cara ini portable untuk MySQL/SQLite dan dapat memakai unique index yang ada.
+            ->orderByDesc('general_registration_number')
             ->value('general_registration_number');
 
         $next = 1;
