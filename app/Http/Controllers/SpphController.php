@@ -97,7 +97,7 @@ class SpphController extends Controller
             ->when($dari, fn($q) => $q->where('tanggal', '>=', $dari))
             ->when($sampai, fn($q) => $q->where('tanggal', '<=', $sampai))
             ->orderBy('id', 'desc')
-            ->paginate(25)
+            ->paginate(10)
             ->withQueryString();
 
         $onboardingSeen = Cache::has('spph_onboarding_' . auth()->id());

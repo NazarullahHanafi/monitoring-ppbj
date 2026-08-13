@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Sp;
+use App\Models\Spph;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -37,6 +38,44 @@ class PollingPerformanceTest extends TestCase
             ->assertJsonCount(50, 'rows')
             ->assertJsonPath('rows.0.id', 1)
             ->assertJsonPath('rows.49.id', 50);
+    }
+
+    public function test_sp_and_spph_indexes_only_render_ten_rows_by_default(): void
+    {
+        $user = User::factory()->create([
+            'department' => 'umum',
+            'role' => 'user',
+        ]);
+
+        foreach (range(1, 15) as $number) {
+            Sp::create([
+                'nomor_sp' => sprintf('%03d/PKU-VIII/SP/2026', $number),
+                'sequence_number' => $number,
+                'tanggal_sp' => '2026-08-13',
+                'nama_vendor' => 'Vendor '.$number,
+                'deskripsi_pengadaan' => 'Pengadaan SP '.$number,
+                'pic' => $user->name,
+            ]);
+
+            Spph::create([
+                'nomor_spph' => sprintf('%03d/PKU-VIII/SPPH/2026', $number),
+                'sequence_number' => $number,
+                'tanggal' => '2026-08-13',
+                'nama_vendor' => 'Vendor '.$number,
+                'deskripsi_pengadaan' => 'Pengadaan SPPH '.$number,
+                'pic' => $user->name,
+            ]);
+        }
+
+        $spResponse = $this->actingAs($user)->get(route('sp.index'));
+        $spphResponse = $this->actingAs($user)->get(route('spph.index'));
+
+        $spResponse->assertOk();
+        $spphResponse->assertOk();
+        $this->assertCount(10, $spResponse->viewData('sps')->items());
+        $this->assertCount(10, $spphResponse->viewData('spphs')->items());
+        $this->assertSame(15, $spResponse->viewData('sps')->total());
+        $this->assertSame(15, $spphResponse->viewData('spphs')->total());
     }
 
     public function test_ppbj_search_does_not_run_a_second_full_table_scan(): void

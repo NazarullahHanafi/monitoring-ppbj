@@ -127,7 +127,7 @@ class SpController extends Controller
         ')->first();
 
         $sps = (clone $baseQuery)->orderBy('sequence_number', 'desc')
-            ->paginate(25)
+            ->paginate(10)
             ->withQueryString();
 
         $spVendorAuditMap = $this->buildSpVendorAuditMap($sps->getCollection());
