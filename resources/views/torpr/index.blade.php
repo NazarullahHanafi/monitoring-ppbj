@@ -5,6 +5,8 @@
 
 @push('styles')
     <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ asset('assets/torpr/torpr.css') }}?v={{ filemtime(public_path('assets/torpr/torpr.css')) }}">
+    {{-- CSS lama dipertahankan sebagai sumber referensi, tetapi tidak lagi dikirim di setiap respons HTML.
     <style>
         .torpr-page,
         .torpr-page button,
@@ -1829,6 +1831,7 @@
         }
 
     </style>
+    --}}
 @endpush
 
 @section('content')
@@ -2231,7 +2234,7 @@
                             $editPermissionAt = $editPermissionLog?->created_at
                                 ? \Carbon\Carbon::parse($editPermissionLog->created_at)->timezone('Asia/Jakarta')->format('d M Y H:i:s') . ' WIB'
                                 : '-';
-                            $editPermissionBy = $editPermissionLog?->user?->name ?: 'user';
+                            $editPermissionBy = $editPermissionLog?->user_name ?: 'user';
                             $editPermissionTitle = $editPermissionLog
                                 ? "Diedit dengan izin oleh {$editPermissionBy} pada {$editPermissionAt}"
                                 : '';
@@ -3442,6 +3445,7 @@
         (function () { var s = localStorage.getItem('theme'), d = window.matchMedia && window.matchMedia('(prefers-color-scheme:dark)').matches; document.documentElement.classList.toggle('dark', s === 'dark' || (!s && d)) })();
     </script>
 
+    {{-- JavaScript TORPR dipindahkan ke aset statis agar browser dapat menggunakannya dari cache.
     <script>
         const canAccessKacab = {{ auth()->user()->role === 'superadmin' && auth()->user()->department === 'operasional' ? 'true' : 'false' }};
 
@@ -6527,7 +6531,24 @@
             });
         })();
     </script>
+    --}}
 
+    <script>
+        window.TORPR_PAGE_CONFIG = Object.freeze({
+            canAccessKacab: @json(auth()->user()->role === 'superadmin' && auth()->user()->department === 'operasional'),
+            myProgressUrl: @json(route('torpr.myProgress')),
+            myProgressArchiveUrl: @json(route('torpr.myProgressArchive')),
+            qrApiBaseUrl: @json(url('/pr/sign-qr')),
+            importPreviewUrl: @json(route('torpr.import.preview')),
+            importProcessUrl: @json(route('torpr.import.process')),
+            csrfToken: @json(csrf_token()),
+            editRequestCenterUrl: @json(route('torpr.editRequests.center')),
+            isHeavy: @json(isset($isHeavy) && $isHeavy),
+        });
+    </script>
+    <script src="{{ asset('assets/torpr/torpr.js') }}?v={{ filemtime(public_path('assets/torpr/torpr.js')) }}"></script>
+
+    {{-- CSS tambahan lama juga sudah digabung ke aset torpr.css.
     <style>
         /* Tambahkan di file CSS Anda */
         .swal-export-container {
@@ -6953,4 +6974,5 @@
             text-transform: uppercase;
         }
     </style>
+    --}}
 @endpush

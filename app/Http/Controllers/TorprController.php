@@ -201,7 +201,10 @@ class TorprController extends Controller
 
         $this->hydrateLatestReceiptApprovals($rows->getCollection(), $rowIds);
 
-        $editAccessRequests = TorprEditRequest::with(['requester:id,name,email', 'owner:id,name,email'])
+        // Halaman daftar hanya membutuhkan status dan masa berlaku izin.
+        // Hindari eager-load requester/owner karena datanya tidak dipakai di tabel awal.
+        $editAccessRequests = TorprEditRequest::query()
+            ->select(['id', 'torpr_id', 'requester_user_id', 'status', 'expires_at'])
             ->where('requester_user_id', auth()->id())
             ->whereIn('torpr_id', $rowIds)
             ->whereIn('status', ['pending', 'approved'])
@@ -217,23 +220,42 @@ class TorprController extends Controller
             ->unique('torpr_id')
             ->keyBy('torpr_id');
 
-        $incomingEditRequestCount = TorprEditRequest::query()
-            ->where('owner_user_id', auth()->id())
+        // Satu conditional aggregate menggantikan dua query COUNT terpisah.
+        $editRequestCounts = TorprEditRequest::query()
             ->where('status', 'pending')
-            ->count();
+            ->where(function ($query) {
+                $query->where('owner_user_id', auth()->id())
+                    ->orWhere('requester_user_id', auth()->id());
+            })
+            ->selectRaw(
+                'COALESCE(SUM(CASE WHEN owner_user_id = ? THEN 1 ELSE 0 END), 0) AS incoming_count, '
+                .'COALESCE(SUM(CASE WHEN requester_user_id = ? THEN 1 ELSE 0 END), 0) AS outgoing_count',
+                [auth()->id(), auth()->id()]
+            )
+            ->first();
 
-        $outgoingEditRequestCount = TorprEditRequest::query()
-            ->where('requester_user_id', auth()->id())
-            ->where('status', 'pending')
-            ->count();
+        $incomingEditRequestCount = (int) ($editRequestCounts?->incoming_count ?? 0);
+        $outgoingEditRequestCount = (int) ($editRequestCounts?->outgoing_count ?? 0);
 
-        $editPermissionLogs = \App\Models\ActivityLog::with('user:id,name')
+        // Ambil tepat satu log izin terbaru per baris dan nama pelakunya dalam
+        // satu query. Implementasi lama mengambil seluruh log lalu unique() di PHP.
+        $latestPermissionLogIds = DB::table('activity_logs')
+            ->selectRaw('MAX(id) AS id')
             ->where('model_type', Torpr::class)
             ->whereIn('model_id', $rowIds)
             ->where('action', 'updated_with_edit_permission')
-            ->latest('id')
-            ->get()
-            ->unique('model_id')
+            ->groupBy('model_id');
+
+        $editPermissionLogs = DB::table('activity_logs as permission_log')
+            ->joinSub($latestPermissionLogIds, 'latest_permission_log', function ($join) {
+                $join->on('permission_log.id', '=', 'latest_permission_log.id');
+            })
+            ->leftJoin('users as permission_user', 'permission_log.user_id', '=', 'permission_user.id')
+            ->get([
+                'permission_log.model_id',
+                'permission_log.created_at',
+                'permission_user.name as user_name',
+            ])
             ->keyBy('model_id');
 
         // ✅ Ambil master portofolio yang sama dengan PPBJ

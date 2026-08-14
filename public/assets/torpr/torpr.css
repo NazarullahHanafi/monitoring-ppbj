@@ -1,0 +1,2246 @@
+        .torpr-page,
+        .torpr-page button,
+        .torpr-page input,
+        .torpr-page select,
+        .torpr-page textarea {
+            font-family: 'Montserrat', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        }
+
+        /* ===== SELECT2 TORPR - dibuat menyatu dengan style input Tailwind ===== */
+        .select2-container {
+            width: 100% !important;
+            font-size: 0.875rem;
+        }
+
+        .select2-container--default .select2-selection--single {
+            height: 42px !important;
+            min-height: 42px !important;
+            border: 1px solid #000000 !important;
+            border-radius: 0.5rem !important;
+            background-color: #ffffff !important;
+            transition: border-color .2s ease, box-shadow .2s ease, background-color .2s ease;
+            outline: none !important;
+        }
+
+        .select2-container--default .select2-selection--single .select2-selection__rendered {
+            height: 42px !important;
+            line-height: 42px !important;
+            padding-left: 0.75rem !important;
+            padding-right: 2.5rem !important;
+            color: #111827 !important;
+            font-weight: 400;
+        }
+
+        .select2-container--default .select2-selection--single .select2-selection__placeholder {
+            color: #9ca3af !important;
+            font-weight: 400;
+        }
+
+        .select2-container--default .select2-selection--single .select2-selection__arrow {
+            height: 40px !important;
+            right: 0.55rem !important;
+            top: 0 !important;
+        }
+
+        .select2-container--default .select2-selection--single .select2-selection__clear {
+            float: right !important;
+            height: 40px !important;
+            line-height: 40px !important;
+            margin-right: 2rem !important;
+            color: #6b7280 !important;
+            font-size: 1rem !important;
+            font-weight: 700 !important;
+        }
+
+        /* ===== SELECT2 MULTIPLE UNTUK FILTER PORTOFOLIO ===== */
+        .select2-container--default .select2-selection--multiple {
+            min-height: 42px !important;
+            border: 1px solid #d1d5db !important;
+            border-radius: 0.5rem !important;
+            background-color: #ffffff !important;
+            padding: 0.25rem 0.35rem !important;
+            transition: border-color .2s ease, box-shadow .2s ease, background-color .2s ease;
+            outline: none !important;
+        }
+
+        .select2-container--default .select2-selection--multiple .select2-selection__rendered {
+            display: flex !important;
+            flex-wrap: wrap !important;
+            align-items: center !important;
+            gap: 0.25rem !important;
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+
+        .select2-container--default .select2-selection--multiple .select2-selection__choice {
+            display: inline-flex !important;
+            align-items: center !important;
+            max-width: 100% !important;
+            margin: 0.125rem !important;
+            border: 1px solid #bfdbfe !important;
+            border-radius: 9999px !important;
+            background-color: #eff6ff !important;
+            color: #1d4ed8 !important;
+            padding: 0.15rem 0.55rem 0.15rem 1.45rem !important;
+            font-size: 0.75rem !important;
+            font-weight: 700 !important;
+            line-height: 1.35rem !important;
+        }
+
+        .select2-container--default .select2-selection--multiple .select2-selection__choice__remove {
+            left: 0.45rem !important;
+            top: 50% !important;
+            transform: translateY(-50%) !important;
+            border-right: 0 !important;
+            color: #2563eb !important;
+            font-weight: 900 !important;
+        }
+
+        .select2-container--default .select2-selection--multiple .select2-search--inline .select2-search__field {
+            height: 28px !important;
+            line-height: 28px !important;
+            margin: 0 !important;
+            color: #111827 !important;
+            font-size: 0.875rem !important;
+        }
+
+        .select2-container--default.select2-container--focus .select2-selection--multiple,
+        .select2-container--default.select2-container--open .select2-selection--multiple,
+        .select2-container--default.select2-container--focus .select2-selection--single,
+        .select2-container--default.select2-container--open .select2-selection--single {
+            border-color: #3b82f6 !important;
+            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25) !important;
+        }
+
+        .select2-dropdown {
+            border: 1px solid #d1d5db !important;
+            border-radius: 0.75rem !important;
+            overflow: hidden !important;
+            box-shadow: 0 18px 40px rgba(15, 23, 42, 0.18) !important;
+            z-index: 10000 !important;
+            background: #ffffff !important;
+        }
+
+        .select2-search--dropdown {
+            padding: 0.65rem !important;
+            background: #ffffff !important;
+        }
+
+        .select2-container--default .select2-search--dropdown .select2-search__field {
+            border: 1px solid #d1d5db !important;
+            border-radius: 0.5rem !important;
+            padding: 0.55rem 0.7rem !important;
+            outline: none !important;
+            color: #111827 !important;
+            background: #ffffff !important;
+        }
+
+        .select2-container--default .select2-search--dropdown .select2-search__field:focus {
+            border-color: #3b82f6 !important;
+            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.18) !important;
+        }
+
+        .select2-results__option {
+            padding: 0.6rem 0.8rem !important;
+            color: #111827;
+        }
+
+        .select2-container--default .select2-results__option--highlighted[aria-selected] {
+            background-color: #2563eb !important;
+            color: #ffffff !important;
+        }
+
+        .select2-container--default .select2-results__option--selected {
+            background-color: #eff6ff !important;
+            color: #1d4ed8 !important;
+            font-weight: 600;
+        }
+
+        /* ===== DARK MODE ===== */
+        .dark .select2-container--default .select2-selection--single {
+            background-color: #111827 !important;
+            border-color: #374151 !important;
+        }
+
+        .dark .select2-container--default .select2-selection--single .select2-selection__rendered {
+            color: #ffffff !important;
+        }
+
+        .dark .select2-container--default .select2-selection--single .select2-selection__placeholder,
+        .dark .select2-container--default .select2-selection--single .select2-selection__clear {
+            color: #9ca3af !important;
+        }
+
+        .dark .select2-container--default .select2-selection--multiple {
+            background-color: #111827 !important;
+            border-color: #374151 !important;
+        }
+
+        .dark .select2-container--default .select2-selection--multiple .select2-selection__choice {
+            border-color: #1e3a8a !important;
+            background-color: rgba(30, 58, 138, 0.45) !important;
+            color: #dbeafe !important;
+        }
+
+        .dark .select2-container--default .select2-selection--multiple .select2-selection__choice__remove {
+            color: #bfdbfe !important;
+        }
+
+        .dark .select2-container--default .select2-selection--multiple .select2-search--inline .select2-search__field {
+            color: #ffffff !important;
+        }
+
+        .dark .select2-dropdown {
+            background-color: #111827 !important;
+            border-color: #374151 !important;
+            color: #f9fafb !important;
+        }
+
+        .dark .select2-search--dropdown {
+            background-color: #111827 !important;
+        }
+
+        .dark .select2-container--default .select2-search--dropdown .select2-search__field {
+            background-color: #0f172a !important;
+            border-color: #374151 !important;
+            color: #ffffff !important;
+        }
+
+        .dark .select2-results__option {
+            color: #f9fafb !important;
+        }
+
+        .dark .select2-container--default .select2-results__option--selected {
+            background-color: #1f2937 !important;
+            color: #ffffff !important;
+        }
+
+        .dark .select2-container--default .select2-results__option--highlighted[aria-selected] {
+            background-color: #2563eb !important;
+            color: #ffffff !important;
+        }
+
+        /* ===== FORM GUIDANCE NOTICE ===== */
+        .form-guidance-card {
+            position: relative;
+            overflow: hidden;
+            animation: formNoticeEnter .45s ease-out;
+        }
+
+        .form-guidance-card::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(110deg, transparent 0%, rgba(255,255,255,.08) 35%, rgba(255,255,255,.28) 50%, rgba(255,255,255,.08) 65%, transparent 100%);
+            transform: translateX(-120%);
+            animation: formNoticeShimmer 3.6s linear infinite;
+            pointer-events: none;
+        }
+
+        .form-guidance-icon {
+            animation: formNoticePulse 2s ease-in-out infinite;
+        }
+
+        .form-guidance-item {
+            animation: formNoticeItem .35s ease-out both;
+        }
+
+        .form-guidance-item:nth-child(1) { animation-delay: .05s; }
+        .form-guidance-item:nth-child(2) { animation-delay: .1s; }
+        .form-guidance-item:nth-child(3) { animation-delay: .15s; }
+        .form-guidance-item:nth-child(4) { animation-delay: .2s; }
+        .form-guidance-item:nth-child(5) { animation-delay: .25s; }
+        .form-guidance-item:nth-child(6) { animation-delay: .3s; }
+
+        @keyframes formNoticeEnter {
+            0% { opacity: 0; transform: translateY(-10px) scale(.98); }
+            100% { opacity: 1; transform: translateY(0) scale(1); }
+        }
+
+        @keyframes formNoticeShimmer {
+            0% { transform: translateX(-120%); }
+            100% { transform: translateX(140%); }
+        }
+
+        @keyframes formNoticePulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.08); }
+        }
+
+        @keyframes formNoticeItem {
+            0% { opacity: 0; transform: translateX(-6px); }
+            100% { opacity: 1; transform: translateX(0); }
+        }
+
+        /* ===== FORCE WHITE TEXT FOR FORM GUIDANCE IN DARK MODE ===== */
+        .dark #formGuidanceBox,
+        .dark #formGuidanceBox p,
+        .dark #formGuidanceBox li,
+        .dark #formGuidanceBox span,
+        .dark #formGuidanceBox strong,
+        .dark #formGuidanceBox h3,
+        .dark #formGuidanceBox ol,
+        .dark #formGuidanceBox div {
+            color: #ffffff !important;
+        }
+
+        .dark #formGuidanceBox .text-sky-100,
+        .dark #formGuidanceBox .text-sky-200,
+        .dark #formGuidanceBox .text-sky-300,
+        .dark #formGuidanceBox .text-gray-200,
+        .dark #formGuidanceBox .text-slate-100,
+        .dark #formGuidanceBox .text-slate-200 {
+            color: #ffffff !important;
+        }
+
+        .dark #formGuidanceBox #formGuidanceMessage,
+        .dark #formGuidanceBox #formGuidanceList,
+        .dark #formGuidanceBox #formGuidanceList span {
+            color: #ffffff !important;
+            opacity: 1 !important;
+        }
+
+        .dark #formGuidanceBox #formGuidanceSubtitle {
+            color: #ffffff !important;
+            opacity: .95 !important;
+        }
+
+        .dark #formGuidanceBox #formGuidanceBadge {
+            color: #ffffff !important;
+            background-color: rgba(37, 99, 235, .35) !important;
+            border-color: rgba(147, 197, 253, .45) !important;
+        }
+
+        .dark #formGuidanceBox .rounded-xl {
+            background-color: rgba(15, 23, 42, .96) !important;
+        }
+
+        .dark #formGuidanceBox .rounded-lg {
+            color: #ffffff !important;
+        }
+
+        /* ===== TORPR COMPACT ACTIONS & ALERT CONTRAST ===== */
+        .torpr-action-stack {
+            gap: .35rem;
+        }
+
+        .torpr-action-row {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: .35rem;
+            flex-wrap: wrap;
+        }
+
+        .torpr-action-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: .25rem;
+            min-height: 1.85rem;
+            padding: .38rem .58rem;
+            border-radius: .62rem;
+            font-size: .68rem;
+            line-height: 1;
+            font-weight: 800;
+            white-space: nowrap;
+            transition: transform .15s ease, box-shadow .15s ease, filter .15s ease;
+        }
+
+        .torpr-action-btn:hover {
+            transform: translateY(-1px);
+            filter: brightness(1.03);
+        }
+
+        .torpr-action-btn:active {
+            transform: scale(.96);
+        }
+
+        .torpr-action-btn svg {
+            width: .82rem;
+            height: .82rem;
+        }
+
+        .torpr-action-btn.is-disabled {
+            cursor: not-allowed;
+            opacity: .75;
+            transform: none;
+            filter: none;
+        }
+
+        .torpr-action-btn.is-locked {
+            background: #334155 !important;
+            border: 1px solid rgba(148, 163, 184, .58) !important;
+            color: #ffffff !important;
+            box-shadow: 0 10px 22px rgba(51, 65, 85, .18);
+        }
+
+        .torpr-action-btn.is-locked:hover {
+            background: #1e293b !important;
+            color: #ffffff !important;
+        }
+
+        .torpr-action-btn.is-pending {
+            background: #fef3c7 !important;
+            border: 1px solid #f59e0b !important;
+            color: #92400e !important;
+        }
+
+        .torpr-action-btn.is-pending:hover {
+            background: #fde68a !important;
+            color: #78350f !important;
+        }
+
+        html.dark .torpr-action-btn.is-locked,
+        .dark .torpr-action-btn.is-locked {
+            background: #f8fafc !important;
+            border-color: #e2e8f0 !important;
+            color: #0f172a !important;
+        }
+
+        html.dark .torpr-action-btn.is-locked:hover,
+        .dark .torpr-action-btn.is-locked:hover {
+            background: #e2e8f0 !important;
+            color: #020617 !important;
+        }
+
+        html.dark .torpr-action-btn.is-pending,
+        .dark .torpr-action-btn.is-pending {
+            background: #78350f !important;
+            border-color: #fbbf24 !important;
+            color: #fff7ed !important;
+        }
+
+        .torpr-request-center-button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: .55rem;
+            min-height: 2.65rem;
+            border-radius: .75rem;
+            border: 1px solid #cbd5e1;
+            background: #ffffff;
+            color: #0f172a;
+            padding: .55rem 1rem;
+            font-weight: 900;
+            box-shadow: 0 12px 28px rgba(15, 23, 42, .1);
+            transition: transform .15s ease, background .15s ease, box-shadow .15s ease;
+        }
+
+        .torpr-request-center-button:hover {
+            background: #f8fafc;
+            transform: translateY(-1px);
+            box-shadow: 0 16px 34px rgba(15, 23, 42, .16);
+        }
+
+        .torpr-request-count-badge {
+            display: inline-flex;
+            min-width: 1.35rem;
+            height: 1.35rem;
+            align-items: center;
+            justify-content: center;
+            border-radius: 999px;
+            background: #dc2626;
+            color: #ffffff;
+            padding: 0 .38rem;
+            font-size: .72rem;
+            font-weight: 950;
+            line-height: 1;
+            box-shadow: 0 10px 18px rgba(220, 38, 38, .28);
+        }
+
+        html.dark .torpr-request-center-button,
+        .dark .torpr-request-center-button {
+            background: #1e293b !important;
+            border-color: #475569 !important;
+            color: #ffffff !important;
+        }
+
+        html.dark .torpr-request-center-button:hover,
+        .dark .torpr-request-center-button:hover {
+            background: #334155 !important;
+        }
+
+        html.dark .torpr-request-count-badge,
+        .dark .torpr-request-count-badge {
+            background: #ef4444 !important;
+            color: #ffffff !important;
+        }
+
+        .torpr-edit-request-card {
+            border-radius: 1rem;
+            border: 1px solid #bfdbfe;
+            background: #dbeafe;
+            color: #172554;
+            padding: .95rem;
+            text-align: left;
+            font-size: .84rem;
+            line-height: 1.65;
+            font-weight: 700;
+        }
+
+        .torpr-edit-request-card strong {
+            color: #172554;
+            font-weight: 950;
+        }
+
+        .torpr-edit-request-template {
+            margin-top: .7rem;
+            border-radius: .9rem;
+            border: 1px dashed #93c5fd;
+            background: #ffffff;
+            color: #0f172a;
+            padding: .8rem;
+            text-align: left;
+            font-size: .8rem;
+            line-height: 1.6;
+            font-weight: 650;
+        }
+
+        .torpr-edit-request-help {
+            margin: .25rem 0 .55rem;
+            color: #475569;
+            font-size: .76rem;
+            font-weight: 800;
+            line-height: 1.55;
+        }
+
+        .torpr-edit-request-reason {
+            min-height: 6.2rem;
+            width: 100%;
+            resize: vertical;
+            border-radius: .9rem;
+            border: 1px solid #cbd5e1;
+            background: #ffffff;
+            color: #0f172a;
+            padding: .85rem;
+            font-size: .86rem;
+            font-weight: 700;
+            line-height: 1.6;
+        }
+
+        .torpr-edit-request-reason::placeholder {
+            color: #64748b;
+        }
+
+        html.dark .torpr-edit-request-card,
+        .dark .torpr-edit-request-card {
+            background: #172554 !important;
+            border-color: #60a5fa !important;
+            color: #eff6ff !important;
+        }
+
+        html.dark .torpr-edit-request-card strong,
+        .dark .torpr-edit-request-card strong {
+            color: #ffffff !important;
+        }
+
+        html.dark .torpr-edit-request-template,
+        .dark .torpr-edit-request-template {
+            background: #0f172a !important;
+            border-color: #475569 !important;
+            color: #f8fafc !important;
+        }
+
+        html.dark .torpr-edit-request-help,
+        .dark .torpr-edit-request-help {
+            color: #cbd5e1 !important;
+        }
+
+        html.dark .torpr-edit-request-reason,
+        .dark .torpr-edit-request-reason {
+            background: #1e293b !important;
+            border-color: #475569 !important;
+            color: #ffffff !important;
+        }
+
+        html.dark .torpr-edit-request-reason::placeholder,
+        .dark .torpr-edit-request-reason::placeholder {
+            color: #cbd5e1 !important;
+        }
+
+        .torpr-request-center-row {
+            border-radius: 1rem;
+            border: 1px solid #dbeafe;
+            background: #ffffff;
+            color: #0f172a;
+            padding: .9rem;
+            box-shadow: 0 12px 30px rgba(15, 23, 42, .08);
+        }
+
+        html.dark .torpr-request-center-row,
+        .dark .torpr-request-center-row {
+            background: #111827 !important;
+            border-color: #334155 !important;
+            color: #f8fafc !important;
+        }
+
+        .torpr-request-center-note {
+            border-radius: 1.1rem;
+            border: 1px solid #bfdbfe;
+            background: #dbeafe;
+            color: #172554;
+            padding: .95rem;
+            font-size: .86rem;
+            font-weight: 800;
+            line-height: 1.65;
+        }
+
+        .torpr-request-center-title {
+            margin-bottom: .55rem;
+            color: #0f172a;
+            font-size: .9rem;
+            font-weight: 950;
+        }
+
+        .torpr-request-center-empty {
+            border-radius: 1rem;
+            border: 1px solid #cbd5e1;
+            background: #f8fafc;
+            color: #334155;
+            padding: .95rem;
+            font-size: .86rem;
+            font-weight: 800;
+        }
+
+        .torpr-request-center-pr {
+            color: #0f172a;
+            font-weight: 950;
+        }
+
+        .torpr-request-center-sub {
+            margin-top: .25rem;
+            color: #475569;
+            font-size: .78rem;
+            font-weight: 800;
+        }
+
+        .torpr-request-center-meta {
+            margin-top: .65rem;
+            color: #334155;
+            font-size: .75rem;
+            line-height: 1.55;
+            font-weight: 800;
+        }
+
+        .torpr-request-center-reason {
+            margin-top: .7rem;
+            border-radius: .85rem;
+            border: 1px solid #bfdbfe;
+            background: #eff6ff;
+            color: #1e3a8a;
+            padding: .75rem;
+            font-size: .78rem;
+            font-weight: 800;
+            line-height: 1.55;
+        }
+
+        .torpr-request-center-actions {
+            display: flex;
+            flex-shrink: 0;
+            gap: .5rem;
+        }
+
+        .torpr-request-center-actions button {
+            border-radius: .75rem;
+            padding: .55rem .85rem;
+            color: #ffffff;
+            font-size: .75rem;
+            font-weight: 950;
+            transition: transform .15s ease, filter .15s ease;
+        }
+
+        .torpr-request-center-actions button:hover {
+            transform: translateY(-1px);
+            filter: brightness(1.04);
+        }
+
+        .torpr-request-center-approve {
+            background: #16a34a;
+        }
+
+        .torpr-request-center-reject {
+            background: #dc2626;
+        }
+
+        .torpr-request-status {
+            display: inline-flex;
+            height: fit-content;
+            align-items: center;
+            border-radius: 999px;
+            padding: .35rem .8rem;
+            font-size: .72rem;
+            font-weight: 950;
+            text-transform: uppercase;
+        }
+
+        .torpr-request-status.is-approved {
+            background: #dcfce7;
+            color: #166534;
+            border: 1px solid #bbf7d0;
+        }
+
+        .torpr-request-status.is-rejected {
+            background: #fee2e2;
+            color: #991b1b;
+            border: 1px solid #fecaca;
+        }
+
+        .torpr-request-status.is-pending {
+            background: #fef3c7;
+            color: #92400e;
+            border: 1px solid #fde68a;
+        }
+
+        html.dark .torpr-request-center-note,
+        .dark .torpr-request-center-note {
+            background: #172554 !important;
+            border-color: #60a5fa !important;
+            color: #dbeafe !important;
+        }
+
+        html.dark .torpr-request-center-title,
+        .dark .torpr-request-center-title,
+        html.dark .torpr-request-center-pr,
+        .dark .torpr-request-center-pr {
+            color: #ffffff !important;
+        }
+
+        html.dark .torpr-request-center-empty,
+        .dark .torpr-request-center-empty {
+            background: #0f172a !important;
+            border-color: #334155 !important;
+            color: #e2e8f0 !important;
+        }
+
+        html.dark .torpr-request-center-sub,
+        .dark .torpr-request-center-sub,
+        html.dark .torpr-request-center-meta,
+        .dark .torpr-request-center-meta {
+            color: #cbd5e1 !important;
+        }
+
+        html.dark .torpr-request-center-reason,
+        .dark .torpr-request-center-reason {
+            background: #172554 !important;
+            border-color: #3b82f6 !important;
+            color: #eff6ff !important;
+        }
+
+        html.dark .torpr-request-status.is-approved,
+        .dark .torpr-request-status.is-approved {
+            background: #064e3b !important;
+            color: #d1fae5 !important;
+            border-color: #10b981 !important;
+        }
+
+        html.dark .torpr-request-status.is-rejected,
+        .dark .torpr-request-status.is-rejected {
+            background: #7f1d1d !important;
+            color: #fee2e2 !important;
+            border-color: #ef4444 !important;
+        }
+
+        html.dark .torpr-request-status.is-pending,
+        .dark .torpr-request-status.is-pending {
+            background: #78350f !important;
+            color: #fff7ed !important;
+            border-color: #f59e0b !important;
+        }
+
+        .torpr-delete-popup {
+            border: 1px solid rgba(226, 232, 240, .9) !important;
+            box-shadow: 0 28px 80px rgba(15, 23, 42, .28) !important;
+        }
+
+        .dark .torpr-delete-popup {
+            background: #0f172a !important;
+            color: #f8fafc !important;
+            border-color: rgba(71, 85, 105, .95) !important;
+            box-shadow: 0 28px 80px rgba(0, 0, 0, .65) !important;
+        }
+
+        .torpr-delete-popup .swal2-title,
+        .torpr-delete-popup .swal2-html-container,
+        .torpr-delete-popup .swal2-input-label {
+            color: #0f172a !important;
+        }
+
+        .dark .torpr-delete-popup .swal2-title,
+        .dark .torpr-delete-popup .swal2-html-container,
+        .dark .torpr-delete-popup .swal2-input-label {
+            color: #f8fafc !important;
+        }
+
+        .torpr-delete-popup .swal2-input {
+            height: 2.7rem !important;
+            border-radius: .8rem !important;
+            border: 1px solid #cbd5e1 !important;
+            background: #ffffff !important;
+            color: #0f172a !important;
+            box-shadow: none !important;
+        }
+
+        .dark .torpr-delete-popup .swal2-input {
+            background: #1e293b !important;
+            border-color: #475569 !important;
+            color: #ffffff !important;
+        }
+
+        .dark .torpr-delete-popup .swal2-input::placeholder {
+            color: #94a3b8 !important;
+        }
+
+        .torpr-delete-danger,
+        .torpr-delete-warning {
+            border-radius: .9rem;
+            padding: .85rem;
+            font-size: .82rem;
+            font-weight: 700;
+            line-height: 1.65;
+            text-align: left;
+        }
+
+        .torpr-delete-danger {
+            background: #fff1f2;
+            border: 1px solid #fca5a5;
+            color: #991b1b;
+        }
+
+        .torpr-delete-danger-title {
+            color: #7f1d1d;
+            font-weight: 900;
+            margin-bottom: .25rem;
+        }
+
+        .torpr-delete-warning {
+            background: #fffbeb;
+            border: 1px solid #fbbf24;
+            color: #92400e;
+        }
+
+        .torpr-delete-warning strong {
+            color: #78350f;
+            font-weight: 900;
+        }
+
+        html.dark .torpr-delete-danger,
+        .dark .torpr-delete-danger {
+            background: #7f1d1d !important;
+            border-color: #f87171 !important;
+            color: #ffffff !important;
+            box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .08);
+        }
+
+        html.dark .torpr-delete-danger-title,
+        .dark .torpr-delete-danger-title {
+            color: #ffffff !important;
+        }
+
+        html.dark .torpr-delete-warning,
+        .dark .torpr-delete-warning {
+            background: #78350f !important;
+            border-color: #fbbf24 !important;
+            color: #fff7ed !important;
+            box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .08);
+        }
+
+        html.dark .torpr-delete-warning strong,
+        .dark .torpr-delete-warning strong {
+            color: #ffffff !important;
+        }
+
+        .torpr-password-wrap {
+            margin-top: .65rem;
+            text-align: left;
+        }
+
+        .torpr-password-label {
+            display: block;
+            margin-bottom: .45rem;
+            color: #0f172a;
+            font-size: .9rem;
+            font-weight: 800;
+        }
+
+        .torpr-password-field {
+            display: flex;
+            align-items: center;
+            gap: .45rem;
+            border: 1px solid #cbd5e1;
+            border-radius: .85rem;
+            background: #ffffff;
+            padding: .2rem .25rem .2rem .75rem;
+        }
+
+        .torpr-password-field input {
+            flex: 1;
+            min-width: 0;
+            border: 0;
+            outline: none;
+            background: transparent;
+            color: #0f172a;
+            font-size: .95rem;
+            font-weight: 700;
+            height: 2.35rem;
+        }
+
+        .torpr-password-field input::placeholder {
+            color: #94a3b8;
+            font-weight: 600;
+        }
+
+        .torpr-password-toggle {
+            border: 0;
+            border-radius: .65rem;
+            background: #e0f2fe;
+            color: #075985;
+            cursor: pointer;
+            font-size: .78rem;
+            font-weight: 900;
+            padding: .55rem .7rem;
+            transition: .18s ease;
+        }
+
+        .torpr-password-toggle:hover {
+            background: #bae6fd;
+            transform: translateY(-1px);
+        }
+
+        .torpr-password-help {
+            margin-top: .45rem;
+            color: #64748b;
+            font-size: .72rem;
+            font-weight: 700;
+            line-height: 1.45;
+        }
+
+        html.dark .torpr-password-label,
+        .dark .torpr-password-label {
+            color: #f8fafc !important;
+        }
+
+        html.dark .torpr-password-field,
+        .dark .torpr-password-field {
+            background: #1e293b !important;
+            border-color: #64748b !important;
+            box-shadow: 0 0 0 1px rgba(148, 163, 184, .12);
+        }
+
+        html.dark .torpr-password-field input,
+        .dark .torpr-password-field input {
+            color: #ffffff !important;
+        }
+
+        html.dark .torpr-password-field input::placeholder,
+        .dark .torpr-password-field input::placeholder {
+            color: #cbd5e1 !important;
+        }
+
+        html.dark .torpr-password-toggle,
+        .dark .torpr-password-toggle {
+            background: #2563eb !important;
+            color: #ffffff !important;
+        }
+
+        html.dark .torpr-password-toggle:hover,
+        .dark .torpr-password-toggle:hover {
+            background: #1d4ed8 !important;
+        }
+
+        html.dark .torpr-password-help,
+        .dark .torpr-password-help {
+            color: #cbd5e1 !important;
+        }
+
+        .torpr-lock-countdown {
+            margin: .85rem auto .25rem;
+            width: fit-content;
+            min-width: 11.5rem;
+            border-radius: 1rem;
+            background: linear-gradient(135deg, #fee2e2, #ffedd5);
+            border: 1px solid #fca5a5;
+            color: #7f1d1d;
+            font-size: 1.65rem;
+            font-weight: 950;
+            letter-spacing: .08em;
+            padding: .75rem 1.1rem;
+            text-align: center;
+            box-shadow: 0 14px 35px rgba(239, 68, 68, .18);
+        }
+
+        .torpr-time-pill {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: .35rem;
+            margin-top: .35rem;
+            border-radius: 999px;
+            background: #eff6ff;
+            border: 1px solid #bfdbfe;
+            color: #1e3a8a;
+            font-size: .76rem;
+            font-weight: 900;
+            padding: .4rem .75rem;
+        }
+
+        .torpr-lock-preview {
+            margin-top: .5rem;
+            border-radius: .9rem;
+            background: #f8fafc;
+            border: 1px solid #cbd5e1;
+            color: #334155;
+            font-size: .76rem;
+            font-weight: 800;
+            line-height: 1.55;
+            padding: .7rem .85rem;
+            text-align: left;
+        }
+
+        .torpr-lock-preview strong {
+            color: #0f172a;
+            font-weight: 950;
+        }
+
+        .torpr-lock-preview-row {
+            display: flex;
+            align-items: flex-start;
+            gap: .45rem;
+        }
+
+        .torpr-lock-preview-row + .torpr-lock-preview-row {
+            margin-top: .35rem;
+        }
+
+        .torpr-lock-caption {
+            color: #475569;
+            font-size: .82rem;
+            font-weight: 700;
+            line-height: 1.55;
+            text-align: center;
+        }
+
+        html.dark .torpr-lock-countdown,
+        .dark .torpr-lock-countdown {
+            background: linear-gradient(135deg, #7f1d1d, #9a3412) !important;
+            border-color: #fb7185 !important;
+            color: #ffffff !important;
+            box-shadow: 0 14px 35px rgba(248, 113, 113, .2);
+        }
+
+        html.dark .torpr-time-pill,
+        .dark .torpr-time-pill {
+            background: #172554 !important;
+            border-color: #3b82f6 !important;
+            color: #dbeafe !important;
+        }
+
+        html.dark .torpr-lock-preview,
+        .dark .torpr-lock-preview {
+            background: #1e293b !important;
+            border-color: #475569 !important;
+            color: #e2e8f0 !important;
+        }
+
+        html.dark .torpr-lock-preview strong,
+        .dark .torpr-lock-preview strong {
+            color: #ffffff !important;
+        }
+
+        html.dark .torpr-lock-caption,
+        .dark .torpr-lock-caption {
+            color: #e2e8f0 !important;
+        }
+
+        .torpr-info-timeline {
+            position: relative;
+        }
+
+        .torpr-info-timeline::before {
+            content: '';
+            position: absolute;
+            left: 13px;
+            top: 18px;
+            bottom: 18px;
+            width: 2px;
+            background: linear-gradient(180deg, #3b82f6, #10b981, #f59e0b);
+            opacity: .38;
+        }
+
+        .torpr-info-step {
+            position: relative;
+            padding-left: 42px;
+        }
+
+        .torpr-info-dot {
+            position: absolute;
+            left: 0;
+            top: 2px;
+            width: 28px;
+            height: 28px;
+            border-radius: 999px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 10px 22px rgba(15, 23, 42, .15);
+        }
+
+        .dark .torpr-info-dot {
+            box-shadow: 0 10px 22px rgba(0, 0, 0, .38);
+        }
+
+        .torpr-my-button {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: .55rem;
+            border-radius: .9rem;
+            padding: .72rem 1rem;
+            font-weight: 900;
+            letter-spacing: -.01em;
+            color: #fff;
+            background: linear-gradient(135deg, #06b6d4, #2563eb 55%, #8b5cf6);
+            box-shadow: 0 18px 35px rgba(37, 99, 235, .22);
+            transition: transform .18s ease, box-shadow .18s ease, filter .18s ease;
+            white-space: nowrap;
+        }
+
+        .torpr-my-button:hover {
+            transform: translateY(-1px);
+            filter: saturate(1.08);
+            box-shadow: 0 22px 42px rgba(37, 99, 235, .3);
+        }
+
+        .torpr-my-button.is-soft {
+            color: #0f172a;
+            background: linear-gradient(135deg, #f0f9ff, #e0f2fe 45%, #ede9fe);
+            border: 1px solid rgba(59, 130, 246, .18);
+        }
+
+        .dark .torpr-my-button.is-soft {
+            color: #e5f4ff;
+            background: linear-gradient(135deg, rgba(14, 165, 233, .18), rgba(37, 99, 235, .22), rgba(139, 92, 246, .22));
+            border-color: rgba(147, 197, 253, .25);
+        }
+
+        .torpr-my-popup {
+            border-radius: 28px !important;
+            padding: 0 !important;
+            background: #f8fbff !important;
+            color: #0f172a !important;
+            overflow: hidden !important;
+        }
+
+        .dark .torpr-my-popup {
+            background: #0f172a !important;
+            color: #e5e7eb !important;
+        }
+
+        .torpr-my-html {
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+
+        .torpr-my-wrap {
+            font-family: 'Montserrat', ui-sans-serif, system-ui, sans-serif;
+            text-align: left;
+            max-height: 76vh;
+            overflow: auto;
+            background:
+                radial-gradient(circle at 0 0, rgba(34, 211, 238, .18), transparent 32%),
+                radial-gradient(circle at 100% 0, rgba(168, 85, 247, .16), transparent 32%),
+                #f8fbff;
+        }
+
+        .dark .torpr-my-wrap {
+            background:
+                radial-gradient(circle at 0 0, rgba(34, 211, 238, .16), transparent 32%),
+                radial-gradient(circle at 100% 0, rgba(168, 85, 247, .14), transparent 32%),
+                #0f172a;
+        }
+
+        .torpr-my-hero {
+            padding: 28px;
+            color: #fff;
+            background: linear-gradient(135deg, #2563eb, #7c3aed 55%, #db2777);
+        }
+
+        .torpr-my-hero h2 {
+            margin: 0;
+            font-size: clamp(1.45rem, 2.5vw, 2.2rem);
+            font-weight: 1000;
+            letter-spacing: -.04em;
+        }
+
+        .torpr-my-hero p {
+            margin: .55rem 0 0;
+            max-width: 760px;
+            color: rgba(255, 255, 255, .86);
+            font-weight: 650;
+            line-height: 1.55;
+        }
+
+        .torpr-my-content {
+            padding: 22px;
+        }
+
+        .torpr-my-stats {
+            display: grid;
+            grid-template-columns: repeat(5, minmax(0, 1fr));
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .torpr-my-stat {
+            border-radius: 18px;
+            padding: 15px;
+            border: 1px solid rgba(148, 163, 184, .26);
+            background: rgba(255, 255, 255, .82);
+            box-shadow: 0 15px 35px rgba(15, 23, 42, .06);
+        }
+
+        .dark .torpr-my-stat {
+            background: rgba(15, 23, 42, .72);
+            border-color: rgba(148, 163, 184, .18);
+        }
+
+        .torpr-my-stat span {
+            display: block;
+            font-size: .67rem;
+            font-weight: 1000;
+            letter-spacing: .08em;
+            text-transform: uppercase;
+            color: #64748b;
+        }
+
+        .dark .torpr-my-stat span {
+            color: #94a3b8;
+        }
+
+        .torpr-my-stat strong {
+            display: block;
+            margin-top: 6px;
+            font-size: 1.65rem;
+            line-height: 1;
+            font-weight: 1000;
+            color: #0f172a;
+        }
+
+        .dark .torpr-my-stat strong {
+            color: #f8fafc;
+        }
+
+        .torpr-my-toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            align-items: center;
+            justify-content: space-between;
+            margin: 0 0 16px;
+            padding: 14px;
+            border-radius: 18px;
+            background: rgba(255, 255, 255, .78);
+            border: 1px solid rgba(148, 163, 184, .24);
+        }
+
+        .dark .torpr-my-toolbar {
+            background: rgba(15, 23, 42, .74);
+            border-color: rgba(148, 163, 184, .18);
+        }
+
+        .torpr-my-search {
+            min-width: min(360px, 100%);
+            flex: 1;
+            border: 1px solid rgba(148, 163, 184, .35);
+            background: #fff;
+            color: #0f172a;
+            border-radius: 14px;
+            padding: 11px 14px;
+            font-weight: 750;
+            outline: none;
+        }
+
+        .dark .torpr-my-search {
+            background: rgba(2, 6, 23, .72);
+            color: #f8fafc;
+            border-color: rgba(148, 163, 184, .24);
+        }
+
+        .torpr-my-mini-btn {
+            border-radius: 14px;
+            padding: 10px 13px;
+            font-size: .78rem;
+            font-weight: 950;
+            color: #1d4ed8;
+            background: #eff6ff;
+            border: 1px solid #bfdbfe;
+            transition: .18s ease;
+        }
+
+        .torpr-my-mini-btn:hover {
+            background: #dbeafe;
+            transform: translateY(-1px);
+        }
+
+        .dark .torpr-my-mini-btn {
+            color: #bfdbfe;
+            background: rgba(37, 99, 235, .16);
+            border-color: rgba(96, 165, 250, .25);
+        }
+
+        .torpr-my-list {
+            display: grid;
+            gap: 14px;
+        }
+
+        .torpr-my-card {
+            border-radius: 22px;
+            padding: 16px;
+            background: rgba(255, 255, 255, .88);
+            border: 1px solid rgba(148, 163, 184, .24);
+            box-shadow: 0 18px 36px rgba(15, 23, 42, .07);
+        }
+
+        .dark .torpr-my-card {
+            background: rgba(15, 23, 42, .82);
+            border-color: rgba(148, 163, 184, .18);
+            box-shadow: 0 18px 36px rgba(0, 0, 0, .28);
+        }
+
+        .torpr-my-card-head {
+            display: flex;
+            gap: 12px;
+            align-items: flex-start;
+            justify-content: space-between;
+        }
+
+        .torpr-my-number {
+            font-size: .92rem;
+            font-weight: 1000;
+            color: #1d4ed8;
+        }
+
+        .dark .torpr-my-number {
+            color: #93c5fd;
+        }
+
+        .torpr-my-title {
+            margin-top: 4px;
+            color: #0f172a;
+            font-weight: 1000;
+            font-size: 1.02rem;
+            line-height: 1.35;
+        }
+
+        .dark .torpr-my-title {
+            color: #f8fafc;
+        }
+
+        .torpr-my-meta {
+            margin-top: 7px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 7px;
+            color: #475569;
+            font-weight: 750;
+            font-size: .78rem;
+        }
+
+        .dark .torpr-my-meta {
+            color: #cbd5e1;
+        }
+
+        .torpr-my-badge {
+            display: inline-flex;
+            align-items: center;
+            border-radius: 999px;
+            padding: 7px 10px;
+            font-size: .72rem;
+            font-weight: 1000;
+            white-space: nowrap;
+        }
+
+        .torpr-my-badge.blue { background: #dbeafe; color: #1d4ed8; }
+        .torpr-my-badge.emerald { background: #dcfce7; color: #047857; }
+        .torpr-my-badge.amber { background: #fef3c7; color: #b45309; }
+        .torpr-my-badge.red { background: #fee2e2; color: #b91c1c; }
+        .torpr-my-badge.slate { background: #e2e8f0; color: #334155; }
+
+        .dark .torpr-my-badge.blue { background: rgba(37, 99, 235, .18); color: #bfdbfe; }
+        .dark .torpr-my-badge.emerald { background: rgba(16, 185, 129, .16); color: #a7f3d0; }
+        .dark .torpr-my-badge.amber { background: rgba(245, 158, 11, .16); color: #fde68a; }
+        .dark .torpr-my-badge.red { background: rgba(239, 68, 68, .18); color: #fecaca; }
+        .dark .torpr-my-badge.slate { background: rgba(100, 116, 139, .24); color: #e2e8f0; }
+
+        .torpr-my-progress {
+            margin-top: 14px;
+            height: 10px;
+            border-radius: 999px;
+            overflow: hidden;
+            background: #e2e8f0;
+        }
+
+        .dark .torpr-my-progress {
+            background: rgba(148, 163, 184, .18);
+        }
+
+        .torpr-my-progress > span {
+            display: block;
+            height: 100%;
+            border-radius: inherit;
+            background: linear-gradient(90deg, #06b6d4, #2563eb, #8b5cf6);
+        }
+
+        .torpr-my-stage-grid {
+            margin-top: 13px;
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 8px;
+        }
+
+        .torpr-my-stage {
+            border-radius: 14px;
+            padding: 9px;
+            background: #f8fafc;
+            border: 1px dashed rgba(148, 163, 184, .45);
+            color: #64748b;
+            font-size: .7rem;
+            font-weight: 850;
+        }
+
+        .torpr-my-stage.is-done {
+            border-style: solid;
+            background: #ecfdf5;
+            border-color: #bbf7d0;
+            color: #047857;
+        }
+
+        .dark .torpr-my-stage {
+            background: rgba(2, 6, 23, .45);
+            border-color: rgba(148, 163, 184, .22);
+            color: #94a3b8;
+        }
+
+        .dark .torpr-my-stage.is-done {
+            background: rgba(16, 185, 129, .12);
+            border-color: rgba(52, 211, 153, .25);
+            color: #a7f3d0;
+        }
+
+        .torpr-my-actions {
+            margin-top: 14px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 9px;
+        }
+
+        .torpr-my-action {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 7px;
+            border-radius: 14px;
+            padding: 10px 12px;
+            font-size: .75rem;
+            font-weight: 1000;
+            transition: .18s ease;
+        }
+
+        .torpr-my-action:hover {
+            transform: translateY(-1px);
+        }
+
+        .torpr-my-action.primary {
+            background: #2563eb;
+            color: #fff;
+        }
+
+        .torpr-my-action.chat {
+            background: #eef2ff;
+            color: #4338ca;
+            border: 1px solid #c7d2fe;
+        }
+
+        .torpr-my-action.archive {
+            background: #ecfeff;
+            color: #0e7490;
+            border: 1px solid #a5f3fc;
+        }
+
+        .dark .torpr-my-action.chat {
+            background: rgba(99, 102, 241, .16);
+            color: #c7d2fe;
+            border-color: rgba(165, 180, 252, .22);
+        }
+
+        .dark .torpr-my-action.archive {
+            background: rgba(6, 182, 212, .14);
+            color: #a5f3fc;
+            border-color: rgba(103, 232, 249, .2);
+        }
+
+        .torpr-my-archive-box {
+            margin-top: 12px;
+            border-radius: 16px;
+            padding: 12px;
+            border: 1px solid rgba(148, 163, 184, .22);
+            background: #f8fafc;
+            color: #334155;
+            font-size: .78rem;
+            font-weight: 750;
+        }
+
+        .dark .torpr-my-archive-box {
+            background: rgba(2, 6, 23, .5);
+            color: #cbd5e1;
+            border-color: rgba(148, 163, 184, .18);
+        }
+
+        .torpr-my-mode-note {
+            margin-bottom: 14px;
+            border-radius: 20px;
+            padding: 14px 16px;
+            border: 1px solid rgba(59, 130, 246, .18);
+            background: linear-gradient(135deg, rgba(239, 246, 255, .95), rgba(240, 253, 250, .92));
+            color: #1e3a8a;
+            font-size: .84rem;
+            font-weight: 850;
+            line-height: 1.55;
+        }
+
+        .dark .torpr-my-mode-note {
+            border-color: rgba(125, 211, 252, .2);
+            background: linear-gradient(135deg, rgba(37, 99, 235, .14), rgba(20, 184, 166, .12));
+            color: #dbeafe;
+        }
+
+        .torpr-my-data-card {
+            display: grid;
+            grid-template-columns: minmax(0, 1.1fr) minmax(220px, .9fr);
+            gap: 16px;
+        }
+
+        .torpr-my-data-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 9px;
+            margin-top: 14px;
+        }
+
+        .torpr-my-data-cell {
+            border-radius: 15px;
+            padding: 10px 12px;
+            background: #f8fafc;
+            border: 1px solid rgba(148, 163, 184, .22);
+        }
+
+        .dark .torpr-my-data-cell {
+            background: rgba(2, 6, 23, .45);
+            border-color: rgba(148, 163, 184, .16);
+        }
+
+        .torpr-my-data-cell span {
+            display: block;
+            font-size: .62rem;
+            font-weight: 1000;
+            text-transform: uppercase;
+            letter-spacing: .08em;
+            color: #64748b;
+        }
+
+        .dark .torpr-my-data-cell span {
+            color: #94a3b8;
+        }
+
+        .torpr-my-data-cell strong {
+            display: block;
+            margin-top: 5px;
+            color: #0f172a;
+            font-size: .82rem;
+            font-weight: 950;
+            line-height: 1.35;
+        }
+
+        .dark .torpr-my-data-cell strong {
+            color: #f8fafc;
+        }
+
+        .torpr-my-risk {
+            border-radius: 18px;
+            padding: 13px;
+            border: 1px solid rgba(148, 163, 184, .22);
+            background: linear-gradient(135deg, #f8fafc, #fff);
+        }
+
+        .dark .torpr-my-risk {
+            background: linear-gradient(135deg, rgba(15, 23, 42, .9), rgba(30, 41, 59, .78));
+            border-color: rgba(148, 163, 184, .16);
+        }
+
+        .torpr-my-risk h4 {
+            margin: 0 0 8px;
+            color: #0f172a;
+            font-size: .9rem;
+            font-weight: 1000;
+        }
+
+        .dark .torpr-my-risk h4 {
+            color: #f8fafc;
+        }
+
+        .torpr-my-risk p {
+            margin: 8px 0 0;
+            color: #475569;
+            font-size: .75rem;
+            font-weight: 750;
+            line-height: 1.45;
+        }
+
+        .dark .torpr-my-risk p {
+            color: #cbd5e1;
+        }
+
+        .torpr-my-timeline-card {
+            position: relative;
+            overflow: hidden;
+        }
+
+        .torpr-my-timeline-card::before {
+            content: '';
+            position: absolute;
+            inset: 0 auto 0 0;
+            width: 7px;
+            background: linear-gradient(180deg, #06b6d4, #2563eb, #8b5cf6);
+        }
+
+        .torpr-my-current-stage {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 10px;
+            border-radius: 999px;
+            padding: 8px 11px;
+            color: #0f172a;
+            background: #fef3c7;
+            border: 1px solid #fde68a;
+            font-size: .75rem;
+            font-weight: 1000;
+        }
+
+        .dark .torpr-my-current-stage {
+            color: #fde68a;
+            background: rgba(245, 158, 11, .14);
+            border-color: rgba(251, 191, 36, .22);
+        }
+
+        .torpr-my-timeline {
+            position: relative;
+            display: grid;
+            gap: 10px;
+            margin-top: 15px;
+            padding-left: 24px;
+        }
+
+        .torpr-my-timeline::before {
+            content: '';
+            position: absolute;
+            left: 9px;
+            top: 10px;
+            bottom: 10px;
+            width: 2px;
+            background: rgba(148, 163, 184, .28);
+        }
+
+        .torpr-my-timeline-step {
+            position: relative;
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 10px;
+            align-items: center;
+            border-radius: 16px;
+            padding: 11px 12px;
+            background: #f8fafc;
+            border: 1px solid rgba(148, 163, 184, .22);
+        }
+
+        .dark .torpr-my-timeline-step {
+            background: rgba(2, 6, 23, .45);
+            border-color: rgba(148, 163, 184, .16);
+        }
+
+        .torpr-my-timeline-step::before {
+            content: '';
+            position: absolute;
+            left: -21px;
+            top: 50%;
+            width: 12px;
+            height: 12px;
+            transform: translateY(-50%);
+            border-radius: 999px;
+            background: #cbd5e1;
+            border: 3px solid #fff;
+            box-shadow: 0 0 0 1px rgba(148, 163, 184, .35);
+        }
+
+        .dark .torpr-my-timeline-step::before {
+            border-color: #0f172a;
+        }
+
+        .torpr-my-timeline-step.is-done::before {
+            background: #10b981;
+            box-shadow: 0 0 0 4px rgba(16, 185, 129, .12);
+        }
+
+        .torpr-my-timeline-step strong {
+            color: #0f172a;
+            font-size: .82rem;
+            font-weight: 1000;
+        }
+
+        .dark .torpr-my-timeline-step strong {
+            color: #f8fafc;
+        }
+
+        .torpr-my-timeline-step small {
+            color: #64748b;
+            font-size: .68rem;
+            font-weight: 800;
+        }
+
+        .dark .torpr-my-timeline-step small {
+            color: #94a3b8;
+        }
+
+        .torpr-my-empty {
+            border-radius: 22px;
+            padding: 28px;
+            text-align: center;
+            background: rgba(255, 255, 255, .86);
+            color: #475569;
+            border: 1px dashed rgba(148, 163, 184, .4);
+            font-weight: 850;
+        }
+
+        .dark .torpr-my-empty {
+            background: rgba(15, 23, 42, .75);
+            color: #cbd5e1;
+            border-color: rgba(148, 163, 184, .2);
+        }
+
+        .torpr-my-card.hidden,
+        .torpr-my-empty.hidden {
+            display: none !important;
+        }
+
+        .torpr-my-chipbar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin: -4px 0 14px;
+        }
+
+        .torpr-my-filter-chip {
+            border-radius: 999px;
+            padding: 8px 11px;
+            font-size: .72rem;
+            font-weight: 1000;
+            color: #334155;
+            background: #fff;
+            border: 1px solid rgba(148, 163, 184, .32);
+            box-shadow: 0 10px 20px rgba(15, 23, 42, .05);
+            transition: .18s ease;
+        }
+
+        .torpr-my-filter-chip:hover,
+        .torpr-my-filter-chip.is-active {
+            color: #fff;
+            background: linear-gradient(135deg, #2563eb, #8b5cf6);
+            border-color: transparent;
+            transform: translateY(-1px);
+        }
+
+        .dark .torpr-my-filter-chip {
+            color: #cbd5e1;
+            background: rgba(15, 23, 42, .78);
+            border-color: rgba(148, 163, 184, .18);
+        }
+
+        .dark .torpr-my-filter-chip:hover,
+        .dark .torpr-my-filter-chip.is-active {
+            color: #fff;
+            background: linear-gradient(135deg, #2563eb, #7c3aed);
+        }
+
+        .torpr-my-no-result {
+            display: none;
+        }
+
+        .torpr-my-no-result.is-visible {
+            display: block;
+        }
+
+        .torpr-my-result-count {
+            display: inline-flex;
+            align-items: center;
+            width: fit-content;
+            gap: 6px;
+            margin: -4px 0 14px;
+            padding: 8px 12px;
+            border-radius: 999px;
+            font-size: .74rem;
+            font-weight: 1000;
+            color: #1d4ed8;
+            background: rgba(219, 234, 254, .86);
+            border: 1px solid rgba(96, 165, 250, .32);
+        }
+
+        .dark .torpr-my-result-count {
+            color: #bfdbfe;
+            background: rgba(30, 64, 175, .22);
+            border-color: rgba(96, 165, 250, .24);
+        }
+
+        @media (max-width: 900px) {
+            .torpr-my-stats,
+            .torpr-my-stage-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+
+            .torpr-my-card-head {
+                flex-direction: column;
+            }
+
+            .torpr-my-data-card {
+                grid-template-columns: 1fr;
+            }
+
+            .torpr-my-data-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+
+        /* Tambahkan di file CSS Anda */
+        .swal-export-container {
+            z-index: 99999 !important;
+        }
+
+        .swal2-container {
+            z-index: 99999 !important;
+        }
+
+        /* Pastikan backdrop juga bisa diklik */
+        .swal2-backdrop-show {
+            z-index: 99998 !important;
+        }
+
+        .swal2-confirm,
+        .swal2-cancel {
+            position: relative;
+            z-index: 99999 !important;
+            pointer-events: auto !important;
+        }
+
+        /* Hindari event blocking */
+        .swal2-popup {
+            pointer-events: auto !important;
+        }
+
+        /* ==========================================
+                                                                                                                                                                                                                                                                                           ANIMATIONS & TRANSITIONS
+                                                                                                                                                                                                                                                                                        ========================================== */
+
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+            }
+
+            to {
+                opacity: 1;
+            }
+        }
+
+        @keyframes scaleIn {
+            from {
+                opacity: 0;
+                transform: scale(0.95);
+            }
+
+            to {
+                opacity: 1;
+                transform: scale(1);
+            }
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateX(-10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        @keyframes slideInLeft {
+            from {
+                opacity: 0;
+                transform: translateX(-20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        @keyframes slideInRight {
+            from {
+                opacity: 0;
+                transform: translateX(20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        @keyframes bounceSubtle {
+
+            0%,
+            100% {
+                transform: translateY(0);
+            }
+
+            50% {
+                transform: translateY(-5px);
+            }
+        }
+
+        @keyframes pulseSubtle {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.8;
+            }
+        }
+
+        @keyframes shake {
+
+            0%,
+            100% {
+                transform: translateX(0);
+            }
+
+            10%,
+            30%,
+            50%,
+            70%,
+            90% {
+                transform: translateX(-5px);
+            }
+
+            20%,
+            40%,
+            60%,
+            80% {
+                transform: translateX(5px);
+            }
+        }
+
+        @keyframes pop {
+            from {
+                transform: translateY(8px) scale(.99);
+                opacity: 0;
+            }
+
+            to {
+                transform: translateY(0) scale(1);
+                opacity: 1;
+            }
+        }
+
+        .animate-slide-down {
+            animation: slideDown 0.5s ease-out;
+        }
+
+        .animate-fade-in {
+            animation: fadeIn 0.4s ease-out;
+        }
+
+        .animate-scale-in {
+            animation: scaleIn 0.3s ease-out;
+        }
+
+        .animate-slide-in {
+            animation: slideIn 0.4s ease-out;
+        }
+
+        .animate-slide-in-left {
+            animation: slideInLeft 0.3s ease-out;
+        }
+
+        .animate-slide-in-right {
+            animation: slideInRight 0.3s ease-out;
+        }
+
+        .animate-bounce-subtle {
+            animation: bounceSubtle 2s ease-in-out infinite;
+        }
+
+        .animate-pulse-subtle {
+            animation: pulseSubtle 2s ease-in-out infinite;
+        }
+
+        .animate-shake {
+            animation: shake 0.5s ease-in-out;
+        }
+
+        .modal-pop {
+            animation: pop .16s ease-out;
+            will-change: transform, opacity;
+        }
+
+        /* Smooth scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+
+        /* Dark mode scrollbar */
+        .dark ::-webkit-scrollbar-track {
+            background: #1f2937;
+        }
+
+        .dark ::-webkit-scrollbar-thumb {
+            background: #4b5563;
+        }
+
+        .dark ::-webkit-scrollbar-thumb:hover {
+            background: #6b7280;
+        }
+
+        /* Backdrop blur enhancement */
+        .backdrop-blur-sm {
+            backdrop-filter: blur(4px);
+            -webkit-backdrop-filter: blur(4px);
+        }
+
+        /* Gradient text */
+        .bg-gradient-to-r {
+            background-clip: text;
+            -webkit-background-clip: text;
+        }
+
+        /* Hover scale effect */
+        .hover\:scale-105:hover {
+            transform: scale(1.05);
+        }
+
+        .hover\:scale-110:hover {
+            transform: scale(1.1);
+        }
+
+        /* Active scale effect */
+        .active\:scale-95:active {
+            transform: scale(0.95);
+        }
+
+        /* Transition all */
+        .transition-all {
+            transition-property: all;
+            transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+            transition-duration: 300ms;
+        }
+
+        /* Custom shadows */
+        .shadow-2xl {
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+        }
+
+        /* Focus ring */
+        .focus\:ring-2:focus {
+            outline: 2px solid transparent;
+            outline-offset: 2px;
+            --tw-ring-offset-shadow: var(--tw-ring-inset) 0 0 0 var(--tw-ring-offset-width) var(--tw-ring-offset-color);
+            --tw-ring-shadow: var(--tw-ring-inset) 0 0 0 calc(2px + var(--tw-ring-offset-width)) var(--tw-ring-color);
+            box-shadow: var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow, 0 0 #0000);
+        }
+
+        /* Loading spinner enhancement */
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .animate-spin {
+            animation: spin 1s linear infinite;
+        }
+
+        @media (max-width: 768px) {
+
+            /* Stack filter inputs vertically on mobile */
+            #filterForm .grid {
+                grid-template-columns: 1fr !important;
+            }
+
+            /* Full width buttons on mobile */
+            #filterForm button,
+            #filterForm a {
+                width: 100%;
+            }
+
+            /* Adjust date inputs */
+            input[type="date"] {
+                -webkit-appearance: none;
+                -moz-appearance: none;
+                appearance: none;
+            }
+        }
+
+        @media (max-width: 640px) {
+
+            /* Smaller text on very small screens */
+            #filterForm label {
+                font-size: 0.7rem;
+            }
+
+            #filterForm input,
+            #filterForm select {
+                font-size: 0.875rem;
+                padding: 0.5rem;
+            }
+        }
+
+
+
+        /* Info PR Modal Animation */
+        @keyframes infoBackdropIn {
+            from {
+                opacity: 0;
+            }
+
+            to {
+                opacity: 1;
+            }
+        }
+
+        @keyframes infoModalIn {
+            from {
+                opacity: 0;
+                transform: translateY(18px) scale(.94);
+                filter: blur(8px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+                filter: blur(0);
+            }
+        }
+
+        @keyframes infoModalOut {
+            from {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+
+            to {
+                opacity: 0;
+                transform: translateY(12px) scale(.96);
+            }
+        }
+
+        .info-backdrop {
+            animation: infoBackdropIn .18s ease-out;
+        }
+
+        .info-modal-pop {
+            animation: infoModalIn .28s cubic-bezier(.16, 1, .3, 1);
+            will-change: transform, opacity, filter;
+        }
+
+        .info-modal-out {
+            animation: infoModalOut .14s ease-in forwards;
+        }
+
+        .info-card-glow::before {
+            content: '';
+            position: absolute;
+            inset: -1px;
+            border-radius: 1rem;
+            padding: 1px;
+            background: linear-gradient(135deg, rgba(59, 130, 246, .55), rgba(16, 185, 129, .35), rgba(99, 102, 241, .55));
+            -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+            -webkit-mask-composite: xor;
+            mask-composite: exclude;
+            pointer-events: none;
+        }
+
+        .info-shine {
+            position: relative;
+            overflow: hidden;
+        }
+
+        .info-shine::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -120%;
+            height: 100%;
+            width: 60%;
+            transform: skewX(-20deg);
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .55), transparent);
+            animation: infoShine 2.8s ease-in-out infinite;
+        }
+
+        @keyframes infoShine {
+
+            0%,
+            45% {
+                left: -120%;
+            }
+
+            100% {
+                left: 140%;
+            }
+        }
+
+        #nomor_pr {
+            text-transform: uppercase;
+        }
