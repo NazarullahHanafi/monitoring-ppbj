@@ -43,33 +43,40 @@ return new class extends Migration {
 
         $now = now();
 
-        DB::table('spphs')
-            ->join('ppbj', 'ppbj.ppbj_no', '=', 'spphs.nomor_pr')
-            ->select(['spphs.id as document_id', 'ppbj.id as ppbj_id'])
-            ->orderBy('spphs.id')
-            ->chunkById(250, function ($rows) use ($now) {
-                DB::table('spph_ppbj')->insertOrIgnore($rows->map(fn ($row) => [
-                    'spph_id' => $row->document_id,
-                    'ppbj_id' => $row->ppbj_id,
-                    'urutan' => 1,
-                    'created_at' => $now,
-                    'updated_at' => $now,
-                ])->all());
-            }, 'spphs.id', 'document_id');
+        $backfill = function (string $sourceTable, string $pivotTable, string $foreignKey) use ($now): void {
+            DB::table($sourceTable)
+                ->select(['id', 'nomor_pr'])
+                ->whereNotNull('nomor_pr')
+                ->where('nomor_pr', '!=', '')
+                ->orderBy('id')
+                ->chunkById(250, function ($documents) use ($pivotTable, $foreignKey, $now) {
+                    // Production has legacy columns with different collations.
+                    // Comparing each column with bound values (instead of a
+                    // cross-table JOIN) remains indexed and avoids collation errors.
+                    $ppbjIds = DB::table('ppbj')
+                        ->whereIn('ppbj_no', $documents->pluck('nomor_pr')->unique()->all())
+                        ->pluck('id', 'ppbj_no');
 
-        DB::table('sps')
-            ->join('ppbj', 'ppbj.ppbj_no', '=', 'sps.nomor_pr')
-            ->select(['sps.id as document_id', 'ppbj.id as ppbj_id'])
-            ->orderBy('sps.id')
-            ->chunkById(250, function ($rows) use ($now) {
-                DB::table('sp_ppbj')->insertOrIgnore($rows->map(fn ($row) => [
-                    'sp_id' => $row->document_id,
-                    'ppbj_id' => $row->ppbj_id,
-                    'urutan' => 1,
-                    'created_at' => $now,
-                    'updated_at' => $now,
-                ])->all());
-            }, 'sps.id', 'document_id');
+                    $rows = $documents->map(function ($document) use ($ppbjIds, $foreignKey, $now) {
+                        $ppbjId = $ppbjIds->get($document->nomor_pr);
+
+                        return $ppbjId ? [
+                            $foreignKey => $document->id,
+                            'ppbj_id' => $ppbjId,
+                            'urutan' => 1,
+                            'created_at' => $now,
+                            'updated_at' => $now,
+                        ] : null;
+                    })->filter()->values()->all();
+
+                    if ($rows !== []) {
+                        DB::table($pivotTable)->insertOrIgnore($rows);
+                    }
+                });
+        };
+
+        $backfill('spphs', 'spph_ppbj', 'spph_id');
+        $backfill('sps', 'sp_ppbj', 'sp_id');
     }
 
     public function down(): void
