@@ -104,7 +104,7 @@
 <body class="bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 transition-colors">
     @if(auth()->user()?->isReadOnly())
         <div class="readonly-viewer-banner" role="status">
-            <span>ðŸ‘ï¸</span>
+            <span>👁️</span>
             <span>Mode Viewer: akun ini hanya dapat melihat data, tanpa akses ubah/simpan/hapus.</span>
         </div>
     @endif
@@ -117,7 +117,7 @@
                 class="px-5 py-4 flex items-center justify-between border-b border-gray-200/50 dark:border-gray-800/50">
                 <div
                     class="font-bold text-lg whitespace-nowrap text-gray-900 dark:text-gray-100 flex items-center gap-2">
-                    <span class="text-2xl">ðŸ“Š</span><span class="sidebar-text dark:text-white mt-1">Monitoring
+                    <span class="text-2xl">📊</span><span class="sidebar-text dark:text-white mt-1">Monitoring
                         PPBJ</span>
                 </div>
                 <button type="button" id="btnToggleSidebar" title="Toggle Sidebar"
@@ -132,19 +132,19 @@
                 @if(auth()->user()?->department === 'umum')
                     <a href="{{ route('dashboard.indexumum') }}"
                         class="nav-item group flex items-center gap-3 px-4 py-3 rounded-xl {{ request()->is('dashboard*') ? 'active' : 'text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-blue-600 dark:hover:text-blue-400' }}"><span
-                            class="icon-box text-xl">ðŸ“Š</span><span class="nav-text font-medium">Dashboard</span></a>
+                            class="icon-box text-xl">📊</span><span class="nav-text font-medium">Dashboard</span></a>
                     <a href="{{ route('ppbj.index') }}"
                         class="nav-item group flex items-center gap-3 px-4 py-3 rounded-xl {{ request()->is('ppbj*') && !request()->is('ppbj/report*') ? 'active' : 'text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-blue-600 dark:hover:text-blue-400' }}"><span
-                            class="icon-box text-xl">ðŸ“</span><span class="nav-text font-medium">Management PPBJ</span></a>
+                            class="icon-box text-xl">📁</span><span class="nav-text font-medium">Management PPBJ</span></a>
                     <a href="{{ route('ppbj.report') }}"
                         class="nav-item group flex items-center gap-3 px-4 py-3 rounded-xl {{ request()->is('ppbj/report*') ? 'active' : 'text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-blue-600 dark:hover:text-blue-400' }}"><span
-                            class="icon-box text-xl">ðŸ“ˆ</span><span class="nav-text font-medium">Laporan</span></a>
+                            class="icon-box text-xl">📈</span><span class="nav-text font-medium">Laporan</span></a>
                     <a href="{{ route('spph.index') }}"
                         class="nav-item group flex items-center gap-3 px-4 py-3 rounded-xl {{ request()->is('spph*') ? 'active' : 'text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-blue-600 dark:hover:text-blue-400' }}"><span
-                            class="icon-box text-xl">ðŸ“‹</span><span class="nav-text font-medium">Penomoran SPPH</span></a>
+                            class="icon-box text-xl">📋</span><span class="nav-text font-medium">Penomoran SPPH</span></a>
                     <a href="{{ route('sp.index') }}"
                         class="nav-item group flex items-center gap-3 px-4 py-3 rounded-xl {{ (request()->is('sp') || request()->is('sp/*')) ? 'active' : 'text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-blue-600 dark:hover:text-blue-400' }}"><span
-                            class="icon-box text-xl">ðŸ“</span><span class="nav-text font-medium">Penomoran SP</span></a>
+                            class="icon-box text-xl">📝</span><span class="nav-text font-medium">Penomoran SP</span></a>
                     <div class="pt-3 mt-2 border-t border-gray-200/50 dark:border-gray-800/50">
                         <div
                             class="flex items-center gap-3 px-4 py-2 text-[11px] font-extrabold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">
@@ -155,23 +155,23 @@
                         </div>
                         <a href="{{ route('sp-master-options.index') }}"
                             class="nav-item group flex items-center gap-3 px-4 py-2.5 rounded-xl {{ request()->is('sp-master-options*') ? 'active' : 'text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-blue-600 dark:hover:text-blue-400' }}">
-                            <span class="icon-box text-xl">âš™ï¸</span>
+                            <span class="icon-box text-xl">⚙️</span>
                             <span class="nav-text font-medium">Master Kontrak SP</span>
                         </a>
                         <a href="{{ route('vendor.index') }}"
                             class="nav-item group flex items-center gap-3 px-4 py-2.5 rounded-xl {{ request()->is('vendors*') ? 'active' : 'text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-blue-600 dark:hover:text-blue-400' }}">
-                            <span class="icon-box text-xl">ðŸ¢</span>
+                            <span class="icon-box text-xl">🏢</span>
                             <span class="nav-text font-medium">Vendor</span>
                         </a>
                         <a href="{{ route('satuan.index') }}"
                             class="nav-item group flex items-center gap-3 px-4 py-2.5 rounded-xl {{ request()->is('satuan*') ? 'active' : 'text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-blue-600 dark:hover:text-blue-400' }}">
-                            <span class="icon-box text-xl">ðŸ“¦</span>
+                            <span class="icon-box text-xl">📦</span>
                             <span class="nav-text font-medium">Satuan</span>
                         </a>
                     </div>
                     <a href="{{ route('approval.pr.index') }}"
                         class="nav-item group flex items-center justify-between gap-3 px-4 py-3 rounded-xl {{ request()->is('approval/pr-receipts*') ? 'active' : 'text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-blue-600 dark:hover:text-blue-400' }}">
-                        <div class="flex items-center gap-3"><span class="icon-box text-xl">âœ…</span><span
+                        <div class="flex items-center gap-3"><span class="icon-box text-xl">✅</span><span
                                 class="nav-text font-medium">Approval
                                 PR</span>@if(isset($pendingApprovalCount) && $pendingApprovalCount > 0)<span
                                 class="ml-2 bg-red-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full ring-2 ring-white dark:ring-gray-800 animate-bounce">{{ $pendingApprovalCount }}</span>@endif
@@ -182,12 +182,12 @@
                     @if(auth()->user()->role === 'superadmin')
                         <a href="{{ route('users.index') }}"
                             class="nav-item group flex items-center gap-3 px-4 py-3 rounded-xl {{ request()->is('users*') ? 'active' : 'text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-blue-600 dark:hover:text-blue-400' }}"><span
-                                class="icon-box text-xl">ðŸ‘¥</span><span class="nav-text font-medium">Management Users</span></a>
+                                class="icon-box text-xl">👥</span><span class="nav-text font-medium">Management Users</span></a>
                     @endif
                     @if(auth()->user()?->isOwner())
                         <a href="{{ route('owner.index') }}"
                             class="nav-item group flex items-center gap-3 px-4 py-3 rounded-xl {{ request()->is('owner*') ? 'active' : 'text-gray-700 dark:text-gray-300 hover:bg-violet-50 dark:hover:bg-violet-900/20 hover:text-violet-600 dark:hover:text-violet-300' }}">
-                            <span class="icon-box text-xl">ðŸ‘‘</span>
+                            <span class="icon-box text-xl">👑</span>
                             <span class="nav-text font-medium">Owner Center</span>
                         </a>
                     @endif
@@ -195,7 +195,7 @@
                         <a href="{{ route('contact-messages.index') }}"
                             class="nav-item group flex items-center justify-between gap-3 px-4 py-3 rounded-xl {{ request()->is('contact-messages*') ? 'active' : 'text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-blue-600 dark:hover:text-blue-400' }}">
                             <div class="flex items-center gap-3">
-                                <span class="icon-box text-xl">ðŸ’¬</span>
+                                <span class="icon-box text-xl">💬</span>
                                 <span class="nav-text font-medium">Pesan Contact</span>
                             </div>
                             @if(($unreadContactMessageCount ?? 0) > 0)
@@ -206,23 +206,23 @@
                     <div class="pt-4 mt-4 border-t border-gray-200/50 dark:border-gray-800/50"><a
                             href="{{ route('account.edit') }}"
                             class="nav-item group flex items-center gap-3 px-4 py-3 rounded-xl {{ request()->is('account*') ? 'active' : 'text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-blue-600 dark:hover:text-blue-400' }}"><span
-                                class="icon-box text-xl">ðŸ‘¤</span><span class="nav-text font-medium">Management
+                                class="icon-box text-xl">👤</span><span class="nav-text font-medium">Management
                                 Akun</span></a></div>
                 @endif
                 @if(auth()->user()?->department === 'operasional')
                     <a href="{{ route('ops.dashboard') }}"
                         class="nav-item group flex items-center gap-3 px-4 py-3 rounded-xl {{ request()->is('ops/dashboard') ? 'active' : 'text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-blue-600 dark:hover:text-blue-400' }}"><span
-                            class="icon-box text-xl">ðŸ“Š</span><span class="nav-text font-medium">Dashboard</span></a>
+                            class="icon-box text-xl">📊</span><span class="nav-text font-medium">Dashboard</span></a>
                     <a href="{{ route('torpr.index') }}"
                         class="nav-item group flex items-center gap-3 px-4 py-3 rounded-xl {{ request()->is('torpr*') ? 'active' : 'text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-blue-600 dark:hover:text-blue-400' }}"><span
-                            class="icon-box text-xl">ðŸ§¾</span><span class="nav-text font-medium">TORPR</span></a>
+                            class="icon-box text-xl">🧾</span><span class="nav-text font-medium">TORPR</span></a>
                     <a href="{{ route('tracking.index') }}"
                         class="nav-item group flex items-center gap-3 px-4 py-3 rounded-xl {{ request()->is('tracking-pr*') ? 'active' : 'text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-blue-600 dark:hover:text-blue-400' }}"><span
-                            class="icon-box text-xl">ðŸ›°ï¸</span><span class="nav-text font-medium">Tracking PR</span></a>
+                            class="icon-box text-xl">🛰️</span><span class="nav-text font-medium">Tracking PR</span></a>
                     <div class="pt-4 mt-4 border-t border-gray-200/50 dark:border-gray-800/50"><a
                             href="{{ route('account.edit') }}"
                             class="nav-item group flex items-center gap-3 px-4 py-3 rounded-xl {{ request()->is('account*') ? 'active' : 'text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-blue-600 dark:hover:text-blue-400' }}"><span
-                                class="icon-box text-xl">ðŸ‘¤</span><span class="nav-text font-medium">Management
+                                class="icon-box text-xl">👤</span><span class="nav-text font-medium">Management
                                 Akun</span></a></div>
                 @endif
             </nav>
@@ -236,7 +236,7 @@
                 <div
                     class="px-5 py-4 flex items-center justify-between border-b border-gray-200 dark:border-gray-700 bg-gradient-to-r from-blue-500/10 to-purple-500/10">
                     <div class="font-bold text-lg text-gray-900 dark:text-white flex items-center gap-2"><span
-                            class="text-2xl">ðŸ“Š</span> Monitoring PPBJ</div>
+                            class="text-2xl">📊</span> Monitoring PPBJ</div>
                     <button id="btnCloseMobile"
                         class="p-2 rounded-xl bg-gray-100 dark:bg-gray-800 hover:bg-red-100 dark:hover:bg-red-900/30 transition-all hover:rotate-90"><svg
                             class="w-5 h-5 text-gray-600 dark:text-gray-300" fill="none" stroke="currentColor"
@@ -249,23 +249,23 @@
                     @if(auth()->user()?->department === 'umum')
                         <a href="{{ route('dashboard.indexumum') }}"
                             class="nav-item block px-4 py-3 rounded-xl {{ request()->is('dashboard*') ? 'active' : 'text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-blue-900/20' }}"><span
-                                class="flex items-center gap-3"><span class="text-xl">ðŸ“Š</span><span
+                                class="flex items-center gap-3"><span class="text-xl">📊</span><span
                                     class="font-medium">Dashboard</span></span></a>
                         <a href="{{ route('ppbj.index') }}"
                             class="nav-item block px-4 py-3 rounded-xl {{ request()->is('ppbj*') && !request()->is('ppbj/report*') ? 'active' : 'text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-blue-900/20' }}"><span
-                                class="flex items-center gap-3"><span class="text-xl">ðŸ“</span><span
+                                class="flex items-center gap-3"><span class="text-xl">📁</span><span
                                     class="font-medium">Management PPBJ</span></span></a>
                         <a href="{{ route('ppbj.report') }}"
                             class="nav-item block px-4 py-3 rounded-xl {{ request()->is('ppbj/report*') ? 'active' : 'text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-blue-900/20' }}"><span
-                                class="flex items-center gap-3"><span class="text-xl">ðŸ“ˆ</span><span
+                                class="flex items-center gap-3"><span class="text-xl">📈</span><span
                                     class="font-medium">Laporan</span></span></a>
                         <a href="{{ route('spph.index') }}"
                             class="nav-item block px-4 py-3 rounded-xl {{ request()->is('spph*') ? 'active' : 'text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-blue-900/20' }}"><span
-                                class="flex items-center gap-3"><span class="text-xl">ðŸ“‹</span><span
+                                class="flex items-center gap-3"><span class="text-xl">📋</span><span
                                     class="font-medium">Penomoran SPPH</span></span></a>
                         <a href="{{ route('sp.index') }}"
                             class="nav-item block px-4 py-3 rounded-xl {{ request()->is('sp') || request()->is('sp/*') ? 'active' : 'text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-blue-900/20' }}"><span
-                                class="flex items-center gap-3"><span class="text-xl">ðŸ“</span><span
+                                class="flex items-center gap-3"><span class="text-xl">📝</span><span
                                     class="font-medium">Penomoran SP</span></span></a>
                         <div class="pt-3 mt-2 border-t border-gray-200/70 dark:border-gray-700/70">
                             <div
@@ -292,26 +292,26 @@
                         </div>
                         <a href="{{ route('approval.pr.index') }}"
                             class="nav-item flex items-center justify-between px-4 py-3 rounded-xl {{ request()->is('approval/pr-receipts*') ? 'active' : 'text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-blue-900/20' }}"><span
-                                class="flex items-center gap-3"><span class="text-xl">âœ…</span><span
+                                class="flex items-center gap-3"><span class="text-xl">✅</span><span
                                     class="font-medium">Approval PR</span></span><span id="badgePendingPrMobile"
                                 class="badge-pulse hidden text-xs font-bold bg-gradient-to-r from-red-500 to-pink-500 text-white px-2.5 py-1 rounded-full">0</span></a>
                         @if(auth()->user()->role === 'superadmin')
                             <a href="{{ route('users.index') }}"
                                 class="nav-item block px-4 py-3 rounded-xl {{ request()->is('users*') ? 'active' : 'text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-blue-900/20' }}"><span
-                                    class="flex items-center gap-3"><span class="text-xl">ðŸ‘¥</span><span
+                                    class="flex items-center gap-3"><span class="text-xl">👥</span><span
                                         class="font-medium">Management Users</span></span></a>
                         @endif
                         @if(auth()->user()?->isOwner())
                             <a href="{{ route('owner.index') }}"
                                 class="nav-item block px-4 py-3 rounded-xl {{ request()->is('owner*') ? 'active' : 'text-gray-700 dark:text-gray-300 hover:bg-violet-50 dark:hover:bg-violet-900/20' }}">
-                                <span class="flex items-center gap-3"><span class="text-xl">ðŸ‘‘</span><span
+                                <span class="flex items-center gap-3"><span class="text-xl">👑</span><span
                                         class="font-medium">Owner Center</span></span>
                             </a>
                         @endif
                         @if(auth()->user()->role === 'superadmin')
                             <a href="{{ route('contact-messages.index') }}"
                                 class="nav-item flex items-center justify-between px-4 py-3 rounded-xl {{ request()->is('contact-messages*') ? 'active' : 'text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-blue-900/20' }}">
-                                <span class="flex items-center gap-3"><span class="text-xl">ðŸ’¬</span><span
+                                <span class="flex items-center gap-3"><span class="text-xl">💬</span><span
                                         class="font-medium">Pesan Contact</span></span>
                                 @if(($unreadContactMessageCount ?? 0) > 0)
                                     <span class="text-xs font-bold bg-gradient-to-r from-red-500 to-pink-500 text-white px-2.5 py-1 rounded-full">{{ $unreadContactMessageCount }}</span>
@@ -321,26 +321,26 @@
                         <div class="pt-4 mt-4 border-t border-gray-200/50 dark:border-gray-800/50"><a
                                 href="{{ route('account.edit') }}"
                                 class="nav-item block px-4 py-3 rounded-xl {{ request()->is('account*') ? 'active' : 'text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-blue-900/20' }}"><span
-                                    class="flex items-center gap-3"><span class="text-xl">ðŸ‘¤</span><span
+                                    class="flex items-center gap-3"><span class="text-xl">👤</span><span
                                         class="font-medium">Management Akun</span></span></a></div>
                     @endif
                     @if(auth()->user()?->department === 'operasional')
                         <a href="{{ route('ops.dashboard') }}"
                             class="nav-item block px-4 py-3 rounded-xl {{ request()->is('ops/dashboard') ? 'active' : 'text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-blue-900/20' }}"><span
-                                class="flex items-center gap-3"><span class="text-xl">ðŸ“Š</span><span
+                                class="flex items-center gap-3"><span class="text-xl">📊</span><span
                                     class="font-medium">Dashboard</span></span></a>
                         <a href="{{ route('torpr.index') }}"
                             class="nav-item block px-4 py-3 rounded-xl {{ request()->is('torpr*') ? 'active' : 'text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-blue-900/20' }}"><span
-                                class="flex items-center gap-3"><span class="text-xl">ðŸ§¾</span><span
+                                class="flex items-center gap-3"><span class="text-xl">🧾</span><span
                                     class="font-medium">TORPR</span></span></a>
                         <a href="{{ route('tracking.index') }}"
                             class="nav-item block px-4 py-3 rounded-xl {{ request()->is('tracking-pr*') ? 'active' : 'text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-blue-900/20' }}"><span
-                                class="flex items-center gap-3"><span class="text-xl">ðŸ›°ï¸</span><span
+                                class="flex items-center gap-3"><span class="text-xl">🛰️</span><span
                                     class="font-medium">Tracking PR</span></span></a>
                         <div class="pt-4 mt-4 border-t border-gray-200/50 dark:border-gray-800/50"><a
                                 href="{{ route('account.edit') }}"
                                 class="nav-item block px-4 py-3 rounded-xl {{ request()->is('account*') ? 'active' : 'text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-blue-900/20' }}"><span
-                                    class="flex items-center gap-3"><span class="text-xl">ðŸ‘¤</span><span
+                                    class="flex items-center gap-3"><span class="text-xl">👤</span><span
                                         class="font-medium">Management Akun</span></span></a></div>
                     @endif
                 </nav>
@@ -399,19 +399,19 @@
                                     </div><span class="pp-me-tag">Kamu</span>
                                 </div>
                             </div>
-                            <div class="pp-footer"><button type="button" class="pp-footer-btn" id="btnChangeMood">âœï¸
+                            <div class="pp-footer"><button type="button" class="pp-footer-btn" id="btnChangeMood">✏️
                                     Ganti mood</button></div>
                         </div>
                     </div>
                     <button type="button" class="chat-trigger" id="chatTrigger" title="Chat Tim">
-                        <span class="chat-trigger-icon">ðŸ’¬</span>
+                        <span class="chat-trigger-icon">💬</span>
                         <span class="chat-trigger-badge" id="chatBadge">0</span>
                         <span class="chat-trigger-mention" id="chatMentionBadge">@</span>
                     </button>
                     <button id="themeToggle" type="button" title="Toggle theme"
                         class="p-2.5 rounded-xl bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-all">
                         <div class="transition-transform duration-500 rotate-0 dark:rotate-180"><span
-                                class="dark:hidden text-xl">ðŸŒ™</span><span class="hidden dark:inline text-xl">â˜€ï¸</span>
+                                class="dark:hidden text-xl">🌙</span><span class="hidden dark:inline text-xl">☀️</span>
                         </div>
                     </button>
                     <a href="/"
@@ -438,17 +438,17 @@
     {{-- CONTEXT MENU --}}
     <div class="ctx-menu" id="ctxMenu">
         <div class="ctx-reactions" id="ctxReactions"></div>
-        <div class="ctx-item" id="ctxReply"><span class="ctx-icon">â†©ï¸</span>Balas</div>
-        <div class="ctx-item" id="ctxEdit"><span class="ctx-icon">âœï¸</span>Edit Pesan</div>
-        <div class="ctx-item" id="ctxMention"><span class="ctx-icon">ðŸ·ï¸</span>Tag @Nama</div>
-        <div class="ctx-item danger" id="ctxDelete"><span class="ctx-icon">ðŸ—‘ï¸</span>Hapus Pesan</div>
+        <div class="ctx-item" id="ctxReply"><span class="ctx-icon">↩️</span>Balas</div>
+        <div class="ctx-item" id="ctxEdit"><span class="ctx-icon">✏️</span>Edit Pesan</div>
+        <div class="ctx-item" id="ctxMention"><span class="ctx-icon">🏷️</span>Tag @Nama</div>
+        <div class="ctx-item danger" id="ctxDelete"><span class="ctx-icon">🗑️</span>Hapus Pesan</div>
     </div>
 
     {{-- CHAT PANEL --}}
     <div class="chat-panel" id="chatPanel">
         <div class="cp-head">
             <div class="cp-head-info">
-                <div class="cp-title">ðŸ’¬ Chat Tim</div>
+                <div class="cp-title">💬 Chat Tim</div>
                 <div class="cp-sub" id="cpOnlineCount">Memuat...</div>
             </div>
             <button type="button" class="cp-head-action" id="cpSearchBtn" title="Cari pesan" aria-label="Cari pesan">
@@ -464,7 +464,7 @@
                 <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14"/></svg>
             </button>
             <span class="cp-head-mention" id="cpHeadMention" title="Lihat pesan yang menandai">@</span>
-            <button type="button" class="cp-close" id="btnCloseChat" title="Tutup">âœ•</button>
+            <button type="button" class="cp-close" id="btnCloseChat" title="Tutup">✕</button>
         </div>
         <div class="cp-search-panel" id="cpSearchPanel">
             <div class="cp-search-row">
@@ -476,15 +476,15 @@
         </div>
         <div class="cp-messages custom-scrollbar" id="cpMessages">
             <div class="cp-empty" id="cpEmpty">
-                <div class="cp-empty-icon">ðŸ’¬</div>
+                <div class="cp-empty-icon">💬</div>
                 <div class="cp-empty-text">Belum ada pesan.<br>Mulai percakapan sekarang!</div>
             </div>
         </div>
         <div class="cp-typing" id="cpTyping"></div>
         <div class="cp-reply-bar" id="cpReplyBar">
-            <span class="cp-reply-bar-icon">â†©</span>
+            <span class="cp-reply-bar-icon">↩</span>
             <span class="cp-reply-text" id="cpReplyText">Membalas pesan</span>
-            <button type="button" class="cp-reply-close" id="btnCancelReply" title="Batal">âœ•</button>
+            <button type="button" class="cp-reply-close" id="btnCancelReply" title="Batal">✕</button>
         </div>
         <div class="cp-input-wrap" id="cpInputWrap">
             <div class="mention-dd" id="mentionDd">
