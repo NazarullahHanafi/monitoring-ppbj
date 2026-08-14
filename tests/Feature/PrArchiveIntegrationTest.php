@@ -155,13 +155,15 @@ class PrArchiveIntegrationTest extends TestCase
     public function test_pr_page_contains_archive_status_interface(): void
     {
         $ppbjView = file_get_contents(resource_path('views/ppbj/index.blade.php'));
+        $ppbjScript = file_get_contents(public_path('assets/ppbj/ppbj.js'));
         $torprView = file_get_contents(resource_path('views/torpr/index.blade.php'));
 
         $this->assertStringContainsString('data-archive-status', $ppbjView);
         $this->assertStringContainsString('id="detailArchiveCard"', $ppbjView);
-        $this->assertStringContainsString('/ppbj/${id}/archive', $ppbjView);
-        $this->assertStringContainsString('Preview', $ppbjView);
-        $this->assertStringContainsString('Lokasi fisik:', $ppbjView);
+        $this->assertStringContainsString('assets/ppbj/ppbj.js', $ppbjView);
+        $this->assertStringContainsString('/ppbj/${id}/archive', $ppbjScript);
+        $this->assertStringContainsString('Preview', $ppbjScript);
+        $this->assertStringContainsString('Lokasi fisik:', $ppbjScript);
         $this->assertStringNotContainsString('data-archive-status', $torprView);
         $this->assertStringNotContainsString('/torpr/${id}/archive', $torprView);
     }

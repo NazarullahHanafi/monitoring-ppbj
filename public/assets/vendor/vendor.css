@@ -1,0 +1,29 @@
+.vendor-header-gradient {
+            background: linear-gradient(135deg, #10b981 0%, #0ea5e9 50%, #6366f1 100%);
+        }
+
+        .modal-overlay {
+            backdrop-filter: blur(6px);
+            background: rgba(0, 0, 0, .5);
+        }
+
+        .tbl-row-hover:hover {
+            background: rgba(16, 185, 129, .04);
+            transition: background .15s;
+        }
+
+        .row-inactive {
+            opacity: .45;
+        }
+
+        .row-inactive:hover {
+            opacity: .7;
+        }
+
+        .stat-card {
+            transition: transform .15s;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-2px);
+        }
