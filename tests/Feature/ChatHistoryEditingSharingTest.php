@@ -341,9 +341,12 @@ class ChatHistoryEditingSharingTest extends TestCase
             ->assertSee('id="ctxEdit"', false)
             ->assertSee('id="cpFullscreenBtn"', false)
             ->assertSee('id="cpMinimizeBtn"', false)
-            ->assertSee('Muat pesan lebih lama')
-            ->assertSee('shareRecordToChat', false)
-            ->assertSee('/@ PR');
+            ->assertSee('assets/app/app-shell.js', false);
+
+        $appShell = file_get_contents(public_path('assets/app/app-shell.js'));
+        $this->assertStringContainsString('Muat pesan lebih lama', $appShell);
+        $this->assertStringContainsString('shareRecordToChat', $appShell);
+        $this->assertStringContainsString('/@ PR', $appShell);
 
         $appCss = file_get_contents(resource_path('css/app.css'));
         $this->assertStringContainsString('chat-panel.fullscreen', $appCss);

@@ -63,9 +63,12 @@ class ViewerReadOnlyAccessTest extends TestCase
             ->get('/dashboard')
             ->assertOk()
             ->assertSee('Mode Viewer')
-            ->assertSee('Mood check dulu')
-            ->assertSee('allowOutsideClick: false', false)
-            ->assertSee('allowEscapeKey: false', false)
-            ->assertSee('showCloseButton: false', false);
+            ->assertSee('assets/app/app-shell.js', false);
+
+        $appShell = file_get_contents(public_path('assets/app/app-shell.js'));
+        $this->assertStringContainsString('Mood check dulu', $appShell);
+        $this->assertStringContainsString('allowOutsideClick: false', $appShell);
+        $this->assertStringContainsString('allowEscapeKey: false', $appShell);
+        $this->assertStringContainsString('showCloseButton: false', $appShell);
     }
 }
