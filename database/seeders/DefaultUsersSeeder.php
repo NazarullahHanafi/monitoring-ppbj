@@ -21,20 +21,20 @@ class DefaultUsersSeeder extends Seeder
         );
 
         User::updateOrCreate(
-            ['email' => 'operasional@local.test'],
+            ['email' => 'operasional@sucofindo.com'],
             [
-                'name' => 'Akun Operasional',
-                'password' => Hash::make('Password!234'),
+                'name' => 'Riko',
+                'password' => Hash::make('SCI2026@='),
                 'department' => 'operasional',
-                'role' => 'user',
+                'role' => 'superadmin',
             ]
         );
 
         User::updateOrCreate(
-            ['email' => 'superadmin@local.test'],
+            ['email' => 'superadmin@sucofindo.com'],
             [
                 'name' => 'Super Admin',
-                'password' => Hash::make('Password!234'),
+                'password' => Hash::make('diadanaku12mA@'),
                 'department' => 'umum',
                 'role' => 'superadmin',
             ]
