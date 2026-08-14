@@ -347,6 +347,11 @@ class ChatHistoryEditingSharingTest extends TestCase
         $this->assertStringContainsString('Muat pesan lebih lama', $appShell);
         $this->assertStringContainsString('shareRecordToChat', $appShell);
         $this->assertStringContainsString('/@ PR', $appShell);
+        $this->assertStringContainsString(
+            'MY_ID = Number((window.APP_SHELL_CONFIG || {}).userId || 0)',
+            $appShell,
+            'Inisialisasi chat harus membaca konfigurasi global dan tidak bergantung pada scope modul presence.'
+        );
 
         $appCss = file_get_contents(resource_path('css/app.css'));
         $this->assertStringContainsString('chat-panel.fullscreen', $appCss);

@@ -259,7 +259,7 @@
                 URL_REACTIONS = '/chat/reactions', URL_REACT = '/chat/', URL_SHARE = '/chat/share',
                 URL_FOLLOWUPS = '/chat/followups', URL_FOLLOWUP = '/chat/followup', URL_QUICK_MOOD = '/chat/quick-mood',
                 CSRF = (document.querySelector('meta[name="csrf-token"]') || {}).content || '',
-                MY_ID = Number(APP_SHELL.userId || 0), MAX_LEN = 500,
+                MY_ID = Number((window.APP_SHELL_CONFIG || {}).userId || 0), MAX_LEN = 500,
                 EMOJIS = ['\u{1F604}', '\u{1F60A}', '\u{1F44D}', '\u{1F525}', '\u2764\uFE0F', '\u{1F389}', '\u{1F602}', '\u{1F914}', '\u{1F60E}', '\u{1F4AF}', '\u{1F64F}', '\u2705'],
                 REACTION_EMOJIS = ['\u{1F44D}', '\u2764\uFE0F', '\u{1F602}', '\u{1F62E}', '\u{1F622}', '\u{1F64F}'],
                 UCLS = ['#6366f1', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#3b82f6', '#ef4444', '#14b8a6', '#f97316', '#84cc16', '#06b6d4', '#a855f7'];
