@@ -144,7 +144,7 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
 
                 const rawValue = $(this).val();
                 const selectedValues = Array.isArray(rawValue) ? rawValue.filter(Boolean) : (rawValue ? [rawValue] : []);
-                const val = selectedValues[selectedValues.length - 1] || '';
+                const val = selectedValues[0] || '';
                 const $info = $('#' + infoId), $status = $('#' + statusId), $content = $('#' + contentId);
                 const $deskripsi = deskripsiId ? $('#' + deskripsiId) : null;
                 const $badge = badgeId ? $('#' + badgeId) : null;
@@ -162,27 +162,21 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
                     return;
                 }
                 $status.html('<span class="text-gray-400">🔄 Memeriksa...</span>');
-                $.get(PPBJ_CHECK_URL, { ppbj_no: val }, function (d) {
+                $.get(PPBJ_CHECK_URL, { ppbj_no: val, ppbj_nos: selectedValues }, function (d) {
                     $status.html('');
                     if (d.status === 'available') {
-                        $status.html('<span class="text-green-600 dark:text-green-400">✅ PPBJ tersedia — akan otomatis terhubung</span>');
+                        $status.html(`<span class="text-green-600 dark:text-green-400">✅ ${escapedHtml(d.message || 'PPBJ tersedia — akan otomatis terhubung')}</span>`);
                         $info.removeClass('hidden');
-                        let html = `<div><strong>Uraian:</strong> ${d.uraian || '-'}</div>`;
-                        if (d.portofolio) html += `<div><strong>Portofolio:</strong> ${d.portofolio}</div>`;
-                        if (d.buyer) html += `<div><strong>Buyer:</strong> ${d.buyer}</div>`;
-                        if (d.total_sebelum_ppn) html += `<div><strong>Nilai PR (PPBJ):</strong> Rp ${number_format_dots(d.total_sebelum_ppn)}</div>`;
+                        let html = renderPpbjPackageSummary(d);
                         if (d.spph_nomor) html += `<div><strong>SPPH:</strong> <span class="font-mono">${escapedHtml(d.spph_nomor)}</span></div>`;
                         if (d.spph_vendors && d.spph_vendors.length) html += `<div><strong>Vendor SPPH:</strong> ${d.spph_vendors.map(v => escapedHtml(v)).join(', ')}</div>`;
                         if (d.spph_pic) html += `<div><strong>PIC SPPH:</strong> ${escapedHtml(d.spph_pic)}</div>`;
                         if (d.spph_items && d.spph_items.length) html += `<div><strong>Item SPPH:</strong> ${d.spph_items.length} item siap ditarik otomatis ke SP</div>`;
-                        if (d.warnings && d.warnings.length) html += `<div class="text-amber-600 dark:text-amber-400">⚠️ ${d.warnings.join(', ')}</div>`;
+                        if (d.warnings && d.warnings.length) html += `<div class="text-amber-600 dark:text-amber-400">⚠️ ${d.warnings.map(warning => escapedHtml(warning)).join(', ')}</div>`;
                         $content.html(html);
                         renderSpphVendorRecommendation(vendorPrefix, d.spph_vendors || [], d.spph_nomor || null);
                         applySpphAutoFill(vendorPrefix, d);
-                        if ($deskripsi && d.uraian) {
-                            $deskripsi.val(d.uraian);
-                            showDeskBadge($badge, d.uraian);
-                        }
+                        applyPpbjDescription($deskripsi, $badge, d);
                         if (d.total_sebelum_ppn) {
                             const $nilaiPr = selector === '.sp-ppbj-select' ? $('#nilaiPrInput') : $('#editNilaiPr');
                             const $nilaiPrBadge = selector === '.sp-ppbj-select' ? $('#addNilaiPrBadge') : $('#editNilaiPrBadge');
@@ -199,9 +193,7 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
                     } else if (d.status === 'already_linked') {
                         $status.html(`<span class="text-amber-600 dark:text-amber-400">⚠️ ${d.message}</span>`);
                         $info.removeClass('hidden');
-                        let linkedHtml = '';
-                        if (d.uraian) linkedHtml += `<div><strong>Uraian:</strong> ${d.uraian}</div>`;
-                        if (d.total_sebelum_ppn) linkedHtml += `<div><strong>Nilai PR (PPBJ):</strong> Rp ${number_format_dots(d.total_sebelum_ppn)}</div>`;
+                        let linkedHtml = renderPpbjPackageSummary(d);
                         if (d.spph_nomor) linkedHtml += `<div><strong>SPPH:</strong> <span class="font-mono">${escapedHtml(d.spph_nomor)}</span></div>`;
                         if (d.spph_vendors && d.spph_vendors.length) linkedHtml += `<div><strong>Vendor SPPH:</strong> ${d.spph_vendors.map(v => escapedHtml(v)).join(', ')}</div>`;
                         if (d.spph_pic) linkedHtml += `<div><strong>PIC SPPH:</strong> ${escapedHtml(d.spph_pic)}</div>`;
@@ -210,10 +202,7 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
                         renderSpphVendorRecommendation(vendorPrefix, d.spph_vendors || [], d.spph_nomor || null);
                         applySpphAutoFill(vendorPrefix, d);
                         if (!linkedHtml) $info.addClass('hidden');
-                        if ($deskripsi && d.uraian) {
-                            $deskripsi.val(d.uraian);
-                            showDeskBadge($badge, d.uraian);
-                        }
+                        applyPpbjDescription($deskripsi, $badge, d);
                         if (d.total_sebelum_ppn) {
                             const $nilaiPr = selector === '.sp-ppbj-select' ? $('#nilaiPrInput') : $('#editNilaiPr');
                             const $nilaiPrBadge = selector === '.sp-ppbj-select' ? $('#addNilaiPrBadge') : $('#editNilaiPrBadge');
@@ -242,6 +231,47 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
             $b.html(`<span class="deskripsi-autofill-badge"><span>${l}: "${escapedHtml(t)}"</span><button type="button" onclick="$(this).closest('.deskripsi-autofill-badge').remove()" title="Hapus">✕</button></span>`).removeClass('hidden');
         }
         function escapedHtml(s) { return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+
+        function renderPpbjPackageSummary(data) {
+            const items = Array.isArray(data.package_items) ? data.package_items : [];
+            if (!items.length) {
+                let html = `<div><strong>Uraian:</strong> ${escapedHtml(data.uraian || '-')}</div>`;
+                if (data.portofolio) html += `<div><strong>Portofolio:</strong> ${escapedHtml(data.portofolio)}</div>`;
+                if (data.buyer) html += `<div><strong>Buyer:</strong> ${escapedHtml(data.buyer)}</div>`;
+                return html;
+            }
+
+            let html = `<div class="rounded-xl border border-blue-200 bg-blue-50/80 p-3 dark:border-blue-800 dark:bg-blue-950/30">` +
+                `<div class="mb-2 flex flex-wrap items-center justify-between gap-2">` +
+                `<strong>Paket ${items.length} PPBJ</strong>` +
+                `<span class="rounded-full bg-blue-600 px-2.5 py-1 text-xs font-bold text-white">Total estimasi Rp ${number_format_dots(data.total_sebelum_ppn || 0)}</span>` +
+                `</div><div class="space-y-2">`;
+
+            items.forEach((item, index) => {
+                html += `<div class="rounded-lg border border-blue-100 bg-white/90 p-2 dark:border-slate-700 dark:bg-slate-900/70">` +
+                    `<div class="font-mono text-xs font-bold text-blue-700 dark:text-blue-300">${index + 1}. ${escapedHtml(item.ppbj_no)}</div>` +
+                    `<div class="text-xs text-slate-700 dark:text-slate-200">${escapedHtml(item.uraian || 'Tanpa uraian')}</div>` +
+                    `<div class="mt-1 text-[11px] text-slate-500 dark:text-slate-400">${escapedHtml(item.portofolio || 'Tanpa portofolio')} · ${escapedHtml(item.buyer || 'Buyer belum ditentukan')} · Rp ${number_format_dots(item.nilai || 0)}</div>` +
+                    `</div>`;
+            });
+
+            return html + `</div><div class="mt-2 text-[11px] font-semibold text-blue-700 dark:text-blue-300">PPBJ pertama menjadi referensi utama dokumen.</div></div>`;
+        }
+
+        function applyPpbjDescription($field, $badge, data) {
+            if (!$field || !$field.length) return;
+            const candidate = String(data.merged_description || data.uraian || '').trim();
+            if (!candidate) return;
+
+            const current = String($field.val() || '').trim();
+            const previousAutoValue = String($field.data('ppbjAutoValue') || '').trim();
+            if (!current || current === previousAutoValue) {
+                $field.val(candidate).data('ppbjAutoValue', candidate);
+                showDeskBadge($badge, candidate);
+            } else {
+                showDeskBadge($badge, candidate, true);
+            }
+        }
 
         const spphVendorState = {
             add: { vendors: [], spphNomor: null },

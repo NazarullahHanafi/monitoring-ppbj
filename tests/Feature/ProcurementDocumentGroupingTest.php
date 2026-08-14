@@ -74,6 +74,7 @@ class ProcurementDocumentGroupingTest extends TestCase
         $sp = Sp::where('nomor_sp', '811/PKU-VIII/SP/2026')->firstOrFail();
 
         $this->assertSame([$first->ppbj_no, $second->ppbj_no], $sp->linkedPpbjNumbers());
+        $this->assertSame(24_000_000.0, (float) $sp->nilai_pr);
         $this->assertDatabaseCount('sp_ppbj', 2);
         $this->assertDatabaseHas('ppbj', ['id' => $first->id, 'awarding_sp' => $sp->nomor_sp]);
         $this->assertDatabaseHas('ppbj', ['id' => $second->id, 'awarding_sp' => $sp->nomor_sp]);
@@ -96,6 +97,34 @@ class ProcurementDocumentGroupingTest extends TestCase
         $this->assertDatabaseCount('sp_ppbj', 0);
         $this->assertDatabaseHas('ppbj', ['id' => $first->id, 'awarding_sp' => null]);
         $this->assertDatabaseHas('ppbj', ['id' => $second->id, 'awarding_sp' => null]);
+    }
+
+    public function test_grouped_ppbj_checks_return_ordered_package_summary_and_total(): void
+    {
+        $user = User::factory()->create(['department' => 'umum', 'role' => 'superadmin']);
+        $first = $this->ppbj('PKB/PR-26/CON/0821');
+        $second = $this->ppbj('PKB/PR-26/CON/0822');
+        $second->update([
+            'uraian' => 'Pengadaan tahap kedua',
+            'total_sebelum_ppn' => 5_000_000,
+        ]);
+
+        foreach (['sp.check-ppbj', 'spph.check-ppbj'] as $routeName) {
+            $response = $this->actingAs($user)->getJson(route($routeName, [
+                'ppbj_nos' => [$second->ppbj_no, $first->ppbj_no],
+            ]));
+
+            $response->assertOk()
+                ->assertJsonPath('status', 'available')
+                ->assertJsonPath('package_count', 2)
+                ->assertJsonPath('primary_ppbj_no', $second->ppbj_no)
+                ->assertJsonPath('total_sebelum_ppn', 17_000_000)
+                ->assertJsonPath('package_items.0.ppbj_no', $second->ppbj_no)
+                ->assertJsonPath('package_items.1.ppbj_no', $first->ppbj_no);
+
+            $this->assertStringContainsString($second->ppbj_no, $response->json('merged_description'));
+            $this->assertStringContainsString($first->ppbj_no, $response->json('merged_description'));
+        }
     }
 
     private function ppbj(string $number): Ppbj

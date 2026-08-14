@@ -134,7 +134,7 @@ class SpphController extends Controller
         $search = $request->get('q', '');
 
         $query = DB::table('ppbj')
-            ->select(['ppbj_no', 'uraian', 'portofolio', 'buyer'])
+            ->select(['ppbj_no', 'uraian', 'portofolio', 'buyer', 'total_sebelum_ppn'])
             ->where('status', '!=', 'CANCELLED')
             ->where(function ($q) {
                 $q->whereNull('spph_rfq_1')->orWhere('spph_rfq_1', '');
@@ -154,6 +154,7 @@ class SpphController extends Controller
                 'uraian' => $r->uraian,
                 'portofolio' => $r->portofolio,
                 'buyer' => $r->buyer,
+                'total_sebelum_ppn' => $r->total_sebelum_ppn,
             ]);
 
         return response()->json(['results' => $results]);
@@ -164,38 +165,66 @@ class SpphController extends Controller
     // =========================================================
     public function checkPpbjStatus(Request $request)
     {
-        $ppbjNo = trim($request->get('ppbj_no', ''));
-        if (! $ppbjNo) {
+        $ppbjNumbers = collect($request->input('ppbj_nos', []))
+            ->map(fn ($number) => trim((string) $number))
+            ->filter()
+            ->unique()
+            ->take(20)
+            ->values();
+
+        if ($ppbjNumbers->isEmpty() && $request->filled('ppbj_no')) {
+            $ppbjNumbers->push(trim((string) $request->input('ppbj_no')));
+        }
+
+        if ($ppbjNumbers->isEmpty()) {
             return response()->json(['status' => 'empty']);
         }
 
-        $ppbj = DB::table('ppbj')
-            ->select(['ppbj_no', 'status', 'spph_rfq_1', 'uraian', 'portofolio', 'buyer'])
-            ->where('ppbj_no', $ppbjNo)
-            ->first();
+        $positions = array_flip($ppbjNumbers->all());
+        $ppbjs = DB::table('ppbj')
+            ->select(['ppbj_no', 'status', 'spph_rfq_1', 'uraian', 'portofolio', 'buyer', 'total_sebelum_ppn'])
+            ->whereIn('ppbj_no', $ppbjNumbers)
+            ->get()
+            ->sortBy(fn ($ppbj) => $positions[$ppbj->ppbj_no] ?? PHP_INT_MAX)
+            ->values();
 
-        if (! $ppbj) {
-            return response()->json(['status' => 'manual', 'message' => 'Nomor PR manual']);
+        if ($ppbjs->count() !== $ppbjNumbers->count()) {
+            return response()->json(['status' => 'manual', 'message' => 'Salah satu nomor PPBJ tidak ditemukan.']);
         }
 
-        if ($ppbj->status === 'CANCELLED') {
-            return response()->json(['status' => 'cancelled', 'message' => 'PPBJ sudah di-CANCELLED!']);
+        if ($cancelled = $ppbjs->first(fn ($ppbj) => $ppbj->status === 'CANCELLED')) {
+            return response()->json(['status' => 'cancelled', 'message' => "PPBJ {$cancelled->ppbj_no} sudah di-CANCELLED!"]);
         }
 
-        if (! empty($ppbj->spph_rfq_1)) {
-            return response()->json([
-                'status' => 'already_linked',
-                'message' => "PPBJ sudah terhubung dengan SPPH: {$ppbj->spph_rfq_1}",
-                'linked_spph' => $ppbj->spph_rfq_1,
-            ]);
-        }
-
-        return response()->json([
-            'status' => 'available',
-            'message' => 'PPBJ tersedia',
-            'uraian' => $ppbj->uraian,
+        $primary = $ppbjs->first();
+        $linked = $ppbjs->first(fn ($ppbj) => filled($ppbj->spph_rfq_1));
+        $items = $ppbjs->map(fn ($ppbj) => [
+            'ppbj_no' => $ppbj->ppbj_no,
+            'uraian' => trim((string) ($ppbj->uraian ?? '')),
             'portofolio' => $ppbj->portofolio,
             'buyer' => $ppbj->buyer,
+            'nilai' => (float) ($ppbj->total_sebelum_ppn ?? 0),
+        ])->values();
+        $mergedDescription = $items->count() === 1
+            ? (string) ($items->first()['uraian'] ?? '')
+            : $items->map(fn ($item, $index) => ($index + 1).'. '.$item['ppbj_no'].' - '.($item['uraian'] ?: 'Tanpa uraian'))
+                ->implode("\n");
+
+        return response()->json([
+            'status' => $linked ? 'already_linked' : 'available',
+            'message' => $linked
+                ? "PPBJ {$linked->ppbj_no} sudah terhubung dengan SPPH: {$linked->spph_rfq_1}"
+                : ($ppbjs->count() > 1 ? "{$ppbjs->count()} PPBJ siap digabungkan ke satu SPPH" : 'PPBJ tersedia'),
+            'linked_spph' => $linked?->spph_rfq_1,
+            'uraian' => $primary->uraian,
+            'portofolio' => $primary->portofolio,
+            'buyer' => $primary->buyer,
+            'total_sebelum_ppn' => (float) $items->sum('nilai'),
+            'primary_total_sebelum_ppn' => (float) ($primary->total_sebelum_ppn ?? 0),
+            'package_count' => $items->count(),
+            'package_items' => $items->all(),
+            'merged_description' => $mergedDescription,
+            'primary_ppbj_no' => $primary->ppbj_no,
         ]);
     }
 

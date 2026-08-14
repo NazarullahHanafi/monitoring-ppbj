@@ -200,61 +200,96 @@ class SpController extends Controller
     // =========================================================
     public function checkPpbjStatus(Request $request)
     {
-        $ppbjNo = trim($request->get('ppbj_no', ''));
-        if (! $ppbjNo) {
+        $ppbjNumbers = collect($request->input('ppbj_nos', []))
+            ->map(fn ($number) => trim((string) $number))
+            ->filter()
+            ->unique()
+            ->take(20)
+            ->values();
+
+        if ($ppbjNumbers->isEmpty() && $request->filled('ppbj_no')) {
+            $ppbjNumbers->push(trim((string) $request->input('ppbj_no')));
+        }
+
+        if ($ppbjNumbers->isEmpty()) {
             return response()->json(['status' => 'empty']);
         }
 
-        $ppbj = DB::table('ppbj')
+        $positions = array_flip($ppbjNumbers->all());
+        $ppbjs = DB::table('ppbj')
             ->select(['ppbj_no', 'status', 'awarding_sp', 'spph_rfq_1', 'uraian', 'portofolio', 'buyer', 'total_sebelum_ppn'])
-            ->where('ppbj_no', $ppbjNo)
-            ->first();
+            ->whereIn('ppbj_no', $ppbjNumbers)
+            ->get()
+            ->sortBy(fn ($ppbj) => $positions[$ppbj->ppbj_no] ?? PHP_INT_MAX)
+            ->values();
 
-        if (! $ppbj) {
-            return response()->json(['status' => 'manual', 'message' => 'Nomor PR manual']);
+        if ($ppbjs->count() !== $ppbjNumbers->count()) {
+            return response()->json(['status' => 'manual', 'message' => 'Salah satu nomor PPBJ tidak ditemukan.']);
         }
 
-        if ($ppbj->status === 'CANCELLED') {
-            return response()->json(['status' => 'cancelled', 'message' => 'PPBJ sudah di-CANCELLED!']);
+        if ($cancelled = $ppbjs->first(fn ($ppbj) => $ppbj->status === 'CANCELLED')) {
+            return response()->json(['status' => 'cancelled', 'message' => "PPBJ {$cancelled->ppbj_no} sudah di-CANCELLED!"]);
         }
 
-        if (! empty($ppbj->awarding_sp)) {
-            $spphMeta = $this->spphVendorMetaForPpbj($ppbj);
-
-            return response()->json([
-                'status' => 'already_linked',
-                'message' => "PPBJ sudah terhubung dengan SP: {$ppbj->awarding_sp}",
-                'linked_sp' => $ppbj->awarding_sp,
-                'uraian' => $ppbj->uraian,
-                'spph_nomor' => $spphMeta['spph_nomor'],
-                'spph_vendors' => $spphMeta['spph_vendors'],
-                'spph_pic' => $spphMeta['spph_pic'],
-                'spph_items' => $spphMeta['spph_items'],
-                'total_sebelum_ppn' => $ppbj->total_sebelum_ppn,
-            ]);
-        }
+        $primary = $ppbjs->first();
+        $linked = $ppbjs->first(fn ($ppbj) => filled($ppbj->awarding_sp));
 
         $warnings = [];
-        if (empty($ppbj->spph_rfq_1)) {
-            $warnings[] = 'PPBJ belum memiliki SPPH';
+        $withoutSpph = $ppbjs->filter(fn ($ppbj) => blank($ppbj->spph_rfq_1));
+        if ($withoutSpph->isNotEmpty()) {
+            $warnings[] = $withoutSpph->count() === 1
+                ? "PPBJ {$withoutSpph->first()->ppbj_no} belum memiliki SPPH"
+                : "{$withoutSpph->count()} PPBJ belum memiliki SPPH";
         }
 
-        $spphMeta = $this->spphVendorMetaForPpbj($ppbj);
+        $spphMeta = $this->spphVendorMetaForPpbj($primary);
+        $summary = $this->ppbjPackageSummary($ppbjs);
 
         return response()->json([
-            'status' => 'available',
-            'message' => 'PPBJ tersedia untuk SP',
-            'uraian' => $ppbj->uraian,
-            'portofolio' => $ppbj->portofolio,
-            'buyer' => $ppbj->buyer,
-            'has_spph' => ! empty($ppbj->spph_rfq_1),
+            'status' => $linked ? 'already_linked' : 'available',
+            'message' => $linked
+                ? "PPBJ {$linked->ppbj_no} sudah terhubung dengan SP: {$linked->awarding_sp}"
+                : ($ppbjs->count() > 1 ? "{$ppbjs->count()} PPBJ siap digabungkan ke satu SP" : 'PPBJ tersedia untuk SP'),
+            'linked_sp' => $linked?->awarding_sp,
+            'uraian' => $primary->uraian,
+            'portofolio' => $primary->portofolio,
+            'buyer' => $primary->buyer,
+            'has_spph' => ! empty($primary->spph_rfq_1),
             'spph_nomor' => $spphMeta['spph_nomor'],
             'spph_vendors' => $spphMeta['spph_vendors'],
             'spph_pic' => $spphMeta['spph_pic'],
             'spph_items' => $spphMeta['spph_items'],
             'warnings' => $warnings,
-            'total_sebelum_ppn' => $ppbj->total_sebelum_ppn,
+            'total_sebelum_ppn' => $summary['total'],
+            'primary_total_sebelum_ppn' => (float) ($primary->total_sebelum_ppn ?? 0),
+            'package_count' => $summary['count'],
+            'package_items' => $summary['items'],
+            'merged_description' => $summary['merged_description'],
+            'primary_ppbj_no' => $primary->ppbj_no,
         ]);
+    }
+
+    private function ppbjPackageSummary($ppbjs): array
+    {
+        $items = $ppbjs->map(fn ($ppbj) => [
+            'ppbj_no' => $ppbj->ppbj_no,
+            'uraian' => trim((string) ($ppbj->uraian ?? '')),
+            'portofolio' => $ppbj->portofolio,
+            'buyer' => $ppbj->buyer,
+            'nilai' => (float) ($ppbj->total_sebelum_ppn ?? 0),
+        ])->values();
+
+        $mergedDescription = $items->count() === 1
+            ? (string) ($items->first()['uraian'] ?? '')
+            : $items->map(fn ($item, $index) => ($index + 1).'. '.$item['ppbj_no'].' - '.($item['uraian'] ?: 'Tanpa uraian'))
+                ->implode("\n");
+
+        return [
+            'count' => $items->count(),
+            'total' => (float) $items->sum('nilai'),
+            'items' => $items->all(),
+            'merged_description' => $mergedDescription,
+        ];
     }
 
     private function activeSpMasterOptionNames(string $type)
@@ -849,6 +884,9 @@ class SpController extends Controller
                     return $conflict;
                 }
                 $ppbjRecord = $ppbjRecords->first();
+                $packageEstimatedValue = (float) $ppbjRecords->sum(
+                    fn (Ppbj $ppbj) => (float) ($ppbj->total_sebelum_ppn ?? 0)
+                );
 
                 $vendorName = $request->filled('vendor_baru')
                     ? trim((string) $request->vendor_baru)
@@ -886,7 +924,9 @@ class SpController extends Controller
                     'tanggal_sp' => $request->tanggal_sp ?: null,
                     'nilai_sp' => $nilaiSp,
                     'nomor_pr' => $nomorPr,
-                    'nilai_pr' => $request->nilai_pr ?: null,
+                    'nilai_pr' => $ppbjRecords->isNotEmpty()
+                        ? ($packageEstimatedValue > 0 ? $packageEstimatedValue : ($request->nilai_pr ?: null))
+                        : ($request->nilai_pr ?: null),
                     'nama_vendor' => $vendorName,
                     'deskripsi_pengadaan' => $request->deskripsi_pengadaan,
                     'pic' => $request->pic,
@@ -1037,6 +1077,9 @@ class SpController extends Controller
                     return $conflict;
                 }
                 $newPpbj = $newPpbjs->first();
+                $packageEstimatedValue = (float) $newPpbjs->sum(
+                    fn (Ppbj $ppbj) => (float) ($ppbj->total_sebelum_ppn ?? 0)
+                );
 
                 $seq = $oracleMode
                     ? $sp->sequence_number
@@ -1063,7 +1106,9 @@ class SpController extends Controller
                     'tanggal_sp' => $request->tanggal_sp ?: null,
                     'nilai_sp' => $nilaiSp,
                     'nomor_pr' => $nomorPr,
-                    'nilai_pr' => $request->nilai_pr ?: null,
+                    'nilai_pr' => $newPpbjs->isNotEmpty()
+                        ? ($packageEstimatedValue > 0 ? $packageEstimatedValue : ($request->nilai_pr ?: null))
+                        : ($request->nilai_pr ?: null),
                     'nama_vendor' => $request->nama_vendor,
                     'deskripsi_pengadaan' => $request->deskripsi_pengadaan,
                     'pic' => $request->pic,

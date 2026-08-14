@@ -39,6 +39,50 @@
                 .replace(/'/g, '&#039;');
         }
 
+        function formatPackageMoney(value) {
+            return new Intl.NumberFormat('id-ID', { maximumFractionDigits: 0 }).format(Number(value || 0));
+        }
+
+        function renderPpbjPackageSummary(data) {
+            const items = Array.isArray(data.package_items) ? data.package_items : [];
+            if (!items.length) {
+                return `<div><strong>Uraian:</strong> ${escapedHtml(data.uraian || '-')}</div>` +
+                    `${data.portofolio ? `<div><strong>Portofolio:</strong> ${escapedHtml(data.portofolio)}</div>` : ''}` +
+                    `${data.buyer ? `<div><strong>Buyer:</strong> ${escapedHtml(data.buyer)}</div>` : ''}`;
+            }
+
+            let html = `<div class="rounded-xl border border-violet-200 bg-violet-50/80 p-3 dark:border-violet-800 dark:bg-violet-950/30">` +
+                `<div class="mb-2 flex flex-wrap items-center justify-between gap-2">` +
+                `<strong>Paket ${items.length} PPBJ</strong>` +
+                `<span class="rounded-full bg-violet-600 px-2.5 py-1 text-xs font-bold text-white">Total estimasi Rp ${formatPackageMoney(data.total_sebelum_ppn)}</span>` +
+                `</div><div class="space-y-2">`;
+
+            items.forEach((item, index) => {
+                html += `<div class="rounded-lg border border-violet-100 bg-white/90 p-2 dark:border-slate-700 dark:bg-slate-900/70">` +
+                    `<div class="font-mono text-xs font-bold text-violet-700 dark:text-violet-300">${index + 1}. ${escapedHtml(item.ppbj_no)}</div>` +
+                    `<div class="text-xs text-slate-700 dark:text-slate-200">${escapedHtml(item.uraian || 'Tanpa uraian')}</div>` +
+                    `<div class="mt-1 text-[11px] text-slate-500 dark:text-slate-400">${escapedHtml(item.portofolio || 'Tanpa portofolio')} · ${escapedHtml(item.buyer || 'Buyer belum ditentukan')} · Rp ${formatPackageMoney(item.nilai)}</div>` +
+                    `</div>`;
+            });
+
+            return html + `</div><div class="mt-2 text-[11px] font-semibold text-violet-700 dark:text-violet-300">PPBJ pertama menjadi referensi utama dokumen.</div></div>`;
+        }
+
+        function applyPpbjDescription($field, $badge, data) {
+            if (!$field || !$field.length) return;
+            const candidate = String(data.merged_description || data.uraian || '').trim();
+            if (!candidate) return;
+
+            const current = String($field.val() || '').trim();
+            const previousAutoValue = String($field.data('ppbjAutoValue') || '').trim();
+            if (!current || current === previousAutoValue) {
+                $field.val(candidate).data('ppbjAutoValue', candidate);
+                showDeskripsiBadge($badge, candidate);
+            } else {
+                showDeskripsiBadge($badge, candidate, true);
+            }
+        }
+
         function showDeskripsiBadge($badge, uraian, isExisting = false) {
             if (!$badge || !$badge.length) return;
             const truncated = uraian.length > 50 ? uraian.substring(0, 50) + '...' : uraian;
@@ -282,7 +326,7 @@
             $select.on('change', function () {
                 const rawValue = $(this).val();
                 const selectedValues = Array.isArray(rawValue) ? rawValue.filter(Boolean) : (rawValue ? [rawValue] : []);
-                const val = selectedValues[selectedValues.length - 1] || '';
+                const val = selectedValues[0] || '';
                 const $info = $('#' + infoBoxId);
                 const $status = $('#' + statusId);
                 const $content = $('#' + contentId);
@@ -302,33 +346,21 @@
 
                 $status.html('<span class="text-gray-400">🔄 Memeriksa...</span>');
 
-                $.get(PPBJ_CHECK_URL, { ppbj_no: val }, function (data) {
+                $.get(PPBJ_CHECK_URL, { ppbj_no: val, ppbj_nos: selectedValues }, function (data) {
                     $status.html('');
                     if (data.status === 'available') {
-                        $status.html('<span class="text-green-600 dark:text-green-400">✅ PPBJ tersedia — akan otomatis terhubung</span>');
+                        $status.html(`<span class="text-green-600 dark:text-green-400">✅ ${escapedHtml(data.message || 'PPBJ tersedia — akan otomatis terhubung')}</span>`);
                         $info.removeClass('hidden');
-                        $content.html(
-                            `<div><strong>Uraian:</strong> ${data.uraian || '-'}</div>` +
-                            `${data.portofolio ? `<div><strong>Portofolio:</strong> ${data.portofolio}</div>` : ''}` +
-                            `${data.buyer ? `<div><strong>Buyer:</strong> ${data.buyer}</div>` : ''}`
-                        );
+                        $content.html(renderPpbjPackageSummary(data));
                         // ✅ FIX: Hanya auto-fill deskripsi jika deskripsi KOSONG
                         // Jangan timpa jika sudah ada isi (misal saat edit)
-                        if ($deskripsi && data.uraian && !$deskripsi.val().trim()) {
-                            $deskripsi.val(data.uraian);
-                            showDeskripsiBadge($badge, data.uraian);
-                        } else if ($deskripsi && data.uraian && $deskripsi.val().trim()) {
-                            // Deskripsi sudah ada isi, tampilkan badge info saja
-                            showDeskripsiBadge($badge, data.uraian, true);
-                        }
+                        applyPpbjDescription($deskripsi, $badge, data);
                     } else if (data.status === 'already_linked') {
                         $status.html(`<span class="text-amber-600 dark:text-amber-400">⚠️ ${data.message}</span>`);
-                        $info.addClass('hidden');
+                        $info.removeClass('hidden');
+                        $content.html(renderPpbjPackageSummary(data));
                         // ✅ FIX: Sama, jangan timpa jika sudah ada isi
-                        if ($deskripsi && data.uraian && !$deskripsi.val().trim()) {
-                            $deskripsi.val(data.uraian);
-                            showDeskripsiBadge($badge, data.uraian, true);
-                        }
+                        applyPpbjDescription($deskripsi, $badge, data);
                     } else if (data.status === 'cancelled') {
                         $status.html(`<span class="text-red-600 dark:text-red-400">❌ ${data.message}</span>`);
                         $info.addClass('hidden');
@@ -439,7 +471,7 @@
 
             if (editPpbjNumbers.length) {
                 nomorPr = editPpbjNumbers[0];
-                $.get(PPBJ_CHECK_URL, { ppbj_no: nomorPr }, function (data) {
+                $.get(PPBJ_CHECK_URL, { ppbj_no: nomorPr, ppbj_nos: editPpbjNumbers }, function (data) {
                     if (data.status === 'available' || data.status === 'already_linked') {
                         setEditPrMode('ppbj');
 
