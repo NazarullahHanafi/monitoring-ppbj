@@ -137,6 +137,20 @@ class Ppbj extends Model
         return $this->hasMany(PpbjRealTracking::class, 'ppbj_id');
     }
 
+    public function spphs()
+    {
+        return $this->belongsToMany(Spph::class, 'spph_ppbj')
+            ->withPivot('urutan')
+            ->withTimestamps();
+    }
+
+    public function sps()
+    {
+        return $this->belongsToMany(Sp::class, 'sp_ppbj')
+            ->withPivot('urutan')
+            ->withTimestamps();
+    }
+
     public function getIsCancelledAttribute(): bool
     {
         return ($this->status ?? 'ACTIVE') === 'CANCELLED';

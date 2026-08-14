@@ -60,15 +60,17 @@
         // UPDATE PR FINAL VALUE
         // ════════════════════════════════════════════════════════════
         function updatePrFinalValue() {
+            const selected = $('#ppbjSelect').val() || [];
             const val = currentPrMode === 'ppbj'
-                ? ($('#ppbjSelect').val() || '')
+                ? (Array.isArray(selected) ? (selected[0] || '') : selected)
                 : ($('#nomorPrManual').val() || '').trim();
             $('#nomorPrFinal').val(val);
         }
 
         function updateEditPrFinalValue() {
+            const selected = $('#editPpbjSelect').val() || [];
             const val = currentEditPrMode === 'ppbj'
-                ? ($('#editPpbjSelect').val() || '')
+                ? (Array.isArray(selected) ? (selected[0] || '') : selected)
                 : ($('#editNomorPrManual').val() || '').trim();
             $('#editNomorPrFinal').val(val);
         }
@@ -254,6 +256,8 @@
                 placeholder: $select.data('placeholder') || 'Pilih No. PPBJ...',
                 allowClear: true,
                 width: '100%',
+                closeOnSelect: false,
+                maximumSelectionLength: 20,
                 minimumInputLength: 0,
                 ajax: {
                     url: PPBJ_OPTIONS_URL,
@@ -276,14 +280,16 @@
             });
 
             $select.on('change', function () {
-                const val = $(this).val();
+                const rawValue = $(this).val();
+                const selectedValues = Array.isArray(rawValue) ? rawValue.filter(Boolean) : (rawValue ? [rawValue] : []);
+                const val = selectedValues[selectedValues.length - 1] || '';
                 const $info = $('#' + infoBoxId);
                 const $status = $('#' + statusId);
                 const $content = $('#' + contentId);
                 const $deskripsi = deskripsiFieldId ? $('#' + deskripsiFieldId) : null;
                 const $badge = badgeContainerId ? $('#' + badgeContainerId) : null;
 
-                if (onChangeCb) onChangeCb(val);
+                if (onChangeCb) onChangeCb(selectedValues);
 
                 if (!val) {
                     $info.addClass('hidden');
@@ -405,7 +411,7 @@
             openModal('addModal');
         }
 
-        async function openEditModal(id, nomor, tgl, nomorPr, vendorNames, deskripsi, pic) {
+        async function openEditModal(id, nomor, tgl, nomorPr, vendorNames, deskripsi, pic, linkedPpbjNumbers = []) {
             ensureVendorUsageStats().then(() => {
                 $('#editVendor').trigger('change.select2');
                 renderVendorUsagePanel('editVendor', 'editVendorUsagePanel');
@@ -427,7 +433,12 @@
             $('#editPpbjStatus').html('');
             $('#editNomorPrFinal').val('');
 
-            if (nomorPr && nomorPr !== 'null' && nomorPr.trim()) {
+            const editPpbjNumbers = Array.isArray(linkedPpbjNumbers) && linkedPpbjNumbers.length
+                ? linkedPpbjNumbers.filter(Boolean)
+                : (nomorPr && nomorPr !== 'null' && nomorPr.trim() ? [nomorPr] : []);
+
+            if (editPpbjNumbers.length) {
+                nomorPr = editPpbjNumbers[0];
                 $.get(PPBJ_CHECK_URL, { ppbj_no: nomorPr }, function (data) {
                     if (data.status === 'available' || data.status === 'already_linked') {
                         setEditPrMode('ppbj');
@@ -436,7 +447,14 @@
                         o.is_ppbj = true;
                         o.text = nomorPr + (data.uraian ? ' — ' + data.uraian.substring(0, 40) : '');
                         o.uraian = data.uraian;
-                        $('#editPpbjSelect').append(o).trigger('change');
+                        $('#editPpbjSelect').append(o);
+                        editPpbjNumbers.slice(1).forEach(ppbjNo => {
+                            if (!$('#editPpbjSelect option[value="' + CSS.escape(ppbjNo) + '"]').length) {
+                                $('#editPpbjSelect').append(new Option(ppbjNo, ppbjNo, true, true));
+                            }
+                        });
+                        $('#editPpbjSelect').val(editPpbjNumbers).trigger('change.select2');
+                        updateEditPrFinalValue();
 
                         // ✅ FIX: Gunakan uraian PPBJ jika ada, JIKA TIDAK gunakan deskripsi asli dari DB
                         if (data.uraian) {

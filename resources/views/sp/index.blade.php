@@ -301,11 +301,13 @@
                     <tbody id="spBody" class="divide-y divide-gray-100 dark:divide-gray-700">
                         @forelse($sps as $i => $s)
                             @php
+                                $linkedPpbjNumbers = $s->linkedPpbjNumbers();
+                                $linkedPpbjText = implode(' ', $linkedPpbjNumbers);
                                 $canEditSp = (filled($s->created_by_user_id) && (int) $s->created_by_user_id === (int) auth()->id())
                                     || auth()->user()?->matchesOwnerLabel($s->pic);
                             @endphp
                             <tr class="tbl-row-hover" data-id="{{ $s->id }}"
-                                data-search="{{ strtolower($s->nomor_sp . ' ' . $s->nomor_pr . ' ' . $s->nama_vendor . ' ' . $s->deskripsi_pengadaan) }}"
+                                data-search="{{ strtolower($s->nomor_sp . ' ' . $linkedPpbjText . ' ' . $s->nama_vendor . ' ' . $s->deskripsi_pengadaan) }}"
                                 data-pic="{{ $s->pic }}">
                                 <td class="px-3 py-3 text-gray-400 text-xs font-mono">{{ $sps->firstItem() + $i }}</td>
                                 <td class="px-3 py-3">
@@ -327,7 +329,13 @@
                                 class="nilai-badge text-emerald-700 dark:text-emerald-400 font-semibold">{{ 'Rp ' . number_format($s->nilai_sp, 0, ',', '.') }}</span>@else<span
                                         class="text-gray-400 text-xs">-</span>@endif</td>
                                 <td class="px-3 py-3 text-gray-600 dark:text-gray-300 font-mono text-xs">
-                                    {{ $s->nomor_pr ?? '-' }}
+                                    <div class="flex flex-col gap-1">
+                                        @forelse($linkedPpbjNumbers as $linkedPpbj)
+                                            <span class="inline-flex w-fit rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 dark:border-slate-700 dark:bg-slate-800">{{ $linkedPpbj }}</span>
+                                        @empty
+                                            <span>-</span>
+                                        @endforelse
+                                    </div>
                                 </td>
                                 <td class="px-3 py-3 text-right">@if($s->nilai_pr)<span
                                 class="nilai-badge text-indigo-600 dark:text-indigo-400">{{ 'Rp ' . number_format($s->nilai_pr, 0, ',', '.') }}</span>@else<span
@@ -412,7 +420,8 @@
                                                     {{ Js::from($s->akhir_kontrak?->format('Y-m-d')) }},
                                                     {{ Js::from($s->bidang_ip_itu ?? '') }},
                                                     {{ Js::from($s->penandatangan_sci ?? '') }},
-                                                    {{ Js::from($s->jabatan_sci ?? '') }}
+                                                    {{ Js::from($s->jabatan_sci ?? '') }},
+                                                    {{ Js::from($linkedPpbjNumbers) }}
                                                 )"
                                                 class="p-1.5 rounded-lg text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/30 transition-colors"
                                                 title="Edit"><svg class="w-4 h-4" fill="none" stroke="currentColor"
@@ -531,10 +540,10 @@
                             Manual</button>
                     </div>
                     <div id="ppbjModeBox">
-                        <select id="ppbjSelect" class="sp-ppbj-select w-full"
+                        <select id="ppbjSelect" name="nomor_prs[]" multiple class="sp-ppbj-select w-full"
                             data-placeholder="Pilih No. PPBJ yang belum punya SP...">
-                            <option value=""></option>
                         </select>
+                        <p class="mt-1 text-[11px] text-slate-500 dark:text-slate-400">Pilih maksimal 20 PPBJ untuk satu paket SP/Kontrak. Nomor pertama menjadi referensi utama.</p>
                     </div>
                     <div id="manualModeBox" class="hidden">
                         <input type="text" id="nomorPrManual" placeholder="Ketik nomor PR manual..."
@@ -542,6 +551,7 @@
                             autocomplete="off">
                     </div>
                     <input type="hidden" name="nomor_pr" id="nomorPrFinal">
+                    <input type="hidden" name="nomor_pr_type" id="nomorPrType" value="ppbj">
                     <input type="hidden" name="vendor_mismatch_confirmed" id="addVendorMismatchConfirmed" value="0">
                     <div id="ppbjInfo"
                         class="hidden mt-1.5 p-2 bg-sky-50 dark:bg-sky-900/20 border border-sky-200 dark:border-sky-800 rounded-lg">
@@ -854,9 +864,9 @@
                             Manual</button>
                     </div>
                     <div id="editPpbjModeBox">
-                        <select id="editPpbjSelect" class="edit-sp-ppbj-select w-full" data-placeholder="Pilih No. PPBJ...">
-                            <option value=""></option>
+                        <select id="editPpbjSelect" name="nomor_prs[]" multiple class="edit-sp-ppbj-select w-full" data-placeholder="Pilih No. PPBJ...">
                         </select>
+                        <p class="mt-1 text-[11px] text-slate-500 dark:text-slate-400">Pilih maksimal 20 PPBJ. Setiap PPBJ hanya boleh terhubung ke satu SP.</p>
                     </div>
                     <div id="editManualModeBox" class="hidden">
                         <input type="text" id="editNomorPrManual" placeholder="Ketik nomor PR manual..."
@@ -864,6 +874,7 @@
                             autocomplete="off">
                     </div>
                     <input type="hidden" name="nomor_pr" id="editNomorPrFinal">
+                    <input type="hidden" name="nomor_pr_type" id="editNomorPrType" value="ppbj">
                     <input type="hidden" name="vendor_mismatch_confirmed" id="editVendorMismatchConfirmed" value="0">
                     <div id="editPpbjInfo"
                         class="hidden mt-1.5 p-2 bg-sky-50 dark:bg-sky-900/20 border border-sky-200 dark:border-sky-800 rounded-lg">
@@ -1381,7 +1392,7 @@
     <script>
         window.SP_PAGE_CONFIG = @json($spPageConfig);
     </script>
-    <script src="{{ asset('assets/sp/sp.js') }}?v=20260814a" defer></script>
+    <script src="{{ asset('assets/sp/sp.js') }}?v=20260814b" defer></script>
 @endpush
 
 @include('components.archive-upload-popup')

@@ -127,4 +127,30 @@ class Spph extends Model
     {
         return $this->belongsTo(User::class, 'created_by_user_id');
     }
+
+    public function ppbjs()
+    {
+        return $this->belongsToMany(Ppbj::class, 'spph_ppbj')
+            ->withPivot('urutan')
+            ->withTimestamps()
+            ->orderByPivot('urutan');
+    }
+
+    public function linkedPpbjNumbers(): array
+    {
+        $numbers = $this->relationLoaded('ppbjs')
+            ? $this->ppbjs->pluck('ppbj_no')
+            : $this->ppbjs()->pluck('ppbj.ppbj_no');
+
+        if ($numbers->isEmpty() && filled($this->nomor_pr)) {
+            $numbers->push($this->nomor_pr);
+        }
+
+        return $numbers->filter()->unique()->values()->all();
+    }
+
+    public function linkedPpbjLabel(string $separator = ', '): string
+    {
+        return implode($separator, $this->linkedPpbjNumbers()) ?: '-';
+    }
 }

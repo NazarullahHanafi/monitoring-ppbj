@@ -81,10 +81,11 @@ class SpphController extends Controller
             'deskripsi_pengadaan',
             'pic',
             'sequence_number',
-        ])
+        ])->with(['ppbjs:id,ppbj_no'])
             ->when($search, fn ($q) => $q->where(function ($q2) use ($search) {
                 $q2->where('nomor_spph', 'LIKE', "%{$search}%")
                     ->orWhere('nomor_pr', 'LIKE', "%{$search}%")
+                    ->orWhereHas('ppbjs', fn ($linked) => $linked->where('ppbj_no', 'LIKE', "%{$search}%"))
                     ->orWhere('nama_vendor', 'LIKE', "%{$search}%")
                     ->orWhere('vendor_names', 'LIKE', "%{$search}%")
                     ->orWhere('deskripsi_pengadaan', 'LIKE', "%{$search}%");
@@ -363,6 +364,7 @@ class SpphController extends Controller
     // =========================================================
     public function store(Request $request)
     {
+        $this->normalizePpbjSelection($request);
         $request->merge([
             'nomor_spph' => $this->normalizeNumberPeriod($request->input('nomor_spph', ''), $request->input('tanggal'), 'SPPH'),
         ]);
@@ -371,6 +373,8 @@ class SpphController extends Controller
             'nomor_spph' => ['required', 'string', 'max:60', Rule::unique('spphs', 'nomor_spph')],
             'tanggal' => 'required|date',
             'nomor_pr' => ['nullable', 'string', 'max:100', Rule::unique('spphs', 'nomor_pr')],
+            'nomor_prs' => 'nullable|array|max:20',
+            'nomor_prs.*' => 'required|string|max:100|distinct|exists:ppbj,ppbj_no',
             'nomor_pr_type' => 'nullable|in:ppbj,manual',
             'nama_vendor' => 'nullable|string|max:255',
             'vendor_names' => 'required_without:nama_vendor|array|max:20',
@@ -387,39 +391,21 @@ class SpphController extends Controller
 
         $this->validateNumberPeriod($request->nomor_spph, $request->tanggal, 'SPPH', 'nomor_spph');
 
-        $nomorPr = $request->nomor_pr ?: null;
+        $ppbjNumbers = $this->selectedPpbjNumbers($request);
+        $nomorPr = $request->nomor_pr_type === 'ppbj'
+            ? ($ppbjNumbers[0] ?? null)
+            : ($request->nomor_pr ?: null);
         $nomorPrType = $request->nomor_pr_type;
 
-        if ($nomorPr && $nomorPrType === 'ppbj') {
-            $ppbj = Ppbj::where('ppbj_no', $nomorPr)->first();
-            if (! $ppbj) {
-                return $this->formError($request, 'nomor_pr', "PPBJ \"{$nomorPr}\" tidak ditemukan!");
-            }
-            if ($ppbj->status === 'CANCELLED') {
-                return $this->formError($request, 'nomor_pr', 'PPBJ ini sudah di-CANCELLED!');
-            }
-            if (! empty($ppbj->spph_rfq_1)) {
-                return $this->formError($request, 'nomor_pr', "PPBJ sudah terhubung dengan SPPH: {$ppbj->spph_rfq_1}!", 409, ['conflict' => true]);
-            }
-        }
-
         try {
-            return DB::transaction(function () use ($request, $nomorPr, $nomorPrType) {
-                $ppbjRecord = null;
+            return DB::transaction(function () use ($request, $nomorPr, $nomorPrType, $ppbjNumbers) {
+                $ppbjRecords = collect();
 
-                if ($nomorPr && $nomorPrType === 'ppbj') {
-                    $ppbjRecord = Ppbj::where('ppbj_no', $nomorPr)->lockForUpdate()->first();
+                if ($nomorPrType === 'ppbj' && $ppbjNumbers) {
+                    $ppbjRecords = $this->lockSpphPpbjs($ppbjNumbers);
 
-                    if (! $ppbjRecord) {
-                        return $this->formError($request, 'nomor_pr', "PPBJ \"{$nomorPr}\" tidak ditemukan!");
-                    }
-
-                    if ($ppbjRecord->status === 'CANCELLED') {
-                        return $this->formError($request, 'nomor_pr', 'PPBJ ini sudah di-CANCELLED!');
-                    }
-
-                    if (! empty($ppbjRecord->spph_rfq_1)) {
-                        return $this->formError($request, 'nomor_pr', "PPBJ sudah terhubung dengan SPPH: {$ppbjRecord->spph_rfq_1}!", 409, ['conflict' => true]);
+                    if ($error = $this->spphPpbjConflict($request, $ppbjNumbers, $ppbjRecords)) {
+                        return $error;
                     }
                 }
 
@@ -441,26 +427,27 @@ class SpphController extends Controller
 
                 $this->syncItems($spph, $request->input('items', []));
 
-                if ($nomorPr && $nomorPrType === 'ppbj') {
-                    if ($ppbjRecord && $ppbjRecord->status !== 'CANCELLED' && empty($ppbjRecord->spph_rfq_1)) {
-                        $ppbjRecord->spph_rfq_1 = $spph->nomor_spph;
-                        $ppbjRecord->tgl_spph = $spph->tanggal;
-                        $ppbjRecord->penyedia_eksternal = $vendorName;
-                        $ppbjRecord->save();
-                    }
+                if ($nomorPrType === 'ppbj' && $ppbjRecords->isNotEmpty()) {
+                    $this->syncSpphPpbjs($spph, $ppbjRecords, $vendorName);
 
-                    app(ProcurementJourneyService::class)->notifyByPrNumber(
-                        $nomorPr,
+                    $journeyMessage = count($ppbjNumbers) > 1
+                        ? "Umum membuat SPPH gabungan {$spph->nomor_spph} untuk ".count($ppbjNumbers).' PR/PPBJ.'
+                        : "Umum membuat SPPH {$spph->nomor_spph}.";
+
+                    foreach ($ppbjRecords as $ppbjRecord) {
+                        app(ProcurementJourneyService::class)->notifyByPrNumber(
+                        $ppbjRecord->ppbj_no,
                         'spph_created',
                         'SPPH dibuat oleh Umum',
-                        "Umum membuat SPPH {$spph->nomor_spph} untuk proses permintaan penawaran harga.",
+                        $journeyMessage,
                         [
                             'progress' => 'SPPH/RFQ',
                             'document_no' => $spph->nomor_spph,
                             'vendors' => $vendorNames,
                         ],
                         $request->user()
-                    );
+                        );
+                    }
                 }
 
                 Cache::forget('spph:last_nomor');
@@ -498,6 +485,7 @@ class SpphController extends Controller
             return back()->withErrors(['edit' => $message])->withInput();
         }
 
+        $this->normalizePpbjSelection($request);
         $request->merge([
             'nomor_spph' => $this->normalizeNumberPeriod($request->input('nomor_spph', ''), $request->input('tanggal'), 'SPPH'),
         ]);
@@ -506,6 +494,8 @@ class SpphController extends Controller
             'nomor_spph' => ['required', 'string', 'max:60', Rule::unique('spphs', 'nomor_spph')->ignore($spph->id)],
             'tanggal' => 'required|date',
             'nomor_pr' => ['nullable', 'string', 'max:100', Rule::unique('spphs', 'nomor_pr')->ignore($spph->id)],
+            'nomor_prs' => 'nullable|array|max:20',
+            'nomor_prs.*' => 'required|string|max:100|distinct|exists:ppbj,ppbj_no',
             'nomor_pr_type' => 'nullable|in:ppbj,manual',
             'nama_vendor' => 'nullable|string|max:255',
             'vendor_names' => 'required_without:nama_vendor|array|max:20',
@@ -521,41 +511,25 @@ class SpphController extends Controller
 
         $this->validateNumberPeriod($request->nomor_spph, $request->tanggal, 'SPPH', 'nomor_spph');
 
-        $nomorPr = $request->nomor_pr ?: null;
+        $ppbjNumbers = $this->selectedPpbjNumbers($request);
+        $nomorPr = $request->nomor_pr_type === 'ppbj'
+            ? ($ppbjNumbers[0] ?? null)
+            : ($request->nomor_pr ?: null);
         $nomorPrType = $request->nomor_pr_type;
         $oldNomorPr = $spph->nomor_pr;
         $oldVendorName = $spph->nama_vendor;
 
-        if ($nomorPr && $nomorPrType === 'ppbj') {
-            $ppbj = Ppbj::where('ppbj_no', $nomorPr)->first();
-            if (! $ppbj) {
-                return $this->formError($request, 'nomor_pr', "PPBJ \"{$nomorPr}\" tidak ditemukan!");
-            }
-            if ($ppbj->status === 'CANCELLED') {
-                return $this->formError($request, 'nomor_pr', 'PPBJ sudah di-CANCELLED!');
-            }
-            if (! empty($ppbj->spph_rfq_1) && $ppbj->spph_rfq_1 !== $spph->nomor_spph) {
-                return $this->formError($request, 'nomor_pr', "PPBJ sudah terhubung dengan SPPH: {$ppbj->spph_rfq_1}!", 409, ['conflict' => true]);
-            }
-        }
-
         try {
-            return DB::transaction(function () use ($request, $spph, $nomorPr, $nomorPrType, $oldNomorPr, $oldVendorName) {
-                $newPpbj = null;
+            return DB::transaction(function () use ($request, $spph, $nomorPr, $nomorPrType, $oldNomorPr, $oldVendorName, $ppbjNumbers) {
+                $newPpbjs = collect();
+                $oldDocumentNumber = $spph->nomor_spph;
+                $oldPpbjs = Ppbj::where('spph_rfq_1', $oldDocumentNumber)->lockForUpdate()->get();
 
-                if ($nomorPr && $nomorPrType === 'ppbj') {
-                    $newPpbj = Ppbj::where('ppbj_no', $nomorPr)->lockForUpdate()->first();
+                if ($nomorPrType === 'ppbj' && $ppbjNumbers) {
+                    $newPpbjs = $this->lockSpphPpbjs($ppbjNumbers);
 
-                    if (! $newPpbj) {
-                        return $this->formError($request, 'nomor_pr', "PPBJ \"{$nomorPr}\" tidak ditemukan!");
-                    }
-
-                    if ($newPpbj->status === 'CANCELLED') {
-                        return $this->formError($request, 'nomor_pr', 'PPBJ sudah di-CANCELLED!');
-                    }
-
-                    if (! empty($newPpbj->spph_rfq_1) && $newPpbj->spph_rfq_1 !== $spph->nomor_spph) {
-                        return $this->formError($request, 'nomor_pr', "PPBJ sudah terhubung dengan SPPH: {$newPpbj->spph_rfq_1}!", 409, ['conflict' => true]);
+                    if ($error = $this->spphPpbjConflict($request, $ppbjNumbers, $newPpbjs, $oldDocumentNumber)) {
+                        return $error;
                     }
                 }
 
@@ -576,26 +550,20 @@ class SpphController extends Controller
 
                 $this->syncItems($spph, $request->input('items', []));
 
-                if ($oldNomorPr && ($oldNomorPr !== $nomorPr || $nomorPrType !== 'ppbj')) {
-                    $oldPpbj = Ppbj::where('ppbj_no', $oldNomorPr)
-                        ->where('spph_rfq_1', $spph->nomor_spph)->first();
-                    if ($oldPpbj) {
+                $newIds = $newPpbjs->pluck('id')->all();
+                foreach ($oldPpbjs->whereNotIn('id', $newIds) as $oldPpbj) {
                         $oldPpbj->spph_rfq_1 = null;
                         $oldPpbj->tgl_spph = null;
                         if (trim((string) $oldPpbj->penyedia_eksternal) === trim((string) $oldVendorName)) {
                             $oldPpbj->penyedia_eksternal = null;
                         }
                         $oldPpbj->save();
-                    }
                 }
 
-                if ($nomorPr && $nomorPrType === 'ppbj') {
-                    if ($newPpbj && $newPpbj->status !== 'CANCELLED') {
-                        $newPpbj->spph_rfq_1 = $spph->nomor_spph;
-                        $newPpbj->tgl_spph = $spph->tanggal;
-                        $newPpbj->penyedia_eksternal = $vendorName;
-                        $newPpbj->save();
-                    }
+                if ($nomorPrType === 'ppbj' && $newPpbjs->isNotEmpty()) {
+                    $this->syncSpphPpbjs($spph, $newPpbjs, $vendorName);
+                } else {
+                    $spph->ppbjs()->sync([]);
                 }
 
                 Cache::forget('spph:last_nomor');
@@ -697,17 +665,14 @@ class SpphController extends Controller
                 ],
             ]);
 
-            if ($spph->nomor_pr) {
-                $ppbj = Ppbj::where('ppbj_no', $spph->nomor_pr)
-                    ->where('spph_rfq_1', $spph->nomor_spph)->first();
-                if ($ppbj) {
+            $linkedPpbjs = Ppbj::where('spph_rfq_1', $spph->nomor_spph)->lockForUpdate()->get();
+            foreach ($linkedPpbjs as $ppbj) {
                     $ppbj->spph_rfq_1 = null;
                     $ppbj->tgl_spph = null;
                     if (trim((string) $ppbj->penyedia_eksternal) === trim((string) $spph->nama_vendor)) {
                         $ppbj->penyedia_eksternal = null;
                     }
                     $ppbj->save();
-                }
             }
             $spph->delete();
             Cache::forget('spph:last_nomor');
@@ -719,6 +684,93 @@ class SpphController extends Controller
             'ok' => true,
             'message' => 'Data SPPH berhasil dihapus.',
         ]);
+    }
+
+    private function normalizePpbjSelection(Request $request): void
+    {
+        $numbers = collect($request->input('nomor_prs', []))
+            ->map(fn ($number) => trim((string) $number))
+            ->filter()
+            ->unique()
+            ->values();
+
+        if ($numbers->isEmpty() && $request->input('nomor_pr_type') === 'ppbj' && $request->filled('nomor_pr')) {
+            $numbers->push(trim((string) $request->input('nomor_pr')));
+        }
+
+        if ($request->input('nomor_pr_type') === 'ppbj') {
+            $request->merge([
+                'nomor_prs' => $numbers->all(),
+                'nomor_pr' => $numbers->first(),
+            ]);
+        }
+    }
+
+    private function selectedPpbjNumbers(Request $request): array
+    {
+        if ($request->input('nomor_pr_type') !== 'ppbj') {
+            return [];
+        }
+
+        return collect($request->input('nomor_prs', []))
+            ->map(fn ($number) => trim((string) $number))
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    private function lockSpphPpbjs(array $numbers)
+    {
+        $positions = array_flip($numbers);
+
+        return Ppbj::whereIn('ppbj_no', $numbers)
+            ->lockForUpdate()
+            ->get()
+            ->sortBy(fn (Ppbj $ppbj) => $positions[$ppbj->ppbj_no] ?? PHP_INT_MAX)
+            ->values();
+    }
+
+    private function spphPpbjConflict(Request $request, array $numbers, $records, ?string $currentDocumentNumber = null)
+    {
+        if ($records->count() !== count($numbers)) {
+            return $this->formError($request, 'nomor_prs', 'Salah satu nomor PPBJ tidak ditemukan. Muat ulang daftar lalu coba kembali.');
+        }
+
+        if ($cancelled = $records->first(fn (Ppbj $ppbj) => $ppbj->status === 'CANCELLED')) {
+            return $this->formError($request, 'nomor_prs', "PPBJ \"{$cancelled->ppbj_no}\" sudah dibatalkan.");
+        }
+
+        $conflict = $records->first(fn (Ppbj $ppbj) => filled($ppbj->spph_rfq_1)
+            && $ppbj->spph_rfq_1 !== $currentDocumentNumber);
+
+        if ($conflict) {
+            return $this->formError(
+                $request,
+                'nomor_prs',
+                "PPBJ {$conflict->ppbj_no} sudah terhubung dengan SPPH {$conflict->spph_rfq_1}.",
+                409,
+                ['conflict' => true]
+            );
+        }
+
+        return null;
+    }
+
+    private function syncSpphPpbjs(Spph $spph, $records, string $vendorName): void
+    {
+        $pivot = [];
+
+        foreach ($records->values() as $index => $ppbj) {
+            $ppbj->spph_rfq_1 = $spph->nomor_spph;
+            $ppbj->tgl_spph = $spph->tanggal;
+            $ppbj->penyedia_eksternal = $vendorName;
+            $ppbj->save();
+
+            $pivot[$ppbj->id] = ['urutan' => $index + 1];
+        }
+
+        $spph->ppbjs()->sync($pivot);
     }
 
     // =========================================================
@@ -790,7 +842,7 @@ class SpphController extends Controller
             'backUrl' => route('spph.index'),
             'meta' => [
                 'Nomor SPPH' => $spph->nomor_spph ?: '-',
-                'Nomor PR/PPBJ' => $spph->nomor_pr ?: '-',
+                'Nomor PR/PPBJ' => $spph->linkedPpbjLabel(),
                 'Vendor' => $vendorName ?: '-',
                 'Penandatangan' => ($signer['name'] ?? '-').' - '.($signer['title'] ?? '-'),
                 'PIC' => $spph->pic ?: '-',
@@ -836,7 +888,7 @@ class SpphController extends Controller
             'backUrl' => route('spph.index'),
             'meta' => [
                 'Nomor SPPH' => $spph->nomor_spph ?: '-',
-                'Nomor PR/PPBJ' => $spph->nomor_pr ?: '-',
+                'Nomor PR/PPBJ' => $spph->linkedPpbjLabel(),
                 'Jumlah Vendor' => $vendorCount.' vendor',
                 'Penandatangan' => ($signer['name'] ?? '-').' - '.($signer['title'] ?? '-'),
                 'PIC' => $spph->pic ?: '-',

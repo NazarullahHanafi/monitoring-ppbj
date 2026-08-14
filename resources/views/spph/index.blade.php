@@ -211,10 +211,12 @@
                         @forelse($spphs as $i => $s)
                             @php
                                 $vendorList = $s->print_vendor_names;
+                                $linkedPpbjNumbers = $s->linkedPpbjNumbers();
+                                $linkedPpbjText = implode(' ', $linkedPpbjNumbers);
                                 $canEditSpph = (filled($s->created_by_user_id) && (int) $s->created_by_user_id === (int) auth()->id()) || auth()->user()?->matchesOwnerLabel($s->pic);
                             @endphp
                             <tr class="tbl-row-hover" data-id="{{ $s->id }}" data-pic="{{ $s->pic }}"
-                                data-search="{{ strtolower($s->nomor_spph . ' ' . $s->nomor_pr . ' ' . implode(' ', $vendorList) . ' ' . $s->deskripsi_pengadaan) }}">
+                                data-search="{{ strtolower($s->nomor_spph . ' ' . $linkedPpbjText . ' ' . implode(' ', $vendorList) . ' ' . $s->deskripsi_pengadaan) }}">
                                 <td class="px-4 py-3 text-gray-400 text-xs font-mono">{{ $spphs->firstItem() + $i }}</td>
                                 <td class="px-4 py-3"><span
                                         class="badge-nomor inline-flex items-center px-2.5 py-1 rounded-lg bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800"
@@ -223,7 +225,13 @@
                                     {{ $s->tanggal?->format('d/m/Y') ?? '-' }}
                                 </td>
                                 <td class="px-4 py-3 text-gray-600 dark:text-gray-300 font-mono text-xs">
-                                    {{ $s->nomor_pr ?? '-' }}
+                                    <div class="flex flex-col gap-1">
+                                        @forelse($linkedPpbjNumbers as $linkedPpbj)
+                                            <span class="inline-flex w-fit rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 dark:border-slate-700 dark:bg-slate-800">{{ $linkedPpbj }}</span>
+                                        @empty
+                                            <span>-</span>
+                                        @endforelse
+                                    </div>
                                 </td>
                                 <td class="px-4 py-3 text-gray-700 dark:text-gray-200 font-medium text-xs">
                                     <div class="flex flex-wrap gap-1">
@@ -295,7 +303,7 @@
                                         @endif
                                         @if($canEditSpph)
                                             <button
-                                                onclick="openEditModal({{ $s->id }}, @js($s->nomor_spph), @js($s->tanggal?->format('Y-m-d')), @js($s->nomor_pr ?? ''), @js($vendorList), @js($s->deskripsi_pengadaan), @js($s->pic))"
+                                                onclick="openEditModal({{ $s->id }}, @js($s->nomor_spph), @js($s->tanggal?->format('Y-m-d')), @js($s->nomor_pr ?? ''), @js($vendorList), @js($s->deskripsi_pengadaan), @js($s->pic), @js($linkedPpbjNumbers))"
                                                 class="p-1.5 rounded-lg text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/30 transition-colors"
                                                 title="Edit">
                                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -386,10 +394,10 @@
                         </div>
                         {{-- ❌ HAPUS name="nomor_pr" dari select --}}
                         <div id="ppbjModeBox">
-                            <select id="ppbjSelect" class="ppbj-select w-full"
+                            <select id="ppbjSelect" name="nomor_prs[]" multiple class="ppbj-select w-full"
                                 data-placeholder="Pilih No. PPBJ yang belum punya SPPH...">
-                                <option value=""></option>
                             </select>
+                            <p class="mt-1 text-[11px] text-slate-500 dark:text-slate-400">Pilih maksimal 20 PPBJ untuk satu paket SPPH. Nomor pertama menjadi referensi utama.</p>
                         </div>
                         {{-- ❌ HAPUS name dari input manual --}}
                         <div id="manualModeBox" class="hidden">
@@ -576,10 +584,10 @@
                         </div>
                         {{-- ❌ HAPUS name="nomor_pr" dari select --}}
                         <div id="editPpbjModeBox">
-                            <select id="editPpbjSelect" class="edit-ppbj-select w-full"
+                            <select id="editPpbjSelect" name="nomor_prs[]" multiple class="edit-ppbj-select w-full"
                                 data-placeholder="Pilih No. PPBJ...">
-                                <option value=""></option>
                             </select>
+                            <p class="mt-1 text-[11px] text-slate-500 dark:text-slate-400">Pilih maksimal 20 PPBJ. Setiap PPBJ hanya boleh terhubung ke satu SPPH.</p>
                         </div>
                         {{-- ❌ HAPUS name dari input manual --}}
                         <div id="editManualModeBox" class="hidden">
@@ -954,7 +962,7 @@
     <script>
         window.SPPH_PAGE_CONFIG = @json($spphPageConfig);
     </script>
-    <script src="{{ asset('assets/spph/spph.js') }}?v=20260814a" defer></script>
+    <script src="{{ asset('assets/spph/spph.js') }}?v=20260814b" defer></script>
 @endpush
 
 @include('components.archive-upload-popup')

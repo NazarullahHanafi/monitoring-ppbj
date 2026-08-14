@@ -109,9 +109,10 @@ class SpController extends Controller
         $penandatanganScis = $this->activeSpMasterOptionNames('penandatangan_sci');
         $jabatanScis = $this->activeSpMasterOptionNames('jabatan_sci');
 
-        $baseQuery = $this->spModeQuery($oracleMode)->when($search, fn ($q) => $q->where(function ($q2) use ($search) {
+        $baseQuery = $this->spModeQuery($oracleMode)->with(['ppbjs:id,ppbj_no'])->when($search, fn ($q) => $q->where(function ($q2) use ($search) {
             $q2->where('nomor_sp', 'like', "%{$search}%")
                 ->orWhere('nomor_pr', 'like', "%{$search}%")
+                ->orWhereHas('ppbjs', fn ($ppbjQuery) => $ppbjQuery->where('ppbj_no', 'like', "%{$search}%"))
                 ->orWhere('nama_vendor', 'like', "%{$search}%")
                 ->orWhere('deskripsi_pengadaan', 'like', "%{$search}%");
         }))
@@ -790,6 +791,8 @@ class SpController extends Controller
     {
         $oracleMode = $this->isOracleMode($request);
 
+        $this->normalizePpbjSelection($request);
+
         $request->merge([
             'nomor_sp' => $oracleMode
                 ? trim($request->input('nomor_sp', ''))
@@ -803,6 +806,8 @@ class SpController extends Controller
             'tanggal_sp' => 'nullable|date',
             'nilai_sp' => 'nullable|numeric|min:0',
             'nomor_pr' => ['nullable', 'string', 'max:100', Rule::unique('sps', 'nomor_pr')],
+            'nomor_prs' => 'nullable|array|max:20',
+            'nomor_prs.*' => 'required|string|max:100|distinct|exists:ppbj,ppbj_no',
             'nilai_pr' => 'nullable|numeric|min:0',
             'nama_vendor' => 'required|string|max:255',
             'deskripsi_pengadaan' => 'required|string',
@@ -834,37 +839,16 @@ class SpController extends Controller
             $this->validateNumberPeriod($request->nomor_sp, $request->tanggal_sp, 'SP', 'nomor_sp');
         }
 
-        $nomorPr = $request->nomor_pr ?: null;
-
-        if ($nomorPr) {
-            $ppbjCheck = DB::table('ppbj')->where('ppbj_no', $nomorPr)->first();
-            if ($ppbjCheck) {
-                if ($ppbjCheck->status === 'CANCELLED') {
-                    return $this->formError($request, 'nomor_pr', "PPBJ \"{$nomorPr}\" sudah di-CANCELLED!");
-                }
-                if (! empty($ppbjCheck->awarding_sp)) {
-                    return $this->formError($request, 'nomor_pr', "PPBJ sudah terhubung dengan SP: {$ppbjCheck->awarding_sp}!", 409, ['conflict' => true]);
-                }
-            }
-        }
+        $ppbjNumbers = $this->selectedPpbjNumbers($request);
+        $nomorPr = $ppbjNumbers[0] ?? ($request->nomor_pr ?: null);
 
         try {
-            return DB::transaction(function () use ($request, $nomorPr, $oracleMode) {
-                $ppbjRecord = null;
-
-                if ($nomorPr) {
-                    $ppbjRecord = Ppbj::where('ppbj_no', $nomorPr)->lockForUpdate()->first();
-
-                    if ($ppbjRecord) {
-                        if ($ppbjRecord->status === 'CANCELLED') {
-                            return $this->formError($request, 'nomor_pr', "PPBJ \"{$nomorPr}\" sudah di-CANCELLED!");
-                        }
-
-                        if (! empty($ppbjRecord->awarding_sp)) {
-                            return $this->formError($request, 'nomor_pr', "PPBJ sudah terhubung dengan SP: {$ppbjRecord->awarding_sp}!", 409, ['conflict' => true]);
-                        }
-                    }
+            return DB::transaction(function () use ($request, $nomorPr, $ppbjNumbers, $oracleMode) {
+                $ppbjRecords = $this->lockSpPpbjs($ppbjNumbers);
+                if ($conflict = $this->spPpbjConflict($request, $ppbjNumbers, $ppbjRecords)) {
+                    return $conflict;
                 }
+                $ppbjRecord = $ppbjRecords->first();
 
                 $vendorName = $request->filled('vendor_baru')
                     ? trim((string) $request->vendor_baru)
@@ -922,20 +906,12 @@ class SpController extends Controller
                 $this->syncItems($sp, $items);
 
                 // Link ke PPBJ
-                if ($nomorPr) {
-                    if ($ppbjRecord && $ppbjRecord->status !== 'CANCELLED' && empty($ppbjRecord->awarding_sp)) {
-                        $ppbjRecord->awarding_sp = $sp->nomor_sp;
-                        $ppbjRecord->tgl_awarding_sp = $sp->tanggal_sp;
-                        $ppbjRecord->tgl_spk = $sp->tanggal_sp;
-                        $ppbjRecord->nilai_sp_spk = $sp->nilai_sp;
-                        $ppbjRecord->sph = $sp->sph;
-                        $ppbjRecord->tgl_sph = $sp->tgl_sph;
-                        $ppbjRecord->promised_date = $request->promised_date ?: null;
-                        $ppbjRecord->save();
-                    }
+                if ($ppbjRecords->isNotEmpty()) {
+                    $this->syncSpPpbjs($sp, $ppbjRecords);
 
-                    app(ProcurementJourneyService::class)->notifyByPrNumber(
-                        $nomorPr,
+                    foreach ($ppbjNumbers as $linkedNumber) {
+                        app(ProcurementJourneyService::class)->notifyByPrNumber(
+                        $linkedNumber,
                         'sp_created',
                         'Surat Pesanan dibuat',
                         "Umum membuat SP {$sp->nomor_sp} untuk vendor {$vendorName}.",
@@ -947,7 +923,8 @@ class SpController extends Controller
                             'promised_date' => $sp->promised_date,
                         ],
                         $request->user()
-                    );
+                        );
+                    }
                 } else {
                     app(ProcurementJourneyService::class)->notifyGeneral(
                         'sp_created_without_pr',
@@ -990,6 +967,7 @@ class SpController extends Controller
     public function update(Request $request, Sp $sp)
     {
         $oracleMode = $this->isOracleMode($request);
+        $this->normalizePpbjSelection($request);
         $currentUser = $request->user();
         $currentUserId = $currentUser?->id;
 
@@ -1016,6 +994,8 @@ class SpController extends Controller
             'tanggal_sp' => 'nullable|date',
             'nilai_sp' => 'nullable|numeric|min:0',
             'nomor_pr' => ['nullable', 'string', 'max:100', Rule::unique('sps', 'nomor_pr')->ignore($sp->id)],
+            'nomor_prs' => 'nullable|array|max:20',
+            'nomor_prs.*' => 'required|string|max:100|distinct|exists:ppbj,ppbj_no',
             'nilai_pr' => 'nullable|numeric|min:0',
             'nama_vendor' => 'required|string|max:255',
             'deskripsi_pengadaan' => 'required|string',
@@ -1046,38 +1026,17 @@ class SpController extends Controller
             $this->validateNumberPeriod($request->nomor_sp, $request->tanggal_sp, 'SP', 'nomor_sp');
         }
 
-        $nomorPr = $request->nomor_pr ?: null;
-        $oldNomorPr = $sp->nomor_pr;
-
-        if ($nomorPr) {
-            $ppbjCheck = DB::table('ppbj')->where('ppbj_no', $nomorPr)->first();
-            if ($ppbjCheck) {
-                if ($ppbjCheck->status === 'CANCELLED') {
-                    return $this->formError($request, 'nomor_pr', "PPBJ \"{$nomorPr}\" sudah di-CANCELLED!");
-                }
-                if (! empty($ppbjCheck->awarding_sp) && $ppbjCheck->awarding_sp !== $sp->nomor_sp) {
-                    return $this->formError($request, 'nomor_pr', "PPBJ sudah terhubung dengan SP: {$ppbjCheck->awarding_sp}!", 409, ['conflict' => true]);
-                }
-            }
-        }
+        $ppbjNumbers = $this->selectedPpbjNumbers($request);
+        $nomorPr = $ppbjNumbers[0] ?? ($request->nomor_pr ?: null);
 
         try {
-            return DB::transaction(function () use ($request, $sp, $nomorPr, $oldNomorPr, $oracleMode) {
-                $newPpbj = null;
-
-                if ($nomorPr) {
-                    $newPpbj = Ppbj::where('ppbj_no', $nomorPr)->lockForUpdate()->first();
-
-                    if ($newPpbj) {
-                        if ($newPpbj->status === 'CANCELLED') {
-                            return $this->formError($request, 'nomor_pr', "PPBJ \"{$nomorPr}\" sudah di-CANCELLED!");
-                        }
-
-                        if (! empty($newPpbj->awarding_sp) && $newPpbj->awarding_sp !== $sp->nomor_sp) {
-                            return $this->formError($request, 'nomor_pr', "PPBJ sudah terhubung dengan SP: {$newPpbj->awarding_sp}!", 409, ['conflict' => true]);
-                        }
-                    }
+            return DB::transaction(function () use ($request, $sp, $nomorPr, $ppbjNumbers, $oracleMode) {
+                $oldPpbjs = Ppbj::where('awarding_sp', $sp->nomor_sp)->lockForUpdate()->get();
+                $newPpbjs = $this->lockSpPpbjs($ppbjNumbers);
+                if ($conflict = $this->spPpbjConflict($request, $ppbjNumbers, $newPpbjs, $sp->nomor_sp)) {
+                    return $conflict;
                 }
+                $newPpbj = $newPpbjs->first();
 
                 $seq = $oracleMode
                     ? $sp->sequence_number
@@ -1123,39 +1082,17 @@ class SpController extends Controller
 
                 $this->syncItems($sp, $items);
 
-                // Hapus link lama dari PPBJ
-                if ($oldNomorPr && ($oldNomorPr !== $nomorPr)) {
-                    $oldPpbj = Ppbj::where('ppbj_no', $oldNomorPr)
-                        ->where('awarding_sp', $sp->nomor_sp)
-                        ->first();
-
-                    if ($oldPpbj) {
-                        $oldPpbj->awarding_sp = null;
-                        $oldPpbj->tgl_awarding_sp = null;
-                        $oldPpbj->tgl_spk = null;
-                        $oldPpbj->nilai_sp_spk = null;
-                        $oldPpbj->sph = null;
-                        $oldPpbj->tgl_sph = null;
-                        $oldPpbj->promised_date = null;
-                        $oldPpbj->save();
-                    }
+                $newIds = $newPpbjs->pluck('id')->all();
+                foreach ($oldPpbjs->whereNotIn('id', $newIds) as $oldPpbj) {
+                    $this->clearSpPpbj($oldPpbj);
                 }
 
                 // Set link baru ke PPBJ
-                if ($nomorPr) {
-                    if ($newPpbj && $newPpbj->status !== 'CANCELLED') {
-                        $newPpbj->awarding_sp = $sp->nomor_sp;
-                        $newPpbj->tgl_awarding_sp = $sp->tanggal_sp;
-                        $newPpbj->tgl_spk = $sp->tanggal_sp;
-                        $newPpbj->nilai_sp_spk = $sp->nilai_sp;
-                        $newPpbj->sph = $sp->sph;
-                        $newPpbj->tgl_sph = $sp->tgl_sph;
-                        $newPpbj->promised_date = $request->promised_date ?: null;
-                        $newPpbj->save();
-                    }
-
-                    app(ProcurementJourneyService::class)->notifyByPrNumber(
-                        $nomorPr,
+                if ($newPpbjs->isNotEmpty()) {
+                    $this->syncSpPpbjs($sp, $newPpbjs);
+                    foreach ($ppbjNumbers as $linkedNumber) {
+                        app(ProcurementJourneyService::class)->notifyByPrNumber(
+                        $linkedNumber,
                         'sp_updated',
                         'Surat Pesanan diperbarui',
                         "Data SP {$sp->nomor_sp} diperbarui oleh Umum.",
@@ -1167,22 +1104,27 @@ class SpController extends Controller
                             'promised_date' => $sp->promised_date,
                         ],
                         $request->user()
-                    );
+                        );
+                    }
                 } else {
-                    app(ProcurementJourneyService::class)->notifyGeneral(
-                        'sp_updated_without_pr',
-                        'Surat Pesanan tanpa nomor PR diperbarui',
-                        "Data SP {$sp->nomor_sp} diperbarui oleh Umum.",
-                        [
-                            'progress' => 'Update SP/Kontrak Manual',
-                            'document_no' => $sp->nomor_sp,
-                            'description' => $sp->deskripsi_pengadaan,
-                            'vendors' => [$sp->nama_vendor],
-                            'nilai' => $sp->nilai_sp,
-                            'promised_date' => $sp->promised_date,
-                        ],
-                        $request->user()
-                    );
+                    $sp->ppbjs()->sync([]);
+
+                    if ($request->input('nomor_pr_type') !== 'ppbj') {
+                        app(ProcurementJourneyService::class)->notifyGeneral(
+                            'sp_updated_without_pr',
+                            'Surat Pesanan tanpa nomor PR diperbarui',
+                            "Data SP {$sp->nomor_sp} diperbarui oleh Umum.",
+                            [
+                                'progress' => 'Update SP/Kontrak Manual',
+                                'document_no' => $sp->nomor_sp,
+                                'description' => $sp->deskripsi_pengadaan,
+                                'vendors' => [$sp->nama_vendor],
+                                'nilai' => $sp->nilai_sp,
+                                'promised_date' => $sp->promised_date,
+                            ],
+                            $request->user()
+                        );
+                    }
                 }
 
                 $this->invalidateSpIndexCaches();
@@ -1286,21 +1228,8 @@ class SpController extends Controller
                 ],
             ]);
 
-            if ($sp->nomor_pr) {
-                $ppbj = Ppbj::where('ppbj_no', $sp->nomor_pr)
-                    ->where('awarding_sp', $sp->nomor_sp)
-                    ->first();
-
-                if ($ppbj) {
-                    $ppbj->awarding_sp = null;
-                    $ppbj->tgl_awarding_sp = null;
-                    $ppbj->tgl_spk = null;
-                    $ppbj->nilai_sp_spk = null;
-                    $ppbj->sph = null;
-                    $ppbj->tgl_sph = null;
-                    $ppbj->promised_date = null;
-                    $ppbj->save();
-                }
+            foreach (Ppbj::where('awarding_sp', $sp->nomor_sp)->lockForUpdate()->get() as $ppbj) {
+                $this->clearSpPpbj($ppbj);
             }
 
             $sp->delete();
@@ -1311,6 +1240,91 @@ class SpController extends Controller
             'ok' => true,
             'message' => 'Data SP berhasil dihapus.',
         ]);
+    }
+
+    private function normalizePpbjSelection(Request $request): void
+    {
+        $numbers = collect($request->input('nomor_prs', []))
+            ->map(fn ($number) => trim((string) $number))->filter()->unique()->values();
+
+        if ($numbers->isEmpty() && $request->input('nomor_pr_type', 'ppbj') === 'ppbj' && $request->filled('nomor_pr')) {
+            $numbers->push(trim((string) $request->input('nomor_pr')));
+        }
+
+        if ($request->input('nomor_pr_type', 'ppbj') === 'ppbj') {
+            $request->merge(['nomor_prs' => $numbers->all(), 'nomor_pr' => $numbers->first()]);
+        }
+    }
+
+    private function selectedPpbjNumbers(Request $request): array
+    {
+        if ($request->input('nomor_pr_type', 'ppbj') !== 'ppbj') {
+            return [];
+        }
+
+        return collect($request->input('nomor_prs', []))
+            ->map(fn ($number) => trim((string) $number))->filter()->unique()->values()->all();
+    }
+
+    private function lockSpPpbjs(array $numbers)
+    {
+        if ($numbers === []) {
+            return collect();
+        }
+
+        $positions = array_flip($numbers);
+
+        return Ppbj::whereIn('ppbj_no', $numbers)->lockForUpdate()->get()
+            ->sortBy(fn (Ppbj $ppbj) => $positions[$ppbj->ppbj_no] ?? PHP_INT_MAX)->values();
+    }
+
+    private function spPpbjConflict(Request $request, array $numbers, $records, ?string $currentDocumentNumber = null)
+    {
+        if ($records->count() !== count($numbers)) {
+            return $this->formError($request, 'nomor_prs', 'Salah satu nomor PPBJ tidak ditemukan. Muat ulang daftar lalu coba kembali.');
+        }
+
+        if ($cancelled = $records->first(fn (Ppbj $ppbj) => $ppbj->status === 'CANCELLED')) {
+            return $this->formError($request, 'nomor_prs', "PPBJ {$cancelled->ppbj_no} sudah dibatalkan.");
+        }
+
+        $conflict = $records->first(fn (Ppbj $ppbj) => filled($ppbj->awarding_sp)
+            && $ppbj->awarding_sp !== $currentDocumentNumber);
+
+        if ($conflict) {
+            return $this->formError($request, 'nomor_prs', "PPBJ {$conflict->ppbj_no} sudah terhubung dengan SP {$conflict->awarding_sp}.", 409, ['conflict' => true]);
+        }
+
+        return null;
+    }
+
+    private function syncSpPpbjs(Sp $sp, $records): void
+    {
+        $pivot = [];
+        foreach ($records->values() as $index => $ppbj) {
+            $ppbj->awarding_sp = $sp->nomor_sp;
+            $ppbj->tgl_awarding_sp = $sp->tanggal_sp;
+            $ppbj->tgl_spk = $sp->tanggal_sp;
+            $ppbj->nilai_sp_spk = $sp->nilai_sp;
+            $ppbj->sph = $sp->sph;
+            $ppbj->tgl_sph = $sp->tgl_sph;
+            $ppbj->promised_date = $sp->promised_date;
+            $ppbj->save();
+            $pivot[$ppbj->id] = ['urutan' => $index + 1];
+        }
+        $sp->ppbjs()->sync($pivot);
+    }
+
+    private function clearSpPpbj(Ppbj $ppbj): void
+    {
+        $ppbj->awarding_sp = null;
+        $ppbj->tgl_awarding_sp = null;
+        $ppbj->tgl_spk = null;
+        $ppbj->nilai_sp_spk = null;
+        $ppbj->sph = null;
+        $ppbj->tgl_sph = null;
+        $ppbj->promised_date = null;
+        $ppbj->save();
     }
 
     /**
@@ -1349,7 +1363,7 @@ class SpController extends Controller
             'backUrl' => route('sp.index', ['mode' => $mode]),
             'meta' => [
                 'Nomor SP' => $nomor,
-                'Nomor PR/PPBJ' => $sp->nomor_pr ?: '-',
+                'Nomor PR/PPBJ' => $sp->linkedPpbjLabel(),
                 'Vendor' => $sp->nama_vendor ?: '-',
                 'Nilai SP' => $sp->nilai_sp ? 'Rp '.number_format((float) $sp->nilai_sp, 0, ',', '.') : '-',
                 'PIC' => $sp->pic ?: '-',
@@ -1717,7 +1731,7 @@ class SpController extends Controller
                 ? \Carbon\Carbon::parse($ppbjCatatan->tgl_ppbj)->locale('id')->translatedFormat('d F Y')
                 : null;
 
-            $catPpbj = 'Memenuhi PR Bidang (.....................) PT Sucofindo Cabang Pekanbaru Sesuai Nomor PR '.$sp->nomor_pr;
+            $catPpbj = 'Memenuhi PR Bidang (.....................) PT Sucofindo Cabang Pekanbaru Sesuai Nomor PR '.$sp->linkedPpbjLabel();
 
             if ($tglPpbjCatatan) {
                 $catPpbj .= ' tanggal '.$tglPpbjCatatan;
@@ -2196,7 +2210,7 @@ class SpController extends Controller
         }
 
         $catatanPr = $sp->nomor_pr
-            ? 'Memenuhi Permintaan Bidang (....................) sesuai PR No. '.$sp->nomor_pr.' tanggal '.$tglPr.'.'
+            ? 'Memenuhi Permintaan Bidang (....................) sesuai PR No. '.$sp->linkedPpbjLabel().' tanggal '.$tglPr.'.'
             : 'Memenuhi Permintaan Bidang .................... sesuai PR No. (....................) tanggal (....................).';
         $catatanPr .= $this->ppbjRegistrationNoteByPr($sp->nomor_pr);
 
@@ -2641,7 +2655,7 @@ class SpController extends Controller
         $this->addFormUjiKelayakanPenyediaEksternal(
             $phpWord,
             $deskripsi,
-            $sp->nomor_pr,
+            $sp->linkedPpbjLabel(),
             $tglPr,
             $vendorUp,
             $tglPakta,
@@ -2922,7 +2936,7 @@ class SpController extends Controller
         }
 
         $catatanPr = $sp->nomor_pr
-            ? 'Memenuhi Permintaan Bidang Dukungan Bisnis sesuai PR No. '.$sp->nomor_pr.' tanggal '.$tglPr.'.'
+            ? 'Memenuhi Permintaan Bidang Dukungan Bisnis sesuai PR No. '.$sp->linkedPpbjLabel().' tanggal '.$tglPr.'.'
             : 'Memenuhi Permintaan Bidang Dukungan Bisnis sesuai PR No. (....................) tanggal (....................).';
         $catatanPr .= $this->ppbjRegistrationNoteByPr($sp->nomor_pr);
 
@@ -3367,7 +3381,7 @@ class SpController extends Controller
         $this->addFormUjiKelayakanPenyediaEksternal(
             $phpWord,
             $deskripsi,
-            $sp->nomor_pr,
+            $sp->linkedPpbjLabel(),
             $tglPr,
             $vendorUp,
             $tglPakta,
@@ -3672,7 +3686,7 @@ class SpController extends Controller
         // Catatan kiri + Summary kanan dalam satu baris supaya tidak pakai vMerge.
         $tglPrText = $tglPr ?: '(....................)';
         $catatanPr = $sp->nomor_pr
-            ? 'Memenuhi PR Bidang Dukungan Bisnis PT Sucofindo Cabang Pekanbaru sesuai PR No. '.$sp->nomor_pr.' tanggal '.$tglPrText
+            ? 'Memenuhi PR Bidang Dukungan Bisnis PT Sucofindo Cabang Pekanbaru sesuai PR No. '.$sp->linkedPpbjLabel().' tanggal '.$tglPrText
             : 'Memenuhi PR Bidang Dukungan Bisnis PT Sucofindo Cabang Pekanbaru sesuai PR No. (....................) tanggal (....................)';
         $catatanPr .= $this->ppbjRegistrationNoteByPr($sp->nomor_pr);
 
@@ -4170,7 +4184,7 @@ class SpController extends Controller
         $this->addFormUjiKelayakanPenyediaEksternal(
             $phpWord,
             $deskripsi,
-            $sp->nomor_pr,
+            $sp->linkedPpbjLabel(),
             $tglPr,
             $vendorUp,
             $tglPakta,

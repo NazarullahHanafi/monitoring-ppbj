@@ -29,10 +29,14 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
         // PR MODE TOGGLE
         // ═══════════════════════════════════════
         function updatePrFinalValue() {
-            $('#nomorPrFinal').val(currentPrMode === 'ppbj' ? ($('#ppbjSelect').val() || '') : ($('#nomorPrManual').val() || '').trim());
+            const selected = $('#ppbjSelect').val() || [];
+            $('#nomorPrFinal').val(currentPrMode === 'ppbj' ? (Array.isArray(selected) ? (selected[0] || '') : selected) : ($('#nomorPrManual').val() || '').trim());
+            $('#nomorPrType').val(currentPrMode);
         }
         function updateEditPrFinalValue() {
-            $('#editNomorPrFinal').val(currentEditPrMode === 'ppbj' ? ($('#editPpbjSelect').val() || '') : ($('#editNomorPrManual').val() || '').trim());
+            const selected = $('#editPpbjSelect').val() || [];
+            $('#editNomorPrFinal').val(currentEditPrMode === 'ppbj' ? (Array.isArray(selected) ? (selected[0] || '') : selected) : ($('#editNomorPrManual').val() || '').trim());
+            $('#editNomorPrType').val(currentEditPrMode);
         }
 
         function setPrMode(mode) {
@@ -119,7 +123,7 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
             const vendorPrefix = selector === '.edit-sp-ppbj-select' ? 'edit' : 'add';
             $sel.select2({
                 placeholder: $sel.data('placeholder') || 'Pilih No. PPBJ...',
-                allowClear: true, width: '100%', minimumInputLength: 0,
+                allowClear: true, width: '100%', closeOnSelect: false, maximumSelectionLength: 20, minimumInputLength: 0,
                 ajax: { url: PPBJ_OPTIONS_URL, dataType: 'json', delay: 300, data: p => ({ q: p.term || '' }), processResults: d => ({ results: d.results }), cache: true },
                 templateResult: item => {
                     if (item.loading) return 'Mencari...';
@@ -138,11 +142,13 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
                     return;
                 }
 
-                const val = $(this).val();
+                const rawValue = $(this).val();
+                const selectedValues = Array.isArray(rawValue) ? rawValue.filter(Boolean) : (rawValue ? [rawValue] : []);
+                const val = selectedValues[selectedValues.length - 1] || '';
                 const $info = $('#' + infoId), $status = $('#' + statusId), $content = $('#' + contentId);
                 const $deskripsi = deskripsiId ? $('#' + deskripsiId) : null;
                 const $badge = badgeId ? $('#' + badgeId) : null;
-                if (onChangeCb) onChangeCb(val);
+                if (onChangeCb) onChangeCb(selectedValues);
                 if (!val) {
                     $info.addClass('hidden'); $status.html('');
                     if ($badge) $badge.addClass('hidden').html('');
@@ -1165,7 +1171,8 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
             akhirKontrak,
             bidangIpItu,
             penandatanganSci,
-            jabatanSci
+            jabatanSci,
+            linkedPpbjNumbers = []
         ) {
             document.getElementById('editFormSp').action = `/sp/${id}`;
             document.getElementById('editIdSp').value = id;
@@ -1203,7 +1210,12 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
             document.getElementById('editNilaiPr').value = formatRupiahFromNumber(nilaiPr);
 
             // Set PPBJ dropdown — hanya untuk tampilan, tidak timpa field
-            if (nomorPr && nomorPr !== 'null' && nomorPr.trim()) {
+            const editPpbjNumbers = Array.isArray(linkedPpbjNumbers) && linkedPpbjNumbers.length
+                ? linkedPpbjNumbers.filter(Boolean)
+                : (nomorPr && nomorPr !== 'null' && nomorPr.trim() ? [nomorPr] : []);
+
+            if (editPpbjNumbers.length) {
+                nomorPr = editPpbjNumbers[0];
                 // Toggle UI ke mode PPBJ (tanpa clear field)
                 _switchEditPpbjUiOnly('ppbj');
 
@@ -1213,7 +1225,13 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
                             nomorPr + (d.uraian ? ' — ' + d.uraian.substring(0, 40) : ''),
                             nomorPr, true, true
                         );
-                        $('#editPpbjSelect').append(o).trigger({ type: 'change', _suppressCustom: true });
+                        $('#editPpbjSelect').append(o);
+                        editPpbjNumbers.slice(1).forEach(ppbjNo => {
+                            if (!$('#editPpbjSelect option[value="' + CSS.escape(ppbjNo) + '"]').length) {
+                                $('#editPpbjSelect').append(new Option(ppbjNo, ppbjNo, true, true));
+                            }
+                        });
+                        $('#editPpbjSelect').val(editPpbjNumbers).trigger({ type: 'change', _suppressCustom: true });
                         updateEditPrFinalValue();
                         $('#editPpbjStatus').html('<span class="text-green-600 dark:text-green-400">✅ Terhubung dengan PPBJ</span>');
                         renderSpphVendorRecommendation('edit', d.spph_vendors || [], d.spph_nomor || null);
