@@ -2,20 +2,21 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Http\Request;
 use App\Services\ChatbotService;
 use App\Services\NotificationService;
-use Illuminate\Support\Facades\Log;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
 
 class WebChatbotController extends Controller
 {
     private const GUEST_MAX_MESSAGE_LENGTH = 500;
+
     private const GUEST_DAILY_LIMIT = 30;
+
     private const GUEST_CONVERSATION_LIMIT = 6;
 
-    
     protected $notificationService;
 
     public function __construct(NotificationService $notificationService)
@@ -36,13 +37,13 @@ class WebChatbotController extends Controller
         ]);
 
         $message = trim($validated['message']);
-        $isGuest = !Auth::check();
+        $isGuest = ! Auth::check();
         $guestKey = null;
         $guestCount = 0;
 
         // GUEST RESTRICTIONS
         if ($isGuest) {
-            $guestKey = 'chatbot_guest_daily:' . sha1((string) $request->ip() . '|' . now()->toDateString());
+            $guestKey = 'chatbot_guest_daily:'.sha1((string) $request->ip().'|'.now()->toDateString());
             $guestCount = (int) Cache::get($guestKey, 0);
 
             if ($guestCount >= self::GUEST_DAILY_LIMIT) {
@@ -55,14 +56,14 @@ class WebChatbotController extends Controller
             if (mb_strlen($message) > self::GUEST_MAX_MESSAGE_LENGTH) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Pesan terlalu panjang untuk mode publik. Maksimal ' . self::GUEST_MAX_MESSAGE_LENGTH . ' karakter.',
+                    'message' => 'Pesan terlalu panjang untuk mode publik. Maksimal '.self::GUEST_MAX_MESSAGE_LENGTH.' karakter.',
                 ], 422);
             }
 
             if ($this->isPrNotificationRequest($message) || $this->isEmailRequest($message)) {
                 return response()->json([
                     'success' => false,
-                    'message' => '🔒 **Login Diperlukan**\n\nSilakan login untuk menggunakan fitur ini.'
+                    'message' => '🔒 **Login Diperlukan**\n\nSilakan login untuk menggunakan fitur ini.',
                 ]);
             }
         }
@@ -73,7 +74,7 @@ class WebChatbotController extends Controller
         // =====================================================
         // CEK APAKAH USER SEDANG DALAM SESSION INPUT EMAIL
         // =====================================================
-        $sessionKey = $user ? 'chatbot_email_session_' . $user->id : null;
+        $sessionKey = $user ? 'chatbot_email_session_'.$user->id : null;
         $emailSession = $sessionKey ? Cache::get($sessionKey) : null;
 
         if ($emailSession) {
@@ -104,7 +105,7 @@ class WebChatbotController extends Controller
         // =====================================================
         // FEEDBACK: Semua user yang login bisa kirim feedback
         // =====================================================
-        if (!is_null($user) && $this->isFeedbackRequest($message)) {
+        if (! is_null($user) && $this->isFeedbackRequest($message)) {
             return $this->handleFeedback($user, $message);
         }
 
@@ -133,7 +134,7 @@ class WebChatbotController extends Controller
 
         // NORMAL CHAT
         $messages = [];
-        if (!empty($validated['conversation'])) {
+        if (! empty($validated['conversation'])) {
             $conversation = $isGuest
                 ? array_slice($validated['conversation'], -self::GUEST_CONVERSATION_LIMIT)
                 : $validated['conversation'];
@@ -143,7 +144,7 @@ class WebChatbotController extends Controller
             }
         }
         $messages[] = ['role' => 'user', 'content' => $message];
-        $userId = $isGuest ? 'guest_' . $request->ip() : 'user_' . auth()->id();
+        $userId = $isGuest ? 'guest_'.$request->ip() : 'user_'.auth()->id();
 
         try {
             // Gunakan $chatbotService dari argument method
@@ -155,10 +156,11 @@ class WebChatbotController extends Controller
 
             return response()->json([
                 'success' => $result['success'],
-                'message' => $result['message']
+                'message' => $result['message'],
             ], $result['success'] ? 200 : 500);
         } catch (\Exception $e) {
-            Log::error('WebChatbotController Error: ' . $e->getMessage());
+            Log::error('WebChatbotController Error: '.$e->getMessage());
+
             return response()->json(['success' => false, 'message' => '⚠️ Server Error.'], 500);
         }
     }
@@ -198,14 +200,15 @@ class WebChatbotController extends Controller
             // ✅ FIX: Hapus notification_count dari response (tidak perlu)
             return response()->json([
                 'success' => true,
-                'message' => $message
+                'message' => $message,
             ]);
 
         } catch (\Exception $e) {
             Log::error('Error fetching PR for umum', ['error' => $e->getMessage()]);
+
             return response()->json([
-                'success' => false, 
-                'message' => '⚠️ Gagal mengambil notifikasi.'
+                'success' => false,
+                'message' => '⚠️ Gagal mengambil notifikasi.',
             ], 500);
         }
     }
@@ -222,14 +225,15 @@ class WebChatbotController extends Controller
             // ✅ FIX: Hapus notification_count dan show_email_confirm (tidak dipakai)
             return response()->json([
                 'success' => true,
-                'message' => $message
+                'message' => $message,
             ]);
 
         } catch (\Exception $e) {
             Log::error('Error fetching PR for operasional', ['error' => $e->getMessage()]);
+
             return response()->json([
                 'success' => false,
-                'message' => '⚠️ Gagal mengambil data PR Anda.'
+                'message' => '⚠️ Gagal mengambil data PR Anda.',
             ], 500);
         }
     }
@@ -245,7 +249,7 @@ class WebChatbotController extends Controller
         if (empty($notifications)) {
             return response()->json([
                 'success' => true,
-                'message' => "📭 **Tidak Ada PR Pending**\n\nAnda tidak memiliki PR yang sedang pending."
+                'message' => "📭 **Tidak Ada PR Pending**\n\nAnda tidak memiliki PR yang sedang pending.",
             ]);
         }
 
@@ -259,7 +263,7 @@ class WebChatbotController extends Controller
 
         $prList = '';
         foreach ($notifications as $i => $notif) {
-            $prList .= "**" . ($i + 1) . ".** {$notif['pr_no']} - {$notif['description']}\n";
+            $prList .= '**'.($i + 1).".** {$notif['pr_no']} - {$notif['description']}\n";
         }
 
         $response = "📧 **Kirim Notifikasi Email ke Bagian Umum**\n\n";
@@ -269,7 +273,7 @@ class WebChatbotController extends Controller
         $response .= "Contoh: `nazarullahhanafi5@gmail.com`\n\n";
         $response .= "Atau ketik **\"default\"** untuk pakai email bawaan:\n";
         $response .= "➡️ `nazarullahhanafi5@gmail.com`\n\n";
-        $response .= "Ketik **\"batal\"** untuk membatalkan.";
+        $response .= 'Ketik **"batal"** untuk membatalkan.';
 
         return response()->json(['success' => true, 'message' => $response]);
     }
@@ -283,9 +287,10 @@ class WebChatbotController extends Controller
         // User mau batal
         if ($this->isCancelMessage($message)) {
             Cache::forget($sessionKey);
+
             return response()->json([
                 'success' => true,
-                'message' => "❌ **Email Dibatalkan**\n\nOke, email tidak jadi dikirim. Ada yang bisa saya bantu lagi? 😊"
+                'message' => "❌ **Email Dibatalkan**\n\nOke, email tidak jadi dikirim. Ada yang bisa saya bantu lagi? 😊",
             ]);
         }
 
@@ -302,10 +307,10 @@ class WebChatbotController extends Controller
             } else {
                 // Validasi email
                 $toEmail = trim($message);
-                if (!filter_var($toEmail, FILTER_VALIDATE_EMAIL)) {
+                if (! filter_var($toEmail, FILTER_VALIDATE_EMAIL)) {
                     return response()->json([
                         'success' => true,
-                        'message' => "❌ **Format email tidak valid!**\n\nContoh yang benar: `nazarullahhanafi5@gmail.com`\n\nSilakan ketik ulang email tujuan, atau ketik **\"default\"** untuk pakai email bawaan."
+                        'message' => "❌ **Format email tidak valid!**\n\nContoh yang benar: `nazarullahhanafi5@gmail.com`\n\nSilakan ketik ulang email tujuan, atau ketik **\"default\"** untuk pakai email bawaan.",
                     ]);
                 }
             }
@@ -323,7 +328,7 @@ class WebChatbotController extends Controller
             $response .= "Atau ketik **\"default\"** untuk CC bawaan:\n";
             $response .= "➡️ `m.idris@sucofindo.co.id`\n\n";
             $response .= "Ketik **\"skip\"** jika tidak ingin ada CC.\n";
-            $response .= "Ketik **\"batal\"** untuk membatalkan.";
+            $response .= 'Ketik **"batal"** untuk membatalkan.';
 
             return response()->json(['success' => true, 'message' => $response]);
         }
@@ -349,10 +354,10 @@ class WebChatbotController extends Controller
                 }
 
                 // Kalau ada input tapi semua invalid
-                if (!empty(trim($message)) && empty($ccEmails)) {
+                if (! empty(trim($message)) && empty($ccEmails)) {
                     return response()->json([
                         'success' => true,
-                        'message' => "❌ **Format email CC tidak valid!**\n\nContoh: `m.idris@sucofindo.co.id`\n\nSilakan ketik ulang, **\"skip\"** jika tidak ada CC, atau **\"default\"** untuk CC bawaan."
+                        'message' => "❌ **Format email CC tidak valid!**\n\nContoh: `m.idris@sucofindo.co.id`\n\nSilakan ketik ulang, **\"skip\"** jika tidak ada CC, atau **\"default\"** untuk CC bawaan.",
                     ]);
                 }
             }
@@ -364,7 +369,7 @@ class WebChatbotController extends Controller
 
             // Build preview konfirmasi
             $toEmail = $session['to_email'];
-            $ccString = !empty($ccEmails) ? implode(', ', $ccEmails) : '_(tidak ada CC)_';
+            $ccString = ! empty($ccEmails) ? implode(', ', $ccEmails) : '_(tidak ada CC)_';
 
             $prList = '';
             foreach ($session['notifications'] as $i => $notif) {
@@ -378,7 +383,7 @@ class WebChatbotController extends Controller
             $response .= "📝 **PR yang dilaporkan:**\n{$prList}\n";
             $response .= "━━━━━━━━━━━━━━━━━━━\n";
             $response .= "Ketik **\"ya, kirim\"** untuk mengirim email\n";
-            $response .= "Ketik **\"batal\"** untuk membatalkan";
+            $response .= 'Ketik **"batal"** untuk membatalkan';
 
             return response()->json(['success' => true, 'message' => $response]);
         }
@@ -388,10 +393,10 @@ class WebChatbotController extends Controller
         // =====================
         if ($step === 'waiting_confirm') {
 
-            if (!$this->isConfirmMessage($message)) {
+            if (! $this->isConfirmMessage($message)) {
                 return response()->json([
                     'success' => true,
-                    'message' => "❓ Ketik **\"ya, kirim\"** untuk mengirim, atau **\"batal\"** untuk membatalkan."
+                    'message' => '❓ Ketik **"ya, kirim"** untuk mengirim, atau **"batal"** untuk membatalkan.',
                 ]);
             }
 
@@ -404,9 +409,10 @@ class WebChatbotController extends Controller
 
         // Fallback
         Cache::forget($sessionKey);
+
         return response()->json([
             'success' => true,
-            'message' => "❓ Terjadi kesalahan session. Silakan ketik **\"kirim email\"** untuk memulai ulang."
+            'message' => '❓ Terjadi kesalahan session. Silakan ketik **"kirim email"** untuk memulai ulang.',
         ]);
     }
 
@@ -447,29 +453,29 @@ class WebChatbotController extends Controller
             Log::warning('Some emails failed', [
                 'sent' => $sentCount,
                 'failed' => $failedCount,
-                'user_id' => $user->id
+                'user_id' => $user->id,
             ]);
         }
 
         if ($sentCount > 0) {
-            $ccString = !empty($ccEmails) ? implode(', ', $ccEmails) : '_(tidak ada)_';
-            $response = "✅ **Email Berhasil Dikirim!**\n\n";
+            $ccString = ! empty($ccEmails) ? implode(', ', $ccEmails) : '_(tidak ada)_';
+            $response = "✅ **Email Masuk Antrean Pengiriman!**\n\n";
             $response .= "📊 **Ringkasan:**\n";
-            $response .= "• Terkirim: **{$sentCount}** email\n";
+            $response .= "• Dijadwalkan: **{$sentCount}** email\n";
             if ($failedCount > 0) {
                 $response .= "• Gagal: **{$failedCount}** email\n";
             }
             $response .= "\n📬 **Detail Pengiriman:**\n";
             $response .= "• **To:** `{$toEmail}`\n";
             $response .= "• **CC:** {$ccString}\n\n";
-            $response .= "💡 Bagian Umum akan segera mereview PR Anda.";
+            $response .= '💡 Sistem mengirimkannya di belakang layar agar chatbot tetap cepat.';
         } else {
-            $response = "❌ **Semua Email Gagal Terkirim**\n\nSilakan coba lagi atau hubungi administrator.";
+            $response = "❌ **Semua Email Gagal Masuk Antrean**\n\nSilakan coba lagi atau hubungi administrator.";
         }
 
         return response()->json([
             'success' => true,
-            'message' => $response
+            'message' => $response,
         ]);
     }
 
@@ -493,17 +499,18 @@ class WebChatbotController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => $message
+                'message' => $message,
             ]);
 
         } catch (\Exception $e) {
             Log::error('Error getting stats', [
                 'error' => $e->getMessage(),
-                'user_id' => $user->id
+                'user_id' => $user->id,
             ]);
+
             return response()->json([
                 'success' => false,
-                'message' => '⚠️ Gagal mengambil statistik.'
+                'message' => '⚠️ Gagal mengambil statistik.',
             ], 500);
         }
     }
@@ -515,7 +522,7 @@ class WebChatbotController extends Controller
     {
         $msg = strtolower($message);
         $category = 'lainnya';
-        
+
         if (str_contains($msg, 'keluhan') || str_contains($msg, 'complain') || str_contains($msg, 'masalah')) {
             $category = 'keluhan';
         } elseif (str_contains($msg, 'saran') || str_contains($msg, 'usul') || str_contains($msg, 'ide')) {
@@ -533,26 +540,28 @@ class WebChatbotController extends Controller
         if (empty($cleanMessage) || strlen($cleanMessage) < 5) {
             return response()->json([
                 'success' => true,
-                'message' => "📝 **Kirim Feedback ke Admin**\n\nSilakan ketik pesan Anda setelah kata 'feedback':\n\nContoh:\n• `feedback: sistem loading lama`\n• `saran: tambah fitur export PDF`\n• `keluhan: email tidak terkirim`"
+                'message' => "📝 **Kirim Feedback ke Admin**\n\nSilakan ketik pesan Anda setelah kata 'feedback':\n\nContoh:\n• `feedback: sistem loading lama`\n• `saran: tambah fitur export PDF`\n• `keluhan: email tidak terkirim`",
             ]);
         }
 
         try {
-            $request = new \Illuminate\Http\Request();
+            $request = new \Illuminate\Http\Request;
             $request->merge(['message' => $cleanMessage, 'category' => $category]);
-            $request->setUserResolver(fn() => $user);
+            $request->setUserResolver(fn () => $user);
 
             $feedbackController = app(\App\Http\Controllers\FeedbackController::class);
+
             return $feedbackController->store($request);
 
         } catch (\Exception $e) {
             Log::error('Feedback error', [
                 'error' => $e->getMessage(),
-                'user_id' => $user->id
+                'user_id' => $user->id,
             ]);
+
             return response()->json([
                 'success' => false,
-                'message' => '⚠️ Gagal mengirim feedback.'
+                'message' => '⚠️ Gagal mengirim feedback.',
             ], 500);
         }
     }
@@ -608,7 +617,7 @@ class WebChatbotController extends Controller
         return response()->json([
             'success' => true,
             'message' => $message,
-            'bg' => $bg
+            'bg' => $bg,
         ]);
     }
 
@@ -617,7 +626,7 @@ class WebChatbotController extends Controller
      */
     public function getNotificationCount(Request $request)
     {
-        if (!Auth::check()) {
+        if (! Auth::check()) {
             return response()->json(['count' => 0]);
         }
 
@@ -626,7 +635,7 @@ class WebChatbotController extends Controller
 
         try {
             $count = 0;
-            
+
             if ($dept === 'umum') {
                 $count = $this->notificationService->getUnreadCount();
             } elseif ($dept === 'operasional') {
@@ -647,9 +656,11 @@ class WebChatbotController extends Controller
     {
         try {
             $result = $this->notificationService->syncFromDatabase();
+
             return response()->json(['success' => $result['success'], 'message' => $result['message'], 'count' => $result['count']]);
         } catch (\Exception $e) {
             Log::error('Notification sync failed', ['error' => $e->getMessage()]);
+
             return response()->json(['success' => false, 'message' => 'Gagal menyinkronkan notifikasi.'], 500);
         }
     }
@@ -659,26 +670,27 @@ class WebChatbotController extends Controller
      */
     public function clearHistory(Request $request, ChatbotService $chatbotService)
     {
-        $userId = auth()->check() ? 'user_' . auth()->id() : 'guest_' . $request->ip();
-        
+        $userId = auth()->check() ? 'user_'.auth()->id() : 'guest_'.$request->ip();
+
         try {
             // Gunakan $chatbotService dari argument
             $chatbotService->clearChatHistory($userId);
 
             if (auth()->check()) {
-                Cache::forget('chatbot_email_session_' . auth()->id());
+                Cache::forget('chatbot_email_session_'.auth()->id());
             }
 
             return response()->json([
                 'success' => true,
-                'message' => 'Riwayat chat dihapus.'
+                'message' => 'Riwayat chat dihapus.',
             ]);
 
         } catch (\Exception $e) {
             Log::error('Clear history failed', ['error' => $e->getMessage()]);
+
             return response()->json([
                 'success' => false,
-                'message' => 'Gagal menghapus riwayat.'
+                'message' => 'Gagal menghapus riwayat.',
             ]);
         }
     }
@@ -707,15 +719,18 @@ class WebChatbotController extends Controller
             'status pr',
         ];
         foreach ($keywords as $kw) {
-            if (str_contains($msg, $kw))
+            if (str_contains($msg, $kw)) {
                 return true;
+            }
         }
+
         return false;
     }
 
     protected function isEmailRequest(string $message): bool
     {
         $msg = strtolower(trim($message));
+
         return str_contains($msg, 'kirim email') || str_contains($msg, 'send email');
     }
 
@@ -724,9 +739,11 @@ class WebChatbotController extends Controller
         $msg = strtolower(trim($message));
         $confirms = ['ya, kirim', 'ya kirim', 'oke kirim', 'ok kirim', 'yes', 'ya', 'setuju', 'kirim sekarang'];
         foreach ($confirms as $c) {
-            if (str_contains($msg, $c))
+            if (str_contains($msg, $c)) {
                 return true;
+            }
         }
+
         return false;
     }
 
@@ -735,9 +752,11 @@ class WebChatbotController extends Controller
         $msg = strtolower(trim($message));
         $cancels = ['batal', 'tidak', 'cancel', 'jangan', 'no', 'gak jadi'];
         foreach ($cancels as $c) {
-            if (str_contains($msg, $c))
+            if (str_contains($msg, $c)) {
                 return true;
+            }
         }
+
         return false;
     }
 
@@ -754,9 +773,11 @@ class WebChatbotController extends Controller
             '/optimize/',
         ];
         foreach ($patterns as $p) {
-            if (preg_match($p, $msg))
+            if (preg_match($p, $msg)) {
                 return true;
+            }
         }
+
         return false;
     }
 
@@ -772,9 +793,11 @@ class WebChatbotController extends Controller
             'tampilkan command',
         ];
         foreach ($keywords as $kw) {
-            if (str_contains($msg, $kw))
+            if (str_contains($msg, $kw)) {
                 return true;
+            }
         }
+
         return false;
     }
 
@@ -794,9 +817,11 @@ class WebChatbotController extends Controller
             'summary pr',
         ];
         foreach ($keywords as $kw) {
-            if (str_contains($msg, $kw))
+            if (str_contains($msg, $kw)) {
                 return true;
+            }
         }
+
         return false;
     }
 
@@ -815,9 +840,11 @@ class WebChatbotController extends Controller
             'report masalah',
         ];
         foreach ($keywords as $kw) {
-            if (str_contains($msg, $kw))
+            if (str_contains($msg, $kw)) {
                 return true;
+            }
         }
+
         return false;
     }
 }

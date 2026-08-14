@@ -14,9 +14,9 @@ Schedule::command('owner:backup-email')
     ->withoutOverlapping();
 
 // Shared hosting tidak menjalankan daemon queue permanen. Worker singkat ini
-// menguras notifikasi Telegram tiap menit lalu berhenti, sehingga request web
-// tidak menunggu koneksi eksternal dan worker PHP tetap tersedia bagi user.
-Schedule::command('queue:work database --queue=telegram --stop-when-empty --tries=3 --timeout=30 --max-time=50')
+// menguras email dan notifikasi Telegram tiap menit lalu berhenti, sehingga
+// request web tidak menunggu koneksi eksternal dan worker PHP tetap tersedia.
+Schedule::command('queue:work database --queue=notifications,telegram --stop-when-empty --tries=3 --timeout=30 --max-time=50')
     ->everyMinute()
     ->withoutOverlapping(2)
     ->runInBackground();

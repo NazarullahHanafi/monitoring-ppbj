@@ -1,4 +1,5 @@
 <?php
+
 // ============================================================
 // FILE 2: NotificationService LENGKAP
 // app/Services/NotificationService.php
@@ -6,17 +7,17 @@
 
 namespace App\Services;
 
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Mail;
+use App\Jobs\SendPrNotificationEmail;
 use App\Models\PrReceiptApproval;
-use App\Mail\PrNotificationMail;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
 
 class NotificationService
 {
     // Default emails (bisa di-override lewat chatbot)
     const EMAIL_TO = 'nazarullahhanafi5@gmail.com';
+
     const EMAIL_CC_DEFAULT = ['nazarullah12104@gmail.com'];
 
     public function notifyNewPrSubmission($prData, $adminUsers = [])
@@ -28,10 +29,9 @@ class NotificationService
         } catch (\Exception $e) {
             Log::error('Failed to store notification', ['error' => $e->getMessage()]);
         }
+
         return $results;
     }
-
-
 
     protected function storeChatbotNotification($prData)
     {
@@ -65,14 +65,15 @@ class NotificationService
                 ->orderBy('created_at', 'desc')
                 ->get();
 
-            if ($pendingPR->isEmpty())
+            if ($pendingPR->isEmpty()) {
                 return [];
+            }
 
             return $pendingPR->map(function ($pr) {
                 return [
-                    'id' => 'pr_' . $pr->id,
+                    'id' => 'pr_'.$pr->id,
                     'pr_receipt_id' => $pr->id,
-                    'pr_no' => $pr->torpr->nomor_pr ?? 'PR-' . $pr->id,
+                    'pr_no' => $pr->torpr->nomor_pr ?? 'PR-'.$pr->id,
                     'description' => $pr->torpr->tujuan_pengadaan ?? '-',
                     'department' => 'Operasional',
                     'submitted_by' => $pr->requested_name ?? '-',
@@ -84,6 +85,7 @@ class NotificationService
 
         } catch (\Exception $e) {
             Log::error('Failed to get user notifications', ['user_id' => $userId, 'error' => $e->getMessage()]);
+
             return [];
         }
     }
@@ -99,13 +101,14 @@ class NotificationService
                 ->orderBy('created_at', 'desc')
                 ->get();
 
-            if ($pendingPR->isEmpty())
+            if ($pendingPR->isEmpty()) {
                 return [];
+            }
 
             return $pendingPR->map(function ($pr) {
                 return [
-                    'id' => 'pr_' . $pr->id,
-                    'pr_no' => $pr->torpr->nomor_pr ?? 'PR-' . $pr->id,
+                    'id' => 'pr_'.$pr->id,
+                    'pr_no' => $pr->torpr->nomor_pr ?? 'PR-'.$pr->id,
                     'description' => $pr->torpr->tujuan_pengadaan ?? '-',
                     'department' => 'Operasional',
                     'submitted_by' => $pr->requested_name ?? '-',
@@ -117,6 +120,7 @@ class NotificationService
 
         } catch (\Exception $e) {
             Log::error('Failed to get notifications', ['error' => $e->getMessage()]);
+
             return [];
         }
     }
@@ -138,7 +142,7 @@ class NotificationService
                     break;
                 case 'year':
                     $query->whereYear('requested_at', $now->year);
-                    $periodLabel = 'Tahun ' . $now->year;
+                    $periodLabel = 'Tahun '.$now->year;
                     break;
                 case 'month':
                 default:
@@ -184,12 +188,13 @@ class NotificationService
                 'approved' => $approved,
                 'rejected' => $rejected,
                 'avg_approval_days' => $avgDays,
-                'oldest_pending' => $oldestPending ? ($oldestPending->torpr->nomor_pr ?? 'PR-' . $oldestPending->id) : null,
+                'oldest_pending' => $oldestPending ? ($oldestPending->torpr->nomor_pr ?? 'PR-'.$oldestPending->id) : null,
                 'oldest_days' => $oldestDays,
             ];
 
         } catch (\Exception $e) {
             Log::error('Failed to get personal stats', ['user_id' => $userId, 'error' => $e->getMessage()]);
+
             return null;
         }
     }
@@ -199,8 +204,8 @@ class NotificationService
      */
     public function formatPersonalStats(array $stats): string
     {
-        if (!$stats) {
-            return "❌ Gagal mengambil statistik. Coba lagi.";
+        if (! $stats) {
+            return '❌ Gagal mengambil statistik. Coba lagi.';
         }
 
         $total = $stats['total'];
@@ -211,7 +216,7 @@ class NotificationService
 
         // Progress bar approved
         $approvedPct = $total > 0 ? round(($approved / $total) * 100) : 0;
-        $bar = str_repeat('█', (int) ($approvedPct / 10)) . str_repeat('░', 10 - (int) ($approvedPct / 10));
+        $bar = str_repeat('█', (int) ($approvedPct / 10)).str_repeat('░', 10 - (int) ($approvedPct / 10));
 
         $message = "📊 **Statistik PR Anda — {$period}**\n\n";
         $message .= "━━━━━━━━━━━━━━━━━━━\n";
@@ -236,7 +241,7 @@ class NotificationService
             $message .= "• **{$stats['oldest_pending']}** — {$stats['oldest_days']} hari\n\n";
         }
 
-        $message .= "💡 Ketik **\"statistik minggu ini\"** atau **\"statistik tahun ini\"** untuk periode lain.";
+        $message .= '💡 Ketik **"statistik minggu ini"** atau **"statistik tahun ini"** untuk periode lain.';
 
         return $message;
     }
@@ -254,11 +259,10 @@ class NotificationService
             // Hapus duplikat & email kosong
             $ccEmails = array_values(array_unique(array_filter($ccEmails)));
 
-            Mail::to($toEmail)
-                ->cc($ccEmails)
-                ->send(new PrNotificationMail($prData, $ccEmails, $senderName));
+            SendPrNotificationEmail::dispatch($prData, $toEmail, $ccEmails, $senderName)
+                ->afterCommit();
 
-            Log::info('PR email sent', [
+            Log::info('PR email queued', [
                 'pr_no' => $prData['pr_no'],
                 'to' => $toEmail,
                 'cc' => $ccEmails,
@@ -269,7 +273,7 @@ class NotificationService
                 'success' => true,
                 'to' => $toEmail,
                 'cc' => $ccEmails,
-                'message' => 'Email berhasil dikirim!',
+                'message' => 'Email masuk antrean pengiriman.',
             ];
 
         } catch (\Exception $e) {
@@ -278,9 +282,10 @@ class NotificationService
                 'to' => $toEmail,
                 'error' => $e->getMessage(),
             ]);
+
             return [
                 'success' => false,
-                'message' => 'Gagal kirim email: ' . $e->getMessage(),
+                'message' => 'Gagal memasukkan email ke antrean: '.$e->getMessage(),
             ];
         }
     }
@@ -321,6 +326,7 @@ class NotificationService
     {
         try {
             $count = PrReceiptApproval::where('status', 'PENDING')->count();
+
             return ['success' => true, 'message' => "Found {$count} pending PRs", 'count' => $count];
         } catch (\Exception $e) {
             return ['success' => false, 'message' => $e->getMessage(), 'count' => 0];
@@ -351,7 +357,7 @@ class NotificationService
         $message .= "1. Buka menu **Approval PR**\n";
         $message .= "2. Review setiap PR\n";
         $message .= "3. **Approve** atau **Reject** dengan alasan\n\n";
-        $message .= "💡 Buka menu Approval PR di dashboard!";
+        $message .= '💡 Buka menu Approval PR di dashboard!';
 
         return $message;
     }
@@ -379,7 +385,7 @@ class NotificationService
         $message .= "━━━━━━━━━━━━━━━━━━━\n";
         $message .= "📧 **Ingin kirim notifikasi email ke Bagian Umum?**\n\n";
         $message .= "Ketik **\"kirim email\"** untuk mulai.\n";
-        $message .= "Anda bisa atur sendiri email tujuan & CC-nya! ✉️";
+        $message .= 'Anda bisa atur sendiri email tujuan & CC-nya! ✉️';
 
         return $message;
     }

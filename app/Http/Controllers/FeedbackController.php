@@ -2,16 +2,18 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Mail;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Auth;
+use App\Jobs\SendFeedbackEmail;
 use Carbon\Carbon;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\ValidationException;
+use Throwable;
 
 class FeedbackController extends Controller
 {
     /**
-     * Terima feedback dari chatbot dan kirim ke email admin
+     * Terima feedback dari chatbot dan masukkan pengiriman email ke antrean.
      */
     public function store(Request $request)
     {
@@ -23,58 +25,44 @@ class FeedbackController extends Controller
 
             $user = Auth::user();
             $category = $validated['category'] ?? 'lainnya';
-            $userMessage = $validated['message'];
-            $sentAt = Carbon::now()->timezone('Asia/Jakarta')->format('d M Y H:i') . ' WIB';
 
-            Log::info('Sending feedback email', [
-                'user_id' => $user->id ?? null,
+            $emailData = [
+                'userName' => $user?->name ?? 'Guest',
+                'userEmail' => $user?->email ?? '-',
+                'userDept' => $user?->department ?? '-',
+                'category' => ucfirst($category),
+                'userMessage' => $validated['message'],
+                'sentAt' => Carbon::now('Asia/Jakarta')->format('d M Y H:i').' WIB',
+            ];
+
+            SendFeedbackEmail::dispatch($emailData, $category)->afterCommit();
+
+            Log::info('Feedback email queued successfully', [
+                'user_id' => $user?->id,
                 'category' => $category,
             ]);
 
-            // ✅ FIX: Data untuk template
-            $emailData = [
-                'userName' => $user->name ?? 'Guest',
-                'userEmail' => $user->email ?? '-',
-                'userDept' => $user->department ?? '-',
-                'category' => ucfirst($category),
-                'userMessage' => $userMessage,
-                'sentAt' => $sentAt,
-            ];
-
-            // ✅ FIX: Kirim email dengan syntax yang benar
-            Mail::send('emails.feedback', $emailData, function ($m) use ($user, $category) {
-                $m->from(config('mail.from.address'), config('mail.from.name'))
-                    ->to('nazarullahhanafi5@gmail.com', 'Admin PPBJ')
-                    ->cc(['nazarullah12104@gmail.com'])
-                    ->subject("💬 [FEEDBACK - " . strtoupper($category) . "] dari " . ($user->name ?? 'Guest'));
-            });
-
-
-            Log::info('Feedback sent successfully');
-
             return response()->json([
                 'success' => true,
-                'message' => "✅ **Feedback Terkirim!**\n\nTerima kasih! Pesan Anda sudah dikirim ke admin. Kami akan segera menindaklanjutinya. 🙏"
+                'message' => "✅ **Feedback Masuk Antrean!**\n\nTerima kasih! Pesan Anda sedang dikirim ke admin di belakang layar. 🙏",
             ]);
-
-        } catch (\Illuminate\Validation\ValidationException $e) {
-            Log::error('Feedback validation failed', ['errors' => $e->errors()]);
+        } catch (ValidationException $exception) {
+            Log::error('Feedback validation failed', ['errors' => $exception->errors()]);
 
             return response()->json([
                 'success' => false,
-                'message' => '⚠️ Pesan terlalu pendek atau tidak valid.'
+                'message' => '⚠️ Pesan terlalu pendek atau tidak valid.',
             ], 422);
-
-        } catch (\Exception $e) {
-            Log::error('Feedback send failed', [
-                'error' => $e->getMessage(),
-                'file' => $e->getFile(),
-                'line' => $e->getLine(),
+        } catch (Throwable $exception) {
+            Log::error('Feedback queue failed', [
+                'error' => $exception->getMessage(),
+                'file' => $exception->getFile(),
+                'line' => $exception->getLine(),
             ]);
 
             return response()->json([
                 'success' => false,
-                'message' => '⚠️ Gagal mengirim feedback. Silakan coba lagi.'
+                'message' => '⚠️ Gagal memasukkan feedback ke antrean. Silakan coba lagi.',
             ], 500);
         }
     }
