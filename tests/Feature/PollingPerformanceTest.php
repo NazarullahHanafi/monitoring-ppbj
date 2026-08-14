@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Sp;
 use App\Models\Spph;
 use App\Models\User;
+use App\Models\Vendor;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
@@ -76,6 +77,27 @@ class PollingPerformanceTest extends TestCase
         $this->assertCount(10, $spphResponse->viewData('spphs')->items());
         $this->assertSame(15, $spResponse->viewData('sps')->total());
         $this->assertSame(15, $spphResponse->viewData('spphs')->total());
+    }
+
+    public function test_vendor_index_only_renders_ten_rows_by_default(): void
+    {
+        $user = User::factory()->create([
+            'department' => 'umum',
+            'role' => 'user',
+        ]);
+
+        foreach (range(1, 15) as $number) {
+            Vendor::create([
+                'nama_vendor' => sprintf('Vendor Pagination %02d', $number),
+                'is_active' => true,
+            ]);
+        }
+
+        $response = $this->actingAs($user)->get(route('vendor.index'));
+
+        $response->assertOk();
+        $this->assertCount(10, $response->viewData('vendors')->items());
+        $this->assertSame(15, $response->viewData('vendors')->total());
     }
 
     public function test_ppbj_search_does_not_run_a_second_full_table_scan(): void

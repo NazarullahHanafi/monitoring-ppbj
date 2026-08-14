@@ -16,7 +16,18 @@ class VendorController extends Controller
     {
         $search = $request->get('search', '');
 
-        $vendors = Vendor::when($search, fn($q) => $q->where(function ($sub) use ($search) {
+        $vendors = Vendor::select([
+            'id',
+            'nama_vendor',
+            'alamat',
+            'telepon',
+            'fax',
+            'email',
+            'npwp',
+            'direktur',
+            'jabatan',
+            'is_active',
+        ])->when($search, fn($q) => $q->where(function ($sub) use ($search) {
             $sub->where('nama_vendor', 'like', "%{$search}%")
                 ->orWhere('alamat', 'like', "%{$search}%")
                 ->orWhere('telepon', 'like', "%{$search}%")
@@ -25,9 +36,9 @@ class VendorController extends Controller
                 ->orWhere('npwp', 'like', "%{$search}%")
                 ->orWhere('direktur', 'like', "%{$search}%")
                 ->orWhere('jabatan', 'like', "%{$search}%");
-        }))
+            }))
             ->orderBy('nama_vendor')
-            ->paginate(25)
+            ->paginate(10)
             ->withQueryString();
 
         $stats = Cache::remember('vendor:stats', 300, function () {
