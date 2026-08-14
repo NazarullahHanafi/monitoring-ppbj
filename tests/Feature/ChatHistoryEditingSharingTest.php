@@ -341,11 +341,13 @@ class ChatHistoryEditingSharingTest extends TestCase
             ->assertSee('id="ctxEdit"', false)
             ->assertSee('id="cpFullscreenBtn"', false)
             ->assertSee('id="cpMinimizeBtn"', false)
-            ->assertSee('chat-panel.fullscreen', false)
-            ->assertSee('chat-panel.minimized', false)
             ->assertSee('Muat pesan lebih lama')
             ->assertSee('shareRecordToChat', false)
             ->assertSee('/@ PR');
+
+        $appCss = file_get_contents(resource_path('css/app.css'));
+        $this->assertStringContainsString('chat-panel.fullscreen', $appCss);
+        $this->assertStringContainsString('chat-panel.minimized', $appCss);
     }
 
     private function insertMessage(User $sender, string $message, $createdAt = null): int

@@ -1881,7 +1881,7 @@ XML;
 
     private function vendorUsageStats(): array
     {
-        return Cache::remember('vendor:usage-stats:spph-sp:v1', 1800, function () {
+        return Cache::remember('vendor:usage-stats:spph-sp:v1', 3600, function () {
             $stats = [];
 
             $ensure = function (string $vendor) use (&$stats): string {

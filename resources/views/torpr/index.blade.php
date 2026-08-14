@@ -5,7 +5,6 @@
 
 @push('styles')
     <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700;800;900&display=swap" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
     <style>
         .torpr-page,
         .torpr-page button,
@@ -3442,11 +3441,6 @@
     <script>
         (function () { var s = localStorage.getItem('theme'), d = window.matchMedia && window.matchMedia('(prefers-color-scheme:dark)').matches; document.documentElement.classList.toggle('dark', s === 'dark' || (!s && d)) })();
     </script>
-    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.1/xlsx.full.min.js"></script>
-
-    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-
 
     <script>
         const canAccessKacab = {{ auth()->user()->role === 'superadmin' && auth()->user()->department === 'operasional' ? 'true' : 'false' }};
@@ -6480,9 +6474,24 @@
             }
 
             const isHeavy = {{ isset($isHeavy) && $isHeavy ? 'true' : 'false' }};
-            if (!isHeavy) {
-                setInterval(refreshReceiptBadges, 60000);
+            let receiptRefreshTimer = null;
+
+            function startReceiptRefresh() {
+                if (isHeavy || document.hidden || receiptRefreshTimer) return;
+                receiptRefreshTimer = setInterval(refreshReceiptBadges, 60000);
             }
+
+            function stopReceiptRefresh() {
+                if (!receiptRefreshTimer) return;
+                clearInterval(receiptRefreshTimer);
+                receiptRefreshTimer = null;
+            }
+
+            startReceiptRefresh();
+            document.addEventListener('visibilitychange', () => {
+                if (document.hidden) stopReceiptRefresh();
+                else startReceiptRefresh();
+            });
         })();
     </script>
 

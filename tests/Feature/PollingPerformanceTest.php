@@ -14,6 +14,20 @@ class PollingPerformanceTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_shared_assets_are_loaded_once_and_layout_css_is_browser_cacheable(): void
+    {
+        $layout = file_get_contents(resource_path('views/layouts/app.blade.php'));
+        $torpr = file_get_contents(resource_path('views/torpr/index.blade.php'));
+        $appCss = file_get_contents(resource_path('css/app.css'));
+
+        $this->assertSame(1, substr_count($layout, 'sweetalert2@11'));
+        $this->assertSame(1, substr_count($layout, 'select2.min.js'));
+        $this->assertStringNotContainsString('xlsx.full.min.js', $layout);
+        $this->assertStringNotContainsString('sweetalert2@11', $torpr);
+        $this->assertStringNotContainsString('select2.min.js', $torpr);
+        $this->assertStringContainsString('Layout application styles (browser-cacheable)', $appCss);
+    }
+
     public function test_sp_polling_is_limited_to_prevent_large_payloads(): void
     {
         $user = User::factory()->create([
