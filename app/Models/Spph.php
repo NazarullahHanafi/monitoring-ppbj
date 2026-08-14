@@ -18,6 +18,13 @@ class Spph extends Model
         'vendor_names' => 'array',
     ];
 
+    protected static function booted(): void
+    {
+        static::deleting(function (Spph $spph) {
+            $spph->ppbjs()->detach();
+        });
+    }
+
     public function getPrintVendorNamesAttribute(): array
     {
         return collect(array_merge([$this->nama_vendor], $this->vendor_names ?? []))

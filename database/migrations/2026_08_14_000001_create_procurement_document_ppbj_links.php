@@ -8,10 +8,19 @@ use Illuminate\Support\Facades\Schema;
 return new class extends Migration {
     public function up(): void
     {
+        // A failed DDL statement on MySQL can leave the new table behind even
+        // though Laravel has not recorded this migration. Removing only these
+        // brand-new pivot tables makes a retry deterministic and safe.
+        Schema::dropIfExists('sp_ppbj');
+        Schema::dropIfExists('spph_ppbj');
+
         Schema::create('spph_ppbj', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('spph_id')->constrained('spphs')->cascadeOnDelete();
-            $table->foreignId('ppbj_id')->constrained('ppbj')->cascadeOnDelete();
+            // Production still contains legacy INT primary keys while newer
+            // installations use BIGINT. BIGINT pivot values work for both;
+            // cleanup is handled by model events instead of incompatible FKs.
+            $table->unsignedBigInteger('spph_id');
+            $table->unsignedBigInteger('ppbj_id');
             $table->unsignedSmallInteger('urutan')->default(1);
             $table->timestamps();
 
@@ -22,8 +31,8 @@ return new class extends Migration {
 
         Schema::create('sp_ppbj', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('sp_id')->constrained('sps')->cascadeOnDelete();
-            $table->foreignId('ppbj_id')->constrained('ppbj')->cascadeOnDelete();
+            $table->unsignedBigInteger('sp_id');
+            $table->unsignedBigInteger('ppbj_id');
             $table->unsignedSmallInteger('urutan')->default(1);
             $table->timestamps();
 

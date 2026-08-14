@@ -59,6 +59,10 @@ class Sp extends Model
                 $sp->jampel_5 = null;
             }
         });
+
+        static::deleting(function (Sp $sp) {
+            $sp->ppbjs()->detach();
+        });
     }
 
     public static function generateNomor(int $year, string $roman): array

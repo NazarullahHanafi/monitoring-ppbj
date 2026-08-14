@@ -18,6 +18,11 @@ class Ppbj extends Model
         static::updating(function ($ppbj) {
             $ppbj->applySlaCalculation();
         });
+
+        static::deleting(function (Ppbj $ppbj) {
+            $ppbj->spphs()->detach();
+            $ppbj->sps()->detach();
+        });
     }
 
     protected $fillable = [
