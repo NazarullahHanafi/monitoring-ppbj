@@ -2,32 +2,29 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\MasterPortofolio;
+use App\Models\PrReceiptApproval;
 use App\Models\Torpr;
 use App\Models\TorprEditRequest;
-use App\Models\PrReceiptApproval;
-use Illuminate\Http\Request;
-use Illuminate\Validation\Rule;
-use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Cache;
-use Illuminate\Database\QueryException;
-use Symfony\Component\HttpFoundation\StreamedResponse;
-use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use App\Models\User;
 use App\Services\NotificationService;
 use App\Services\PrArchiveService;
-use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Log;
+use Illuminate\Database\QueryException;
+use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
-use App\Models\User;
-use App\Models\MasterPortofolio;
-use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
-use PhpOffice\PhpSpreadsheet\Style\Fill;
-use PhpOffice\PhpSpreadsheet\Style\Border;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\Rule;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
+use PhpOffice\PhpSpreadsheet\Style\Border;
+use PhpOffice\PhpSpreadsheet\Style\Fill;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 
 class TorprController extends Controller
 {
-
     public function index(Request $request)
     {
         $query = DB::table('torprs')
@@ -47,14 +44,6 @@ class TorprController extends Controller
                 'torprs.tgl_ttd_kacab_pr',
                 'torprs.signed_by_kabid_name',
                 'torprs.signed_by_kacab_name',
-                'pra.id as approval_id',
-                'pra.status as approval_status',
-                'pra.requested_at as approval_requested_at',
-                'pra.approved_at as approval_approved_at',
-                'pra.rejected_at as approval_rejected_at',
-                'pra.rejected_reason',
-                'pra.approved_by_user_id',
-                'u1.name as approved_by_name',
                 'u2.name as received_by_name',
                 'u3.name as creator_name',
                 'u3.email as creator_email',
@@ -62,16 +51,6 @@ class TorprController extends Controller
                 'p.general_registered_at',
                 'gu.name as general_registered_by_name',
             ])
-            ->leftJoin(DB::raw('(
-            SELECT pra1.* 
-            FROM pr_receipt_approvals pra1
-            INNER JOIN (
-                SELECT torpr_id, MAX(id) as max_id
-                FROM pr_receipt_approvals
-                GROUP BY torpr_id
-            ) pra2 ON pra1.torpr_id = pra2.torpr_id AND pra1.id = pra2.max_id
-        ) as pra'), 'pra.torpr_id', '=', 'torprs.id')
-            ->leftJoin('users as u1', 'pra.approved_by_user_id', '=', 'u1.id')
             ->leftJoin('users as u2', 'torprs.received_by_umum_user_id', '=', 'u2.id')
             ->leftJoin('users as u3', 'torprs.created_by_user_id', '=', 'u3.id')
             ->leftJoin('ppbj as p', 'p.ppbj_no', '=', 'torprs.nomor_pr')
@@ -82,26 +61,32 @@ class TorprController extends Controller
             $query->where(function ($q) use ($search) {
                 // UBAH 'like', $search . '%' MENJADI 'like', '%' . $search . '%'
                 // Agar bisa mencari angka di tengah atau belakang (contoh: mencari '001' di 'PR/2026/001')
-                $q->where('torprs.nomor_pr', 'like', '%' . $search . '%')
-                    ->orWhere('torprs.tujuan_pengadaan', 'like', '%' . $search . '%')
-                    ->orWhere('torprs.portofolio', 'like', '%' . $search . '%')
-                    ->orWhere('p.general_registration_number', 'like', '%' . $search . '%');
+                $q->where('torprs.nomor_pr', 'like', '%'.$search.'%')
+                    ->orWhere('torprs.tujuan_pengadaan', 'like', '%'.$search.'%')
+                    ->orWhere('torprs.portofolio', 'like', '%'.$search.'%')
+                    ->orWhere('p.general_registration_number', 'like', '%'.$search.'%');
             });
         }
 
         // ✅ STATUS FILTER
         if ($status = $request->get('receipt_status')) {
-            $query->where('pra.status', $status);
+            $query->whereExists(function ($approvalQuery) use ($status) {
+                $approvalQuery->selectRaw('1')
+                    ->from('pr_receipt_approvals as pra_filter')
+                    ->whereColumn('pra_filter.torpr_id', 'torprs.id')
+                    ->where('pra_filter.status', $status)
+                    ->whereRaw('pra_filter.id = (SELECT MAX(pra_latest.id) FROM pr_receipt_approvals pra_latest WHERE pra_latest.torpr_id = torprs.id)');
+            });
         }
 
         // ✅ FILTER PORTOFOLIO MULTIPLE
         // Bisa pilih 1, 2, 3, atau banyak portofolio sekaligus dari Select2 multiple.
         $selectedPortofolios = array_values(array_filter(array_map(
-            fn($value) => trim((string) $value),
+            fn ($value) => trim((string) $value),
             (array) $request->input('portofolio', [])
         )));
 
-        if (!empty($selectedPortofolios)) {
+        if (! empty($selectedPortofolios)) {
             $query->whereIn('torprs.portofolio', $selectedPortofolios);
         }
 
@@ -152,14 +137,14 @@ class TorprController extends Controller
                 case 'last7days':
                     $query->whereBetween('torprs.tanggal_pr', [
                         Carbon::now()->subDays(7)->startOfDay(),
-                        Carbon::now()->endOfDay()
+                        Carbon::now()->endOfDay(),
                     ]);
                     break;
 
                 case 'last30days':
                     $query->whereBetween('torprs.tanggal_pr', [
                         Carbon::now()->subDays(30)->startOfDay(),
-                        Carbon::now()->endOfDay()
+                        Carbon::now()->endOfDay(),
                     ]);
                     break;
 
@@ -194,7 +179,7 @@ class TorprController extends Controller
                     if ($dateFrom && $dateTo) {
                         $query->whereBetween('torprs.tanggal_pr', [
                             Carbon::parse($dateFrom)->startOfDay(),
-                            Carbon::parse($dateTo)->endOfDay()
+                            Carbon::parse($dateTo)->endOfDay(),
                         ]);
                     } elseif ($dateFrom) {
                         $query->where('torprs.tanggal_pr', '>=', Carbon::parse($dateFrom)->toDateString());
@@ -206,13 +191,15 @@ class TorprController extends Controller
         }
 
         $perPage = (int) $request->get('per_page', 10);
-        $perPage = in_array($perPage, [10, 25, 50, 100]) ? $perPage : 25;
+        $perPage = in_array($perPage, [10, 25, 50, 100]) ? $perPage : 10;
 
         $query->orderBy('torprs.id', 'desc');
 
         $rows = $query->paginate($perPage)->withQueryString();
         $isHeavy = $rows->count() > 40;
         $rowIds = collect($rows->items())->pluck('id')->filter()->values();
+
+        $this->hydrateLatestReceiptApprovals($rows->getCollection(), $rowIds);
 
         $editAccessRequests = TorprEditRequest::with(['requester:id,name,email', 'owner:id,name,email'])
             ->where('requester_user_id', auth()->id())
@@ -230,18 +217,15 @@ class TorprController extends Controller
             ->unique('torpr_id')
             ->keyBy('torpr_id');
 
-        $incomingEditRequests = TorprEditRequest::with(['torpr:id,nomor_pr,tujuan_pengadaan', 'requester:id,name,email'])
+        $incomingEditRequestCount = TorprEditRequest::query()
             ->where('owner_user_id', auth()->id())
             ->where('status', 'pending')
-            ->latest('id')
-            ->limit(25)
-            ->get();
+            ->count();
 
-        $outgoingEditRequests = TorprEditRequest::with(['torpr:id,nomor_pr,tujuan_pengadaan', 'owner:id,name,email'])
+        $outgoingEditRequestCount = TorprEditRequest::query()
             ->where('requester_user_id', auth()->id())
-            ->latest('id')
-            ->limit(15)
-            ->get();
+            ->where('status', 'pending')
+            ->count();
 
         $editPermissionLogs = \App\Models\ActivityLog::with('user:id,name')
             ->where('model_type', Torpr::class)
@@ -262,10 +246,108 @@ class TorprController extends Controller
             'isHeavy',
             'portofolios',
             'editAccessRequests',
-            'incomingEditRequests',
-            'outgoingEditRequests',
+            'incomingEditRequestCount',
+            'outgoingEditRequestCount',
             'editPermissionLogs'
         ));
+    }
+
+    /**
+     * Memuat approval terakhir hanya untuk sepuluh baris halaman aktif.
+     * Dengan begitu query COUNT pagination tidak lagi ikut mematerialisasi
+     * seluruh riwayat approval.
+     */
+    private function hydrateLatestReceiptApprovals($rows, $rowIds): void
+    {
+        $defaults = [
+            'approval_id' => null,
+            'approval_status' => null,
+            'approval_requested_at' => null,
+            'approval_approved_at' => null,
+            'approval_rejected_at' => null,
+            'rejected_reason' => null,
+            'approved_by_user_id' => null,
+            'approved_by_name' => null,
+        ];
+
+        if ($rowIds->isEmpty()) {
+            return;
+        }
+
+        $approvals = DB::table('pr_receipt_approvals as pra')
+            ->leftJoin('users as approver', 'pra.approved_by_user_id', '=', 'approver.id')
+            ->whereIn('pra.torpr_id', $rowIds)
+            ->whereRaw('pra.id = (SELECT MAX(pra_latest.id) FROM pr_receipt_approvals pra_latest WHERE pra_latest.torpr_id = pra.torpr_id)')
+            ->select([
+                'pra.torpr_id',
+                'pra.id as approval_id',
+                'pra.status as approval_status',
+                'pra.requested_at as approval_requested_at',
+                'pra.approved_at as approval_approved_at',
+                'pra.rejected_at as approval_rejected_at',
+                'pra.rejected_reason',
+                'pra.approved_by_user_id',
+                'approver.name as approved_by_name',
+            ])
+            ->get()
+            ->keyBy('torpr_id');
+
+        foreach ($rows as $row) {
+            $approval = $approvals->get($row->id);
+            foreach ($defaults as $field => $default) {
+                $row->{$field} = $approval->{$field} ?? $default;
+            }
+        }
+    }
+
+    /**
+     * Isi pusat Req Edit dimuat saat tombol dibuka, bukan saat halaman TORPR
+     * pertama kali dirender.
+     */
+    public function editRequestCenter(Request $request)
+    {
+        $userId = (int) $request->user()->id;
+
+        $incoming = TorprEditRequest::with(['torpr:id,nomor_pr,tujuan_pengadaan', 'requester:id,name,email'])
+            ->where('owner_user_id', $userId)
+            ->where('status', 'pending')
+            ->latest('id')
+            ->limit(25)
+            ->get()
+            ->map(fn (TorprEditRequest $editRequest) => [
+                'id' => $editRequest->id,
+                'nomor_pr' => $editRequest->torpr?->nomor_pr ?: 'Nomor PR belum diisi',
+                'tujuan' => $editRequest->torpr?->tujuan_pengadaan ?: '-',
+                'requester' => $editRequest->requester?->name ?: 'User',
+                'email' => $editRequest->requester?->email ?: '-',
+                'reason' => $editRequest->reason ?: '-',
+                'created_at' => $editRequest->created_at?->timezone('Asia/Jakarta')->format('d M Y H:i:s').' WIB',
+            ])
+            ->values();
+
+        $outgoing = TorprEditRequest::with(['torpr:id,nomor_pr,tujuan_pengadaan', 'owner:id,name,email'])
+            ->where('requester_user_id', $userId)
+            ->latest('id')
+            ->limit(15)
+            ->get()
+            ->map(fn (TorprEditRequest $editRequest) => [
+                'id' => $editRequest->id,
+                'nomor_pr' => $editRequest->torpr?->nomor_pr ?: 'Nomor PR belum diisi',
+                'tujuan' => $editRequest->torpr?->tujuan_pengadaan ?: '-',
+                'owner' => $editRequest->owner?->name ?: 'Pembuat PR',
+                'status' => $editRequest->status,
+                'reason' => $editRequest->reason ?: '-',
+                'created_at' => $editRequest->created_at?->timezone('Asia/Jakarta')->format('d M Y H:i:s').' WIB',
+                'reviewed_at' => $editRequest->reviewed_at?->timezone('Asia/Jakarta')->format('d M Y H:i:s').' WIB',
+                'expires_at' => $editRequest->expires_at?->timezone('Asia/Jakarta')->format('d M Y H:i:s').' WIB',
+                'review_note' => $editRequest->review_note ?: '-',
+            ])
+            ->values();
+
+        return response()->json([
+            'incoming' => $incoming,
+            'outgoing' => $outgoing,
+        ])->header('Cache-Control', 'private, no-store');
     }
 
     public function myProgress(Request $request)
@@ -421,7 +503,7 @@ class TorprController extends Controller
                 'tujuan' => $torpr->tujuan_pengadaan ?: '-',
                 'portofolio' => $ppbj->portofolio ?? $torpr->portofolio ?? '-',
                 'nilai_pr' => (float) ($torpr->jumlah_pr ?? 0),
-                'nilai_pr_label' => 'Rp ' . number_format((float) ($torpr->jumlah_pr ?? 0), 0, ',', '.'),
+                'nilai_pr_label' => 'Rp '.number_format((float) ($torpr->jumlah_pr ?? 0), 0, ',', '.'),
                 'tanggal_pr' => $formatDate($torpr->tanggal_pr),
                 'status_label' => $statusLabel,
                 'status_tone' => $statusTone,
@@ -511,7 +593,7 @@ class TorprController extends Controller
             ], 422);
         }
 
-        if (!$torpr->createdBy) {
+        if (! $torpr->createdBy) {
             return response()->json([
                 'message' => 'Pembuat PR tidak ditemukan, request edit tidak bisa dikirim.',
             ], 422);
@@ -637,24 +719,24 @@ class TorprController extends Controller
         $latest = $torpr->latestReceiptApproval;
 
         // ✅ VALIDASI: Hanya bisa resubmit jika status REJECTED
-        if (!$latest || $latest->status !== 'REJECTED') {
+        if (! $latest || $latest->status !== 'REJECTED') {
             return response()->json([
-                'message' => 'PR ini tidak dalam status REJECTED. Hanya PR yang ditolak yang bisa diajukan ulang.'
+                'message' => 'PR ini tidak dalam status REJECTED. Hanya PR yang ditolak yang bisa diajukan ulang.',
             ], 422);
         }
 
-        if (!$this->canRequestUmum()) {
+        if (! $this->canRequestUmum()) {
             return response()->json([
-                'message' => 'Akses ditolak. Hanya Superadmin Operasional yang dapat mengajukan PR ke Umum.'
+                'message' => 'Akses ditolak. Hanya Superadmin Operasional yang dapat mengajukan PR ke Umum.',
             ], 403);
         }
 
         // ✅ VALIDASI: Semua data wajib lengkap sebelum bisa diajukan ulang ke Umum
         $missing = $this->missingReceiptFields($torpr);
 
-        if (!empty($missing)) {
+        if (! empty($missing)) {
             return response()->json([
-                'message' => 'Data belum lengkap: ' . implode(', ', $missing),
+                'message' => 'Data belum lengkap: '.implode(', ', $missing),
             ], 422);
         }
 
@@ -688,7 +770,7 @@ class TorprController extends Controller
             ]);
 
             return response()->json([
-                'message' => 'Gagal mengajukan ulang PR. Silakan coba lagi.'
+                'message' => 'Gagal mengajukan ulang PR. Silakan coba lagi.',
             ], 500);
         }
     }
@@ -758,29 +840,29 @@ class TorprController extends Controller
     public function showQuickSign($token, $type)
     {
         // Validate type
-        if (!in_array($type, ['kacab', 'kabid'])) {
+        if (! in_array($type, ['kacab', 'kabid'])) {
             abort(404, 'Invalid signature type');
         }
 
         if ($type === 'kacab') {
             // 1. Cek apakah sudah login
-            if (!auth()->check()) {
+            if (! auth()->check()) {
                 // Simpan intended URL agar bisa kembali setelah login
                 return redirect()->guest(route('login'))->with('error', 'Silakan login sebagai Superadmin Operasional untuk menandatangani sebagai Kacab.');
             }
 
             // 2. Cek apakah role dan department sesuai
             $user = auth()->user();
-            if (!($user->role === 'superadmin' && $user->department === 'operasional')) {
+            if (! ($user->role === 'superadmin' && $user->department === 'operasional')) {
                 abort(403, 'Akses Ditolak. Hanya Superadmin Operasional yang dapat menandatangani sebagai Kacab.');
             }
         }
 
         // Find PR by token
-        $column = 'sign_token_' . $type;
+        $column = 'sign_token_'.$type;
         $torpr = Torpr::where($column, $token)->first();
 
-        if (!$torpr) {
+        if (! $torpr) {
             return view('pr.invalid-token', ['type' => $type]);
         }
 
@@ -789,13 +871,13 @@ class TorprController extends Controller
         }
 
         // Check if already signed
-        $ttdColumn = 'tgl_ttd_' . $type . '_pr';
+        $ttdColumn = 'tgl_ttd_'.$type.'_pr';
         if ($torpr->{$ttdColumn}) {
             return view('pr.already-signed', [
                 'torpr' => $torpr,
                 'type' => $type,
                 'signedAt' => $torpr->{$ttdColumn},
-                'signedBy' => $torpr->{'signed_by_' . $type . '_name'}
+                'signedBy' => $torpr->{'signed_by_'.$type.'_name'},
             ]);
         }
 
@@ -803,35 +885,35 @@ class TorprController extends Controller
         return view('pr.quick-sign', [
             'torpr' => $torpr,
             'type' => $type,
-            'token' => $token
+            'token' => $token,
         ]);
     }
 
     public function processQuickSign(Request $request, $token, $type)
     {
         if ($type === 'kacab') {
-            if (!auth()->check()) {
+            if (! auth()->check()) {
                 return response()->json(['ok' => false, 'message' => 'Sesi habis. Silakan login kembali.'], 401);
             }
 
             $user = auth()->user();
-            if (!($user->role === 'superadmin' && $user->department === 'operasional')) {
+            if (! ($user->role === 'superadmin' && $user->department === 'operasional')) {
                 return response()->json(['ok' => false, 'message' => 'Akses ditolak. Hanya Superadmin Operasional yang boleh TTD Kacab.'], 403);
             }
         }
 
         $request->validate([
-            'signer_name' => ['required', 'string', 'min:3', 'max:100']
+            'signer_name' => ['required', 'string', 'min:3', 'max:100'],
         ]);
 
-        if (!in_array($type, ['kacab', 'kabid'])) {
+        if (! in_array($type, ['kacab', 'kabid'])) {
             return response()->json(['ok' => false, 'message' => 'Invalid type'], 400);
         }
 
-        $column = 'sign_token_' . $type;
+        $column = 'sign_token_'.$type;
         $torpr = Torpr::where($column, $token)->first();
 
-        if (!$torpr) {
+        if (! $torpr) {
             return response()->json(['ok' => false, 'message' => 'Token tidak valid'], 404);
         }
 
@@ -839,13 +921,13 @@ class TorprController extends Controller
             return response()->json(['ok' => false, 'message' => 'Token sudah kedaluwarsa. Silakan buat QR baru.'], 410);
         }
 
-        $ttdColumn = 'tgl_ttd_' . $type . '_pr';
-        $nameColumn = 'signed_by_' . $type . '_name';
+        $ttdColumn = 'tgl_ttd_'.$type.'_pr';
+        $nameColumn = 'signed_by_'.$type.'_name';
 
         if ($torpr->{$ttdColumn}) {
             return response()->json([
                 'ok' => false,
-                'message' => 'PR sudah ditandatangani sebelumnya oleh ' . $torpr->{$nameColumn}
+                'message' => 'PR sudah ditandatangani sebelumnya oleh '.$torpr->{$nameColumn},
             ], 422);
         }
 
@@ -854,7 +936,7 @@ class TorprController extends Controller
             $ttdColumn => now(),
             $nameColumn => $request->signer_name,
             $column => null,
-            $column . '_expires_at' => null,
+            $column.'_expires_at' => null,
         ]);
 
         $this->forgetTorprJsonCache((int) $torpr->id);
@@ -872,51 +954,51 @@ class TorprController extends Controller
             'pr_id' => $torpr->id,
             'pr_no' => $torpr->nomor_pr,
             'type' => $type,
-            'signer' => $request->signer_name
+            'signer' => $request->signer_name,
         ]);
 
         return response()->json([
             'ok' => true,
             'message' => 'Tanda tangan berhasil dicatat!',
             'timestamp' => now()->format('d M Y H:i:s'),
-            'signer' => $request->signer_name
+            'signer' => $request->signer_name,
         ]);
     }
 
     public function regenerateSignToken($id, $type)
     {
         $user = auth()->user();
-        if (!$user || $user->role !== 'superadmin' || $user->department !== 'operasional') {
+        if (! $user || $user->role !== 'superadmin' || $user->department !== 'operasional') {
             return response()->json(['ok' => false, 'message' => 'Akses ditolak.'], 403);
         }
 
-        if (!in_array($type, ['kacab', 'kabid'])) {
+        if (! in_array($type, ['kacab', 'kabid'])) {
             return response()->json(['ok' => false, 'message' => 'Invalid type'], 400);
         }
 
         $torpr = Torpr::findOrFail($id);
 
         // Check permission (only if not signed yet)
-        $ttdColumn = 'tgl_ttd_' . $type . '_pr';
+        $ttdColumn = 'tgl_ttd_'.$type.'_pr';
         if ($torpr->{$ttdColumn}) {
             return response()->json([
                 'ok' => false,
-                'message' => 'Tidak bisa regenerate token untuk PR yang sudah ditandatangani'
+                'message' => 'Tidak bisa regenerate token untuk PR yang sudah ditandatangani',
             ], 422);
         }
 
-        $column = 'sign_token_' . $type;
+        $column = 'sign_token_'.$type;
         $newToken = \Illuminate\Support\Str::random(32);
 
         $torpr->update([
             $column => $newToken,
-            $column . '_expires_at' => now()->addDays(7),
+            $column.'_expires_at' => now()->addDays(7),
         ]);
 
         return response()->json([
             'ok' => true,
             'message' => 'Token berhasil di-generate ulang',
-            'new_token' => $newToken
+            'new_token' => $newToken,
         ]);
     }
 
@@ -924,7 +1006,7 @@ class TorprController extends Controller
     {
         abort_unless(in_array($type, ['kacab', 'kabid'], true), 404);
 
-        $column = 'sign_token_' . $type;
+        $column = 'sign_token_'.$type;
         $torpr = Torpr::where($column, $token)->firstOrFail();
         abort_if($this->signTokenExpired($torpr, $type), 410, 'Token tanda tangan sudah kedaluwarsa.');
 
@@ -942,9 +1024,9 @@ class TorprController extends Controller
 
     private function signTokenExpired(Torpr $torpr, string $type): bool
     {
-        $expiresAt = $torpr->{'sign_token_' . $type . '_expires_at'};
+        $expiresAt = $torpr->{'sign_token_'.$type.'_expires_at'};
 
-        return !$expiresAt || $expiresAt->isPast();
+        return ! $expiresAt || $expiresAt->isPast();
     }
 
     public function update(Request $request, $id)
@@ -958,7 +1040,7 @@ class TorprController extends Controller
         $currentStatus = $latest?->status;
         if (in_array($currentStatus, $lockedStatuses, true)) {
             return response()->json([
-                'message' => 'Data sudah terkunci karena status receipt: ' . $currentStatus
+                'message' => 'Data sudah terkunci karena status receipt: '.$currentStatus,
             ], 422);
         }
 
@@ -978,7 +1060,7 @@ class TorprController extends Controller
         // ==========================================
         // LOGIKA TTD KABID (Berlaku untuk semua user)
         // ==========================================
-        if (!empty($data['tgl_ttd_kabid_pr'])) {
+        if (! empty($data['tgl_ttd_kabid_pr'])) {
             $oldKabid = $torpr->tgl_ttd_kabid_pr
                 ? Carbon::parse($torpr->tgl_ttd_kabid_pr)->format('Y-m-d H:i:s')
                 : null;
@@ -1001,11 +1083,11 @@ class TorprController extends Controller
         // ==========================================
 
         // Proteksi: Jika BUKAN Superadmin Ops, paksa pakai data lama
-        if (!$isSuperadminOps) {
+        if (! $isSuperadminOps) {
             $data['tgl_ttd_kacab_pr'] = $torpr->tgl_ttd_kacab_pr;
             $data['signed_by_kacab_name'] = $torpr->signed_by_kacab_name;
         } else {
-            if (!empty($data['tgl_ttd_kacab_pr'])) {
+            if (! empty($data['tgl_ttd_kacab_pr'])) {
                 $oldKacab = $torpr->tgl_ttd_kacab_pr
                     ? Carbon::parse($torpr->tgl_ttd_kacab_pr)->format('Y-m-d H:i:s')
                     : null;
@@ -1039,7 +1121,7 @@ class TorprController extends Controller
                 if ($oldVal != $newVal) {
                     $changes[$key] = [
                         'old' => $oldVal,
-                        'new' => $newVal
+                        'new' => $newVal,
                     ];
                 }
             }
@@ -1057,7 +1139,7 @@ class TorprController extends Controller
         }
 
         // Simpan Log
-        if (!empty($changes)) {
+        if (! empty($changes)) {
             $logChanges = $changes;
             $action = 'updated';
             $description = 'Data PR diperbarui';
@@ -1107,28 +1189,28 @@ class TorprController extends Controller
 
         $creator = $torpr->createdBy;
 
-        if (!$creator) {
+        if (! $creator) {
             return response()->json([
                 'message' => 'Pembuat PR tidak ditemukan, sehingga password pembuat tidak bisa diverifikasi.',
             ], 422);
         }
 
-        $attemptKey = "torpr_delete_password_attempts:{$torpr->id}:{$creator->id}:{$user->id}:" . sha1((string) $request->ip());
-        $lockKey = "torpr_delete_password_lock:{$torpr->id}:{$creator->id}:{$user->id}:" . sha1((string) $request->ip());
+        $attemptKey = "torpr_delete_password_attempts:{$torpr->id}:{$creator->id}:{$user->id}:".sha1((string) $request->ip());
+        $lockKey = "torpr_delete_password_lock:{$torpr->id}:{$creator->id}:{$user->id}:".sha1((string) $request->ip());
 
         if ($lockedUntil = Cache::get($lockKey)) {
             $lockedUntilAt = Carbon::parse($lockedUntil);
             $retryAfter = (int) ceil(max(1, now()->diffInSeconds($lockedUntilAt, false)));
 
             return response()->json([
-                'message' => 'Terlalu banyak percobaan password salah. Silakan coba lagi sekitar ' . ceil($retryAfter / 60) . ' menit lagi.',
+                'message' => 'Terlalu banyak percobaan password salah. Silakan coba lagi sekitar '.ceil($retryAfter / 60).' menit lagi.',
                 'locked' => true,
                 'retry_after' => $retryAfter,
                 'locked_until' => $lockedUntilAt->toIso8601String(),
             ], 429);
         }
 
-        if (!Hash::check((string) $request->creator_password, (string) $creator->password)) {
+        if (! Hash::check((string) $request->creator_password, (string) $creator->password)) {
             $attempts = ((int) Cache::get($attemptKey, 0)) + 1;
             $remainingAttempts = max(0, 3 - $attempts);
 
@@ -1157,7 +1239,7 @@ class TorprController extends Controller
             }
 
             return response()->json([
-                'message' => 'Password pembuat PR tidak sesuai. Sisa percobaan: ' . $remainingAttempts . '.',
+                'message' => 'Password pembuat PR tidak sesuai. Sisa percobaan: '.$remainingAttempts.'.',
                 'attempts_remaining' => $remainingAttempts,
             ], 422);
         }
@@ -1166,7 +1248,7 @@ class TorprController extends Controller
         Cache::forget($lockKey);
 
         $oldNomorPr = $torpr->nomor_pr;
-        $description = "Draft PR dihapus: " . $this->safeTorprNumber($torpr);
+        $description = 'Draft PR dihapus: '.$this->safeTorprNumber($torpr);
 
         DB::transaction(function () use ($torpr, $user, $creator, $description, $request) {
             \App\Models\ActivityLog::create([
@@ -1190,7 +1272,7 @@ class TorprController extends Controller
         $this->forgetTorprJsonCache((int) $id);
         if ($oldNomorPr) {
             foreach (['_v8', '_v9', '_v10'] as $version) {
-                Cache::forget('tracking_pr_' . md5(strtolower($oldNomorPr)) . $version);
+                Cache::forget('tracking_pr_'.md5(strtolower($oldNomorPr)).$version);
             }
         }
 
@@ -1279,9 +1361,9 @@ class TorprController extends Controller
             'requested_name' => ['required', 'string', 'min:2', 'max:120'],
         ]);
 
-        if (!$this->canRequestUmum()) {
+        if (! $this->canRequestUmum()) {
             return response()->json([
-                'message' => 'Akses ditolak. Hanya Superadmin Operasional yang dapat request PR ke Umum.'
+                'message' => 'Akses ditolak. Hanya Superadmin Operasional yang dapat request PR ke Umum.',
             ], 403);
         }
 
@@ -1293,7 +1375,7 @@ class TorprController extends Controller
             'tanggal_pr',
             'jumlah_pr',
             'tgl_ttd_kabid_pr',
-            'tgl_ttd_kacab_pr'
+            'tgl_ttd_kacab_pr',
         ])->findOrFail($id);
 
         $hasPending = PrReceiptApproval::where('torpr_id', $torpr->id)
@@ -1307,9 +1389,9 @@ class TorprController extends Controller
         // ✅ VALIDASI: Semua data wajib lengkap sebelum bisa request ke Umum
         $missing = $this->missingReceiptFields($torpr);
 
-        if (!empty($missing)) {
+        if (! empty($missing)) {
             return response()->json([
-                'message' => 'Data belum lengkap: ' . implode(', ', $missing),
+                'message' => 'Data belum lengkap: '.implode(', ', $missing),
             ], 422);
         }
 
@@ -1346,13 +1428,13 @@ class TorprController extends Controller
             // ✅ REDUCE LOG: Hanya log jika penting (info berubah jadi debug)
             Log::debug('PR approval requested', [
                 'pr_id' => $id,
-                'pr_no' => $prData['pr_no']
+                'pr_no' => $prData['pr_no'],
             ]);
 
         } catch (\Exception $e) {
             Log::error('Failed to send PR notifications', [
                 'pr_id' => $id,
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ]);
         }
 
@@ -1363,8 +1445,8 @@ class TorprController extends Controller
             'message' => 'PR berhasil diajukan untuk approval. Super Admin telah mendapat notifikasi.',
             'notification_sent' => [
                 'telegram' => $notificationResults['telegram_sent'] ?? 0,
-                'chatbot' => $notificationResults['cache_stored'] ?? false
-            ]
+                'chatbot' => $notificationResults['cache_stored'] ?? false,
+            ],
         ]);
     }
 
@@ -1384,7 +1466,6 @@ class TorprController extends Controller
             'rejected_by' => $latest?->rejectedBy?->name,
         ]);
     }
-
 
     private function canRequestUmum(): bool
     {
@@ -1463,7 +1544,7 @@ class TorprController extends Controller
                 'number' => $number,
                 'title' => $purpose,
                 'status' => 'Menunggu persetujuan pembuat PR',
-                'meta' => 'Requester: ' . $requester->name,
+                'meta' => 'Requester: '.$requester->name,
                 'reason' => $editRequest->reason,
                 'torpr_id' => $torpr->id,
                 'request_id' => $editRequest->id,
@@ -1477,7 +1558,7 @@ class TorprController extends Controller
         $parts = preg_split('/\s+/u', trim($name)) ?: [];
 
         return count($parts) >= 2
-            ? strtoupper(mb_substr($parts[0], 0, 1) . mb_substr($parts[1], 0, 1))
+            ? strtoupper(mb_substr($parts[0], 0, 1).mb_substr($parts[1], 0, 1))
             : strtoupper(mb_substr($name, 0, 2));
     }
 
@@ -1571,6 +1652,7 @@ class TorprController extends Controller
 
             if (empty($data[$dateColumn])) {
                 $data[$nameColumn] = null;
+
                 continue;
             }
 
@@ -1592,7 +1674,7 @@ class TorprController extends Controller
     {
         foreach (array_filter([$oldNomorPr, $torpr->nomor_pr]) as $nomorPr) {
             foreach (['_v8', '_v9', '_v10'] as $version) {
-                Cache::forget('tracking_pr_' . md5(strtolower($nomorPr)) . $version);
+                Cache::forget('tracking_pr_'.md5(strtolower($nomorPr)).$version);
             }
         }
     }
@@ -1602,13 +1684,15 @@ class TorprController extends Controller
         $fields = ['tanggal_pr', 'tgl_ttd_kabid_pr', 'tgl_ttd_kacab_pr'];
 
         foreach ($fields as $f) {
-            if (!array_key_exists($f, $data))
+            if (! array_key_exists($f, $data)) {
                 continue;
+            }
 
             $v = $data[$f];
 
             if ($v === null || (is_string($v) && trim($v) === '')) {
                 $data[$f] = null;
+
                 continue;
             }
 
@@ -1621,15 +1705,17 @@ class TorprController extends Controller
 
     private function fmtDateTimeLocal($v): ?string
     {
-        if (!$v)
+        if (! $v) {
             return null;
+        }
+
         return Carbon::parse($v)->format('Y-m-d\TH:i');
     }
 
     // ✅ FIXED: Template dengan column yang benar
     public function downloadTemplate()
     {
-        $spreadsheet = new Spreadsheet();
+        $spreadsheet = new Spreadsheet;
         $sheet = $spreadsheet->getActiveSheet();
 
         $spreadsheet->getProperties()
@@ -1761,7 +1847,7 @@ class TorprController extends Controller
 
         $spreadsheet->setActiveSheetIndex(0);
 
-        $filename = 'Template_Import_TORPR_' . now()->format('Ymd') . '.xlsx';
+        $filename = 'Template_Import_TORPR_'.now()->format('Ymd').'.xlsx';
         $tempFile = tempnam(sys_get_temp_dir(), 'excel_');
         $writer = new Xlsx($spreadsheet);
         $writer->save($tempFile);
@@ -1798,7 +1884,7 @@ class TorprController extends Controller
             } else {
                 $handle = fopen($file->getRealPath(), 'r');
                 $bom = fread($handle, 3);
-                if ($bom !== chr(0xEF) . chr(0xBB) . chr(0xBF)) {
+                if ($bom !== chr(0xEF).chr(0xBB).chr(0xBF)) {
                     rewind($handle);
                 }
 
@@ -1840,17 +1926,18 @@ class TorprController extends Controller
             if ($headerMismatch) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Format template tidak sesuai. Silakan download template yang benar.'
+                    'message' => 'Format template tidak sesuai. Silakan download template yang benar.',
                 ], 422);
             }
 
             $nomorPrInFile = [];
 
             foreach ($rows as $rowIndex => $line) {
-                if ($rowIndex == 1)
+                if ($rowIndex == 1) {
                     continue;
+                }
 
-                if (!isset($line[0])) {
+                if (! isset($line[0])) {
                     $line = array_values($line);
                 }
 
@@ -1858,13 +1945,14 @@ class TorprController extends Controller
                     return is_string($v) ? trim($v) : $v;
                 }, $line);
 
-                if (empty(array_filter($line, fn($v) => !empty($v)))) {
+                if (empty(array_filter($line, fn ($v) => ! empty($v)))) {
                     continue;
                 }
 
                 // Skip example row
                 if (isset($line[0]) && $line[0] === 'Pengadaan Alat Tulis Kantor') {
                     $warnings[] = "Baris $rowIndex: Baris contoh dilewati";
+
                     continue;
                 }
 
@@ -1910,13 +1998,13 @@ class TorprController extends Controller
                 $dateFields = [
                     'tanggal_pr',
                     'tgl_ttd_kabid_pr',
-                    'tgl_ttd_kacab_pr'
+                    'tgl_ttd_kacab_pr',
                 ];
 
                 foreach ($dateFields as $field) {
-                    if (!empty($rowData[$field])) {
+                    if (! empty($rowData[$field])) {
                         $date = $this->parseDateTime($rowData[$field]);
-                        if (!$date) {
+                        if (! $date) {
                             $rowData['status'] = 'error';
                             $fieldLabel = ucwords(str_replace('_', ' ', $field));
                             $rowData['errors'][] = "$fieldLabel format tidak valid";
@@ -1925,22 +2013,22 @@ class TorprController extends Controller
                 }
 
                 // Validasi numeric
-                if (!empty($rowData['jumlah_pr'])) {
+                if (! empty($rowData['jumlah_pr'])) {
                     $cleaned = str_replace([',', '.', ' ', 'Rp'], '', $rowData['jumlah_pr']);
-                    if (!is_numeric($cleaned)) {
+                    if (! is_numeric($cleaned)) {
                         $rowData['status'] = 'error';
-                        $rowData['errors'][] = "Jumlah PR harus berupa angka";
+                        $rowData['errors'][] = 'Jumlah PR harus berupa angka';
                     }
                 }
 
-                if (!empty($rowData['tgl_ttd_kacab_pr'])) {
+                if (! empty($rowData['tgl_ttd_kacab_pr'])) {
                     $isSuperadminOps = (auth()->user()->role === 'superadmin' && auth()->user()->department === 'operasional');
 
-                    if (!$isSuperadminOps) {
-                        $rowData['errors'][] = "⚠️ TTD Kacab: Hanya Superadmin Operasional yang boleh mengisi kolom ini via Import. Data akan diabaikan.";
+                    if (! $isSuperadminOps) {
+                        $rowData['errors'][] = '⚠️ TTD Kacab: Hanya Superadmin Operasional yang boleh mengisi kolom ini via Import. Data akan diabaikan.';
                         // Kita tidak set status 'error' agar proses tetap jalan, tapi data akan di-ignore nanti.
                         // Atau jika ingin memblok total, uncomment baris bawah:
-                        // $rowData['status'] = 'error'; 
+                        // $rowData['status'] = 'error';
                     }
                 }
 
@@ -1950,12 +2038,12 @@ class TorprController extends Controller
             if (empty($data)) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'File tidak mengandung data valid'
+                    'message' => 'File tidak mengandung data valid',
                 ], 422);
             }
 
-            $validCount = count(array_filter($data, fn($d) => $d['status'] === 'valid'));
-            $errorCount = count(array_filter($data, fn($d) => $d['status'] === 'error'));
+            $validCount = count(array_filter($data, fn ($d) => $d['status'] === 'valid'));
+            $errorCount = count(array_filter($data, fn ($d) => $d['status'] === 'error'));
 
             return response()->json([
                 'success' => true,
@@ -1969,11 +2057,11 @@ class TorprController extends Controller
             ]);
 
         } catch (\Exception $e) {
-            \Log::error('TORPR Import error: ' . $e->getMessage());
+            \Log::error('TORPR Import error: '.$e->getMessage());
 
             return response()->json([
                 'success' => false,
-                'message' => 'Gagal memproses file. Pastikan format file sesuai template.'
+                'message' => 'Gagal memproses file. Pastikan format file sesuai template.',
             ], 500);
         }
     }
@@ -1996,6 +2084,7 @@ class TorprController extends Controller
                 $rowNumber = $item['row_number'] ?? '-';
                 if (isset($item['status']) && $item['status'] === 'error') {
                     $failed++;
+
                     continue;
                 }
 
@@ -2003,13 +2092,15 @@ class TorprController extends Controller
 
                 if (! $isValid) {
                     $failed++;
-                    $errors[] = "Baris {$rowNumber}: " . implode(', ', $validationErrors);
+                    $errors[] = "Baris {$rowNumber}: ".implode(', ', $validationErrors);
+
                     continue;
                 }
 
                 if (Torpr::where('nomor_pr', $validatedItem['nomor_pr'])->exists()) {
                     $failed++;
                     $errors[] = "Baris {$rowNumber}: Nomor PR {$validatedItem['nomor_pr']} sudah terdaftar";
+
                     continue;
                 }
 
@@ -2057,8 +2148,8 @@ class TorprController extends Controller
             } catch (\Exception $e) {
                 $failed++;
                 $rowNumber = $item['row_number'] ?? '-';
-                $errors[] = "Baris {$rowNumber}: " . $e->getMessage();
-                \Log::error("TORPR Import error on row {$rowNumber}: " . $e->getMessage());
+                $errors[] = "Baris {$rowNumber}: ".$e->getMessage();
+                \Log::error("TORPR Import error on row {$rowNumber}: ".$e->getMessage());
             }
         }
 
@@ -2097,7 +2188,7 @@ class TorprController extends Controller
             $clean[$field] = $value === null || $value === '' ? null : $this->parseDateTime($value);
 
             if (($value !== null && $value !== '') && ! $clean[$field]) {
-                $errors[] = ucwords(str_replace('_', ' ', $field)) . ' format tidak valid';
+                $errors[] = ucwords(str_replace('_', ' ', $field)).' format tidak valid';
             }
         }
 
@@ -2117,7 +2208,7 @@ class TorprController extends Controller
         $cleaned = str_replace(',', '.', $cleaned);
 
         if (! is_numeric($cleaned)) {
-            $errors[] = ucwords(str_replace('_', ' ', $field)) . ' harus berupa angka';
+            $errors[] = ucwords(str_replace('_', ' ', $field)).' harus berupa angka';
 
             return null;
         }
@@ -2137,6 +2228,7 @@ class TorprController extends Controller
         if (is_numeric($value) && $value > 25569) {
             try {
                 $date = \PhpOffice\PhpSpreadsheet\Shared\Date::excelToDateTimeObject($value);
+
                 return $date->format('Y-m-d H:i:s');
             } catch (\Exception $e) {
                 // Continue
@@ -2167,6 +2259,7 @@ class TorprController extends Controller
 
         try {
             $carbonDate = Carbon::parse($value);
+
             return $carbonDate->format('Y-m-d H:i:s');
         } catch (\Exception $e) {
             return null;
@@ -2175,13 +2268,13 @@ class TorprController extends Controller
 
     public function exportFull(Request $request)
     {
-        $filename = 'TORPR_Export_Full_' . now()->format('Ymd_His') . '.csv';
+        $filename = 'TORPR_Export_Full_'.now()->format('Ymd_His').'.csv';
 
         return response()->streamDownload(function () use ($request) {
             $out = fopen('php://output', 'w');
 
             // Tambahkan BOM (Byte Order Mark) agar Excel bisa baca UTF-8 dengan benar
-            fprintf($out, chr(0xEF) . chr(0xBB) . chr(0xBF));
+            fprintf($out, chr(0xEF).chr(0xBB).chr(0xBF));
 
             // ✅ FIXED: Header tanpa kolom 'ID'
             fputcsv($out, [
@@ -2212,11 +2305,11 @@ class TorprController extends Controller
             // ✅ FILTER PORTOFOLIO MULTIPLE SAAT EXPORT
             // Menyesuaikan export dengan filter aktif di halaman TORPR.
             $selectedPortofolios = array_values(array_filter(array_map(
-                fn($value) => trim((string) $value),
+                fn ($value) => trim((string) $value),
                 (array) $request->input('portofolio', [])
             )));
 
-            if (!empty($selectedPortofolios)) {
+            if (! empty($selectedPortofolios)) {
                 $query->whereIn('portofolio', $selectedPortofolios);
             }
 

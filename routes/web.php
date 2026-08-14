@@ -251,6 +251,9 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
             // ── PPBJ Dropdown ──
             Route::get('/ppbj-options', [SpphController::class, 'getPpbjOptions'])->name('ppbj-options')->middleware('throttle:60,1');
             Route::get('/check-ppbj', [SpphController::class, 'checkPpbjStatus'])->name('check-ppbj')->middleware('throttle:60,1');
+            Route::get('/vendor-usage-stats', [SpphController::class, 'vendorUsageStatsJson'])
+                ->name('vendor-usage-stats')
+                ->middleware('throttle:30,1');
 
             // ── Onboarding Tutorial ──
             Route::get('/onboarding-status', function () {
@@ -428,6 +431,9 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
         Route::get('/torpr/my-progress/archive', [TorprController::class, 'myProgressArchive'])
             ->name('torpr.myProgressArchive')
             ->middleware('throttle:40,1');
+        Route::get('/torpr/edit-requests/center', [TorprController::class, 'editRequestCenter'])
+            ->name('torpr.editRequests.center')
+            ->middleware('throttle:30,1');
         Route::post('/torpr', [TorprController::class, 'store'])->name('torpr.store');
         Route::put('/torpr/{id}', [TorprController::class, 'update'])->name('torpr.update');
         Route::delete('/torpr/{id}', [TorprController::class, 'destroy'])

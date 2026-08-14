@@ -2,8 +2,11 @@
 
 namespace Tests\Feature;
 
+use App\Models\PrReceiptApproval;
 use App\Models\Sp;
 use App\Models\Spph;
+use App\Models\Torpr;
+use App\Models\TorprEditRequest;
 use App\Models\User;
 use App\Models\Vendor;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -310,5 +313,125 @@ class PollingPerformanceTest extends TestCase
             count($torprSelects),
             'Daftar TORPR tidak boleh memuat seluruh record ketika tabel membesar.'
         );
+    }
+
+    public function test_torpr_index_hydrates_only_the_latest_receipt_approval(): void
+    {
+        $user = User::factory()->create([
+            'department' => 'operasional',
+            'role' => 'user',
+        ]);
+
+        $torpr = Torpr::create([
+            'nomor_pr' => 'PKB/PR-26/CON/9901',
+            'tujuan_pengadaan' => 'Uji approval terakhir',
+            'tanggal_pr' => '2026-08-13',
+            'jumlah_pr' => 1000000,
+            'created_by_user_id' => $user->id,
+        ]);
+
+        PrReceiptApproval::create([
+            'torpr_id' => $torpr->id,
+            'requested_by_user_id' => $user->id,
+            'requested_name' => $user->name,
+            'requested_at' => now()->subHour(),
+            'status' => 'APPROVED',
+        ]);
+
+        $latest = PrReceiptApproval::create([
+            'torpr_id' => $torpr->id,
+            'requested_by_user_id' => $user->id,
+            'requested_name' => $user->name,
+            'requested_at' => now(),
+            'status' => 'PENDING',
+        ]);
+
+        $response = $this->actingAs($user)->get(route('torpr.index', [
+            'receipt_status' => 'PENDING',
+        ]));
+
+        $response->assertOk();
+        $row = collect($response->viewData('rows')->items())->firstWhere('id', $torpr->id);
+        $this->assertNotNull($row);
+        $this->assertSame($latest->id, $row->approval_id);
+        $this->assertSame('PENDING', $row->approval_status);
+
+        $this->actingAs($user)
+            ->get(route('torpr.index', ['receipt_status' => 'APPROVED']))
+            ->assertOk()
+            ->assertDontSee('PKB/PR-26/CON/9901');
+    }
+
+    public function test_torpr_edit_request_center_is_loaded_on_demand_for_current_user(): void
+    {
+        $owner = User::factory()->create([
+            'department' => 'operasional',
+            'role' => 'user',
+        ]);
+        $requester = User::factory()->create([
+            'department' => 'operasional',
+            'role' => 'user',
+        ]);
+        $torpr = Torpr::create([
+            'nomor_pr' => 'PKB/PR-26/CON/9902',
+            'tujuan_pengadaan' => 'Uji pusat request edit',
+            'tanggal_pr' => '2026-08-13',
+            'jumlah_pr' => 1000000,
+            'created_by_user_id' => $owner->id,
+        ]);
+
+        TorprEditRequest::create([
+            'torpr_id' => $torpr->id,
+            'requester_user_id' => $requester->id,
+            'owner_user_id' => $owner->id,
+            'status' => 'pending',
+            'reason' => 'Perlu koreksi data pengadaan',
+        ]);
+
+        $this->actingAs($owner)
+            ->getJson(route('torpr.editRequests.center'))
+            ->assertOk()
+            ->assertJsonCount(1, 'incoming')
+            ->assertJsonCount(0, 'outgoing')
+            ->assertJsonPath('incoming.0.nomor_pr', 'PKB/PR-26/CON/9902')
+            ->assertJsonPath('incoming.0.reason', 'Perlu koreksi data pengadaan');
+
+        $this->actingAs($requester)
+            ->getJson(route('torpr.editRequests.center'))
+            ->assertOk()
+            ->assertJsonCount(0, 'incoming')
+            ->assertJsonCount(1, 'outgoing');
+    }
+
+    public function test_spph_vendor_usage_statistics_are_loaded_on_demand(): void
+    {
+        $user = User::factory()->create([
+            'department' => 'umum',
+            'role' => 'user',
+        ]);
+
+        Spph::create([
+            'nomor_spph' => '990/PKU-VIII/SPPH/2026',
+            'sequence_number' => 990,
+            'tanggal' => '2026-08-13',
+            'nama_vendor' => 'Vendor Statistik',
+            'deskripsi_pengadaan' => 'Uji statistik vendor',
+            'pic' => $user->name,
+        ]);
+        Sp::create([
+            'nomor_sp' => '990/PKU-VIII/SP/2026',
+            'sequence_number' => 990,
+            'tanggal_sp' => '2026-08-13',
+            'nama_vendor' => 'Vendor Statistik',
+            'deskripsi_pengadaan' => 'Uji statistik vendor',
+            'pic' => $user->name,
+        ]);
+
+        $this->actingAs($user)
+            ->getJson(route('spph.vendor-usage-stats'))
+            ->assertOk()
+            ->assertJsonPath('stats.vendor statistik.spph_count', 1)
+            ->assertJsonPath('stats.vendor statistik.sp_count', 1)
+            ->assertJsonPath('stats.vendor statistik.total_count', 2);
     }
 }

@@ -3265,7 +3265,10 @@
         const SATUANS = @json($satuans);
         const SATUAN_STORE_URL = '{{ route("satuan.store") }}';
         const ADD_SATUAN_VALUE = '__add_satuan__';
-        const VENDOR_USAGE_STATS = @json($vendorUsageStats ?? []);
+        const VENDOR_USAGE_STATS_URL = @json(route('spph.vendor-usage-stats'));
+        let VENDOR_USAGE_STATS = {};
+        let vendorUsageStatsLoaded = false;
+        let vendorUsageStatsPromise = null;
 
         let lastId = {{ $spphs->count() > 0 ? $spphs->max('id') : 0 }};
         let pollTimer = null, checkTimer = null, searchTimer = null, presTimer = null, hbTimer = null;
@@ -3627,6 +3630,10 @@
             document.getElementById('nomorStatus').innerHTML = '';
             $('#vendorSelect').val(null).trigger('change');
             renderVendorUsagePanel('vendorSelect', 'vendorUsagePanel');
+            ensureVendorUsageStats().then(() => {
+                $('#vendorSelect').trigger('change.select2');
+                renderVendorUsagePanel('vendorSelect', 'vendorUsagePanel');
+            });
             document.getElementById('newVendorBoxSpph')?.classList.add('hidden');
             resetNewVendorSpphForm();
 
@@ -3649,6 +3656,10 @@
         }
 
         async function openEditModal(id, nomor, tgl, nomorPr, vendorNames, deskripsi, pic) {
+            ensureVendorUsageStats().then(() => {
+                $('#editVendor').trigger('change.select2');
+                renderVendorUsagePanel('editVendor', 'editVendorUsagePanel');
+            });
             document.getElementById('editForm').action = `/spph/${id}`;
             document.getElementById('editId').value = id;
             document.getElementById('editNomor').value = nomor;
@@ -4375,6 +4386,38 @@
 
         function vendorUsageKey(name) {
             return String(name || '').trim().toLowerCase().replace(/\s+/g, ' ');
+        }
+
+        function ensureVendorUsageStats() {
+            if (vendorUsageStatsLoaded) {
+                return Promise.resolve(VENDOR_USAGE_STATS);
+            }
+
+            if (!vendorUsageStatsPromise) {
+                vendorUsageStatsPromise = fetch(VENDOR_USAGE_STATS_URL, {
+                    headers: {
+                        'Accept': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest'
+                    },
+                    credentials: 'same-origin'
+                }).then(async response => {
+                    const data = await response.json().catch(() => ({}));
+                    if (!response.ok) {
+                        throw new Error(data.message || 'Statistik vendor gagal dimuat.');
+                    }
+
+                    VENDOR_USAGE_STATS = data.stats && typeof data.stats === 'object' ? data.stats : {};
+                    vendorUsageStatsLoaded = true;
+                    return VENDOR_USAGE_STATS;
+                }).catch(error => {
+                    console.warn('Statistik vendor belum tersedia:', error);
+                    return VENDOR_USAGE_STATS;
+                }).finally(() => {
+                    vendorUsageStatsPromise = null;
+                });
+            }
+
+            return vendorUsageStatsPromise;
         }
 
         function vendorUsageFor(name) {

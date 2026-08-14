@@ -1864,9 +1864,9 @@
                 class="torpr-request-center-button group active:scale-95">
                 <span class="text-lg">🔐</span>
                 <span>Req Edit</span>
-                @if(($incomingEditRequests->count() + $outgoingEditRequests->where('status', 'pending')->count()) > 0)
+                @if(($incomingEditRequestCount + $outgoingEditRequestCount) > 0)
                     <span class="torpr-request-count-badge" aria-label="Jumlah request edit aktif">
-                        {{ $incomingEditRequests->count() + $outgoingEditRequests->where('status', 'pending')->count() }}
+                        {{ $incomingEditRequestCount + $outgoingEditRequestCount }}
                     </span>
                 @endif
             </button>
@@ -5884,32 +5884,39 @@
                 }).format(date);
             }
 
-            const torprIncomingEditRequests = @js($incomingEditRequests->map(function ($req) {
-                return [
-                    'id' => $req->id,
-                    'nomor_pr' => $req->torpr?->nomor_pr ?: 'Nomor PR belum diisi',
-                    'tujuan' => $req->torpr?->tujuan_pengadaan ?: '-',
-                    'requester' => $req->requester?->name ?: 'User',
-                    'email' => $req->requester?->email ?: '-',
-                    'reason' => $req->reason ?: '-',
-                    'created_at' => $req->created_at?->timezone('Asia/Jakarta')->format('d M Y H:i:s') . ' WIB',
-                ];
-            })->values());
+            let torprIncomingEditRequests = [];
+            let torprOutgoingEditRequests = [];
+            let torprEditRequestCenterLoaded = false;
+            let torprEditRequestCenterPromise = null;
 
-            const torprOutgoingEditRequests = @js($outgoingEditRequests->map(function ($req) {
-                return [
-                    'id' => $req->id,
-                    'nomor_pr' => $req->torpr?->nomor_pr ?: 'Nomor PR belum diisi',
-                    'tujuan' => $req->torpr?->tujuan_pengadaan ?: '-',
-                    'owner' => $req->owner?->name ?: 'Pembuat PR',
-                    'status' => $req->status,
-                    'reason' => $req->reason ?: '-',
-                    'created_at' => $req->created_at?->timezone('Asia/Jakarta')->format('d M Y H:i:s') . ' WIB',
-                    'reviewed_at' => $req->reviewed_at?->timezone('Asia/Jakarta')->format('d M Y H:i:s') . ' WIB',
-                    'expires_at' => $req->expires_at?->timezone('Asia/Jakarta')->format('d M Y H:i:s') . ' WIB',
-                    'review_note' => $req->review_note ?: '-',
-                ];
-            })->values());
+            async function loadTorprEditRequestCenter() {
+                if (torprEditRequestCenterLoaded) {
+                    return;
+                }
+
+                if (!torprEditRequestCenterPromise) {
+                    torprEditRequestCenterPromise = fetch(@json(route('torpr.editRequests.center')), {
+                        headers: {
+                            'Accept': 'application/json',
+                            'X-Requested-With': 'XMLHttpRequest',
+                        },
+                        credentials: 'same-origin',
+                    }).then(async response => {
+                        const data = await response.json().catch(() => ({}));
+                        if (!response.ok) {
+                            throw new Error(data.message || 'Data request edit gagal dimuat.');
+                        }
+
+                        torprIncomingEditRequests = Array.isArray(data.incoming) ? data.incoming : [];
+                        torprOutgoingEditRequests = Array.isArray(data.outgoing) ? data.outgoing : [];
+                        torprEditRequestCenterLoaded = true;
+                    }).finally(() => {
+                        torprEditRequestCenterPromise = null;
+                    });
+                }
+
+                return torprEditRequestCenterPromise;
+            }
 
             window.requestTorprEditAccess = async function (id, nomorPr, creatorName, creatorContact) {
                 const safeNomor = nomorPr || 'Nomor PR belum diisi';
@@ -6080,7 +6087,33 @@
                 }
             }
 
-            window.openTorprEditRequestCenter = function () {
+            window.openTorprEditRequestCenter = async function () {
+                Swal.fire({
+                    title: 'Memuat Req Edit...',
+                    allowOutsideClick: false,
+                    didOpen: () => Swal.showLoading(),
+                    customClass: {
+                        popup: 'torpr-delete-popup',
+                        title: 'torpr-delete-title',
+                    },
+                });
+
+                try {
+                    await loadTorprEditRequestCenter();
+                } catch (error) {
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Req Edit gagal dimuat',
+                        text: error.message || 'Silakan coba lagi.',
+                        confirmButtonColor: '#2563eb',
+                        customClass: {
+                            popup: 'torpr-delete-popup',
+                            title: 'torpr-delete-title',
+                        },
+                    });
+                    return;
+                }
+
                 const incomingHtml = torprIncomingEditRequests.length
                     ? torprIncomingEditRequests.map(req => `
                         <div class="torpr-request-center-row">

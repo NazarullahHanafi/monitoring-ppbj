@@ -2,29 +2,27 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Spph;
-use App\Models\SpphItem;
-use App\Models\Satuan;
-use App\Models\Vendor;
-use App\Models\User;
 use App\Models\Ppbj;
 use App\Models\Sp;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Carbon;
+use App\Models\Spph;
+use App\Models\SpphItem;
+use App\Models\User;
+use App\Models\Vendor;
+use App\Services\ProcurementJourneyService;
+use App\Support\PrintPreviewFile;
+use App\Traits\HasPresence;
 use Illuminate\Database\QueryException;
+use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
-use App\Traits\HasPresence;
-use App\Support\PrintPreviewFile;
-use App\Services\ProcurementJourneyService;
+use PhpOffice\PhpWord\IOFactory;
 use PhpOffice\PhpWord\PhpWord;
 use PhpOffice\PhpWord\Settings;
-use PhpOffice\PhpWord\Shared\Html as PhpWordHtml;
-use Illuminate\Support\Str;
-use PhpOffice\PhpWord\IOFactory;
 use ZipArchive;
 
 class SpphController extends Controller
@@ -50,29 +48,28 @@ class SpphController extends Controller
         $vendors = Cache::remember(
             'vendors:active',
             3600,
-            fn() => Vendor::active()->select(['id', 'nama_vendor'])->orderBy('nama_vendor')->get()
+            fn () => Vendor::active()->select(['id', 'nama_vendor'])->orderBy('nama_vendor')->get()
         );
 
         $pics = Cache::remember(
             'pics:umum',
             3600,
-            fn() => User::where('department', 'umum')->orderBy('name')->pluck('name')->toArray()
+            fn () => User::where('department', 'umum')->orderBy('name')->pluck('name')->toArray()
         );
 
         $satuans = Cache::remember(
             'satuans:all',
             3600,
-            fn() => \App\Models\Satuan::orderBy('nama_satuan')->pluck('nama_satuan')->toArray()
+            fn () => \App\Models\Satuan::orderBy('nama_satuan')->pluck('nama_satuan')->toArray()
         );
 
         $lastSpph = Cache::remember(
             'spph:last_nomor',
             300,
-            fn() => Spph::select('nomor_spph', 'sequence_number')
+            fn () => Spph::select('nomor_spph', 'sequence_number')
                 ->orderBy('sequence_number', 'desc')->first()
         );
         $lastNomor = $lastSpph?->nomor_spph;
-        $vendorUsageStats = $this->vendorUsageStats();
 
         $spphs = Spph::select([
             'id',
@@ -85,22 +82,22 @@ class SpphController extends Controller
             'pic',
             'sequence_number',
         ])
-            ->when($search, fn($q) => $q->where(function ($q2) use ($search) {
+            ->when($search, fn ($q) => $q->where(function ($q2) use ($search) {
                 $q2->where('nomor_spph', 'LIKE', "%{$search}%")
                     ->orWhere('nomor_pr', 'LIKE', "%{$search}%")
                     ->orWhere('nama_vendor', 'LIKE', "%{$search}%")
                     ->orWhere('vendor_names', 'LIKE', "%{$search}%")
                     ->orWhere('deskripsi_pengadaan', 'LIKE', "%{$search}%");
             }))
-            ->when($pic, fn($q) => $q->where('pic', $pic))
-            ->when($vendorFilter, fn($q) => $this->applyVendorFilter($q, $vendorFilter))
-            ->when($dari, fn($q) => $q->where('tanggal', '>=', $dari))
-            ->when($sampai, fn($q) => $q->where('tanggal', '<=', $sampai))
+            ->when($pic, fn ($q) => $q->where('pic', $pic))
+            ->when($vendorFilter, fn ($q) => $this->applyVendorFilter($q, $vendorFilter))
+            ->when($dari, fn ($q) => $q->where('tanggal', '>=', $dari))
+            ->when($sampai, fn ($q) => $q->where('tanggal', '<=', $sampai))
             ->orderBy('id', 'desc')
             ->paginate(10)
             ->withQueryString();
 
-        $onboardingSeen = Cache::has('spph_onboarding_' . auth()->id());
+        $onboardingSeen = Cache::has('spph_onboarding_'.auth()->id());
 
         return view('spph.index', compact(
             'vendors',
@@ -113,9 +110,19 @@ class SpphController extends Controller
             'vendorFilter',
             'dari',
             'sampai',
-            'onboardingSeen',
-            'vendorUsageStats'
+            'onboardingSeen'
         ));
+    }
+
+    /**
+     * Statistik vendor hanya dibutuhkan ketika modal tambah/edit dibuka.
+     * Memisahkannya dari index mengurangi beban render dan ukuran HTML awal.
+     */
+    public function vendorUsageStatsJson()
+    {
+        return response()->json([
+            'stats' => $this->vendorUsageStats(),
+        ])->header('Cache-Control', 'private, max-age=60');
     }
 
     // =========================================================
@@ -140,9 +147,9 @@ class SpphController extends Controller
         }
 
         $results = $query->orderBy('ppbj_no', 'desc')->limit(50)->get()
-            ->map(fn($r) => [
+            ->map(fn ($r) => [
                 'id' => $r->ppbj_no,
-                'text' => $r->ppbj_no . ($r->uraian ? ' — ' . Str::limit($r->uraian, 40) : ''),
+                'text' => $r->ppbj_no.($r->uraian ? ' — '.Str::limit($r->uraian, 40) : ''),
                 'uraian' => $r->uraian,
                 'portofolio' => $r->portofolio,
                 'buyer' => $r->buyer,
@@ -157,26 +164,30 @@ class SpphController extends Controller
     public function checkPpbjStatus(Request $request)
     {
         $ppbjNo = trim($request->get('ppbj_no', ''));
-        if (!$ppbjNo)
+        if (! $ppbjNo) {
             return response()->json(['status' => 'empty']);
+        }
 
         $ppbj = DB::table('ppbj')
             ->select(['ppbj_no', 'status', 'spph_rfq_1', 'uraian', 'portofolio', 'buyer'])
             ->where('ppbj_no', $ppbjNo)
             ->first();
 
-        if (!$ppbj)
+        if (! $ppbj) {
             return response()->json(['status' => 'manual', 'message' => 'Nomor PR manual']);
+        }
 
-        if ($ppbj->status === 'CANCELLED')
+        if ($ppbj->status === 'CANCELLED') {
             return response()->json(['status' => 'cancelled', 'message' => 'PPBJ sudah di-CANCELLED!']);
+        }
 
-        if (!empty($ppbj->spph_rfq_1))
+        if (! empty($ppbj->spph_rfq_1)) {
             return response()->json([
                 'status' => 'already_linked',
                 'message' => "PPBJ sudah terhubung dengan SPPH: {$ppbj->spph_rfq_1}",
                 'linked_spph' => $ppbj->spph_rfq_1,
             ]);
+        }
 
         return response()->json([
             'status' => 'available',
@@ -198,26 +209,26 @@ class SpphController extends Controller
         $dari = $request->get('dari', '');
         $sampai = $request->get('sampai', '');
 
-        $data = Spph::when($search, fn($q) => $q->where(function ($q2) use ($search) {
+        $data = Spph::when($search, fn ($q) => $q->where(function ($q2) use ($search) {
             $q2->where('nomor_spph', 'like', "%{$search}%")
                 ->orWhere('nomor_pr', 'like', "%{$search}%")
                 ->orWhere('nama_vendor', 'like', "%{$search}%")
                 ->orWhere('vendor_names', 'like', "%{$search}%")
                 ->orWhere('deskripsi_pengadaan', 'like', "%{$search}%");
         }))
-            ->when($pic, fn($q) => $q->where('pic', $pic))
-            ->when($vendorFilter, fn($q) => $this->applyVendorFilter($q, $vendorFilter))
-            ->when($dari, fn($q) => $q->where('tanggal', '>=', $dari))
-            ->when($sampai, fn($q) => $q->where('tanggal', '<=', $sampai))
+            ->when($pic, fn ($q) => $q->where('pic', $pic))
+            ->when($vendorFilter, fn ($q) => $this->applyVendorFilter($q, $vendorFilter))
+            ->when($dari, fn ($q) => $q->where('tanggal', '>=', $dari))
+            ->when($sampai, fn ($q) => $q->where('tanggal', '<=', $sampai))
             ->orderBy('id', 'desc')
             ->get();
 
-        $filename = 'SPPH_' . now()->format('Ymd_His') . '.csv';
+        $filename = 'SPPH_'.now()->format('Ymd_His').'.csv';
         $headers = ['No', 'Nomor SPPH', 'Tanggal', 'Nomor PR', 'Nama Vendor', 'Deskripsi Pengadaan', 'PIC'];
 
         $callback = function () use ($data, $headers) {
             $file = fopen('php://output', 'w');
-            fprintf($file, chr(0xEF) . chr(0xBB) . chr(0xBF));
+            fprintf($file, chr(0xEF).chr(0xBB).chr(0xBF));
             fputcsv($file, $headers);
             foreach ($data as $i => $row) {
                 fputcsv($file, \App\Support\Csv::row([
@@ -249,27 +260,30 @@ class SpphController extends Controller
         $excludeId = (int) $request->get('exclude_id', 0);
         $tanggal = $request->get('tanggal');
 
-        if (!$nomor)
+        if (! $nomor) {
             return response()->json(['status' => 'empty']);
+        }
 
-        $cacheKey = 'spph:check:' . md5($originalNomor . ':' . $nomor . ':' . $excludeId . ':' . $tanggal);
+        $cacheKey = 'spph:check:'.md5($originalNomor.':'.$nomor.':'.$excludeId.':'.$tanggal);
+
         return Cache::remember($cacheKey, 30, function () use ($nomor, $originalNomor, $excludeId, $tanggal) {
             $exists = Spph::where('nomor_spph', $nomor)
-                ->when($excludeId, fn($q) => $q->where('id', '!=', $excludeId))
+                ->when($excludeId, fn ($q) => $q->where('id', '!=', $excludeId))
                 ->exists();
 
-            if ($exists)
+            if ($exists) {
                 return [
                     'status' => 'duplicate',
                     'message' => "Nomor \"{$nomor}\" sudah digunakan!",
                     'normalized_nomor' => $nomor !== $originalNomor ? $nomor : null,
                 ];
+            }
 
             $seqInput = $this->extractSeq($nomor);
             $warning = null;
 
             if ($seqInput !== null) {
-                $lastNomor = Spph::when($excludeId, fn($q) => $q->where('id', '!=', $excludeId))
+                $lastNomor = Spph::when($excludeId, fn ($q) => $q->where('id', '!=', $excludeId))
                     ->orderBy('sequence_number', 'desc')->value('nomor_spph');
 
                 if ($lastNomor) {
@@ -277,10 +291,11 @@ class SpphController extends Controller
                     if ($lastSeq !== null) {
                         [$year] = $this->periodFromDate($tanggal);
                         $expectedSeq = $this->nextAvailableSequence($excludeId, $year);
-                        if ($seqInput < $expectedSeq)
+                        if ($seqInput < $expectedSeq) {
                             $warning = "Nomor ini ({$seqInput}) lebih kecil dari urutan berikutnya ({$expectedSeq}).";
-                        elseif ($seqInput > $expectedSeq)
-                            $warning = "Nomor boleh lompat, tetapi sistem otomatis berikutnya tetap akan menyarankan " . $this->replaceSequenceInNumber($nomor, $expectedSeq) . " agar celah nomor tidak hilang.";
+                        } elseif ($seqInput > $expectedSeq) {
+                            $warning = 'Nomor boleh lompat, tetapi sistem otomatis berikutnya tetap akan menyarankan '.$this->replaceSequenceInNumber($nomor, $expectedSeq).' agar celah nomor tidak hilang.';
+                        }
                     }
                 }
             }
@@ -327,7 +342,7 @@ class SpphController extends Controller
             ->orderBy('id')
             ->limit(50)
             ->get()
-            ->map(fn($r) => [
+            ->map(fn ($r) => [
                 'id' => $r->id,
                 'nomor_spph' => $r->nomor_spph,
                 'tanggal' => $r->tanggal?->format('d/m/Y'),
@@ -377,79 +392,82 @@ class SpphController extends Controller
 
         if ($nomorPr && $nomorPrType === 'ppbj') {
             $ppbj = Ppbj::where('ppbj_no', $nomorPr)->first();
-            if (!$ppbj)
+            if (! $ppbj) {
                 return $this->formError($request, 'nomor_pr', "PPBJ \"{$nomorPr}\" tidak ditemukan!");
-            if ($ppbj->status === 'CANCELLED')
-                return $this->formError($request, 'nomor_pr', "PPBJ ini sudah di-CANCELLED!");
-            if (!empty($ppbj->spph_rfq_1))
+            }
+            if ($ppbj->status === 'CANCELLED') {
+                return $this->formError($request, 'nomor_pr', 'PPBJ ini sudah di-CANCELLED!');
+            }
+            if (! empty($ppbj->spph_rfq_1)) {
                 return $this->formError($request, 'nomor_pr', "PPBJ sudah terhubung dengan SPPH: {$ppbj->spph_rfq_1}!", 409, ['conflict' => true]);
+            }
         }
 
         try {
             return DB::transaction(function () use ($request, $nomorPr, $nomorPrType) {
-            $ppbjRecord = null;
+                $ppbjRecord = null;
 
-            if ($nomorPr && $nomorPrType === 'ppbj') {
-                $ppbjRecord = Ppbj::where('ppbj_no', $nomorPr)->lockForUpdate()->first();
+                if ($nomorPr && $nomorPrType === 'ppbj') {
+                    $ppbjRecord = Ppbj::where('ppbj_no', $nomorPr)->lockForUpdate()->first();
 
-                if (!$ppbjRecord) {
-                    return $this->formError($request, 'nomor_pr', "PPBJ \"{$nomorPr}\" tidak ditemukan!");
+                    if (! $ppbjRecord) {
+                        return $this->formError($request, 'nomor_pr', "PPBJ \"{$nomorPr}\" tidak ditemukan!");
+                    }
+
+                    if ($ppbjRecord->status === 'CANCELLED') {
+                        return $this->formError($request, 'nomor_pr', 'PPBJ ini sudah di-CANCELLED!');
+                    }
+
+                    if (! empty($ppbjRecord->spph_rfq_1)) {
+                        return $this->formError($request, 'nomor_pr', "PPBJ sudah terhubung dengan SPPH: {$ppbjRecord->spph_rfq_1}!", 409, ['conflict' => true]);
+                    }
                 }
 
-                if ($ppbjRecord->status === 'CANCELLED') {
-                    return $this->formError($request, 'nomor_pr', "PPBJ ini sudah di-CANCELLED!");
+                $vendorNames = $this->resolveVendorNames($request);
+                $vendorName = $vendorNames[0];
+
+                $seq = $this->extractSeq($request->nomor_spph) ?? $this->nextAvailableSequence(null, (int) ($this->numberPeriodFromNomor($request->nomor_spph, 'SPPH')['year'] ?? now()->year));
+                $spph = Spph::create([
+                    'nomor_spph' => $request->nomor_spph,
+                    'sequence_number' => $seq,
+                    'created_by_user_id' => auth()->id(),
+                    'tanggal' => $request->tanggal,
+                    'nomor_pr' => $nomorPr,
+                    'nama_vendor' => $vendorName,
+                    'vendor_names' => $vendorNames,
+                    'deskripsi_pengadaan' => $request->deskripsi_pengadaan,
+                    'pic' => $request->pic,
+                ]);
+
+                $this->syncItems($spph, $request->input('items', []));
+
+                if ($nomorPr && $nomorPrType === 'ppbj') {
+                    if ($ppbjRecord && $ppbjRecord->status !== 'CANCELLED' && empty($ppbjRecord->spph_rfq_1)) {
+                        $ppbjRecord->spph_rfq_1 = $spph->nomor_spph;
+                        $ppbjRecord->tgl_spph = $spph->tanggal;
+                        $ppbjRecord->penyedia_eksternal = $vendorName;
+                        $ppbjRecord->save();
+                    }
+
+                    app(ProcurementJourneyService::class)->notifyByPrNumber(
+                        $nomorPr,
+                        'spph_created',
+                        'SPPH dibuat oleh Umum',
+                        "Umum membuat SPPH {$spph->nomor_spph} untuk proses permintaan penawaran harga.",
+                        [
+                            'progress' => 'SPPH/RFQ',
+                            'document_no' => $spph->nomor_spph,
+                            'vendors' => $vendorNames,
+                        ],
+                        $request->user()
+                    );
                 }
 
-                if (!empty($ppbjRecord->spph_rfq_1)) {
-                    return $this->formError($request, 'nomor_pr', "PPBJ sudah terhubung dengan SPPH: {$ppbjRecord->spph_rfq_1}!", 409, ['conflict' => true]);
-                }
-            }
+                Cache::forget('spph:last_nomor');
+                Cache::forget('spph:suggest');
+                Cache::forget('vendor:usage-stats:spph-sp:v1');
 
-            $vendorNames = $this->resolveVendorNames($request);
-            $vendorName = $vendorNames[0];
-
-            $seq = $this->extractSeq($request->nomor_spph) ?? $this->nextAvailableSequence(null, (int) ($this->numberPeriodFromNomor($request->nomor_spph, 'SPPH')['year'] ?? now()->year));
-            $spph = Spph::create([
-                'nomor_spph' => $request->nomor_spph,
-                'sequence_number' => $seq,
-                'created_by_user_id' => auth()->id(),
-                'tanggal' => $request->tanggal,
-                'nomor_pr' => $nomorPr,
-                'nama_vendor' => $vendorName,
-                'vendor_names' => $vendorNames,
-                'deskripsi_pengadaan' => $request->deskripsi_pengadaan,
-                'pic' => $request->pic,
-            ]);
-
-            $this->syncItems($spph, $request->input('items', []));
-
-            if ($nomorPr && $nomorPrType === 'ppbj') {
-                if ($ppbjRecord && $ppbjRecord->status !== 'CANCELLED' && empty($ppbjRecord->spph_rfq_1)) {
-                    $ppbjRecord->spph_rfq_1 = $spph->nomor_spph;
-                    $ppbjRecord->tgl_spph = $spph->tanggal;
-                    $ppbjRecord->penyedia_eksternal = $vendorName;
-                    $ppbjRecord->save();
-                }
-
-                app(ProcurementJourneyService::class)->notifyByPrNumber(
-                    $nomorPr,
-                    'spph_created',
-                    'SPPH dibuat oleh Umum',
-                    "Umum membuat SPPH {$spph->nomor_spph} untuk proses permintaan penawaran harga.",
-                    [
-                        'progress' => 'SPPH/RFQ',
-                        'document_no' => $spph->nomor_spph,
-                        'vendors' => $vendorNames,
-                    ],
-                    $request->user()
-                );
-            }
-
-            Cache::forget('spph:last_nomor');
-            Cache::forget('spph:suggest');
-            Cache::forget('vendor:usage-stats:spph-sp:v1');
-
-            return $this->formSuccess($request, route('spph.index'), 'Data SPPH berhasil disimpan!');
+                return $this->formSuccess($request, route('spph.index'), 'Data SPPH berhasil disimpan!');
             }, 3);
         } catch (QueryException $e) {
             return $this->formError(
@@ -470,7 +488,7 @@ class SpphController extends Controller
         $currentUser = $request->user();
         $currentUserId = $currentUser?->id;
 
-        if ((int) $spph->created_by_user_id !== (int) $currentUserId && !$currentUser?->matchesOwnerLabel($spph->pic)) {
+        if ((int) $spph->created_by_user_id !== (int) $currentUserId && ! $currentUser?->matchesOwnerLabel($spph->pic)) {
             $message = 'Data SPPH hanya bisa diedit oleh user pembuatnya.';
 
             if ($request->expectsJson()) {
@@ -510,78 +528,81 @@ class SpphController extends Controller
 
         if ($nomorPr && $nomorPrType === 'ppbj') {
             $ppbj = Ppbj::where('ppbj_no', $nomorPr)->first();
-            if (!$ppbj)
+            if (! $ppbj) {
                 return $this->formError($request, 'nomor_pr', "PPBJ \"{$nomorPr}\" tidak ditemukan!");
-            if ($ppbj->status === 'CANCELLED')
-                return $this->formError($request, 'nomor_pr', "PPBJ sudah di-CANCELLED!");
-            if (!empty($ppbj->spph_rfq_1) && $ppbj->spph_rfq_1 !== $spph->nomor_spph)
+            }
+            if ($ppbj->status === 'CANCELLED') {
+                return $this->formError($request, 'nomor_pr', 'PPBJ sudah di-CANCELLED!');
+            }
+            if (! empty($ppbj->spph_rfq_1) && $ppbj->spph_rfq_1 !== $spph->nomor_spph) {
                 return $this->formError($request, 'nomor_pr', "PPBJ sudah terhubung dengan SPPH: {$ppbj->spph_rfq_1}!", 409, ['conflict' => true]);
+            }
         }
 
         try {
             return DB::transaction(function () use ($request, $spph, $nomorPr, $nomorPrType, $oldNomorPr, $oldVendorName) {
-            $newPpbj = null;
+                $newPpbj = null;
 
-            if ($nomorPr && $nomorPrType === 'ppbj') {
-                $newPpbj = Ppbj::where('ppbj_no', $nomorPr)->lockForUpdate()->first();
+                if ($nomorPr && $nomorPrType === 'ppbj') {
+                    $newPpbj = Ppbj::where('ppbj_no', $nomorPr)->lockForUpdate()->first();
 
-                if (!$newPpbj) {
-                    return $this->formError($request, 'nomor_pr', "PPBJ \"{$nomorPr}\" tidak ditemukan!");
-                }
-
-                if ($newPpbj->status === 'CANCELLED') {
-                    return $this->formError($request, 'nomor_pr', "PPBJ sudah di-CANCELLED!");
-                }
-
-                if (!empty($newPpbj->spph_rfq_1) && $newPpbj->spph_rfq_1 !== $spph->nomor_spph) {
-                    return $this->formError($request, 'nomor_pr', "PPBJ sudah terhubung dengan SPPH: {$newPpbj->spph_rfq_1}!", 409, ['conflict' => true]);
-                }
-            }
-
-            $vendorNames = $this->resolveVendorNames($request);
-            $vendorName = $vendorNames[0];
-            $seq = $this->extractSeq($request->nomor_spph) ?? $spph->sequence_number;
-
-            $spph->update([
-                'nomor_spph' => $request->nomor_spph,
-                'sequence_number' => $seq,
-                'tanggal' => $request->tanggal,
-                'nomor_pr' => $nomorPr,
-                'nama_vendor' => $vendorName,
-                'vendor_names' => $vendorNames,
-                'deskripsi_pengadaan' => $request->deskripsi_pengadaan,
-                'pic' => $request->pic,
-            ]);
-
-            $this->syncItems($spph, $request->input('items', []));
-
-            if ($oldNomorPr && ($oldNomorPr !== $nomorPr || $nomorPrType !== 'ppbj')) {
-                $oldPpbj = Ppbj::where('ppbj_no', $oldNomorPr)
-                    ->where('spph_rfq_1', $spph->nomor_spph)->first();
-                if ($oldPpbj) {
-                    $oldPpbj->spph_rfq_1 = null;
-                    $oldPpbj->tgl_spph = null;
-                    if (trim((string) $oldPpbj->penyedia_eksternal) === trim((string) $oldVendorName)) {
-                        $oldPpbj->penyedia_eksternal = null;
+                    if (! $newPpbj) {
+                        return $this->formError($request, 'nomor_pr', "PPBJ \"{$nomorPr}\" tidak ditemukan!");
                     }
-                    $oldPpbj->save();
+
+                    if ($newPpbj->status === 'CANCELLED') {
+                        return $this->formError($request, 'nomor_pr', 'PPBJ sudah di-CANCELLED!');
+                    }
+
+                    if (! empty($newPpbj->spph_rfq_1) && $newPpbj->spph_rfq_1 !== $spph->nomor_spph) {
+                        return $this->formError($request, 'nomor_pr', "PPBJ sudah terhubung dengan SPPH: {$newPpbj->spph_rfq_1}!", 409, ['conflict' => true]);
+                    }
                 }
-            }
 
-            if ($nomorPr && $nomorPrType === 'ppbj') {
-                if ($newPpbj && $newPpbj->status !== 'CANCELLED') {
-                    $newPpbj->spph_rfq_1 = $spph->nomor_spph;
-                    $newPpbj->tgl_spph = $spph->tanggal;
-                    $newPpbj->penyedia_eksternal = $vendorName;
-                    $newPpbj->save();
+                $vendorNames = $this->resolveVendorNames($request);
+                $vendorName = $vendorNames[0];
+                $seq = $this->extractSeq($request->nomor_spph) ?? $spph->sequence_number;
+
+                $spph->update([
+                    'nomor_spph' => $request->nomor_spph,
+                    'sequence_number' => $seq,
+                    'tanggal' => $request->tanggal,
+                    'nomor_pr' => $nomorPr,
+                    'nama_vendor' => $vendorName,
+                    'vendor_names' => $vendorNames,
+                    'deskripsi_pengadaan' => $request->deskripsi_pengadaan,
+                    'pic' => $request->pic,
+                ]);
+
+                $this->syncItems($spph, $request->input('items', []));
+
+                if ($oldNomorPr && ($oldNomorPr !== $nomorPr || $nomorPrType !== 'ppbj')) {
+                    $oldPpbj = Ppbj::where('ppbj_no', $oldNomorPr)
+                        ->where('spph_rfq_1', $spph->nomor_spph)->first();
+                    if ($oldPpbj) {
+                        $oldPpbj->spph_rfq_1 = null;
+                        $oldPpbj->tgl_spph = null;
+                        if (trim((string) $oldPpbj->penyedia_eksternal) === trim((string) $oldVendorName)) {
+                            $oldPpbj->penyedia_eksternal = null;
+                        }
+                        $oldPpbj->save();
+                    }
                 }
-            }
 
-            Cache::forget('spph:last_nomor');
-            Cache::forget('spph:suggest');
-            Cache::forget('vendor:usage-stats:spph-sp:v1');
+                if ($nomorPr && $nomorPrType === 'ppbj') {
+                    if ($newPpbj && $newPpbj->status !== 'CANCELLED') {
+                        $newPpbj->spph_rfq_1 = $spph->nomor_spph;
+                        $newPpbj->tgl_spph = $spph->tanggal;
+                        $newPpbj->penyedia_eksternal = $vendorName;
+                        $newPpbj->save();
+                    }
+                }
 
-            return $this->formSuccess($request, route('spph.index'), 'Data SPPH berhasil diperbarui!');
+                Cache::forget('spph:last_nomor');
+                Cache::forget('spph:suggest');
+                Cache::forget('vendor:usage-stats:spph-sp:v1');
+
+                return $this->formSuccess($request, route('spph.index'), 'Data SPPH berhasil diperbarui!');
             }, 3);
         } catch (QueryException $e) {
             return $this->formError(
@@ -609,7 +630,7 @@ class SpphController extends Controller
         $spph->loadMissing('createdBy');
         $verifier = $spph->createdBy ?: $user;
 
-        if (!$verifier) {
+        if (! $verifier) {
             return response()->json([
                 'message' => 'User verifikasi tidak ditemukan, sehingga password tidak bisa dicek.',
             ], 422);
@@ -625,14 +646,14 @@ class SpphController extends Controller
             $retryAfter = (int) ceil(max(1, now()->diffInSeconds($lockedUntilAt, false)));
 
             return response()->json([
-                'message' => 'Terlalu banyak percobaan password salah. Silakan coba lagi sekitar ' . ceil($retryAfter / 60) . ' menit lagi.',
+                'message' => 'Terlalu banyak percobaan password salah. Silakan coba lagi sekitar '.ceil($retryAfter / 60).' menit lagi.',
                 'locked' => true,
                 'retry_after' => $retryAfter,
                 'locked_until' => $lockedUntilAt->toIso8601String(),
             ], 429);
         }
 
-        if (!Hash::check((string) $request->creator_password, (string) $verifier->password)) {
+        if (! Hash::check((string) $request->creator_password, (string) $verifier->password)) {
             $attempts = ((int) Cache::get($attemptKey, 0)) + 1;
             $remainingAttempts = max(0, 3 - $attempts);
             Cache::put($attemptKey, $attempts, now()->addMinutes(15));
@@ -651,7 +672,7 @@ class SpphController extends Controller
             }
 
             return response()->json([
-                'message' => 'Password pembuat SPPH tidak sesuai. Sisa percobaan: ' . $remainingAttempts . '.',
+                'message' => 'Password pembuat SPPH tidak sesuai. Sisa percobaan: '.$remainingAttempts.'.',
                 'attempts_remaining' => $remainingAttempts,
             ], 422);
         }
@@ -665,7 +686,7 @@ class SpphController extends Controller
                 'model_type' => Spph::class,
                 'model_id' => $spph->id,
                 'action' => 'deleted',
-                'description' => 'SPPH dihapus: ' . ($spph->nomor_spph ?: 'SPPH-' . $spph->id),
+                'description' => 'SPPH dihapus: '.($spph->nomor_spph ?: 'SPPH-'.$spph->id),
                 'changes' => [
                     'nomor_spph' => $spph->nomor_spph,
                     'nomor_pr' => $spph->nomor_pr,
@@ -710,7 +731,7 @@ class SpphController extends Controller
                 ->select(['id', 'urutan', 'nama_barang', 'satuan', 'jumlah', 'tgl_pemenuhan'])
                 ->orderBy('urutan')
                 ->get()
-                ->map(fn(SpphItem $item) => [
+                ->map(fn (SpphItem $item) => [
                     'id' => $item->id,
                     'urutan' => $item->urutan,
                     'nama_barang' => $this->sanitizeRichText($item->nama_barang),
@@ -730,6 +751,7 @@ class SpphController extends Controller
     {
         $request->validate(['nama_vendor' => 'required|string|max:255|unique:vendors,nama_vendor']);
         $vendor = Vendor::create(['nama_vendor' => trim($request->nama_vendor)]);
+
         return response()->json(['success' => true, 'vendor' => $vendor]);
     }
 
@@ -753,14 +775,14 @@ class SpphController extends Controller
         ]);
         $preview = PrintPreviewFile::store(
             $this->cetakSpph($printRequest, $spph),
-            $this->safeDownloadName('SPPH ' . ($spph->nomor_spph ?: $spph->id) . ' - ' . $vendorName . '.docx')
+            $this->safeDownloadName('SPPH '.($spph->nomor_spph ?: $spph->id).' - '.$vendorName.'.docx')
         );
 
         return view('documents.print-preview', [
             'title' => 'Preview Cetak SPPH',
             'eyebrow' => 'PENOMORAN SPPH',
             'documentType' => strtoupper($preview['extension'] ?? 'docx'),
-            'documentName' => $spph->nomor_spph ?: 'SPPH-' . $spph->id,
+            'documentName' => $spph->nomor_spph ?: 'SPPH-'.$spph->id,
             'subtitle' => $spph->deskripsi_pengadaan ?: 'Surat Permintaan Penawaran Harga',
             'downloadUrl' => $preview['downloadUrl'],
             'previewFrameUrl' => $preview['previewFrameUrl'],
@@ -770,7 +792,7 @@ class SpphController extends Controller
                 'Nomor SPPH' => $spph->nomor_spph ?: '-',
                 'Nomor PR/PPBJ' => $spph->nomor_pr ?: '-',
                 'Vendor' => $vendorName ?: '-',
-                'Penandatangan' => ($signer['name'] ?? '-') . ' - ' . ($signer['title'] ?? '-'),
+                'Penandatangan' => ($signer['name'] ?? '-').' - '.($signer['title'] ?? '-'),
                 'PIC' => $spph->pic ?: '-',
                 'Link berlaku sampai' => $preview['expiresText'],
             ],
@@ -795,7 +817,7 @@ class SpphController extends Controller
             ]);
             $preview = PrintPreviewFile::store(
                 $this->cetakSemuaVendor($printRequest, $spph),
-                $this->safeDownloadName('SPPH ' . ($spph->nomor_spph ?: $spph->id) . ' - Semua Vendor.docx')
+                $this->safeDownloadName('SPPH '.($spph->nomor_spph ?: $spph->id).' - Semua Vendor.docx')
             );
             $downloadUrl = $preview['downloadUrl'];
         }
@@ -804,19 +826,19 @@ class SpphController extends Controller
             'title' => 'Preview Cetak Semua Vendor SPPH',
             'eyebrow' => 'PENOMORAN SPPH',
             'documentType' => $vendorCount > 1 ? 'ZIP' : strtoupper($preview['extension'] ?? 'docx'),
-            'documentName' => $spph->nomor_spph ?: 'SPPH-' . $spph->id,
+            'documentName' => $spph->nomor_spph ?: 'SPPH-'.$spph->id,
             'subtitle' => $vendorCount > 1
-                ? 'Paket dokumen SPPH untuk ' . $vendorCount . ' vendor'
+                ? 'Paket dokumen SPPH untuk '.$vendorCount.' vendor'
                 : ($spph->deskripsi_pengadaan ?: 'Surat Permintaan Penawaran Harga'),
             'downloadUrl' => $downloadUrl,
             'previewFrameUrl' => $preview['previewFrameUrl'] ?? null,
-            'filename' => $preview['filename'] ?? $this->safeDownloadName('SPPH ' . ($spph->nomor_spph ?: $spph->id) . ' - Semua Vendor.' . ($vendorCount > 1 ? 'zip' : 'docx')),
+            'filename' => $preview['filename'] ?? $this->safeDownloadName('SPPH '.($spph->nomor_spph ?: $spph->id).' - Semua Vendor.'.($vendorCount > 1 ? 'zip' : 'docx')),
             'backUrl' => route('spph.index'),
             'meta' => [
                 'Nomor SPPH' => $spph->nomor_spph ?: '-',
                 'Nomor PR/PPBJ' => $spph->nomor_pr ?: '-',
-                'Jumlah Vendor' => $vendorCount . ' vendor',
-                'Penandatangan' => ($signer['name'] ?? '-') . ' - ' . ($signer['title'] ?? '-'),
+                'Jumlah Vendor' => $vendorCount.' vendor',
+                'Penandatangan' => ($signer['name'] ?? '-').' - '.($signer['title'] ?? '-'),
                 'PIC' => $spph->pic ?: '-',
                 'Link berlaku sampai' => $preview['expiresText'] ?? 'Dibuat saat download',
             ],
@@ -830,7 +852,7 @@ class SpphController extends Controller
         $printVendorName = $this->resolvePrintVendorName($spph, $request->query('vendor'));
         $signer = $this->resolveSpphSigner($request->query('penandatangan'));
 
-        $phpWord = new PhpWord();
+        $phpWord = new PhpWord;
         $phpWord->setDefaultFontName('Arial');
         $phpWord->setDefaultFontSize(9);
         $phpWord->setDefaultParagraphStyle(['spaceAfter' => 0, 'spaceBefore' => 0]);
@@ -895,8 +917,9 @@ class SpphController extends Controller
         $section->addText('Kepada Yth,', $fn, $pBoth);
         $section->addText($printVendorName, $fb, $pBoth);
         foreach (explode("\n", $alamat) as $baris) {
-            if (trim($baris))
+            if (trim($baris)) {
                 $section->addText(trim($baris), $fn, $pBoth);
+            }
         }
         $section->addTextBreak(1, $p0);
 
@@ -915,7 +938,7 @@ class SpphController extends Controller
 
         $prRun = $section->addTextRun($pBoth);
         $prRun->addText('Perihal  : ', $fn);
-        $prRun->addText('Surat Permintaan Penawaran Harga (SPPH) ' . $spph->deskripsi_pengadaan, $fbu);
+        $prRun->addText('Surat Permintaan Penawaran Harga (SPPH) '.$spph->deskripsi_pengadaan, $fbu);
 
         $section->addTextBreak(1, $p0);
         $section->addText(
@@ -1026,9 +1049,9 @@ class SpphController extends Controller
         $shortDesc = strlen($cleanDesc) > 40 ? substr($cleanDesc, 0, 40) : $cleanDesc;
         $cleanVendor = preg_replace('/[^A-Za-z0-9\s\-]/', '', $printVendorName);
         $cleanVendor = trim(preg_replace('/\s+/', ' ', $cleanVendor));
-        $shortVendor = $cleanVendor ? ' - ' . (strlen($cleanVendor) > 30 ? substr($cleanVendor, 0, 30) : $cleanVendor) : '';
-        $filename = 'Surat Permintaan Penawaran Harga ' . $shortDesc . $shortVendor . '.docx';
-        $tempPath = storage_path('app/spph_' . $spph->id . '_' . Str::random(8) . '.docx');
+        $shortVendor = $cleanVendor ? ' - '.(strlen($cleanVendor) > 30 ? substr($cleanVendor, 0, 30) : $cleanVendor) : '';
+        $filename = 'Surat Permintaan Penawaran Harga '.$shortDesc.$shortVendor.'.docx';
+        $tempPath = storage_path('app/spph_'.$spph->id.'_'.Str::random(8).'.docx');
 
         IOFactory::createWriter($phpWord, 'Word2007')->save($tempPath);
 
@@ -1058,14 +1081,14 @@ class SpphController extends Controller
             return $this->cetakSpph($request, $spph);
         }
 
-        $zipName = $this->safeDownloadName('SPPH ' . $spph->nomor_spph . ' - Semua Vendor.zip');
-        $zipPath = storage_path('app/spph_all_' . $spph->id . '_' . Str::random(8) . '.zip');
+        $zipName = $this->safeDownloadName('SPPH '.$spph->nomor_spph.' - Semua Vendor.zip');
+        $zipPath = storage_path('app/spph_all_'.$spph->id.'_'.Str::random(8).'.zip');
 
         if (! class_exists(ZipArchive::class)) {
             abort(500, 'Ekstensi ZIP belum aktif di server.');
         }
 
-        $zip = new ZipArchive();
+        $zip = new ZipArchive;
 
         if ($zip->open($zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
             abort(500, 'Gagal membuat file ZIP SPPH.');
@@ -1079,7 +1102,7 @@ class SpphController extends Controller
             ]);
             $response = $this->cetakSpph($vendorRequest, $spph);
             $filePath = $response->getFile()->getPathname();
-            $entryName = $this->safeDownloadName('SPPH ' . $spph->nomor_spph . ' - ' . $vendorName . '.docx');
+            $entryName = $this->safeDownloadName('SPPH '.$spph->nomor_spph.' - '.$vendorName.'.docx');
 
             if (is_file($filePath)) {
                 $zip->addFile($filePath, $entryName);
@@ -1122,6 +1145,7 @@ class SpphController extends Controller
         // Pastikan UTF-8 valid dulu
         $text = mb_convert_encoding($text, 'UTF-8', 'UTF-8');
         $clean = preg_replace('/[^\x09\x0A\x0D\x20-\x{D7FF}\x{E000}-\x{FFFD}]/u', '', $text);
+
         return ($clean !== null) ? $clean : $text;
     }
 
@@ -1131,8 +1155,9 @@ class SpphController extends Controller
     // =========================================================
     private function prepareHtmlForWord(string $html): string
     {
-        if ($html === '')
+        if ($html === '') {
             return '';
+        }
 
         // 1. Normalize line endings
         $html = str_replace(["\r\n", "\r"], "\n", $html);
@@ -1148,14 +1173,16 @@ class SpphController extends Controller
             $kept = [];
             foreach (explode(';', $m[1]) as $prop) {
                 $prop = trim($prop);
-                if ($prop === '')
+                if ($prop === '') {
                     continue;
+                }
                 // Hanya properti tipografi dasar
                 if (preg_match('/^(font-weight|font-style|text-decoration|color|font-size|font-family|text-align)\s*:/i', $prop)) {
                     $kept[] = $prop;
                 }
             }
-            return $kept ? ' style="' . implode('; ', $kept) . '"' : '';
+
+            return $kept ? ' style="'.implode('; ', $kept).'"' : '';
         }, $html) ?? $html;
 
         // 5. Hapus atribut class, id, data-*, onclick, dll — tidak relevan untuk Word
@@ -1192,12 +1219,14 @@ class SpphController extends Controller
     private function renderHtmlToCell($cell, string $html, array $paraStyle): void
     {
         $html = trim($html);
-        if ($html === '' || trim(strip_tags($html)) === '')
+        if ($html === '' || trim(strip_tags($html)) === '') {
             return;
+        }
 
         // Plain text (tanpa tag HTML) → render per baris (paling aman & cepat)
-        if (!$this->isHtmlContent($html)) {
+        if (! $this->isHtmlContent($html)) {
             $this->renderPlainTextToCell($cell, $html, $paraStyle);
+
             return;
         }
 
@@ -1205,19 +1234,20 @@ class SpphController extends Controller
         // penulisan hanya via addText, sehingga aman dari kegagalan parsial.
         try {
             $this->renderHtmlManual($cell, $this->prepareHtmlForWord($html), $paraStyle);
+
             return;
         } catch (\Throwable $e) {
-            \Illuminate\Support\Facades\Log::warning('renderHtmlToCell: ' . $e->getMessage());
+            \Illuminate\Support\Facades\Log::warning('renderHtmlToCell: '.$e->getMessage());
         }
 
         // Safety net (sangat jarang tercapai): jatuhkan ke plain text
         $plain = $this->sanitizeXml(
             trim(strip_tags(html_entity_decode($html, ENT_QUOTES | ENT_HTML5, 'UTF-8')))
         );
-        if ($plain !== '')
+        if ($plain !== '') {
             $this->renderPlainTextToCell($cell, $plain, $paraStyle);
+        }
     }
-
 
     // =========================================================
     // PRIVATE: Manual HTML → Word (fallback sederhana)
@@ -1229,7 +1259,7 @@ class SpphController extends Controller
         $dom = new \DOMDocument('1.0', 'UTF-8');
         libxml_use_internal_errors(true);
         $dom->loadHTML('<?xml encoding="UTF-8"><html><body><div id="__root__">'
-            . $html . '</div></body></html>');
+            .$html.'</div></body></html>');
         libxml_clear_errors();
 
         $root = null;
@@ -1242,23 +1272,26 @@ class SpphController extends Controller
                 }
             }
         }
-        if (!$root)
+        if (! $root) {
             return;
+        }
 
         $baseFn = ['size' => 9, 'name' => 'Arial'];
         $lines = $this->htmlToLines($root, $baseFn, null);
 
         foreach ($lines as $line) {
             $ps = $paraStyle;
-            if (!empty($line['align']))
+            if (! empty($line['align'])) {
                 $ps = array_merge($ps, ['alignment' => $line['align']]);
+            }
 
             $parts = $line['parts'];
             $prefix = $line['prefix'] ?? '';
             $listType = $line['list'] ?? null; // 'ul' | 'ol' | null
 
-            if (empty($parts) && $prefix === '' && $listType === null)
+            if (empty($parts) && $prefix === '' && $listType === null) {
                 continue;
+            }
 
             // ── List item: paragraf dengan hanging indent + marker manual ──
             // (meniru tampilan editor: bullet/nomor menjorok, baris ke-2+ sejajar teks)
@@ -1271,11 +1304,13 @@ class SpphController extends Controller
                 ]);
                 $run = $cell->addTextRun($lps);
                 // marker + 1 spasi non-breaking agar marker & teks selalu menempel rapi
-                $run->addText($marker . ' ', $baseFn);
+                $run->addText($marker.' ', $baseFn);
                 foreach ($parts as $p) {
-                    if ($p['text'] !== '')
+                    if ($p['text'] !== '') {
                         $run->addText($p['text'], $p['fs']);
+                    }
                 }
+
                 continue;
             }
 
@@ -1286,11 +1321,13 @@ class SpphController extends Controller
                 $cell->addText($parts[0]['text'], $parts[0]['fs'], $ps);
             } else {
                 $run = $cell->addTextRun($ps);
-                if ($prefix !== '')
+                if ($prefix !== '') {
                     $run->addText($prefix, $baseFn);
+                }
                 foreach ($parts as $p) {
-                    if ($p['text'] !== '')
+                    if ($p['text'] !== '') {
                         $run->addText($p['text'], $p['fs']);
+                    }
                 }
             }
         }
@@ -1303,8 +1340,9 @@ class SpphController extends Controller
         $cur = ['prefix' => '', 'parts' => [], 'align' => $align, 'list' => null];
 
         $flush = function () use (&$lines, &$cur, $align) {
-            if (!empty($cur['parts']) || $cur['prefix'] !== '' || $cur['list'] !== null)
+            if (! empty($cur['parts']) || $cur['prefix'] !== '' || $cur['list'] !== null) {
                 $lines[] = $cur;
+            }
             $cur = ['prefix' => '', 'parts' => [], 'align' => $align, 'list' => null];
         };
 
@@ -1312,18 +1350,22 @@ class SpphController extends Controller
             // Text node
             if ($child->nodeType === XML_TEXT_NODE) {
                 $t = $this->sanitizeXml($child->textContent);
-                if ($t !== '')
+                if ($t !== '') {
                     $cur['parts'][] = ['text' => $t, 'fs' => $fs];
+                }
+
                 continue;
             }
-            if (!($child instanceof \DOMElement))
+            if (! ($child instanceof \DOMElement)) {
                 continue;
+            }
 
             $tag = strtolower($child->nodeName);
 
             // <br> → pindah baris
             if ($tag === 'br') {
                 $flush();
+
                 continue;
             }
 
@@ -1333,11 +1375,12 @@ class SpphController extends Controller
                 $listType = ($tag === 'ol') ? 'ol' : 'ul';
                 $counter = 1;
                 foreach ($child->childNodes as $li) {
-                    if (!($li instanceof \DOMElement) || strtolower($li->nodeName) !== 'li')
+                    if (! ($li instanceof \DOMElement) || strtolower($li->nodeName) !== 'li') {
                         continue;
+                    }
                     $la = $this->rtAlign($li);
                     $liAlign = $la ? $this->normalizeAlign($la) : $align;
-                    $marker = ($listType === 'ol') ? ($counter++ . '.') : '•';
+                    $marker = ($listType === 'ol') ? ($counter++.'.') : '•';
                     $liLines = $this->htmlToLines($li, $fs, $liAlign);
                     if (empty($liLines)) {
                         $lines[] = ['prefix' => $marker, 'parts' => [], 'align' => $liAlign, 'list' => $listType];
@@ -1345,10 +1388,12 @@ class SpphController extends Controller
                         // baris pertama jadi list item; sisanya paragraf lanjutan
                         $liLines[0]['list'] = $listType;
                         $liLines[0]['prefix'] = $marker;
-                        foreach ($liLines as $ll)
+                        foreach ($liLines as $ll) {
                             $lines[] = $ll;
+                        }
                     }
                 }
+
                 continue;
             }
 
@@ -1357,8 +1402,10 @@ class SpphController extends Controller
                 $flush();
                 $ba = $this->rtAlign($child);
                 $blkAlign = $ba ? $this->normalizeAlign($ba) : $align;
-                foreach ($this->htmlToLines($child, $fs, $blkAlign) as $cl)
+                foreach ($this->htmlToLines($child, $fs, $blkAlign) as $cl) {
                     $lines[] = $cl;
+                }
+
                 continue;
             }
 
@@ -1366,20 +1413,25 @@ class SpphController extends Controller
             $cf = $this->rtFont($fs, $child);
             $inlineLines = $this->htmlToLines($child, $cf, $cur['align']);
             if (count($inlineLines) <= 1) {
-                if (!empty($inlineLines))
-                    foreach ($inlineLines[0]['parts'] as $p)
+                if (! empty($inlineLines)) {
+                    foreach ($inlineLines[0]['parts'] as $p) {
                         $cur['parts'][] = $p;
+                    }
+                }
             } else {
                 // jarang: inline berisi block — baris pertama gabung, sisanya baris baru
-                foreach ($inlineLines[0]['parts'] as $p)
+                foreach ($inlineLines[0]['parts'] as $p) {
                     $cur['parts'][] = $p;
+                }
                 $flush();
-                for ($i = 1; $i < count($inlineLines); $i++)
+                for ($i = 1; $i < count($inlineLines); $i++) {
                     $lines[] = $inlineLines[$i];
+                }
             }
         }
 
         $flush();
+
         return $lines;
     }
 
@@ -1391,26 +1443,34 @@ class SpphController extends Controller
         $s = $base;
         $tag = strtolower($node->nodeName);
 
-        if (in_array($tag, ['b', 'strong']))
+        if (in_array($tag, ['b', 'strong'])) {
             $s['bold'] = true;
-        if (in_array($tag, ['i', 'em']))
+        }
+        if (in_array($tag, ['i', 'em'])) {
             $s['italic'] = true;
-        if ($tag === 'u')
+        }
+        if ($tag === 'u') {
             $s['underline'] = 'single';
-        if (in_array($tag, ['s', 'strike', 'del']))
+        }
+        if (in_array($tag, ['s', 'strike', 'del'])) {
             $s['strikethrough'] = true;
-        if ($tag === 'sub')
+        }
+        if ($tag === 'sub') {
             $s['subscript'] = true;
-        if ($tag === 'sup')
+        }
+        if ($tag === 'sup') {
             $s['superscript'] = true;
+        }
 
         if ($tag === 'font') {
             $f = $node->getAttribute('face');
-            if ($f)
+            if ($f) {
                 $s['name'] = $f;
+            }
             $c = $node->getAttribute('color');
-            if ($c)
+            if ($c) {
                 $s['color'] = $this->expandHexColor(ltrim($c, '#'));
+            }
             $z = $node->getAttribute('size');
             if ($z) {
                 $map = [1 => 8, 2 => 10, 3 => 12, 4 => 14, 5 => 18, 6 => 24, 7 => 36];
@@ -1420,8 +1480,9 @@ class SpphController extends Controller
 
         $css = $node->getAttribute('style');
         if ($css !== '') {
-            if (preg_match('/font-family\s*:\s*([^;]+)/i', $css, $m))
+            if (preg_match('/font-family\s*:\s*([^;]+)/i', $css, $m)) {
                 $s['name'] = trim(str_replace(["'", '"'], '', $m[1]));
+            }
 
             if (preg_match('/font-size\s*:\s*(\d+(?:\.\d+)?)\s*(px|pt|em|rem)?/i', $css, $m)) {
                 $v = (float) $m[1];
@@ -1433,23 +1494,29 @@ class SpphController extends Controller
                 };
             }
 
-            if (preg_match('/(?:^|;)\s*color\s*:\s*(#[0-9a-fA-F]{3,6})/i', $css, $m))
+            if (preg_match('/(?:^|;)\s*color\s*:\s*(#[0-9a-fA-F]{3,6})/i', $css, $m)) {
                 $s['color'] = $this->expandHexColor(ltrim($m[1], '#'));
+            }
 
-            if (preg_match('/color\s*:\s*rgb\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)/i', $css, $m))
+            if (preg_match('/color\s*:\s*rgb\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)/i', $css, $m)) {
                 $s['color'] = sprintf('%02X%02X%02X', $m[1], $m[2], $m[3]);
+            }
 
-            if (preg_match('/font-weight\s*:\s*(bold|[6-9]\d{2})/i', $css))
+            if (preg_match('/font-weight\s*:\s*(bold|[6-9]\d{2})/i', $css)) {
                 $s['bold'] = true;
-            if (preg_match('/font-style\s*:\s*italic/i', $css))
+            }
+            if (preg_match('/font-style\s*:\s*italic/i', $css)) {
                 $s['italic'] = true;
+            }
 
             if (preg_match('/text-decoration\s*:\s*([^;]+)/i', $css, $m)) {
                 $d = strtolower($m[1]);
-                if (str_contains($d, 'underline'))
+                if (str_contains($d, 'underline')) {
                     $s['underline'] = 'single';
-                if (str_contains($d, 'line-through'))
+                }
+                if (str_contains($d, 'line-through')) {
                     $s['strikethrough'] = true;
+                }
             }
         }
 
@@ -1462,12 +1529,14 @@ class SpphController extends Controller
     private function rtAlign(\DOMElement $node): ?string
     {
         $css = $node->getAttribute('style');
-        if ($css && preg_match('/text-align\s*:\s*(left|center|right|justify)/i', $css, $m))
+        if ($css && preg_match('/text-align\s*:\s*(left|center|right|justify)/i', $css, $m)) {
             return strtolower($m[1]);
+        }
 
         $a = $node->getAttribute('align');
-        if ($a && in_array(strtolower($a), ['left', 'center', 'right', 'justify']))
+        if ($a && in_array(strtolower($a), ['left', 'center', 'right', 'justify'])) {
             return strtolower($a);
+        }
 
         return null;
     }
@@ -1485,8 +1554,10 @@ class SpphController extends Controller
     private function expandHexColor(string $hex): string
     {
         $hex = strtoupper(ltrim($hex, '#'));
-        if (strlen($hex) === 3)
-            $hex = $hex[0] . $hex[0] . $hex[1] . $hex[1] . $hex[2] . $hex[2];
+        if (strlen($hex) === 3) {
+            $hex = $hex[0].$hex[0].$hex[1].$hex[1].$hex[2].$hex[2];
+        }
+
         return $hex;
     }
 
@@ -1502,35 +1573,40 @@ class SpphController extends Controller
         float $shapeWidthPt = 595.2,
         float $shapeHeightPt = 841.9
     ): void {
-        if (!file_exists($docxPath) || filesize($docxPath) === 0)
+        if (! file_exists($docxPath) || filesize($docxPath) === 0) {
             return;
-        if (!file_exists($imagePath))
+        }
+        if (! file_exists($imagePath)) {
             return;
-        if (filesize($imagePath) > 2 * 1024 * 1024)
+        }
+        if (filesize($imagePath) > 2 * 1024 * 1024) {
             return;
+        }
 
         // ── Kerja di file temp, bukan file asli langsung ──
-        $tempPath = $docxPath . '.tmp_' . uniqid();
-        if (!copy($docxPath, $tempPath))
+        $tempPath = $docxPath.'.tmp_'.uniqid();
+        if (! copy($docxPath, $tempPath)) {
             return;
+        }
 
-        $zip = new ZipArchive();
+        $zip = new ZipArchive;
         if ($zip->open($tempPath, ZipArchive::CREATE) !== true) {
             @unlink($tempPath);
+
             return;
         }
 
         $ext = strtolower(pathinfo($imagePath, PATHINFO_EXTENSION)) ?: 'jpg';
-        $mediaName = 'kop_surat.' . $ext;
+        $mediaName = 'kop_surat.'.$ext;
 
         // ── Builder XML header dengan namespace LENGKAP ──
         $makeHeader = function (string $rId, string $shapeId) use ($logoShiftPt, $shapeWidthPt, $shapeHeightPt): string {
             $style = implode(';', [
                 'position:absolute',
                 'margin-left:0',
-                'margin-top:' . $logoShiftPt . 'pt',
-                'width:' . $shapeWidthPt . 'pt',
-                'height:' . $shapeHeightPt . 'pt',
+                'margin-top:'.$logoShiftPt.'pt',
+                'width:'.$shapeWidthPt.'pt',
+                'height:'.$shapeHeightPt.'pt',
                 'z-index:-251657216',
                 'mso-position-horizontal:left',
                 'mso-position-horizontal-relative:page',
@@ -1590,38 +1666,38 @@ class SpphController extends Controller
 XML;
         };
 
-        $makeRels = fn(string $target) =>
-            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' . "\n"
-            . '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
-            . '<Relationship Id="rId1"'
-            . ' Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image"'
-            . ' Target="media/' . $target . '"/>'
-            . '</Relationships>';
+        $makeRels = fn (string $target) => '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'."\n"
+            .'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+            .'<Relationship Id="rId1"'
+            .' Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image"'
+            .' Target="media/'.$target.'"/>'
+            .'</Relationships>';
 
         $success = false;
 
         try {
             // ── 1. Tambah gambar ──
             $imgData = file_get_contents($imagePath);
-            if ($imgData === false)
+            if ($imgData === false) {
                 throw new \RuntimeException('Cannot read image');
+            }
 
             // Hapus dulu kalau sudah ada (cegah duplikat entry di ZIP)
-            $zip->deleteName('word/media/' . $mediaName);
-            $zip->addFromString('word/media/' . $mediaName, $imgData);
+            $zip->deleteName('word/media/'.$mediaName);
+            $zip->addFromString('word/media/'.$mediaName, $imgData);
 
             // ── 2. Setup gambar halaman 2 ──
             $hasPage2 = $imagePath2 && file_exists($imagePath2)
                 && filesize($imagePath2) > 0
                 && filesize($imagePath2) <= 2 * 1024 * 1024;
             $ext2 = $hasPage2 ? (strtolower(pathinfo($imagePath2, PATHINFO_EXTENSION)) ?: 'jpg') : $ext;
-            $mediaName2 = $hasPage2 ? ('kop_surat2.' . $ext2) : $mediaName;
+            $mediaName2 = $hasPage2 ? ('kop_surat2.'.$ext2) : $mediaName;
 
             if ($hasPage2) {
                 $img2 = file_get_contents($imagePath2);
                 if ($img2 !== false) {
-                    $zip->deleteName('word/media/' . $mediaName2);
-                    $zip->addFromString('word/media/' . $mediaName2, $img2);
+                    $zip->deleteName('word/media/'.$mediaName2);
+                    $zip->addFromString('word/media/'.$mediaName2, $img2);
                 } else {
                     $hasPage2 = false;
                     $mediaName2 = $mediaName;
@@ -1643,8 +1719,9 @@ XML;
             // ── 4. Patch document.xml.rels ──
             $docRelsPath = 'word/_rels/document.xml.rels';
             $docRels = $zip->getFromName($docRelsPath);
-            if ($docRels === false)
+            if ($docRels === false) {
                 throw new \RuntimeException('Cannot read document.xml.rels');
+            }
 
             preg_match_all('/Id="rId(\d+)"/', $docRels, $m);
             $maxNum = empty($m[1]) ? 0 : (int) max($m[1]);
@@ -1653,32 +1730,33 @@ XML;
             if (preg_match('/Id="(rId\d+)"[^>]+Target="header1\.xml"/', $docRels, $mx)) {
                 $rIdFirst = $mx[1];
             } else {
-                $rIdFirst = 'rId' . ($maxNum + 1);
+                $rIdFirst = 'rId'.($maxNum + 1);
                 $maxNum++;
             }
 
             if (preg_match('/Id="(rId\d+)"[^>]+Target="header2\.xml"/', $docRels, $mx)) {
                 $rIdDefault = $mx[1];
             } else {
-                $rIdDefault = 'rId' . ($maxNum + 1);
+                $rIdDefault = 'rId'.($maxNum + 1);
             }
 
             // Hapus entry header lama kalau ada, tambah ulang
             $docRels = preg_replace('/<Relationship[^>]+Target="header[12]\.xml"[^>]*\/>\s*/i', '', $docRels);
             $newRelEntries =
-                '<Relationship Id="' . $rIdFirst . '"'
-                . ' Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header"'
-                . ' Target="header1.xml"/>'
-                . '<Relationship Id="' . $rIdDefault . '"'
-                . ' Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header"'
-                . ' Target="header2.xml"/>';
-            $docRels = str_replace('</Relationships>', $newRelEntries . '</Relationships>', $docRels);
+                '<Relationship Id="'.$rIdFirst.'"'
+                .' Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header"'
+                .' Target="header1.xml"/>'
+                .'<Relationship Id="'.$rIdDefault.'"'
+                .' Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header"'
+                .' Target="header2.xml"/>';
+            $docRels = str_replace('</Relationships>', $newRelEntries.'</Relationships>', $docRels);
             $zip->addFromString($docRelsPath, $docRels);
 
             // ── 5. Patch document.xml ──
             $docXml = $zip->getFromName('word/document.xml');
-            if ($docXml === false || $docXml === '')
+            if ($docXml === false || $docXml === '') {
                 throw new \RuntimeException('Cannot read document.xml');
+            }
 
             // Pastikan namespace r ada di root
             if (strpos($docXml, 'xmlns:r=') === false) {
@@ -1694,13 +1772,15 @@ XML;
             // Strategi: ambil posisi </w:sectPr> terakhir, lalu ambil konten sectPr-nya,
             // hapus headerReference & titlePg lama kalau ada, sisipkan yang baru
             $lastEnd = strrpos($docXml, '</w:sectPr>');
-            if ($lastEnd === false)
+            if ($lastEnd === false) {
                 throw new \RuntimeException('No </w:sectPr> found');
+            }
 
             // Cari <w:sectPr yang matching (cari dari awal hingga $lastEnd)
             $sectPrStart = strrpos(substr($docXml, 0, $lastEnd), '<w:sectPr');
-            if ($sectPrStart === false)
+            if ($sectPrStart === false) {
                 throw new \RuntimeException('No <w:sectPr found');
+            }
 
             $beforeSectPr = substr($docXml, 0, $sectPrStart);
             $sectPrFull = substr($docXml, $sectPrStart, ($lastEnd + strlen('</w:sectPr>')) - $sectPrStart);
@@ -1715,21 +1795,21 @@ XML;
             // Sisipkan elemen baru di awal isi sectPr (setelah tag pembuka)
             // Urutan OOXML: headerReference → pgSz → pgMar → headerHeight → ...
             $headerRefs =
-                '<w:headerReference w:type="first"   r:id="' . $rIdFirst . '"/>'
-                . '<w:headerReference w:type="default" r:id="' . $rIdDefault . '"/>'
-                . '<w:headerReference w:type="even"    r:id="' . $rIdDefault . '"/>'
-                . '<w:titlePg/>'
-                . '<w:headerHeight w:w="' . $headerHeightTwips . '" w:type="dxa"/>';
+                '<w:headerReference w:type="first"   r:id="'.$rIdFirst.'"/>'
+                .'<w:headerReference w:type="default" r:id="'.$rIdDefault.'"/>'
+                .'<w:headerReference w:type="even"    r:id="'.$rIdDefault.'"/>'
+                .'<w:titlePg/>'
+                .'<w:headerHeight w:w="'.$headerHeightTwips.'" w:type="dxa"/>';
 
             // Insert setelah opening tag <w:sectPr ...>
             $sectPrFull = preg_replace(
                 '/(<w:sectPr\b[^>]*>)/s',
-                '$1' . $headerRefs,
+                '$1'.$headerRefs,
                 $sectPrFull,
                 1
             );
 
-            $docXml = $beforeSectPr . $sectPrFull . $afterSectPr;
+            $docXml = $beforeSectPr.$sectPrFull.$afterSectPr;
             $zip->addFromString('word/document.xml', $docXml);
 
             // ── 6. Patch [Content_Types].xml ──
@@ -1741,11 +1821,11 @@ XML;
                 $ctNew = preg_replace('/<Override[^>]+PartName="\/word\/header[12]\.xml"[^>]*\/>\s*/i', '', $ctNew);
 
                 foreach (array_unique([$ext, $ext2]) as $e) {
-                    if (strpos($ctNew, 'Extension="' . $e . '"') === false) {
+                    if (strpos($ctNew, 'Extension="'.$e.'"') === false) {
                         $mime = ($e === 'png') ? 'image/png' : 'image/jpeg';
                         $ctNew = str_replace(
                             '</Types>',
-                            '<Default Extension="' . $e . '" ContentType="' . $mime . '"/></Types>',
+                            '<Default Extension="'.$e.'" ContentType="'.$mime.'"/></Types>',
                             $ctNew
                         );
                     }
@@ -1754,9 +1834,9 @@ XML;
                 $hdrCT = 'application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml';
                 $ctNew = str_replace(
                     '</Types>',
-                    '<Override PartName="/word/header1.xml" ContentType="' . $hdrCT . '"/>'
-                    . '<Override PartName="/word/header2.xml" ContentType="' . $hdrCT . '"/>'
-                    . '</Types>',
+                    '<Override PartName="/word/header1.xml" ContentType="'.$hdrCT.'"/>'
+                    .'<Override PartName="/word/header2.xml" ContentType="'.$hdrCT.'"/>'
+                    .'</Types>',
                     $ctNew
                 );
 
@@ -1766,7 +1846,7 @@ XML;
             $success = true;
 
         } catch (\Throwable $e) {
-            \Illuminate\Support\Facades\Log::warning('injectHeaderWatermark: ' . $e->getMessage());
+            \Illuminate\Support\Facades\Log::warning('injectHeaderWatermark: '.$e->getMessage());
         }
 
         // ── Tutup ZIP ──
@@ -1777,7 +1857,7 @@ XML;
             && $this->isDocxXmlValid($tempPath)
         ) {
             // Ganti file asli hanya kalau temp valid
-            if (!rename($tempPath, $docxPath)) {
+            if (! rename($tempPath, $docxPath)) {
                 copy($tempPath, $docxPath);
                 @unlink($tempPath);
             }
@@ -1792,9 +1872,10 @@ XML;
     // =========================================================
     private function isDocxXmlValid(string $path): bool
     {
-        $zip = new ZipArchive();
-        if ($zip->open($path) !== true)
+        $zip = new ZipArchive;
+        if ($zip->open($path) !== true) {
             return false;
+        }
 
         $ok = true;
         $prev = libxml_use_internal_errors(true);
@@ -1802,8 +1883,8 @@ XML;
             $name = $zip->getNameIndex($i);
             if (substr($name, -4) === '.xml' || substr($name, -5) === '.rels') {
                 $xml = $zip->getFromName($name);
-                $dom = new \DOMDocument();
-                if ($xml === false || !$dom->loadXML($xml)) {
+                $dom = new \DOMDocument;
+                if ($xml === false || ! $dom->loadXML($xml)) {
                     $ok = false;
                     break;
                 }
@@ -1812,6 +1893,7 @@ XML;
         libxml_clear_errors();
         libxml_use_internal_errors($prev);
         $zip->close();
+
         return $ok;
     }
 
@@ -1825,15 +1907,16 @@ XML;
         foreach ($items as $item) {
             $raw = $item['nama_barang'] ?? '';
             $nama = $this->sanitizeRichText($raw);
-            if (!trim(strip_tags($nama)))
+            if (! trim(strip_tags($nama))) {
                 continue;
+            }
             SpphItem::create([
                 'spph_id' => $spph->id,
                 'urutan' => $urutan++,
                 'nama_barang' => $nama,
                 'satuan' => $item['satuan'] ?? null,
                 'jumlah' => $item['jumlah'] ?? null,
-                'tgl_pemenuhan' => !empty($item['tgl_pemenuhan']) ? $item['tgl_pemenuhan'] : null,
+                'tgl_pemenuhan' => ! empty($item['tgl_pemenuhan']) ? $item['tgl_pemenuhan'] : null,
             ]);
         }
     }
@@ -1887,7 +1970,7 @@ XML;
             $ensure = function (string $vendor) use (&$stats): string {
                 $key = $this->vendorUsageKey($vendor);
 
-                if (!isset($stats[$key])) {
+                if (! isset($stats[$key])) {
                     $stats[$key] = [
                         'name' => trim($vendor),
                         'spph_count' => 0,
@@ -1905,7 +1988,7 @@ XML;
             };
 
             $touchLastUsed = function (string $key, ?Carbon $date, ?string $document) use (&$stats): void {
-                if (!$date) {
+                if (! $date) {
                     return;
                 }
 
@@ -1913,39 +1996,39 @@ XML;
                     ? Carbon::parse($stats[$key]['last_used_at'])
                     : null;
 
-                if (!$current || $date->greaterThan($current)) {
+                if (! $current || $date->greaterThan($current)) {
                     $stats[$key]['last_used_at'] = $date->toDateString();
                     $stats[$key]['last_used_label'] = $date->locale('id')->translatedFormat('d M Y');
                     $stats[$key]['last_document'] = $document;
                 }
             };
 
-            Spph::select(['nomor_spph', 'tanggal', 'nama_vendor', 'vendor_names'])
-                ->orderBy('id')
-                ->get()
-                ->each(function (Spph $spph) use (&$stats, $ensure, $touchLastUsed) {
-                    $date = $spph->tanggal ? Carbon::parse($spph->tanggal) : null;
+            Spph::select(['id', 'nomor_spph', 'tanggal', 'nama_vendor', 'vendor_names'])
+                ->chunkById(500, function ($spphs) use (&$stats, $ensure, $touchLastUsed) {
+                    $spphs->each(function (Spph $spph) use (&$stats, $ensure, $touchLastUsed) {
+                        $date = $spph->tanggal ? Carbon::parse($spph->tanggal) : null;
 
-                    foreach ($spph->print_vendor_names as $vendor) {
-                        $key = $ensure($vendor);
-                        $stats[$key]['spph_count']++;
-                        $touchLastUsed($key, $date, $spph->nomor_spph);
-                    }
+                        foreach ($spph->print_vendor_names as $vendor) {
+                            $key = $ensure($vendor);
+                            $stats[$key]['spph_count']++;
+                            $touchLastUsed($key, $date, $spph->nomor_spph);
+                        }
+                    });
                 });
 
-            Sp::select(['nomor_sp', 'tanggal_sp', 'nama_vendor'])
+            Sp::select(['id', 'nomor_sp', 'tanggal_sp', 'nama_vendor'])
                 ->whereNotNull('nama_vendor')
-                ->orderBy('id')
-                ->get()
-                ->each(function (Sp $sp) use (&$stats, $ensure, $touchLastUsed) {
-                    $vendor = trim((string) $sp->nama_vendor);
-                    if ($vendor === '') {
-                        return;
-                    }
+                ->chunkById(500, function ($sps) use (&$stats, $ensure, $touchLastUsed) {
+                    $sps->each(function (Sp $sp) use (&$stats, $ensure, $touchLastUsed) {
+                        $vendor = trim((string) $sp->nama_vendor);
+                        if ($vendor === '') {
+                            return;
+                        }
 
-                    $key = $ensure($vendor);
-                    $stats[$key]['sp_count']++;
-                    $touchLastUsed($key, $sp->tanggal_sp ? Carbon::parse($sp->tanggal_sp) : null, $sp->nomor_sp);
+                        $key = $ensure($vendor);
+                        $stats[$key]['sp_count']++;
+                        $touchLastUsed($key, $sp->tanggal_sp ? Carbon::parse($sp->tanggal_sp) : null, $sp->nomor_sp);
+                    });
                 });
 
             foreach ($stats as &$row) {
@@ -1981,7 +2064,7 @@ XML;
     {
         $vendor = trim($vendor);
         $jsonVendor = json_encode($vendor, JSON_UNESCAPED_UNICODE);
-        $likeJsonVendor = '%' . addcslashes((string) $jsonVendor, '\\%_') . '%';
+        $likeJsonVendor = '%'.addcslashes((string) $jsonVendor, '\\%_').'%';
 
         return $query->where(function ($q) use ($vendor, $likeJsonVendor) {
             $q->where('nama_vendor', $vendor)
@@ -2015,10 +2098,13 @@ XML;
     // =========================================================
     private function extractSeq(string $nomor): ?int
     {
-        if (preg_match('/^(\d+)\/PKU-/', $nomor, $m))
+        if (preg_match('/^(\d+)\/PKU-/', $nomor, $m)) {
             return (int) $m[1];
-        if (preg_match('/\/(\d+)$/', $nomor, $m))
+        }
+        if (preg_match('/\/(\d+)$/', $nomor, $m)) {
             return (int) $m[1];
+        }
+
         return null;
     }
 
@@ -2042,7 +2128,7 @@ XML;
     {
         $documentType = preg_quote($documentType, '/');
 
-        if (! preg_match('/^\d+\/PKU-([IVXLCDM]+)\/' . $documentType . '\/(\d{4})$/i', trim($nomor), $matches)) {
+        if (! preg_match('/^\d+\/PKU-([IVXLCDM]+)\/'.$documentType.'\/(\d{4})$/i', trim($nomor), $matches)) {
             return null;
         }
 
@@ -2080,8 +2166,8 @@ XML;
         [$year, $roman] = $this->periodFromDate($date);
 
         return preg_replace(
-            '/^(\d+\/PKU-)([IVXLCDM]+)(\/' . preg_quote($documentType, '/') . '\/)(\d{4})$/i',
-            '${1}' . $roman . '${3}' . $year,
+            '/^(\d+\/PKU-)([IVXLCDM]+)(\/'.preg_quote($documentType, '/').'\/)(\d{4})$/i',
+            '${1}'.$roman.'${3}'.$year,
             trim($nomor)
         );
     }
@@ -2125,12 +2211,12 @@ XML;
     {
         $year ??= now()->year;
 
-        $usedSequences = Spph::when($excludeId, fn($q) => $q->where('id', '!=', $excludeId))
+        $usedSequences = Spph::when($excludeId, fn ($q) => $q->where('id', '!=', $excludeId))
             ->where('nomor_spph', 'like', "%/SPPH/{$year}")
             ->orderBy('sequence_number')
             ->pluck('sequence_number')
-            ->map(fn($seq) => (int) $seq)
-            ->filter(fn($seq) => $seq > 0)
+            ->map(fn ($seq) => (int) $seq)
+            ->filter(fn ($seq) => $seq > 0)
             ->unique()
             ->values();
 
@@ -2154,6 +2240,7 @@ XML;
 
             if ($seq === $end + 1) {
                 $end = $seq;
+
                 continue;
             }
 
