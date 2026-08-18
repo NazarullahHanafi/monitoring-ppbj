@@ -164,37 +164,7 @@ class PpbjController extends Controller
         }
 
         if ($request->filled('status_sla')) {
-            $statusSla = $request->status_sla;
-
-            switch ($statusSla) {
-                case 'CANCELLED':
-                    $query->where('status', 'CANCELLED');
-                    break;
-
-                case 'LENGKAP':
-                    $query->where('status', '!=', 'CANCELLED')
-                        ->where('progres', 100)
-                        ->whereNotNull('no_invoice');
-                    break;
-
-                case 'ON TRACK':
-                    $query->where('status', '!=', 'CANCELLED')
-                        ->where('progres', '<', 100)
-                        ->where('sisa_target_sla', '>', 2);
-                    break;
-
-                case 'WARNING':
-                    $query->where('status', '!=', 'CANCELLED')
-                        ->where('progres', '<', 100)
-                        ->whereBetween('sisa_target_sla', [1, 2]);
-                    break;
-
-                case 'OVERDUE':
-                    $query->where('status', '!=', 'CANCELLED')
-                        ->where('progres', '<', 100)
-                        ->where('sisa_target_sla', '<=', 0);
-                    break;
-            }
+            $this->applyLiveSlaStatusFilter($query, (string) $request->status_sla);
         }
 
         if ($request->filled('progress')) {
@@ -258,6 +228,14 @@ class PpbjController extends Controller
         $perPage = in_array($perPage, [10, 25, 50, 100]) ? $perPage : 10;
         $query->orderBy('id', 'desc');
         $ppbj = $query->paginate($perPage)->withQueryString();
+
+        // Hidrasi hanya 10 baris halaman aktif agar seluruh rumus SLA/kontrak memakai
+        // satu sumber di model, tanpa query tambahan dan tanpa kalkulasi Blade ganda.
+        $ppbj->setCollection(
+            $ppbj->getCollection()->map(
+                fn ($row) => (new Ppbj())->newFromBuilder((array) $row)
+            )
+        );
 
         // Ambil seluruh nama user yang diperlukan dalam satu query untuk halaman aktif.
         // Ini menggantikan lima correlated subquery yang sebelumnya dijalankan per baris.
@@ -704,9 +682,17 @@ class PpbjController extends Controller
     {
         $request->validate([
             'ppbj_no' => ['required', 'string', 'max:255', 'unique:ppbj,ppbj_no'],
+            'tgl_awarding_sp' => ['nullable', 'date'],
+            'tgl_spk' => ['nullable', 'date'],
+            'promised_date' => [
+                'nullable',
+                'date',
+                Rule::when($request->filled('tgl_spk'), ['after_or_equal:tgl_spk']),
+            ],
         ], [
             'ppbj_no.unique' => 'No PPBJ tersebut sudah ada.',
             'ppbj_no.required' => 'No PPBJ wajib diisi.',
+            'promised_date.after_or_equal' => 'Tanggal pemenuhan/berakhir kontrak tidak boleh lebih awal dari tanggal SPK/kontrak.',
         ]);
 
         try {
@@ -795,8 +781,16 @@ class PpbjController extends Controller
                 'max:255',
                 Rule::unique('ppbj', 'ppbj_no')->ignore($ppbj->id),
             ],
+            'tgl_awarding_sp' => ['nullable', 'date'],
+            'tgl_spk' => ['nullable', 'date'],
+            'promised_date' => [
+                'nullable',
+                'date',
+                Rule::when($request->filled('tgl_spk'), ['after_or_equal:tgl_spk']),
+            ],
         ], [
             'ppbj_no.unique' => 'No PPBJ tersebut sudah ada.',
+            'promised_date.after_or_equal' => 'Tanggal pemenuhan/berakhir kontrak tidak boleh lebih awal dari tanggal SPK/kontrak.',
         ]);
 
         try {
@@ -1101,31 +1095,7 @@ class PpbjController extends Controller
                 $query->where('penyedia_eksternal', $request->penyedia_eksternal);
 
             if ($request->filled('status_sla')) {
-                switch ($request->status_sla) {
-                    case 'CANCELLED':
-                        $query->where('status', 'CANCELLED');
-                        break;
-                    case 'LENGKAP':
-                        $query->where('status', '!=', 'CANCELLED')
-                            ->where('progres', 100)
-                            ->whereNotNull('no_invoice');
-                        break;
-                    case 'ON TRACK':
-                        $query->where('status', '!=', 'CANCELLED')
-                            ->where('progres', '<', 100)
-                            ->where('sisa_target_sla', '>', 2);
-                        break;
-                    case 'WARNING':
-                        $query->where('status', '!=', 'CANCELLED')
-                            ->where('progres', '<', 100)
-                            ->whereBetween('sisa_target_sla', [1, 2]);
-                        break;
-                    case 'OVERDUE':
-                        $query->where('status', '!=', 'CANCELLED')
-                            ->where('progres', '<', 100)
-                            ->where('sisa_target_sla', '<=', 0);
-                        break;
-                }
+                $this->applyLiveSlaStatusFilter($query, (string) $request->status_sla);
             }
 
             if ($request->filled('progress')) {
@@ -2298,6 +2268,57 @@ class PpbjController extends Controller
             ->unique()
             ->values()
             ->all();
+    }
+
+    /**
+     * Filter SLA dihitung langsung terhadap tanggal hari ini agar tidak bergantung
+     * pada nilai snapshot sisa_target_sla yang hanya berubah saat record disimpan.
+     * Berlaku untuk Query Builder maupun Eloquent Builder.
+     */
+    private function applyLiveSlaStatusFilter($query, string $status): void
+    {
+        $startDateSql = "COALESCE(tgl_diserahkan, tgl_terima_pr, tgl_ppbj)";
+        $targetSql = "CASE WHEN COALESCE(total_sebelum_ppn, 0) <= 0 THEN 0 WHEN total_sebelum_ppn <= 50000000 THEN 10 ELSE 14 END";
+        $remainingSql = "(($targetSql) - GREATEST(DATEDIFF(CURDATE(), $startDateSql), 0))";
+
+        $applyIncomplete = static function ($builder) {
+            $builder->where(function ($q) {
+                $q->whereNull('awarding_sp')->orWhere('awarding_sp', '');
+            })->orWhereNull('tgl_awarding_sp')->orWhereNull('tgl_spk');
+        };
+
+        if ($status === 'CANCELLED') {
+            $query->where('status', 'CANCELLED');
+            return;
+        }
+
+        $query->where(function ($q) {
+            $q->whereNull('status')->orWhere('status', '!=', 'CANCELLED');
+        });
+
+        if ($status === 'LENGKAP') {
+            $query->whereNotNull('awarding_sp')->where('awarding_sp', '!=', '')
+                ->whereNotNull('tgl_awarding_sp')
+                ->whereNotNull('tgl_spk');
+            return;
+        }
+
+        $query->where($applyIncomplete);
+
+        if ($status === 'BELUM DIHITUNG') {
+            $query->whereRaw("(($targetSql) <= 0 OR $startDateSql IS NULL)");
+            return;
+        }
+
+        $query->whereRaw("($targetSql) > 0 AND $startDateSql IS NOT NULL");
+
+        match ($status) {
+            'ON TRACK' => $query->whereRaw("$remainingSql > 2"),
+            'WARNING' => $query->whereRaw("$remainingSql BETWEEN 1 AND 2"),
+            'JATUH TEMPO' => $query->whereRaw("$remainingSql = 0"),
+            'OVERDUE' => $query->whereRaw("$remainingSql < 0"),
+            default => null,
+        };
     }
 
     // =====================

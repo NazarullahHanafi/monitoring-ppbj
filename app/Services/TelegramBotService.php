@@ -308,6 +308,36 @@ class TelegramBotService
         $this->sendNotification(implode("\n", $lines));
     }
 
+    public function notifyContractFulfillmentReminders(array $reminders): void
+    {
+        if ($reminders === []) {
+            return;
+        }
+
+        $lines = [
+            'Reminder masa pemenuhan SP/kontrak SIMONPR',
+            'Waktu: '.now()->translatedFormat('l, d F Y H:i:s').' WIB',
+            '',
+        ];
+
+        foreach (array_slice($reminders, 0, 15) as $index => $item) {
+            $lines[] = ($index + 1).'. '.Str::limit((string) ($item['number'] ?? '-'), 80);
+            $lines[] = '   Status: '.($item['status'] ?? '-').' | '.($item['timing'] ?? '-');
+            $lines[] = '   Batas: '.($item['deadline'] ?? '-');
+            $lines[] = '   Uraian: '.Str::limit((string) ($item['description'] ?? '-'), 100);
+        }
+
+        if (count($reminders) > 15) {
+            $lines[] = '';
+            $lines[] = 'Dan '.(count($reminders) - 15).' reminder lainnya. Buka Management PPBJ untuk detail.';
+        }
+
+        $lines[] = '';
+        $lines[] = 'Reminder hanya dikirim pada H-30, H-14, H-7, H-3, H-1, hari H, dan H+1 agar tidak spam.';
+
+        $this->sendNotification(implode("\n", $lines));
+    }
+
     public function setWebhook(string $url): array
     {
         $token = $this->token();

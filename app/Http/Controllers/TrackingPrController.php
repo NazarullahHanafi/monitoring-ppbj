@@ -306,15 +306,28 @@ class TrackingPrController extends Controller
 
             // Status SLA
             $statusSla = 'ON TRACK';
+            $targetSla = Ppbj::hitungTargetSla($ppbj->total_sebelum_ppn ?? 0);
             try {
                 $ppbjStatus = isset($ppbj->status) ? $ppbj->status : 'ACTIVE';
                 if ($ppbjStatus === 'CANCELLED') {
                     $statusSla = 'CANCELLED';
                 } else {
+                    $isSlaComplete = ! empty($ppbj->awarding_sp)
+                        && ! empty($ppbj->tgl_awarding_sp)
+                        && ! empty($ppbj->tgl_spk);
+                    $slaStart = $ppbj->tgl_diserahkan
+                        ?? $ppbj->tgl_terima_pr
+                        ?? $ppbj->tgl_ppbj
+                        ?? null;
+                    $remainingSla = $targetSla > 0 && $slaStart
+                        ? $targetSla - max(0, (int) Carbon::parse($slaStart)->startOfDay()->diffInDays(now()->startOfDay()))
+                        : 0;
+
                     $statusSla = Ppbj::hitungStatusSla(
-                        $ppbj->sisa_target_sla ?? 0,
-                        $ppbj->progres ?? 0,
-                        $ppbj->no_invoice ?? null
+                        $remainingSla,
+                        $isSlaComplete,
+                        $targetSla,
+                        (bool) $slaStart
                     );
                 }
             } catch (\Exception $e) {
@@ -332,7 +345,7 @@ class TrackingPrController extends Controller
                 'portofolio' => $ppbj->portofolio ?? null,
                 'buyer' => $ppbj->buyer ?? null,
                 'total_sebelum_ppn' => $ppbj->total_sebelum_ppn ?? null,
-                'target_sla_hari' => $ppbj->target_sla_hari ?? null,
+                'target_sla_hari' => $targetSla,
                 'sisa_target_sla' => $ppbj->sisa_target_sla ?? null,
                 'realisasi_sla' => $ppbj->realisasi_sla ?? null,
                 'time_left' => $ppbj->time_left ?? null,

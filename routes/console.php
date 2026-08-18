@@ -13,6 +13,12 @@ Schedule::command('owner:backup-email')
     ->timezone(config('app.timezone', 'Asia/Jakarta'))
     ->withoutOverlapping();
 
+Schedule::command('ppbj:contract-reminders')
+    ->dailyAt('07:05')
+    ->timezone(config('app.timezone', 'Asia/Jakarta'))
+    ->withoutOverlapping(10)
+    ->onOneServer();
+
 // Shared hosting tidak menjalankan daemon queue permanen. Worker singkat ini
 // menguras email dan notifikasi Telegram tiap menit lalu berhenti, sehingga
 // request web tidak menunggu koneksi eksternal dan worker PHP tetap tersedia.

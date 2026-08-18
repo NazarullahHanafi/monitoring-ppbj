@@ -141,8 +141,10 @@
                 <option value="">Semua</option>
                 <option value="ON TRACK" {{ request('status_sla') === 'ON TRACK' ? 'selected' : '' }}>ON TRACK</option>
                 <option value="WARNING" {{ request('status_sla') === 'WARNING' ? 'selected' : '' }}>WARNING</option>
+                <option value="JATUH TEMPO" {{ request('status_sla') === 'JATUH TEMPO' ? 'selected' : '' }}>JATUH TEMPO</option>
                 <option value="OVERDUE" {{ request('status_sla') === 'OVERDUE' ? 'selected' : '' }}>OVERDUE</option>
                 <option value="LENGKAP" {{ request('status_sla') === 'LENGKAP' ? 'selected' : '' }}>LENGKAP</option>
+                <option value="BELUM DIHITUNG" {{ request('status_sla') === 'BELUM DIHITUNG' ? 'selected' : '' }}>BELUM DIHITUNG</option>
                 <option value="CANCELLED" {{ request('status_sla') === 'CANCELLED' ? 'selected' : '' }}>CANCELLED</option>
             </select>
         </div>
@@ -420,7 +422,7 @@
     {{-- ================= TABLE (RESPONSIVE) ================= --}}
     <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
         <div class="overflow-x-auto">
-            <table class="min-w-[980px] w-full text-sm text-left">
+            <table class="min-w-[1180px] w-full text-sm text-left">
                 <thead class="bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
                     <tr class="text-gray-600 dark:text-gray-300">
                         <th class="px-4 py-3 text-left">PPBJ</th>
@@ -428,6 +430,7 @@
                         <th class="px-4 py-3 text-left">Portofolio</th>
                         <th class="px-4 py-3 text-left">Buyer</th>
                         <th class="px-4 py-3 text-center">Sisa SLA</th>
+                        <th class="px-4 py-3 text-center">Masa Pemenuhan</th>
                         <th class="px-4 py-3 text-center">Status</th>
                         <th class="px-4 py-3 text-center">Progress</th>
                         <th class="px-4 py-3 text-center">Info</th>
@@ -441,7 +444,9 @@
                             $progress = (int) ($row->progres ?? 0);
                             $progress = max(0, min(100, $progress));
                             $isCancelled = (strtoupper((string) ($row->status ?? 'ACTIVE')) === 'CANCELLED');
-                            $isSlaComplete = method_exists($row, 'isSlaComplete') ? $row->isSlaComplete() : ($progress === 100 && !empty($row->no_invoice));
+                            $isSlaComplete = method_exists($row, 'isSlaComplete')
+                                ? $row->isSlaComplete()
+                                : (!empty($row->awarding_sp) && !empty($row->tgl_awarding_sp) && !empty($row->tgl_spk));
                             $parseRowSlaDate = function ($date) {
                                 if (! $date) return null;
                                 try {
@@ -453,7 +458,9 @@
                             $rowSlaStart = $parseRowSlaDate($row->tgl_diserahkan ?? null)
                                 ?: ($parseRowSlaDate($row->tgl_terima_pr ?? null)
                                     ?: $parseRowSlaDate($row->tgl_ppbj ?? null));
-                            $rowTargetDays = (int) ($row->target_sla_hari ?? 0);
+                            $rowTargetDays = method_exists($row, 'slaTargetDays')
+                                ? $row->slaTargetDays()
+                                : App\Models\Ppbj::hitungTargetSla($row->total_sebelum_ppn ?? 0);
                             $rowRunningDays = ($rowSlaStart && $rowTargetDays > 0)
                                 ? max(0, (int) $rowSlaStart->diffInDays(now()->startOfDay()))
                                 : null;
@@ -483,11 +490,17 @@
                                 $statusColor = 'bg-blue-600';
                             } else {
                                 $sisaSla = method_exists($row, 'slaCurrentRemainingDays')
-                                    ? ($row->slaCurrentRemainingDays() ?? (int) ($row->sisa_target_sla ?? 0))
+                                    ? $row->slaCurrentRemainingDays()
                                     : ($rowLiveRemaining ?? (int) ($row->sisa_target_sla ?? 0));
-                                if ($sisaSla <= 0) {
+                                if ($sisaSla === null) {
+                                    $displayStatusSla = 'BELUM DIHITUNG';
+                                    $statusColor = 'bg-slate-500';
+                                } elseif ($sisaSla < 0) {
                                     $displayStatusSla = 'OVERDUE';
                                     $statusColor = 'bg-red-600';
+                                } elseif ($sisaSla === 0) {
+                                    $displayStatusSla = 'JATUH TEMPO';
+                                    $statusColor = 'bg-orange-600';
                                 } elseif ($sisaSla <= 2) {
                                     $displayStatusSla = 'WARNING';
                                     $statusColor = 'bg-yellow-500';
@@ -496,6 +509,17 @@
                                     $statusColor = 'bg-green-600';
                                 }
                             }
+
+                            $contractStatus = method_exists($row, 'contractStatusLabel')
+                                ? $row->contractStatusLabel()
+                                : (empty($row->tgl_spk) ? 'BELUM AKTIF' : (empty($row->promised_date) ? 'BATAS BELUM DIATUR' : 'AKTIF'));
+                            $contractStatusClass = method_exists($row, 'contractStatusColorClass')
+                                ? $row->contractStatusColorClass()
+                                : 'bg-slate-100 text-slate-700 ring-slate-200 dark:bg-slate-700 dark:text-slate-200 dark:ring-slate-600';
+                            $contractExplanation = method_exists($row, 'contractExplanation')
+                                ? $row->contractExplanation()
+                                : 'Informasi masa pemenuhan belum tersedia.';
+                            $contractRemaining = method_exists($row, 'contractRemainingDays') ? $row->contractRemainingDays() : null;
                         @endphp
 
                         <tr id="row_{{ $row->id }}"
@@ -556,6 +580,24 @@
                                         <span class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold ring-1 {{ $slaOutcomeClass }}">
                                             {{ $slaOutcomeLabel }}
                                         </span>
+                                    @endif
+                                </div>
+                            </td>
+
+                            <td class="px-4 py-3 text-center" title="{{ $contractExplanation }}">
+                                <div class="inline-flex max-w-[170px] flex-col items-center gap-1">
+                                    <span class="inline-flex items-center rounded-full px-2 py-1 text-[9px] font-extrabold ring-1 {{ $contractStatusClass }}">
+                                        {{ $contractStatus }}
+                                    </span>
+                                    @if(!empty($row->promised_date))
+                                        <span class="text-[10px] font-semibold text-slate-500 dark:text-slate-300">
+                                            {{ \Carbon\Carbon::parse($row->promised_date)->translatedFormat('d M Y') }}
+                                            @if($contractRemaining !== null && !$row->goods_confirmed_at)
+                                                · {{ $contractRemaining >= 0 ? $contractRemaining . ' hari lagi' : 'lewat ' . abs($contractRemaining) . ' hari' }}
+                                            @endif
+                                        </span>
+                                    @else
+                                        <span class="text-[10px] text-slate-400">Tanggal belum diatur</span>
                                     @endif
                                 </div>
                             </td>
@@ -630,7 +672,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="9"
+                            <td colspan="10"
                                 class="text-center py-10 text-gray-500 dark:text-gray-400 bg-white dark:bg-gray-800">
                                 Data tidak ditemukan
                             </td>
@@ -772,7 +814,7 @@
                     'tgl_pemenang' => ['Tanggal Pemenang', 'date'],
                     'tgl_spk' => ['Tanggal SPK', 'date'],
                     'nilai_sp_spk' => ['Nilai SP/SPK', 'currency'],
-                    'promised_date' => ['Promised Date', 'date'],
+                    'promised_date' => ['Tanggal Pemenuhan / Berakhir Kontrak', 'date'],
                     'do_no' => ['DO No', 'text'],
                     'bpg_no' => ['BPG No', 'text'],
                     'nilai_bpg' => ['Nilai BPG', 'currency'],
@@ -1084,7 +1126,7 @@
 @endsection
 
 @push('styles')
-    <link rel="stylesheet" href="{{ asset('assets/ppbj/ppbj.css') }}?v=20260818a">
+    <link rel="stylesheet" href="{{ asset('assets/ppbj/ppbj.css') }}?v=20260818b">
 @endpush
 
 @push('scripts')
@@ -1095,8 +1137,9 @@
                     if (! method_exists($item, 'isSlaComplete')) {
                         $isCancelled = strtoupper((string) ($data['status'] ?? 'ACTIVE')) === 'CANCELLED';
                         $isSlaComplete = ! $isCancelled
-                            && (int) ($data['progres'] ?? 0) === 100
-                            && ! empty($data['no_invoice']);
+                            && ! empty($data['awarding_sp'])
+                            && ! empty($data['tgl_awarding_sp'])
+                            && ! empty($data['tgl_spk']);
                     }
 
                     $parseDate = function ($date) {
@@ -1117,17 +1160,14 @@
                         : (! empty($data['tgl_terima_pr'])
                             ? 'Tanggal terima PR'
                             : (! empty($data['tgl_ppbj']) ? 'Tanggal PPBJ / PR' : 'Tanggal awal belum tersedia'));
-                    $finishRaw = $data['tgl_invoice'] ?: ($data['tgl_bpb'] ?: ($data['tgl_bpg'] ?: ($data['updated_at'] ?? null)));
-                    $finishLabel = ! empty($data['tgl_invoice'])
-                        ? 'Tanggal invoice'
-                        : (! empty($data['tgl_bpb'])
-                            ? 'Tanggal BPB'
-                            : (! empty($data['tgl_bpg'])
-                                ? 'Tanggal BPG'
-                                : (! empty($data['updated_at']) ? 'Tanggal update terakhir' : 'Tanggal selesai belum tersedia')));
+                    $finishRaw = $data['tgl_spk'] ?? null;
+                    $finishLabel = ! empty($data['tgl_spk']) ? 'Tanggal SPK / kontrak' : 'Tanggal SPK / kontrak belum tersedia';
                     $startDate = $parseDate($startRaw);
                     $finishDate = $parseDate($finishRaw);
-                    $targetDays = (int) ($data['target_sla_hari'] ?? 0);
+                    $targetDays = method_exists($item, 'slaTargetDays')
+                        ? $item->slaTargetDays()
+                        : \App\Models\Ppbj::hitungTargetSla($data['total_sebelum_ppn'] ?? 0);
+                    $data['target_sla_hari'] = $targetDays;
                     $targetDate = ($startDate && $targetDays > 0) ? $startDate->copy()->addDays($targetDays) : null;
                     $runningDays = $startDate ? max(0, (int) $startDate->copy()->startOfDay()->diffInDays(now()->startOfDay())) : null;
                     $usedDays = ($startDate && $finishDate) ? max(0, (int) $startDate->diffInDays($finishDate)) : null;
@@ -1187,6 +1227,18 @@
                     $data['sla_explanation'] = method_exists($item, 'slaExplanation')
                         ? $item->slaExplanation()
                         : $slaExplanation;
+                    $data['contract_status_label'] = method_exists($item, 'contractStatusLabel') ? $item->contractStatusLabel() : 'BELUM AKTIF';
+                    $data['contract_remaining_days'] = method_exists($item, 'contractRemainingDays') ? $item->contractRemainingDays() : null;
+                    $data['contract_duration_days'] = method_exists($item, 'contractDurationDays') ? $item->contractDurationDays() : null;
+                    $data['contract_start_date_label'] = method_exists($item, 'contractStartDate') && $item->contractStartDate()
+                        ? $item->contractStartDate()->translatedFormat('d F Y')
+                        : null;
+                    $data['contract_end_date_label'] = method_exists($item, 'contractEndDate') && $item->contractEndDate()
+                        ? $item->contractEndDate()->translatedFormat('d F Y')
+                        : null;
+                    $data['contract_explanation'] = method_exists($item, 'contractExplanation')
+                        ? $item->contractExplanation()
+                        : 'Informasi masa pemenuhan belum tersedia.';
 
                     if (! empty($data['general_registered_at'])) {
                         try {
@@ -1212,6 +1264,6 @@
     <script>
         window.PPBJ_PAGE_CONFIG = @json($ppbjPageConfig);
     </script>
-    <script src="{{ asset('assets/ppbj/ppbj.js') }}?v=20260818a" defer></script>
+    <script src="{{ asset('assets/ppbj/ppbj.js') }}?v=20260818b" defer></script>
 
 @endpush

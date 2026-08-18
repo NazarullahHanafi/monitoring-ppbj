@@ -161,14 +161,22 @@ class Ppbj extends Model
         return ($this->status ?? 'ACTIVE') === 'CANCELLED';
     }
 
-    public static function hitungStatusSla($sisaTarget, $progres = 0, $noInvoice = null)
+    public static function hitungStatusSla($sisaTarget, bool $isComplete = false, int $targetSla = 0, bool $hasStartDate = true)
     {
-        if ((int) $progres === 100 && !empty($noInvoice)) {
+        if ($isComplete) {
             return 'LENGKAP';
         }
 
-        if ($sisaTarget <= 0) {
+        if ($targetSla <= 0 || ! $hasStartDate) {
+            return 'BELUM DIHITUNG';
+        }
+
+        if ($sisaTarget < 0) {
             return 'OVERDUE';
+        }
+
+        if ($sisaTarget === 0) {
+            return 'JATUH TEMPO';
         }
 
         if ($sisaTarget <= 2) {
@@ -184,14 +192,22 @@ class Ppbj extends Model
             return 'CANCELLED';
         }
 
-        if ((int) ($this->progres ?? 0) === 100 && !empty($this->no_invoice)) {
+        if ($this->isSlaComplete()) {
             return 'LENGKAP';
         }
 
         $remaining = $this->slaCurrentRemainingDays();
 
-        if ($remaining !== null && $remaining <= 0) {
+        if ($remaining === null) {
+            return 'BELUM DIHITUNG';
+        }
+
+        if ($remaining < 0) {
             return 'OVERDUE';
+        }
+
+        if ($remaining === 0) {
+            return 'JATUH TEMPO';
         }
 
         if ($remaining !== null && $remaining <= 2) {
@@ -204,8 +220,9 @@ class Ppbj extends Model
     public function isSlaComplete(): bool
     {
         return ! $this->is_cancelled
-            && (int) ($this->progres ?? 0) === 100
-            && ! empty($this->no_invoice);
+            && ! empty($this->awarding_sp)
+            && ! empty($this->tgl_awarding_sp)
+            && ! empty($this->tgl_spk);
     }
 
     public function slaStartDate(): ?Carbon
@@ -234,34 +251,12 @@ class Ppbj extends Model
 
     public function slaFinishDate(): ?Carbon
     {
-        $date = $this->tgl_invoice
-            ?: $this->tgl_bpb
-            ?: $this->tgl_bpg
-            ?: $this->updated_at
-            ?: null;
-
-        return $this->parseSlaDate($date);
+        return $this->parseSlaDate($this->tgl_spk);
     }
 
     public function slaFinishSourceLabel(): string
     {
-        if ($this->tgl_invoice) {
-            return 'Tanggal invoice';
-        }
-
-        if ($this->tgl_bpb) {
-            return 'Tanggal BPB';
-        }
-
-        if ($this->tgl_bpg) {
-            return 'Tanggal BPG';
-        }
-
-        if ($this->updated_at) {
-            return 'Tanggal update terakhir';
-        }
-
-        return 'Tanggal selesai belum tersedia';
+        return $this->tgl_spk ? 'Tanggal SPK / kontrak' : 'Tanggal SPK / kontrak belum tersedia';
     }
 
     public function slaUsedDays(): ?int
@@ -276,6 +271,11 @@ class Ppbj extends Model
         return max(0, (int) $start->diffInDays($finish));
     }
 
+    public function slaTargetDays(): int
+    {
+        return self::hitungTargetSla($this->total_sebelum_ppn ?? 0);
+    }
+
     public function slaFinalRemainingDays(): ?int
     {
         $usedDays = $this->slaUsedDays();
@@ -284,7 +284,7 @@ class Ppbj extends Model
             return null;
         }
 
-        return (int) ($this->target_sla_hari ?? 0) - $usedDays;
+        return $this->slaTargetDays() - $usedDays;
     }
 
     public function slaCurrentRemainingDays(): ?int
@@ -294,7 +294,7 @@ class Ppbj extends Model
         }
 
         $runningDays = $this->slaRunningDays();
-        $target = (int) ($this->target_sla_hari ?? 0);
+        $target = $this->slaTargetDays();
 
         if ($runningDays === null || $target <= 0) {
             return null;
@@ -312,7 +312,7 @@ class Ppbj extends Model
         if (! $this->isSlaComplete()) {
             $remaining = $this->slaCurrentRemainingDays();
 
-            return ($remaining ?? (int) ($this->sisa_target_sla ?? 0)) . ' hari';
+            return $remaining === null ? 'Belum dihitung' : $remaining . ' hari';
         }
 
         return 'Selesai';
@@ -332,7 +332,7 @@ class Ppbj extends Model
     public function slaTargetDate(): ?Carbon
     {
         $start = $this->slaStartDate();
-        $target = (int) ($this->target_sla_hari ?? 0);
+        $target = $this->slaTargetDays();
 
         if (! $start || $target <= 0) {
             return null;
@@ -392,13 +392,17 @@ class Ppbj extends Model
             return 'Data dibatalkan, SLA tidak lagi dihitung.';
         }
 
-        $target = (int) ($this->target_sla_hari ?? 0);
+        $target = $this->slaTargetDays();
         $start = $this->slaStartDate();
         $startLabel = $this->slaStartSourceLabel();
         $targetDate = $this->slaTargetDateLabel();
 
-        if (! $start || $target <= 0) {
-            return 'SLA belum bisa dijelaskan lengkap karena target SLA atau tanggal awal belum tersedia.';
+        if ($target <= 0) {
+            return 'SLA belum dihitung karena nilai PR masih kosong atau Rp0. Isi nilai PR agar target SLA otomatis ditentukan.';
+        }
+
+        if (! $start) {
+            return 'Target SLA sudah ditentukan, tetapi tanggal awal belum tersedia. Isi tanggal diserahkan ke Umum, tanggal terima PR, atau tanggal PR.';
         }
 
         if ($this->isSlaComplete()) {
@@ -423,7 +427,7 @@ class Ppbj extends Model
                 $result = 'selesai tepat sesuai target SLA';
             }
 
-            return "SLA dihitung dari {$startLabel} ({$startDate}) sampai {$finishLabel} ({$finishDate}). Target {$target} hari.{$targetText} Realisasi {$usedDays} hari, sehingga {$result}.";
+            return "SLA dihitung dari {$startLabel} ({$startDate}) sampai {$finishLabel} ({$finishDate}). Target {$target} hari berdasarkan nilai PR.{$targetText} Realisasi {$usedDays} hari, sehingga {$result}.";
         }
 
         $runningDays = $this->slaRunningDays();
@@ -440,6 +444,115 @@ class Ppbj extends Model
         }
 
         return "SLA masih berjalan dari {$startLabel} ({$startDate}) sampai hari ini. Target {$target} hari.{$targetText} Sudah berjalan {$runningDays} hari, sisa {$remaining} hari.";
+    }
+
+    public function contractStartDate(): ?Carbon
+    {
+        return $this->parseSlaDate($this->tgl_spk);
+    }
+
+    public function contractEndDate(): ?Carbon
+    {
+        return $this->parseSlaDate($this->promised_date);
+    }
+
+    public function contractDurationDays(): ?int
+    {
+        $start = $this->contractStartDate();
+        $end = $this->contractEndDate();
+
+        if (! $start || ! $end) {
+            return null;
+        }
+
+        return (int) $start->copy()->startOfDay()->diffInDays($end->copy()->startOfDay(), false);
+    }
+
+    public function contractRemainingDays(): ?int
+    {
+        $end = $this->contractEndDate();
+
+        return $end ? (int) now()->startOfDay()->diffInDays($end->copy()->startOfDay(), false) : null;
+    }
+
+    public function contractStatusLabel(): string
+    {
+        if ($this->goods_confirmed_at) {
+            return 'SUDAH TERPENUHI';
+        }
+
+        if (! $this->contractStartDate()) {
+            return 'BELUM AKTIF';
+        }
+
+        if (! $this->contractEndDate()) {
+            return 'BATAS BELUM DIATUR';
+        }
+
+        if (($this->contractDurationDays() ?? 0) < 0) {
+            return 'TANGGAL TIDAK VALID';
+        }
+
+        $remaining = $this->contractRemainingDays();
+
+        return match (true) {
+            $remaining === null => 'BATAS BELUM DIATUR',
+            $remaining < 0 => 'MELEWATI BATAS',
+            $remaining === 0 => 'BERAKHIR HARI INI',
+            $remaining <= 7 => 'SANGAT KRITIS',
+            $remaining <= 14 => 'KRITIS',
+            $remaining <= 30 => 'SEGERA BERAKHIR',
+            default => 'AKTIF',
+        };
+    }
+
+    public function contractStatusColorClass(): string
+    {
+        return match ($this->contractStatusLabel()) {
+            'SUDAH TERPENUHI' => 'bg-emerald-50 text-emerald-700 ring-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-200 dark:ring-emerald-500/30',
+            'AKTIF' => 'bg-blue-50 text-blue-700 ring-blue-200 dark:bg-blue-500/15 dark:text-blue-200 dark:ring-blue-500/30',
+            'SEGERA BERAKHIR' => 'bg-amber-50 text-amber-700 ring-amber-200 dark:bg-amber-500/15 dark:text-amber-200 dark:ring-amber-500/30',
+            'KRITIS', 'SANGAT KRITIS', 'BERAKHIR HARI INI' => 'bg-orange-50 text-orange-700 ring-orange-200 dark:bg-orange-500/15 dark:text-orange-200 dark:ring-orange-500/30',
+            'MELEWATI BATAS', 'TANGGAL TIDAK VALID' => 'bg-rose-50 text-rose-700 ring-rose-200 dark:bg-rose-500/15 dark:text-rose-200 dark:ring-rose-500/30',
+            default => 'bg-slate-100 text-slate-700 ring-slate-200 dark:bg-slate-700 dark:text-slate-200 dark:ring-slate-600',
+        };
+    }
+
+    public function contractExplanation(): string
+    {
+        $start = $this->contractStartDate();
+        $end = $this->contractEndDate();
+
+        if ($this->goods_confirmed_at) {
+            return 'Barang/pekerjaan telah dikonfirmasi diterima oleh Operasional. Pemantauan batas pemenuhan dinyatakan selesai.';
+        }
+
+        if (! $start) {
+            return 'Masa pemenuhan belum aktif karena tanggal SPK/kontrak belum diisi.';
+        }
+
+        if (! $end) {
+            return 'Kontrak sudah dibuat, tetapi tanggal pemenuhan/berakhir kontrak belum diatur.';
+        }
+
+        $duration = $this->contractDurationDays();
+        $remaining = $this->contractRemainingDays();
+        $startLabel = $start->translatedFormat('d F Y');
+        $endLabel = $end->translatedFormat('d F Y');
+
+        if ($duration !== null && $duration < 0) {
+            return "Tanggal pemenuhan ({$endLabel}) lebih awal dari tanggal SPK/kontrak ({$startLabel}). Periksa kembali kedua tanggal tersebut.";
+        }
+
+        if ($remaining !== null && $remaining < 0) {
+            return "Masa pemenuhan dimulai {$startLabel}, berakhir {$endLabel}, dan telah melewati batas " . abs($remaining) . ' hari.';
+        }
+
+        if ($remaining === 0) {
+            return "Masa pemenuhan dimulai {$startLabel} dan berakhir hari ini ({$endLabel}).";
+        }
+
+        return "Masa pemenuhan dimulai {$startLabel}, berakhir {$endLabel}, berdurasi {$duration} hari, dan tersisa {$remaining} hari.";
     }
 
     protected function parseSlaDate($date): ?Carbon
@@ -461,7 +574,7 @@ class Ppbj extends Model
         $nilaiSpSpk = $this->nilai_sp_spk ?? 0;
 
         $targetSla = self::hitungTargetSla($total);
-        $realisasiSla = self::hitungRealisasiSla($this->tgl_spph, $this->tgl_spk);
+        $realisasiSla = $this->isSlaComplete() ? (int) ($this->slaUsedDays() ?? 0) : 0;
         $sisaTarget = self::hitungSisaTarget(
             $targetSla,
             $this->tgl_diserahkan ?: $this->tgl_terima_pr ?: $this->tgl_ppbj
@@ -471,7 +584,7 @@ class Ppbj extends Model
         $progres = self::hitungProgresByTahapan($this);
         $persentaseRealisasi = self::hitungPersentaseRealisasi($nilaiSpSpk, $total);
 
-        $statusSla = self::hitungStatusSla($sisaTarget, $progres, $this->no_invoice);
+        $statusSla = self::hitungStatusSla($sisaTarget, $this->isSlaComplete(), $targetSla, (bool) $this->slaStartDate());
 
         $this->update([
             'target_sla_hari' => $targetSla,
@@ -497,10 +610,7 @@ class Ppbj extends Model
 
         $this->target_sla_hari = self::hitungTargetSla($total);
 
-        $this->realisasi_sla = self::hitungRealisasiSla(
-            $this->tgl_spph,
-            $this->tgl_spk
-        );
+        $this->realisasi_sla = $this->isSlaComplete() ? (int) ($this->slaUsedDays() ?? 0) : 0;
 
         $this->sisa_target_sla = self::hitungSisaTarget(
             $this->target_sla_hari,
@@ -526,8 +636,9 @@ class Ppbj extends Model
         // Status SLA — pakai parameter lengkap (sekali saja, tidak duplikat)
         $this->status_sla = self::hitungStatusSla(
             $this->sisa_target_sla,
-            $this->progres,
-            $this->no_invoice
+            $this->isSlaComplete(),
+            (int) $this->target_sla_hari,
+            (bool) $this->slaStartDate()
         );
     }
 
@@ -538,11 +649,11 @@ class Ppbj extends Model
      */
     public static function hitungTargetSla($total)
     {
-        if ($total > 20000000) {
+        if ($total > 50000000) {
             return 14;
         }
 
-        if ($total >= 1 && $total <= 20000000) {
+        if ($total >= 1 && $total <= 50000000) {
             return 10;
         }
 
@@ -570,7 +681,7 @@ class Ppbj extends Model
      */
     public static function hitungSisaTarget($targetSla, $tglDiserahkan)
     {
-        if (!$tglDiserahkan) {
+        if ((int) $targetSla <= 0 || !$tglDiserahkan) {
             return 0;
         }
 

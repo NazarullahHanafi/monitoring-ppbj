@@ -1347,6 +1347,12 @@
                     'sla_running_days',
                     'sla_target_date_label',
                     'sla_explanation',
+                    'contract_status_label',
+                    'contract_remaining_days',
+                    'contract_duration_days',
+                    'contract_start_date_label',
+                    'contract_end_date_label',
+                    'contract_explanation',
                     'goods_arrived_by_user_id',
                     'goods_confirmed_by_user_id',
                     'general_registered_by_user_id',
@@ -1372,7 +1378,7 @@
                     penyedia_eksternal: 'Penyedia Eksternal',
                     nilai_sp_spk: 'Nilai SP/SPK',
                     nilai_bpg: 'Nilai BPG',
-                    promised_date: 'Target Barang / Pekerjaan',
+                    promised_date: 'Tanggal Pemenuhan / Berakhir Kontrak',
                     goods_arrived_at: 'Barang / Pekerjaan Datang',
                     goods_arrived_by_user_id: 'ID Penanda Barang Datang',
                     goods_arrived_by_name: 'Ditandai Datang Oleh',
@@ -1427,6 +1433,56 @@
 
                         <p class="mt-4 rounded-xl border border-blue-100 bg-white/75 p-3 text-sm font-semibold leading-relaxed text-slate-700 dark:border-blue-500/20 dark:bg-gray-950/30 dark:text-slate-200">
                             ${escapeHtml(d.sla_explanation || 'Penjelasan SLA belum tersedia.')}
+                        </p>
+                    </div>
+                `;
+
+                const contractStatus = d.contract_status_label || 'BELUM AKTIF';
+                const contractRemaining = d.contract_remaining_days;
+                const contractTone = ['MELEWATI BATAS', 'TANGGAL TIDAK VALID'].includes(contractStatus)
+                    ? 'bg-rose-50 text-rose-700 ring-rose-200 dark:bg-rose-500/15 dark:text-rose-200 dark:ring-rose-500/30'
+                    : (['SANGAT KRITIS', 'KRITIS', 'BERAKHIR HARI INI', 'SEGERA BERAKHIR'].includes(contractStatus)
+                        ? 'bg-amber-50 text-amber-700 ring-amber-200 dark:bg-amber-500/15 dark:text-amber-200 dark:ring-amber-500/30'
+                        : (contractStatus === 'SUDAH TERPENUHI'
+                            ? 'bg-emerald-50 text-emerald-700 ring-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-200 dark:ring-emerald-500/30'
+                            : 'bg-blue-50 text-blue-700 ring-blue-200 dark:bg-blue-500/15 dark:text-blue-200 dark:ring-blue-500/30'));
+                const remainingText = contractRemaining === null || contractRemaining === undefined
+                    ? '-'
+                    : (Number(contractRemaining) >= 0
+                        ? `${Number(contractRemaining)} hari lagi`
+                        : `Lewat ${Math.abs(Number(contractRemaining))} hari`);
+
+                html += `
+                    <div class="md:col-span-2 rounded-2xl border border-violet-200 bg-gradient-to-br from-violet-50 via-white to-cyan-50 p-4 shadow-sm dark:border-violet-500/30 dark:from-violet-950/30 dark:via-gray-800 dark:to-cyan-950/30">
+                        <div class="flex flex-wrap items-start justify-between gap-3">
+                            <div>
+                                <div class="text-[11px] font-black uppercase tracking-[0.18em] text-violet-600 dark:text-violet-300">Masa Pemenuhan / Kontrak</div>
+                                <div class="mt-1 text-base font-black text-gray-900 dark:text-white">Pemantauan tanggal SPK sampai batas pemenuhan</div>
+                            </div>
+                            <span class="inline-flex items-center rounded-full px-3 py-1 text-xs font-black ring-1 ${contractTone}">
+                                ${escapeHtml(contractStatus)}
+                            </span>
+                        </div>
+                        <div class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-4">
+                            <div class="rounded-xl border border-slate-200 bg-white/80 p-3 dark:border-gray-700 dark:bg-gray-900/50">
+                                <div class="text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Mulai kontrak</div>
+                                <div class="mt-1 text-sm font-black text-slate-900 dark:text-white">${escapeHtml(d.contract_start_date_label || '-')}</div>
+                            </div>
+                            <div class="rounded-xl border border-slate-200 bg-white/80 p-3 dark:border-gray-700 dark:bg-gray-900/50">
+                                <div class="text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Batas pemenuhan</div>
+                                <div class="mt-1 text-sm font-black text-slate-900 dark:text-white">${escapeHtml(d.contract_end_date_label || '-')}</div>
+                            </div>
+                            <div class="rounded-xl border border-slate-200 bg-white/80 p-3 dark:border-gray-700 dark:bg-gray-900/50">
+                                <div class="text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Durasi</div>
+                                <div class="mt-1 text-sm font-black text-slate-900 dark:text-white">${escapeHtml(d.contract_duration_days === null || d.contract_duration_days === undefined ? '-' : `${d.contract_duration_days} hari`)}</div>
+                            </div>
+                            <div class="rounded-xl border border-slate-200 bg-white/80 p-3 dark:border-gray-700 dark:bg-gray-900/50">
+                                <div class="text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Sisa waktu</div>
+                                <div class="mt-1 text-sm font-black text-slate-900 dark:text-white">${escapeHtml(remainingText)}</div>
+                            </div>
+                        </div>
+                        <p class="mt-4 rounded-xl border border-violet-100 bg-white/75 p-3 text-sm font-semibold leading-relaxed text-slate-700 dark:border-violet-500/20 dark:bg-gray-950/30 dark:text-slate-200">
+                            ${escapeHtml(d.contract_explanation || 'Informasi masa pemenuhan belum tersedia.')}
                         </p>
                     </div>
                 `;

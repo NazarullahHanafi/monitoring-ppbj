@@ -229,7 +229,12 @@ class PrReceiptApprovalController extends Controller
             'realisasi_sla' => 0,
             'persentase_realisasi' => 0,
             'progres' => 0,
-            'status_sla' => Ppbj::hitungStatusSla($sisaTargetSla, 0, null),
+            'status_sla' => Ppbj::hitungStatusSla(
+                $sisaTargetSla,
+                false,
+                $targetSla,
+                true
+            ),
             'status' => 'ACTIVE',
             'created_at' => now(),
             'updated_at' => now(),
