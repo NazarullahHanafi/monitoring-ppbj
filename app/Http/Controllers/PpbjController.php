@@ -752,11 +752,21 @@ class PpbjController extends Controller
     {
         $prefix = 'REG-UMUM/' . $year . '/';
 
-        $lastNumber = DB::table('ppbj')
+        $registrationQuery = DB::table('ppbj')
             ->where('general_registration_number', 'like', $prefix . '%')
-            ->lockForUpdate()
-            ->orderByRaw("CAST(SUBSTRING_INDEX(general_registration_number, '/', -1) AS UNSIGNED) DESC")
-            ->value('general_registration_number');
+            ->lockForUpdate();
+
+        // Produksi memakai MySQL/MariaDB: urutkan bagian sequence secara numerik
+        // supaya tetap benar ketika nomor melewati 999. SQLite dipakai pada test.
+        if (DB::connection()->getDriverName() === 'mysql') {
+            $registrationQuery->orderByRaw(
+                "CAST(SUBSTRING_INDEX(general_registration_number, '/', -1) AS UNSIGNED) DESC"
+            );
+        } else {
+            $registrationQuery->orderByDesc('general_registration_number');
+        }
+
+        $lastNumber = $registrationQuery->value('general_registration_number');
 
         $next = 1;
 
@@ -1639,83 +1649,152 @@ class PpbjController extends Controller
             'data.*.ppbj_no' => ['required', 'string'],
         ]);
 
-        $imported = 0;
         $failed = 0;
         $errors = [];
+        $preparedItems = [];
+        $seenPpbjNumbers = [];
 
         foreach ($request->data as $item) {
+            $rowNumber = $item['row_number'] ?? '-';
+
+            if (isset($item['status']) && $item['status'] === 'error') {
+                $failed++;
+                continue;
+            }
+
+            [$isValid, $validatedItem, $validationErrors] = $this->validatePpbjImportItem($item);
+
+            if (! $isValid) {
+                $failed++;
+                $errors[] = "Baris {$rowNumber}: " . implode(', ', $validationErrors);
+                continue;
+            }
+
+            $normalizedNumber = mb_strtolower(trim((string) $validatedItem['ppbj_no']));
+            if (isset($seenPpbjNumbers[$normalizedNumber])) {
+                $failed++;
+                $errors[] = "Baris {$rowNumber}: PPBJ No {$validatedItem['ppbj_no']} duplikat dalam data import";
+                continue;
+            }
+
+            $seenPpbjNumbers[$normalizedNumber] = true;
+            $preparedItems[] = [
+                'row_number' => $rowNumber,
+                'data' => $validatedItem,
+            ];
+        }
+
+        // Satu query untuk seluruh nomor jauh lebih ringan daripada exists() per baris.
+        $existingNumbers = empty($preparedItems)
+            ? collect()
+            : Ppbj::query()
+                ->whereIn('ppbj_no', array_column(array_column($preparedItems, 'data'), 'ppbj_no'))
+                ->pluck('ppbj_no')
+                ->mapWithKeys(fn ($number) => [mb_strtolower(trim((string) $number)) => true]);
+
+        $importableItems = [];
+        foreach ($preparedItems as $preparedItem) {
+            $number = (string) $preparedItem['data']['ppbj_no'];
+            if ($existingNumbers->has(mb_strtolower(trim($number)))) {
+                $failed++;
+                $errors[] = "Baris {$preparedItem['row_number']}: PPBJ No {$number} sudah terdaftar";
+                continue;
+            }
+
+            $importableItems[] = $preparedItem;
+        }
+
+        $imported = 0;
+        if ($importableItems !== []) {
             try {
-                $rowNumber = $item['row_number'] ?? '-';
+                $imported = DB::transaction(function () use ($request, $importableItems) {
+                    $registeredAt = now();
+                    $registrationColumns = collect([
+                        'general_registration_number',
+                        'general_registered_at',
+                        'general_registered_by_user_id',
+                    ])->filter(fn ($column) => Schema::hasColumn('ppbj', $column))->values()->all();
+                    $registrationEnabled = in_array('general_registration_number', $registrationColumns, true);
+                    $nextRegistrationSequence = null;
 
-                if (isset($item['status']) && $item['status'] === 'error') {
-                    $failed++;
-                    continue;
-                }
+                    if ($registrationEnabled) {
+                        $firstRegistration = $this->nextGeneralRegistrationNumber((int) $registeredAt->year);
+                        preg_match('/(\d+)$/', $firstRegistration, $matches);
+                        $nextRegistrationSequence = (int) ($matches[1] ?? 1);
+                    }
 
-                [$isValid, $validatedItem, $validationErrors] = $this->validatePpbjImportItem($item);
+                    foreach ($importableItems as $preparedItem) {
+                        $importData = $preparedItem['data'];
+                        // Kolom ini memiliki default 0 di database. Jangan mengirim NULL
+                        // karena sebagian driver/database menolaknya meski default tersedia.
+                        if (($importData['total_sebelum_ppn'] ?? null) === null) {
+                            unset($importData['total_sebelum_ppn']);
+                        }
 
-                if (! $isValid) {
-                    $failed++;
-                    $errors[] = "Baris {$rowNumber}: " . implode(', ', $validationErrors);
-                    continue;
-                }
+                        $registrationPayload = [];
+                        if ($registrationEnabled && $nextRegistrationSequence !== null) {
+                            $registrationPayload = $this->generalRegistrationPayloadForSequence(
+                                $request,
+                                (int) $registeredAt->year,
+                                $nextRegistrationSequence,
+                                $registeredAt,
+                                $registrationColumns
+                            );
+                            $nextRegistrationSequence++;
+                        }
 
-                if (Ppbj::where('ppbj_no', $validatedItem['ppbj_no'])->exists()) {
-                    $failed++;
-                    $errors[] = "Baris {$rowNumber}: PPBJ No {$validatedItem['ppbj_no']} sudah terdaftar";
-                    continue;
-                }
+                        Ppbj::create(array_merge(
+                            $importData,
+                            ['created_by_user_id' => $request->user()?->id ?? auth()->id()],
+                            $registrationPayload
+                        ));
+                    }
 
-                Ppbj::create([
-                    'ppbj_no' => $validatedItem['ppbj_no'],
-                    'tgl_ppbj' => $validatedItem['tgl_ppbj'],
-                    'tgl_terima_pr' => $validatedItem['tgl_terima_pr'],
-                    'uraian' => $validatedItem['uraian'],
-                    'note' => $validatedItem['note'],
-                    'portofolio' => $validatedItem['portofolio'],
-                    'buyer' => $validatedItem['buyer'],
-                    'total_sebelum_ppn' => $validatedItem['total_sebelum_ppn'],
-                    'metode_pengadaan' => $validatedItem['metode_pengadaan'],
-                    'spph_rfq_1' => $validatedItem['spph_rfq_1'],
-                    'rfq_2' => $validatedItem['rfq_2'],
-                    'rfq_3' => $validatedItem['rfq_3'],
-                    'tgl_spph' => $validatedItem['tgl_spph'],
-                    'closed_date' => $validatedItem['closed_date'],
-                    'sph' => $validatedItem['sph'],
-                    'tgl_sph' => $validatedItem['tgl_sph'],
-                    'awarding_sp' => $validatedItem['awarding_sp'],
-                    'tgl_awarding_sp' => $validatedItem['tgl_awarding_sp'],
-                    'penyedia_eksternal' => $validatedItem['penyedia_eksternal'],
-                    'tgl_spk' => $validatedItem['tgl_spk'],
-                    'nilai_sp_spk' => $validatedItem['nilai_sp_spk'],
-                    'promised_date' => $validatedItem['promised_date'],
-                    'do_no' => $validatedItem['do_no'],
-                    'bpg_no' => $validatedItem['bpg_no'],
-                    'nilai_bpg' => $validatedItem['nilai_bpg'],
-                    'tgl_bpg' => $validatedItem['tgl_bpg'],
-                    'receiving_transaction' => $validatedItem['receiving_transaction'],
-                    'bpb_no' => $validatedItem['bpb_no'],
-                    'tgl_bpb' => $validatedItem['tgl_bpb'],
-                    'no_invoice' => $validatedItem['no_invoice'],
-                    'tgl_invoice' => $validatedItem['tgl_invoice'],
-                    'keterangan' => $validatedItem['keterangan'],
-                    'tgl_diserahkan' => $validatedItem['tgl_diserahkan'],
-                    'created_by_user_id' => auth()->id(),
+                    return count($importableItems);
+                }, 3);
+            } catch (QueryException $e) {
+                Log::warning('Import PPBJ gagal karena data bentrok', [
+                    'error' => $e->getMessage(),
+                    'rows' => count($importableItems),
                 ]);
 
-                $imported++;
+                $failed += count($importableItems);
+                $errors[] = 'Import dibatalkan karena ada nomor PPBJ atau Registrasi Umum yang dipakai bersamaan. Silakan refresh lalu ulangi import.';
+            } catch (\Throwable $e) {
+                Log::error('Import PPBJ gagal', [
+                    'error' => $e->getMessage(),
+                    'rows' => count($importableItems),
+                ]);
 
-            } catch (\Exception $e) {
-                $failed++;
-                $rowNumber = $item['row_number'] ?? '-';
-                $errors[] = "Baris {$rowNumber}: " . $e->getMessage();
-                Log::error("Import error on row {$rowNumber}: " . $e->getMessage());
+                $failed += count($importableItems);
+                $errors[] = 'Import dibatalkan agar data tetap konsisten. Silakan periksa file lalu coba kembali.';
             }
         }
 
         DashboardController::clearCache();
 
         return response()->json(['success' => true, 'imported' => $imported, 'failed' => $failed, 'errors' => $errors]);
+    }
+
+    private function generalRegistrationPayloadForSequence(
+        Request $request,
+        int $year,
+        int $sequence,
+        Carbon $registeredAt,
+        array $availableColumns
+    ): array {
+        $payload = [
+            'general_registration_number' => $this->formatGeneralRegistrationNumber($year, $sequence),
+            'general_registered_at' => $registeredAt,
+            'general_registered_by_user_id' => $request->user()?->id ?? auth()->id(),
+        ];
+
+        return array_intersect_key($payload, array_flip($availableColumns));
+    }
+
+    private function formatGeneralRegistrationNumber(int $year, int $sequence): string
+    {
+        return 'REG-UMUM/' . $year . '/' . str_pad((string) $sequence, 3, '0', STR_PAD_LEFT);
     }
 
     private function validatePpbjImportItem(array $item): array
