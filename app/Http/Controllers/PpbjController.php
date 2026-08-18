@@ -1449,19 +1449,10 @@ class PpbjController extends Controller
                 $rows = $worksheet->toArray(null, true, true, true);
                 // Beberapa file memiliki judul/preamble sebelum header. Cari baris
                 // yang benar-benar memuat kolom nomor PPBJ/PR, bukan sekadar baris pertama.
-                $headerRowNumber = collect(array_keys($rows))->first(
-                    fn ($rowNumber) => array_key_exists(
-                        'ppbj_no',
-                        $this->resolveImportColumnMap(array_values($rows[$rowNumber] ?? []))
-                    )
-                );
+                $headerRowNumber = $this->findImportHeaderRow($rows);
 
                 if ($headerRowNumber === null) {
-                    $headerRowNumber = collect(array_keys($rows))->first(function ($rowNumber) use ($rows) {
-                        return collect($rows[$rowNumber] ?? [])->contains(
-                            fn ($value) => $this->normalizeImportHeader($value) !== ''
-                        );
-                    });
+                    $headerRowNumber = $this->findFirstImportDataRow($rows);
                 }
 
                 if ($headerRowNumber === null) {
@@ -2022,6 +2013,38 @@ class PpbjController extends Controller
         return $columnMap;
     }
 
+    /**
+     * @param  array<int|string, array<mixed>>  $rows
+     * @return int|string|null
+     */
+    private function findImportHeaderRow(array $rows): int|string|null
+    {
+        foreach ($rows as $rowNumber => $row) {
+            if (array_key_exists('ppbj_no', $this->resolveImportColumnMap(array_values($row)))) {
+                return $rowNumber;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  array<int|string, array<mixed>>  $rows
+     * @return int|string|null
+     */
+    private function findFirstImportDataRow(array $rows): int|string|null
+    {
+        foreach ($rows as $rowNumber => $row) {
+            foreach ($row as $value) {
+                if ($this->normalizeImportHeader($value) !== '') {
+                    return $rowNumber;
+                }
+            }
+        }
+
+        return null;
+    }
+
     private function readDelimitedImportFile(string $path): array
     {
         $sample = (string) file_get_contents($path, false, null, 0, 8192);
@@ -2053,9 +2076,7 @@ class PpbjController extends Controller
         }
         fclose($handle);
 
-        $headerRowNumber = collect(array_keys($rows))->first(
-            fn ($rowNumber) => array_key_exists('ppbj_no', $this->resolveImportColumnMap($rows[$rowNumber] ?? []))
-        );
+        $headerRowNumber = $this->findImportHeaderRow($rows);
         if ($headerRowNumber === null) {
             $headerRowNumber = array_key_first($rows);
         }
