@@ -23,12 +23,26 @@ class PollingPerformanceTest extends TestCase
         $torpr = file_get_contents(resource_path('views/torpr/index.blade.php'));
         $appCss = file_get_contents(resource_path('css/app.css'));
 
-        $this->assertSame(1, substr_count($layout, 'sweetalert2@11'));
+        $this->assertSame(1, substr_count($layout, 'sweetalert2.all.min.js'));
         $this->assertSame(1, substr_count($layout, 'select2.min.js'));
+        $this->assertStringContainsString('jquery-3.7.1.min.js', $layout);
+        $this->assertStringNotContainsString('https://code.jquery.com', $layout);
+        $this->assertStringNotContainsString('https://cdn.jsdelivr.net/npm/sweetalert2', $layout);
+        $this->assertStringNotContainsString('https://cdn.jsdelivr.net/npm/select2', $layout);
         $this->assertStringNotContainsString('xlsx.full.min.js', $layout);
         $this->assertStringNotContainsString('sweetalert2@11', $torpr);
         $this->assertStringNotContainsString('select2.min.js', $torpr);
         $this->assertStringContainsString('Layout application styles (browser-cacheable)', $appCss);
+
+        foreach ([
+            'jquery-3.7.1.min.js',
+            'sweetalert2.all.min.js',
+            'sweetalert2.min.css',
+            'select2.min.js',
+            'select2.min.css',
+        ] as $asset) {
+            $this->assertFileExists(public_path('assets/vendor/ui/'.$asset));
+        }
     }
 
     public function test_sp_polling_is_limited_to_prevent_large_payloads(): void

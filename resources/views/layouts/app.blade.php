@@ -8,8 +8,10 @@
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>@yield('title', 'Monitoring PPBJ')</title>
     @vite(['resources/css/app.css', 'resources/js/app.js'])
-    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    {{-- UI vendor assets are served locally so rendering is not blocked by CDN/DNS latency. --}}
+    <script src="{{ asset('assets/vendor/ui/jquery-3.7.1.min.js') }}"></script>
+    <link rel="stylesheet" href="{{ asset('assets/vendor/ui/sweetalert2.min.css') }}">
+    <script src="{{ asset('assets/vendor/ui/sweetalert2.all.min.js') }}"></script>
     <script>
         (function () {
             function installSweetAlertDurationGuard() {
@@ -56,7 +58,7 @@
         })();
     </script>
     <link rel="icon" href="{{ asset('images/logo4.png') }}" type="image/x-icon">
-    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <link href="{{ asset('assets/vendor/ui/select2.min.css') }}" rel="stylesheet">
     <script>
         (function () {
             var root = document.documentElement;
@@ -96,7 +98,7 @@
             applyTheme(useDark ? 'dark' : 'light');
         })();
     </script>
-    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+    <script src="{{ asset('assets/vendor/ui/select2.min.js') }}"></script>
     @stack('styles')
 
 </head>
@@ -527,7 +529,7 @@
     <script src="{{ asset('assets/app/app-shell.js') }}?v={{ filemtime(public_path('assets/app/app-shell.js')) }}"></script>
     <script>
         @if(auth()->user()?->department === 'umum')
-            (function () { var url = '{{ route('approval.pr.pendingCount') }}', b1 = document.getElementById('badgePendingPr'), b2 = document.getElementById('badgePendingPrMobile'), t = null; function refresh() { fetch(url, { headers: { 'Accept': 'application/json' } }).then(function (r) { if (!r.ok) throw 0; return r.json() }).then(function (d) { var c = Number(d.count || 0);[b1, b2].forEach(function (b) { if (b) { b.textContent = c; if (c > 0) b.classList.remove('hidden'); else b.classList.add('hidden') } }) }).catch(function () { }) } document.addEventListener('visibilitychange', function () { if (document.hidden) { clearInterval(t); t = null } else { refresh(); t = setInterval(refresh, 60000) } }); if (!document.hidden) { refresh(); t = setInterval(refresh, 60000) } })();
+            (function () { var url = '{{ route('approval.pr.pendingCount') }}', b1 = document.getElementById('badgePendingPr'), b2 = document.getElementById('badgePendingPrMobile'), t = null; function refresh() { fetch(url, { headers: { 'Accept': 'application/json' } }).then(function (r) { if (!r.ok) throw 0; return r.json() }).then(function (d) { var c = Number(d.count || 0);[b1, b2].forEach(function (b) { if (b) { b.textContent = c; if (c > 0) b.classList.remove('hidden'); else b.classList.add('hidden') } }) }).catch(function () { }) } function schedule() { if (!t) t = setInterval(refresh, 60000) } document.addEventListener('visibilitychange', function () { if (document.hidden) { clearInterval(t); t = null } else { refresh(); schedule() } }); if (!document.hidden) schedule() })();
         @endif
 
         @if(auth()->user()?->isReadOnly())

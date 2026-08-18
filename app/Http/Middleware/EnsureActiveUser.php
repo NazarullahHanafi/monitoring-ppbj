@@ -5,7 +5,6 @@ namespace App\Http\Middleware;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Schema;
 use Symfony\Component\HttpFoundation\Response;
 
 class EnsureActiveUser
@@ -14,7 +13,9 @@ class EnsureActiveUser
     {
         $user = $request->user();
 
-        if (! $user || ! Schema::hasTable('users') || ! Schema::hasColumn('users', 'is_active')) {
+        // Struktur tabel users sudah dijamin oleh migration. Pengecekan Schema
+        // di sini sebelumnya menjalankan query metadata pada setiap request.
+        if (! $user) {
             return $next($request);
         }
 

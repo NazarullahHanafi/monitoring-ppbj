@@ -8,7 +8,6 @@ use App\Models\PrReceiptApproval;
 use App\Models\User;
 use App\Policies\UserPolicy;
 use Illuminate\Support\ServiceProvider;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\View;
 use Illuminate\Auth\Events\Logout;
 use App\Models\Satuan;
@@ -53,7 +52,7 @@ class AppServiceProvider extends ServiceProvider
                     fn() => PrReceiptApproval::where('status', 'PENDING')->count()
                 );
 
-                if ($user->role === 'superadmin' && Schema::hasTable('contact_messages')) {
+                if ($user->role === 'superadmin') {
                     $unreadContactMessageCount = Cache::remember(
                         'contact_messages_unread_count',
                         now()->addSeconds(30),
