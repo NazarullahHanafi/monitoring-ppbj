@@ -1495,12 +1495,14 @@ class PpbjController extends Controller
             }
 
             $fieldLabels = $this->importFieldLabels();
-            $missingOptional = collect(array_keys($fieldLabels))
-                ->reject(fn ($field) => $field === 'ppbj_no' || array_key_exists($field, $columnMap))
-                ->map(fn ($field) => $fieldLabels[$field])
-                ->values();
-            if ($missingOptional->isNotEmpty()) {
-                $warnings[] = $missingOptional->count().' kolom opsional tidak ada dan akan dikosongkan.';
+            $missingOptional = [];
+            foreach ($fieldLabels as $field => $label) {
+                if ($field !== 'ppbj_no' && ! array_key_exists($field, $columnMap)) {
+                    $missingOptional[] = $label;
+                }
+            }
+            if ($missingOptional !== []) {
+                $warnings[] = count($missingOptional).' kolom opsional tidak ada dan akan dikosongkan.';
             }
 
             if (count($rows) > 2000) {
