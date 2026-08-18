@@ -1299,6 +1299,8 @@ class PpbjController extends Controller
         ];
         $sheet->getStyle('A1:AG1')->applyFromArray($headerStyle);
         $sheet->getRowDimension(1)->setRowHeight(25);
+        $sheet->freezePane('A2');
+        $sheet->setAutoFilter('A1:AG1');
 
         $exampleData = [
             'PPBJ001/2026',
@@ -1389,9 +1391,9 @@ class PpbjController extends Controller
             ['   - PPBJ No: WAJIB diisi dan harus UNIK (tidak boleh duplikat)'],
             [''],
             ['2. FORMAT DATA:'],
-            ['   - Format Tanggal: YYYY-MM-DD (contoh: 2026-01-15)'],
-            ['   - Format Angka: Tanpa titik/koma (contoh: 50000000)'],
-            ['   - Jangan mengubah nama kolom/header!'],
+            ['   - Tanggal: YYYY-MM-DD atau DD/MM/YYYY (contoh: 2026-01-15 atau 15/01/2026)'],
+            ['   - Angka: 50000000, 50.000.000, atau Rp50.000.000'],
+            ['   - Urutan kolom boleh diubah. Kolom tambahan yang tidak dikenal akan diabaikan'],
             [''],
             ['3. CARA MENGGUNAKAN:'],
             ['   a. Hapus baris contoh (baris 2) sebelum mengisi data Anda'],
@@ -1401,8 +1403,11 @@ class PpbjController extends Controller
             [''],
             ['4. CATATAN PENTING:'],
             ['   - Kolom yang kosong boleh dikosongkan (tidak wajib semua diisi)'],
+            ['   - Hanya kolom PPBJ No/Nomor PR yang wajib tersedia'],
             ['   - Kolom otomatis seperti SLA, Progress akan dihitung sistem'],
             ['   - Maksimal ukuran file: 10MB'],
+            ['   - Maksimal 2.000 baris per import'],
+            ['   - Baris bermasalah akan dilewati; baris valid tetap dapat diimport'],
             [''],
             ['Jika masih ada masalah, hubungi administrator sistem.'],
         ];
@@ -1429,8 +1434,6 @@ class PpbjController extends Controller
     // =====================
     public function previewImport(Request $request)
     {
-        Log::info('Preview import started');
-
         $request->validate([
             'file' => ['required', 'file', 'mimes:xlsx,xls,csv,txt', 'max:10240'],
         ]);
@@ -1438,204 +1441,189 @@ class PpbjController extends Controller
         try {
             $file = $request->file('file');
             $extension = strtolower($file->getClientOriginalExtension());
-            $data = [];
             $warnings = [];
 
             if (in_array($extension, ['xlsx', 'xls'])) {
                 $spreadsheet = \PhpOffice\PhpSpreadsheet\IOFactory::load($file->getRealPath());
                 $worksheet = $spreadsheet->getActiveSheet();
                 $rows = $worksheet->toArray(null, true, true, true);
-                $header = array_map('trim', array_values($rows[1]));
-                unset($rows[1]);
+                // Beberapa file memiliki judul/preamble sebelum header. Cari baris
+                // yang benar-benar memuat kolom nomor PPBJ/PR, bukan sekadar baris pertama.
+                $headerRowNumber = collect(array_keys($rows))->first(
+                    fn ($rowNumber) => array_key_exists(
+                        'ppbj_no',
+                        $this->resolveImportColumnMap(array_values($rows[$rowNumber] ?? []))
+                    )
+                );
+
+                if ($headerRowNumber === null) {
+                    $headerRowNumber = collect(array_keys($rows))->first(function ($rowNumber) use ($rows) {
+                        return collect($rows[$rowNumber] ?? [])->contains(
+                            fn ($value) => $this->normalizeImportHeader($value) !== ''
+                        );
+                    });
+                }
+
+                if ($headerRowNumber === null) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'File kosong. Isi header dan minimal satu baris data.',
+                    ], 422);
+                }
+
+                $header = array_values($rows[$headerRowNumber]);
+                $rows = collect($rows)
+                    ->filter(fn ($_row, $rowNumber) => (int) $rowNumber > (int) $headerRowNumber)
+                    ->map(fn ($row) => array_values($row))
+                    ->all();
             } else {
-                $handle = fopen($file->getRealPath(), 'r');
-                $bom = fread($handle, 3);
-                if ($bom !== chr(0xEF) . chr(0xBB) . chr(0xBF))
-                    rewind($handle);
-                $header = array_map('trim', fgetcsv($handle));
-                $rows = [];
-                $rowNum = 1;
-                while (($line = fgetcsv($handle)) !== false) {
-                    $rows[++$rowNum] = $line;
-                }
-                fclose($handle);
+                [$header, $rows] = $this->readDelimitedImportFile($file->getRealPath());
             }
 
-            $expectedHeaders = [
-                'PPBJ No',
-                'Tanggal PPBJ',
-                'Tanggal Terima PR',
-                'Uraian',
-                'Note',
-                'Portofolio',
-                'Buyer',
-                'Total Sebelum PPN',
-                'Metode Pengadaan',
-                'SPPH/RFQ 1',
-                'RFQ 2',
-                'RFQ 3',
-                'Tanggal SPPH',
-                'Closed Date',
-                'SPH',
-                'Tanggal SPH',
-                'Awarding SP',
-                'Tanggal Awarding',
-                'Penyedia Eksternal',
-                'Tanggal SPK',
-                'Nilai SP/SPK',
-                'Promised Date',
-                'DO No',
-                'BPG No',
-                'Nilai BPG',
-                'Tanggal BPG',
-                'Receiving Transaction',
-                'BPB No',
-                'Tanggal BPB',
-                'No Invoice',
-                'Tanggal Invoice',
-                'Keterangan',
-                'Tanggal Diserahkan',
-            ];
-
-            $headerMismatch = count($header) !== count($expectedHeaders);
-            if (!$headerMismatch) {
-                foreach ($header as $index => $col) {
-                    if (strtolower(trim($col)) !== strtolower($expectedHeaders[$index])) {
-                        $headerMismatch = true;
-                        break;
-                    }
-                }
-            }
-
-            if ($headerMismatch) {
+            $columnMap = $this->resolveImportColumnMap($header);
+            if (! array_key_exists('ppbj_no', $columnMap)) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Format template tidak sesuai. Silakan download template yang benar.',
+                    'message' => 'Kolom nomor PPBJ/PR tidak ditemukan.',
+                    'details' => 'Gunakan header "PPBJ No", "Nomor PPBJ", atau "Nomor PR". Urutan kolom bebas dan kolom tambahan akan diabaikan.',
                 ], 422);
             }
 
-            $ppbjNosInFile = [];
+            $recognizedHeaders = count($columnMap);
+            $recognizedIndexes = array_values($columnMap);
+            $unknownHeaders = collect($header)
+                ->map(fn ($value, $index) => ['index' => $index, 'value' => trim((string) $value)])
+                ->filter(fn ($headerItem) => $headerItem['value'] !== '')
+                ->reject(fn ($headerItem) => in_array($headerItem['index'], $recognizedIndexes, true))
+                ->pluck('value')
+                ->values()
+                ->all();
+
+            if ($unknownHeaders !== []) {
+                $warnings[] = 'Kolom tambahan diabaikan: '.implode(', ', array_slice($unknownHeaders, 0, 8));
+            }
+
+            $fieldLabels = $this->importFieldLabels();
+            $missingOptional = collect(array_keys($fieldLabels))
+                ->reject(fn ($field) => $field === 'ppbj_no' || array_key_exists($field, $columnMap))
+                ->map(fn ($field) => $fieldLabels[$field])
+                ->values();
+            if ($missingOptional->isNotEmpty()) {
+                $warnings[] = $missingOptional->count().' kolom opsional tidak ada dan akan dikosongkan.';
+            }
+
+            if (count($rows) > 2000) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'File berisi lebih dari 2.000 baris.',
+                    'details' => 'Pisahkan file menjadi beberapa bagian agar import stabil dan mudah diperiksa.',
+                ], 422);
+            }
+
+            $data = [];
+            $seenNumbers = [];
 
             foreach ($rows as $rowIndex => $line) {
-                if ($rowIndex == 1)
-                    continue;
-                if (!isset($line[0]))
-                    $line = array_values($line);
-                $line = array_map(fn($v) => is_string($v) ? trim($v) : $v, $line);
-                if (empty(array_filter($line, fn($v) => !empty($v))))
-                    continue;
-                if (isset($line[0]) && $line[0] === 'PPBJ001/2026') {
-                    $warnings[] = "Baris $rowIndex: Baris contoh dilewati";
+                $line = array_values((array) $line);
+                if (collect($line)->every(fn ($value) => trim((string) ($value ?? '')) === '')) {
                     continue;
                 }
 
-                $rowData = [
-                    'row_number' => $rowIndex,
-                    'ppbj_no' => $line[0] ?? '',
-                    'tgl_ppbj' => $line[1] ?? '',
-                    'tgl_terima_pr' => $line[2] ?? '',
-                    'uraian' => $line[3] ?? '',
-                    'note' => $line[4] ?? '',
-                    'portofolio' => $line[5] ?? '',
-                    'buyer' => $line[6] ?? '',
-                    'total_sebelum_ppn' => $line[7] ?? '',
-                    'metode_pengadaan' => $line[8] ?? '',
-                    'spph_rfq_1' => $line[9] ?? '',
-                    'rfq_2' => $line[10] ?? '',
-                    'rfq_3' => $line[11] ?? '',
-                    'tgl_spph' => $line[12] ?? '',
-                    'closed_date' => $line[13] ?? '',
-                    'sph' => $line[14] ?? '',
-                    'tgl_sph' => $line[15] ?? '',
-                    'awarding_sp' => $line[16] ?? '',
-                    'tgl_awarding_sp' => $line[17] ?? '',
-                    'penyedia_eksternal' => $line[18] ?? '',
-                    'tgl_spk' => $line[19] ?? '',
-                    'nilai_sp_spk' => $line[20] ?? '',
-                    'promised_date' => $line[21] ?? '',
-                    'do_no' => $line[22] ?? '',
-                    'bpg_no' => $line[23] ?? '',
-                    'nilai_bpg' => $line[24] ?? '',
-                    'tgl_bpg' => $line[25] ?? '',
-                    'receiving_transaction' => $line[26] ?? '',
-                    'bpb_no' => $line[27] ?? '',
-                    'tgl_bpb' => $line[28] ?? '',
-                    'no_invoice' => $line[29] ?? '',
-                    'tgl_invoice' => $line[30] ?? '',
-                    'keterangan' => $line[31] ?? '',
-                    'tgl_diserahkan' => $line[32] ?? '',
-                    'status' => 'valid',
-                    'errors' => [],
-                ];
+                $rawItem = [];
+                foreach ($fieldLabels as $field => $_label) {
+                    $columnIndex = $columnMap[$field] ?? null;
+                    $rawItem[$field] = $columnIndex === null ? null : ($line[$columnIndex] ?? null);
+                }
 
-                // Validasi PPBJ No
-                if (empty($rowData['ppbj_no'])) {
-                    $rowData['status'] = 'error';
-                    $rowData['errors'][] = 'PPBJ No wajib diisi';
-                } else {
-                    if (in_array($rowData['ppbj_no'], $ppbjNosInFile)) {
-                        $rowData['status'] = 'error';
-                        $rowData['errors'][] = 'PPBJ No duplikat dalam file';
+                $sourceRowNumber = is_numeric($rowIndex) ? (int) $rowIndex : count($data) + 2;
+                $number = trim((string) ($rawItem['ppbj_no'] ?? ''));
+
+                if (mb_strtolower($number) === 'ppbj001/2026') {
+                    $warnings[] = "Baris {$sourceRowNumber}: baris contoh dilewati";
+                    continue;
+                }
+
+                [$isValid, $cleanItem, $validationErrors] = $this->validatePpbjImportItem($rawItem);
+                $normalizedNumber = mb_strtolower(trim((string) ($cleanItem['ppbj_no'] ?? $number)));
+
+                if ($normalizedNumber !== '') {
+                    if (isset($seenNumbers[$normalizedNumber])) {
+                        $validationErrors[] = 'PPBJ No duplikat dalam file';
+                        $isValid = false;
                     } else {
-                        $ppbjNosInFile[] = $rowData['ppbj_no'];
-                        if (Ppbj::where('ppbj_no', $rowData['ppbj_no'])->exists()) {
-                            $rowData['status'] = 'error';
-                            $rowData['errors'][] = 'PPBJ No sudah terdaftar di database';
-                        }
+                        $seenNumbers[$normalizedNumber] = count($data);
                     }
                 }
 
-                $dateFields = [
-                    'tgl_ppbj',
-                    'tgl_terima_pr',
-                    'tgl_spph',
-                    'closed_date',
-                    'tgl_sph',
-                    'tgl_awarding_sp',
-                    'tgl_spk',
-                    'promised_date',
-                    'tgl_bpg',
-                    'tgl_bpb',
-                    'tgl_invoice',
-                    'tgl_diserahkan',
-                ];
-                foreach ($dateFields as $field) {
-                    if (!empty($rowData[$field]) && !$this->parseDate($rowData[$field])) {
-                        $rowData['status'] = 'error';
-                        $rowData['errors'][] = ucwords(str_replace('_', ' ', $field)) . ' format tidak valid';
-                    }
-                }
-
-                foreach (['total_sebelum_ppn', 'nilai_sp_spk', 'nilai_bpg'] as $field) {
-                    if (!empty($rowData[$field])) {
-                        $cleaned = str_replace([',', '.', ' ', 'Rp'], '', $rowData[$field]);
-                        if (!is_numeric($cleaned)) {
-                            $rowData['status'] = 'error';
-                            $rowData['errors'][] = ucwords(str_replace('_', ' ', $field)) . ' harus berupa angka';
-                        }
-                    }
-                }
-
-                $data[] = $rowData;
+                $data[] = array_merge($cleanItem, [
+                    'row_number' => $sourceRowNumber,
+                    'status' => $isValid ? 'valid' : 'error',
+                    'errors' => array_values(array_unique($validationErrors)),
+                ]);
             }
 
-            if (empty($data)) {
-                return response()->json(['success' => false, 'message' => 'File tidak mengandung data valid'], 422);
+            if ($data === []) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'File belum berisi data yang dapat diperiksa.',
+                    'details' => 'Hapus baris contoh lalu isi data mulai dari baris berikutnya.',
+                ], 422);
             }
 
-            $validCount = count(array_filter($data, fn($d) => $d['status'] === 'valid'));
-            $errorCount = count(array_filter($data, fn($d) => $d['status'] === 'error'));
+            // Cek seluruh nomor dalam satu query. Ini menghindari N+1 saat file berisi banyak baris.
+            $candidateNumbers = collect($data)
+                ->where('status', 'valid')
+                ->pluck('ppbj_no')
+                ->map(fn ($number) => trim((string) $number))
+                ->filter()
+                ->unique()
+                ->values();
+            $existingNumbers = $candidateNumbers->isEmpty()
+                ? collect()
+                : Ppbj::query()
+                    ->whereIn('ppbj_no', $candidateNumbers->all())
+                    ->pluck('ppbj_no')
+                    ->mapWithKeys(fn ($number) => [mb_strtolower(trim((string) $number)) => true]);
+
+            foreach ($data as &$rowData) {
+                $numberKey = mb_strtolower(trim((string) ($rowData['ppbj_no'] ?? '')));
+                if ($numberKey !== '' && $existingNumbers->has($numberKey)) {
+                    $rowData['status'] = 'error';
+                    $rowData['errors'][] = 'PPBJ No sudah terdaftar di database';
+                    $rowData['errors'] = array_values(array_unique($rowData['errors']));
+                }
+            }
+            unset($rowData);
+
+            $validCount = count(array_filter($data, fn ($row) => $row['status'] === 'valid'));
+            $errorCount = count($data) - $validCount;
 
             return response()->json([
                 'success' => true,
                 'data' => $data,
                 'summary' => ['total' => count($data), 'valid' => $validCount, 'error' => $errorCount],
                 'warnings' => $warnings,
+                'format' => [
+                    'recognized_headers' => $recognizedHeaders,
+                    'message' => 'Header dikenali otomatis; urutan kolom bebas.',
+                ],
             ]);
+        } catch (\PhpOffice\PhpSpreadsheet\Reader\Exception $e) {
+            Log::warning('File import PPBJ tidak dapat dibaca', ['error' => $e->getMessage()]);
 
-        } catch (\Exception $e) {
-            Log::error('Import preview error: ' . $e->getMessage());
-            return response()->json(['success' => false, 'message' => 'Gagal memproses file. Pastikan format file sesuai template.'], 500);
+            return response()->json([
+                'success' => false,
+                'message' => 'File Excel tidak dapat dibaca atau rusak.',
+                'details' => 'Simpan ulang sebagai .xlsx atau .csv, lalu coba kembali.',
+            ], 422);
+        } catch (\Throwable $e) {
+            Log::error('Import preview error: '.$e->getMessage(), ['exception' => $e]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal memeriksa file import.',
+                'details' => 'Pastikan file tidak diproteksi password dan mengikuti contoh pada template.',
+            ], 422);
         }
     }
 
@@ -1645,7 +1633,7 @@ class PpbjController extends Controller
     public function processImport(Request $request)
     {
         $request->validate([
-            'data' => ['required', 'array'],
+            'data' => ['required', 'array', 'max:2000'],
             'data.*.ppbj_no' => ['required', 'string'],
         ]);
 
@@ -1879,16 +1867,205 @@ class PpbjController extends Controller
             return null;
         }
 
-        $cleaned = str_replace(['Rp', 'rp', ' ', '.'], '', (string) $value);
-        $cleaned = str_replace(',', '.', $cleaned);
+        if (is_int($value) || is_float($value)) {
+            return (float) $value;
+        }
+
+        $raw = trim((string) $value);
+        $negative = str_starts_with($raw, '(') && str_ends_with($raw, ')');
+        $cleaned = preg_replace('/[^0-9,\.\-]/u', '', $raw) ?? '';
+        $cleaned = trim($cleaned);
+
+        $commaCount = substr_count($cleaned, ',');
+        $dotCount = substr_count($cleaned, '.');
+
+        if ($commaCount > 0 && $dotCount > 0) {
+            // Separator terakhir adalah desimal; separator lainnya adalah ribuan.
+            $lastComma = strrpos($cleaned, ',');
+            $lastDot = strrpos($cleaned, '.');
+            $decimalSeparator = $lastComma > $lastDot ? ',' : '.';
+            $thousandSeparator = $decimalSeparator === ',' ? '.' : ',';
+            $cleaned = str_replace($thousandSeparator, '', $cleaned);
+            $cleaned = str_replace($decimalSeparator, '.', $cleaned);
+        } elseif ($commaCount > 0 || $dotCount > 0) {
+            $separator = $commaCount > 0 ? ',' : '.';
+            $count = $commaCount + $dotCount;
+            $lastPartLength = strlen((string) substr(strrchr($cleaned, $separator), 1));
+
+            if ($count > 1 || $lastPartLength === 3) {
+                $cleaned = str_replace($separator, '', $cleaned);
+            } else {
+                $cleaned = str_replace($separator, '.', $cleaned);
+            }
+        }
+
+        if ($negative && ! str_starts_with($cleaned, '-')) {
+            $cleaned = '-'.$cleaned;
+        }
 
         if (! is_numeric($cleaned)) {
-            $errors[] = ucwords(str_replace('_', ' ', $field)) . ' harus berupa angka';
+            $errors[] = ucwords(str_replace('_', ' ', $field)).' harus berupa angka (contoh: 1500000 atau Rp1.500.000)';
 
             return null;
         }
 
         return (float) $cleaned;
+    }
+
+    /**
+     * Nama field baku yang dipakai preview dan proses import.
+     */
+    private function importFieldLabels(): array
+    {
+        return [
+            'ppbj_no' => 'PPBJ No',
+            'tgl_ppbj' => 'Tanggal PPBJ',
+            'tgl_terima_pr' => 'Tanggal Terima PR',
+            'uraian' => 'Uraian',
+            'note' => 'Note',
+            'portofolio' => 'Portofolio',
+            'buyer' => 'Buyer',
+            'total_sebelum_ppn' => 'Total Sebelum PPN',
+            'metode_pengadaan' => 'Metode Pengadaan',
+            'spph_rfq_1' => 'SPPH/RFQ 1',
+            'rfq_2' => 'RFQ 2',
+            'rfq_3' => 'RFQ 3',
+            'tgl_spph' => 'Tanggal SPPH',
+            'closed_date' => 'Closed Date',
+            'sph' => 'SPH',
+            'tgl_sph' => 'Tanggal SPH',
+            'awarding_sp' => 'Awarding SP',
+            'tgl_awarding_sp' => 'Tanggal Awarding',
+            'penyedia_eksternal' => 'Penyedia Eksternal',
+            'tgl_spk' => 'Tanggal SPK',
+            'nilai_sp_spk' => 'Nilai SP/SPK',
+            'promised_date' => 'Promised Date',
+            'do_no' => 'DO No',
+            'bpg_no' => 'BPG No',
+            'nilai_bpg' => 'Nilai BPG',
+            'tgl_bpg' => 'Tanggal BPG',
+            'receiving_transaction' => 'Receiving Transaction',
+            'bpb_no' => 'BPB No',
+            'tgl_bpb' => 'Tanggal BPB',
+            'no_invoice' => 'No Invoice',
+            'tgl_invoice' => 'Tanggal Invoice',
+            'keterangan' => 'Keterangan',
+            'tgl_diserahkan' => 'Tanggal Diserahkan',
+        ];
+    }
+
+    private function importHeaderAliases(): array
+    {
+        return [
+            'ppbj_no' => ['PPBJ No', 'No PPBJ', 'Nomor PPBJ', 'Nomor PR', 'No PR', 'PPBJ/PR', 'No PPBJ/PR'],
+            'tgl_ppbj' => ['Tanggal PPBJ', 'Tgl PPBJ', 'Tanggal PR', 'Tgl PR'],
+            'tgl_terima_pr' => ['Tanggal Terima PR', 'Tgl Terima PR', 'Tanggal Diterima'],
+            'uraian' => ['Uraian', 'Deskripsi', 'Uraian Pengadaan', 'Deskripsi Pengadaan'],
+            'note' => ['Note', 'Catatan'],
+            'portofolio' => ['Portofolio', 'Portfolio'],
+            'buyer' => ['Buyer', 'PIC', 'Nama Buyer'],
+            'total_sebelum_ppn' => ['Total Sebelum PPN', 'Nilai PR', 'Harga PR', 'Total PR'],
+            'metode_pengadaan' => ['Metode Pengadaan', 'Metode'],
+            'spph_rfq_1' => ['SPPH/RFQ 1', 'SPPH', 'RFQ 1', 'No SPPH'],
+            'rfq_2' => ['RFQ 2', 'SPPH/RFQ 2'],
+            'rfq_3' => ['RFQ 3', 'SPPH/RFQ 3'],
+            'tgl_spph' => ['Tanggal SPPH', 'Tgl SPPH'],
+            'closed_date' => ['Closed Date', 'Tanggal Closed', 'Tanggal Tutup'],
+            'sph' => ['SPH', 'No SPH'],
+            'tgl_sph' => ['Tanggal SPH', 'Tgl SPH'],
+            'awarding_sp' => ['Awarding SP', 'No SP', 'Nomor SP', 'SP/Kontrak'],
+            'tgl_awarding_sp' => ['Tanggal Awarding', 'Tgl Awarding', 'Tanggal SP'],
+            'penyedia_eksternal' => ['Penyedia Eksternal', 'Vendor', 'Nama Vendor', 'Penyedia'],
+            'tgl_spk' => ['Tanggal SPK', 'Tgl SPK'],
+            'nilai_sp_spk' => ['Nilai SP/SPK', 'Nilai SP', 'Harga SP', 'Nilai Kontrak'],
+            'promised_date' => ['Promised Date', 'Tanggal Pemenuhan', 'Estimasi Datang'],
+            'do_no' => ['DO No', 'No DO', 'Nomor DO'],
+            'bpg_no' => ['BPG No', 'No BPG', 'Nomor BPG'],
+            'nilai_bpg' => ['Nilai BPG'],
+            'tgl_bpg' => ['Tanggal BPG', 'Tgl BPG'],
+            'receiving_transaction' => ['Receiving Transaction', 'Receiving', 'Transaksi Penerimaan'],
+            'bpb_no' => ['BPB No', 'No BPB', 'Nomor BPB'],
+            'tgl_bpb' => ['Tanggal BPB', 'Tgl BPB'],
+            'no_invoice' => ['No Invoice', 'Nomor Invoice', 'Invoice'],
+            'tgl_invoice' => ['Tanggal Invoice', 'Tgl Invoice'],
+            'keterangan' => ['Keterangan', 'Remarks'],
+            'tgl_diserahkan' => ['Tanggal Diserahkan', 'Tgl Diserahkan', 'Tanggal Serah ke Umum'],
+        ];
+    }
+
+    private function normalizeImportHeader(mixed $value): string
+    {
+        $value = preg_replace('/^\xEF\xBB\xBF/', '', trim((string) $value)) ?? '';
+        $value = mb_strtolower($value);
+
+        return preg_replace('/[^a-z0-9]+/u', '', $value) ?? '';
+    }
+
+    private function resolveImportColumnMap(array $headers): array
+    {
+        $aliasLookup = [];
+        foreach ($this->importHeaderAliases() as $field => $aliases) {
+            foreach ($aliases as $alias) {
+                $aliasLookup[$this->normalizeImportHeader($alias)] = $field;
+            }
+        }
+
+        $columnMap = [];
+        foreach (array_values($headers) as $index => $header) {
+            $normalized = $this->normalizeImportHeader($header);
+            $field = $aliasLookup[$normalized] ?? null;
+            if ($field !== null && ! array_key_exists($field, $columnMap)) {
+                $columnMap[$field] = $index;
+            }
+        }
+
+        return $columnMap;
+    }
+
+    private function readDelimitedImportFile(string $path): array
+    {
+        $sample = (string) file_get_contents($path, false, null, 0, 8192);
+        $sample = preg_replace('/^\xEF\xBB\xBF/', '', $sample) ?? $sample;
+        $sampleLines = collect(preg_split('/\r\n|\r|\n/', $sample) ?: [])
+            ->map(fn ($line) => trim((string) $line))
+            ->filter()
+            ->take(20);
+        $delimiters = [',', ';', "\t", '|'];
+        $delimiter = collect($delimiters)
+            ->sortByDesc(fn ($candidate) => $sampleLines->max(
+                fn ($line) => count(str_getcsv($line, $candidate))
+            ) ?? 1)
+            ->first() ?? ',';
+
+        $handle = fopen($path, 'rb');
+        if ($handle === false) {
+            throw new \RuntimeException('File tidak dapat dibuka.');
+        }
+
+        $rows = [];
+        $lineNumber = 0;
+        while (($line = fgetcsv($handle, 0, $delimiter)) !== false) {
+            $lineNumber++;
+            if ($lineNumber === 1 && isset($line[0])) {
+                $line[0] = preg_replace('/^\xEF\xBB\xBF/', '', (string) $line[0]) ?? $line[0];
+            }
+            $rows[$lineNumber] = $line;
+        }
+        fclose($handle);
+
+        $headerRowNumber = collect(array_keys($rows))->first(
+            fn ($rowNumber) => array_key_exists('ppbj_no', $this->resolveImportColumnMap($rows[$rowNumber] ?? []))
+        );
+        if ($headerRowNumber === null) {
+            $headerRowNumber = array_key_first($rows);
+        }
+
+        $header = $headerRowNumber === null ? [] : ($rows[$headerRowNumber] ?? []);
+        $dataRows = collect($rows)
+            ->filter(fn ($_row, $rowNumber) => $headerRowNumber !== null && $rowNumber > $headerRowNumber)
+            ->all();
+
+        return [$header, $dataRows];
     }
 
     // =====================
@@ -2107,7 +2284,7 @@ class PpbjController extends Controller
     {
         if (empty($value))
             return null;
-        $value = trim($value);
+        $value = trim((string) $value);
 
         if (is_numeric($value) && $value > 25569) {
             try {
@@ -2116,7 +2293,7 @@ class PpbjController extends Controller
             }
         }
 
-        foreach (['Y-m-d', 'd/m/Y', 'd-m-Y', 'm/d/Y', 'Y/m/d'] as $format) {
+        foreach (['Y-m-d', 'd/m/Y', 'd-m-Y', 'd.m.Y', 'm/d/Y', 'Y/m/d'] as $format) {
             try {
                 $date = \DateTime::createFromFormat($format, $value);
                 if ($date && $date->format($format) === $value)

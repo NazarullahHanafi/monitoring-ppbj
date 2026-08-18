@@ -504,6 +504,8 @@
             document.getElementById('previewStep').classList.add('hidden');
             document.getElementById('loadingStep').classList.add('hidden');
             document.getElementById('importFile').value = '';
+            document.getElementById('formatNotice')?.classList.add('hidden');
+            document.getElementById('importWarnings')?.classList.add('hidden');
             previewData = [];
         };
 
@@ -519,8 +521,8 @@
 
             // Validasi ekstensi
             const ext = file.name.split('.').pop().toLowerCase();
-            if (!['xlsx', 'xls', 'csv'].includes(ext)) {
-                toastErr('Error', 'Format file harus Excel (.xlsx, .xls) atau CSV');
+            if (!['xlsx', 'xls', 'csv', 'txt'].includes(ext)) {
+                toastErr('Error', 'Format file harus Excel (.xlsx, .xls), CSV, atau TXT');
                 return;
             }
 
@@ -541,10 +543,14 @@
                     body: formData
                 });
 
-                const result = await response.json();
+                const contentType = response.headers.get('content-type') || '';
+                const result = contentType.includes('application/json')
+                    ? await response.json()
+                    : { message: await response.text() };
 
                 if (!response.ok) {
-                    throw new Error(result.message || 'Gagal memproses file');
+                    const details = result.details ? ` ${result.details}` : '';
+                    throw new Error(`${result.message || 'Gagal memproses file'}${details}`.trim());
                 }
 
                 if (!result.success) {
@@ -575,6 +581,24 @@
             document.getElementById('totalRows').textContent = result.summary.total;
             document.getElementById('validRows').textContent = result.summary.valid;
             document.getElementById('errorRows').textContent = result.summary.error;
+
+            const formatNotice = document.getElementById('formatNotice');
+            if (formatNotice) {
+                const recognized = Number(result.format?.recognized_headers || 0);
+                formatNotice.innerHTML = `<strong>Format dikenali.</strong> ${escapeHtml(result.format?.message || 'Header berhasil dibaca otomatis.')} ${recognized > 0 ? `(${recognized} kolom dikenali)` : ''}`;
+                formatNotice.classList.remove('hidden');
+            }
+
+            const warningsBox = document.getElementById('importWarnings');
+            const warnings = Array.isArray(result.warnings) ? result.warnings.filter(Boolean) : [];
+            if (warningsBox) {
+                if (warnings.length > 0) {
+                    warningsBox.innerHTML = `<strong>Catatan pemeriksaan:</strong><ul class="mt-1 list-disc pl-5">${warnings.map(warning => `<li>${escapeHtml(warning)}</li>`).join('')}</ul>`;
+                    warningsBox.classList.remove('hidden');
+                } else {
+                    warningsBox.classList.add('hidden');
+                }
+            }
 
             // Show/Hide Alert Box
             const errorAlert = document.getElementById('errorAlert');
@@ -671,15 +695,19 @@
             });
 
             // Tombol Process Logic
-            const hasErrors = result.summary.error > 0;
+            const validCount = Number(result.summary.valid || 0);
+            const hasErrors = Number(result.summary.error || 0) > 0;
             const btnProcess = document.getElementById('btnProcess');
 
-            if (hasErrors) {
+            if (validCount === 0) {
                 btnProcess.disabled = true;
                 btnProcess.classList.add('opacity-50', 'cursor-not-allowed');
                 btnProcess.classList.remove('bg-emerald-600', 'hover:bg-emerald-700');
                 btnProcess.classList.add('bg-gray-500');
-                btnProcess.innerHTML = `🚫 Perbaiki Error Dulu`;
+                btnProcess.innerHTML = `
+                    <span id="btnProcessText">Tidak Ada Data Valid</span>
+                    <span id="btnProcessSpinner" class="hidden h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white"></span>
+                `;
 
                 // Auto scroll ke bagian tabel error
                 const tableContainer = document.querySelector('#previewStep .overflow-x-auto');
@@ -698,7 +726,7 @@
                 btnProcess.classList.remove('opacity-50', 'cursor-not-allowed', 'bg-gray-500');
                 btnProcess.classList.add('bg-emerald-600', 'hover:bg-emerald-700');
                 btnProcess.innerHTML = `
-                                                                            <span id="btnProcessText">✓ Proses Import</span>
+                                                                            <span id="btnProcessText">✓ Import ${validCount} Data Valid${hasErrors ? ' (Error Dilewati)' : ''}</span>
                                                                             <span id="btnProcessSpinner" class="hidden h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white"></span>
                                                                         `;
             }
@@ -719,7 +747,7 @@
 
             const result = await Swal.fire({
                 title: 'Konfirmasi Import',
-                html: `Akan mengimport <strong>${validData.length}</strong> data.<br>Lanjutkan?`,
+                html: `Akan mengimport <strong>${validData.length}</strong> data valid.${previewData.length > validData.length ? `<br><strong>${previewData.length - validData.length}</strong> baris bermasalah akan dilewati.` : ''}<br>Lanjutkan?`,
                 icon: 'question',
                 showCancelButton: true,
                 confirmButtonColor: '#10B981',
@@ -749,7 +777,10 @@
                     body: JSON.stringify({ data: validData })
                 });
 
-                const result = await response.json();
+                const contentType = response.headers.get('content-type') || '';
+                const result = contentType.includes('application/json')
+                    ? await response.json()
+                    : { message: await response.text() };
 
                 if (!response.ok) {
                     throw new Error(result.message || 'Gagal import data');
@@ -781,7 +812,7 @@
                 toastErr('Error', error.message);
             } finally {
                 btnProcess.disabled = false;
-                btnProcessText.textContent = '✓ Proses Import';
+                btnProcessText.textContent = `✓ Import ${validData.length} Data Valid`;
                 btnProcessSpinner.classList.add('hidden');
             }
         };

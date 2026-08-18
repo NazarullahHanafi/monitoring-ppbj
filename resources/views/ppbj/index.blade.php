@@ -903,7 +903,7 @@
             <div class="flex items-start justify-between mb-4">
                 <div>
                     <h2 class="font-bold text-lg">Import Data PPBJ</h2>
-                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Upload file CSV untuk import data secara massal
+                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Upload Excel/CSV untuk memeriksa dan mengimpor data secara massal
                     </p>
                 </div>
                 <button type="button" onclick="closeImportModal()"
@@ -915,10 +915,10 @@
                 <div
                     class="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl p-8 text-center hover:border-blue-500 dark:hover:border-blue-400 transition">
                     <div class="text-6xl mb-4">📂</div>
-                    <h3 class="font-semibold text-lg mb-2">Upload File CSV</h3>
+                    <h3 class="font-semibold text-lg mb-2">Upload File Excel/CSV</h3>
                     <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">Drag & drop file atau klik untuk browse</p>
 
-                    <input type="file" id="importFile" accept=".xlsx,.xls,.csv" class="hidden"
+                    <input type="file" id="importFile" accept=".xlsx,.xls,.csv,.txt" class="hidden"
                         onchange="handleFileSelect(event)">
 
                     <button type="button" onclick="document.getElementById('importFile').click()"
@@ -929,7 +929,7 @@
                     <div class="mt-4">
                         <a href="{{ route('ppbj.template') }}"
                             class="inline-flex items-center gap-2 text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-semibold">
-                            <span>📥 Download Template CSV</span>
+                            <span>📥 Download Template Excel</span>
                         </a>
                     </div>
                 </div>
@@ -937,21 +937,29 @@
                 <div class="mt-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
                     <h4 class="font-semibold text-sm text-blue-900 dark:text-blue-300 mb-2">💡 Petunjuk Import:</h4>
                     <ul class="text-xs text-blue-800 dark:text-blue-400 space-y-1">
-                        <li>• Download template CSV terlebih dahulu</li>
+                        <li>• Download template Excel terlebih dahulu sebagai contoh paling aman</li>
                         <li>• <strong>PPBJ No wajib diisi dan harus unik</strong> (tidak boleh duplikat)</li>
-                        <li>• Format tanggal: <code
+                        <li>• Format tanggal boleh <code
                                 class="bg-blue-100 dark:bg-blue-800 px-1 rounded text-blue-900 dark:text-blue-200">YYYY-MM-DD</code>
-                            (contoh: 2026-01-15)
+                            atau <code class="bg-blue-100 dark:bg-blue-800 px-1 rounded text-blue-900 dark:text-blue-200">DD/MM/YYYY</code>
                         </li>
-                        <li>• Format angka: tanpa titik/koma (contoh: 50000000)</li>
+                        <li>• Angka boleh berupa 50000000, 50.000.000, atau Rp50.000.000</li>
+                        <li>• Urutan kolom bebas; kolom tambahan diabaikan dan kolom opsional boleh tidak ada</li>
+                        <li>• CSV boleh memakai pemisah koma, titik koma, tab, atau garis vertikal</li>
                         <li>• Kolom otomatis (SLA, Progress, dll) tidak perlu diisi</li>
-                        <li>• Maksimal ukuran file: 10MB</li>
+                        <li>• Maksimal 10MB dan 2.000 baris per proses</li>
                     </ul>
                 </div>
             </div>
 
             {{-- Step 2: Preview --}}
             <div id="previewStep" class="hidden">
+                <div id="formatNotice"
+                    class="hidden mb-4 rounded-lg border border-cyan-200 bg-cyan-50 p-3 text-sm text-cyan-900 dark:border-cyan-800 dark:bg-cyan-900/20 dark:text-cyan-200">
+                </div>
+                <div id="importWarnings"
+                    class="hidden mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-200">
+                </div>
                 <div class="grid grid-cols-3 gap-4 mb-4">
                     <div class="bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
                         <div class="text-sm text-blue-600 dark:text-blue-400">Total Baris</div>
@@ -982,7 +990,7 @@
                                 Ditemukan <span id="errorCount">0</span> baris dengan error
                             </h3>
                             <p class="text-xs text-red-700 dark:text-red-300 mt-1">
-                                Perbaiki data di baris yang error sebelum melakukan import.
+                                Baris bermasalah akan dilewati. Data yang valid tetap dapat diimport.
                             </p>
                         </div>
                     </div>
@@ -1032,7 +1040,7 @@
                         <span
                             class="px-2 py-1 bg-red-100 dark:bg-red-900/50 text-red-800 dark:text-red-200 rounded-full font-semibold">✗
                             Error</span>
-                        <span class="text-gray-600 dark:text-gray-400">= Harus diperbaiki</span>
+                        <span class="text-gray-600 dark:text-gray-400">= Dilewati dan perlu diperbaiki</span>
                     </div>
                 </div>
 
@@ -1076,7 +1084,7 @@
 @endsection
 
 @push('styles')
-    <link rel="stylesheet" href="{{ asset('assets/ppbj/ppbj.css') }}?v=20260814a">
+    <link rel="stylesheet" href="{{ asset('assets/ppbj/ppbj.css') }}?v=20260818a">
 @endpush
 
 @push('scripts')
@@ -1204,6 +1212,6 @@
     <script>
         window.PPBJ_PAGE_CONFIG = @json($ppbjPageConfig);
     </script>
-    <script src="{{ asset('assets/ppbj/ppbj.js') }}?v=20260814a" defer></script>
+    <script src="{{ asset('assets/ppbj/ppbj.js') }}?v=20260818a" defer></script>
 
 @endpush
