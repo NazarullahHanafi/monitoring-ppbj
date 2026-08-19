@@ -11,6 +11,7 @@ use App\Models\Spph;
 use App\Models\User;
 use App\Models\Vendor;
 use App\Services\ProcurementJourneyService;
+use App\Support\CacheBatch;
 use App\Support\PrintPreviewFile;
 use App\Traits\HasPresence;
 use Illuminate\Database\QueryException;
@@ -102,12 +103,24 @@ class SpController extends Controller
         $sampai = $request->get('sampai', '');
         $oracleMode = $this->isOracleMode($request);
 
-        $pics = Cache::remember('pics:umum', 3600, fn () => User::where('department', 'umum')->orderBy('name')->pluck('name'));
-        $satuans = Cache::remember('satuans:all', 3600, fn () => Satuan::orderBy('nama_satuan')->pluck('nama_satuan')->toArray());
-        $lastNomor = Cache::remember('sp:last_nomor:'.($oracleMode ? 'oracle' : 'auto'), 300, fn () => $this->spModeQuery($oracleMode)->orderBy('sequence_number', 'desc')->value('nomor_sp'));
-        $bidangIpItus = $this->activeSpMasterOptionNames('bidang_ip_itu');
-        $penandatanganScis = $this->activeSpMasterOptionNames('penandatangan_sci');
-        $jabatanScis = $this->activeSpMasterOptionNames('jabatan_sci');
+        $lastNumberCacheKey = 'sp:last_nomor:'.($oracleMode ? 'oracle' : 'auto');
+        $referenceData = CacheBatch::remember([
+            'pics:umum' => fn () => User::where('department', 'umum')->orderBy('name')->pluck('name'),
+            'satuans:all' => fn () => Satuan::orderBy('nama_satuan')->pluck('nama_satuan')->toArray(),
+            $lastNumberCacheKey => fn () => $this->spModeQuery($oracleMode)
+                ->orderBy('sequence_number', 'desc')
+                ->value('nomor_sp'),
+            'sp_master_options:bidang_ip_itu:active_names' => fn () => $this->queryActiveSpMasterOptionNames('bidang_ip_itu'),
+            'sp_master_options:penandatangan_sci:active_names' => fn () => $this->queryActiveSpMasterOptionNames('penandatangan_sci'),
+            'sp_master_options:jabatan_sci:active_names' => fn () => $this->queryActiveSpMasterOptionNames('jabatan_sci'),
+        ], 3600);
+
+        $pics = $referenceData['pics:umum'];
+        $satuans = $referenceData['satuans:all'];
+        $lastNomor = $referenceData[$lastNumberCacheKey];
+        $bidangIpItus = $referenceData['sp_master_options:bidang_ip_itu:active_names'];
+        $penandatanganScis = $referenceData['sp_master_options:penandatangan_sci:active_names'];
+        $jabatanScis = $referenceData['sp_master_options:jabatan_sci:active_names'];
 
         $baseQuery = $this->spModeQuery($oracleMode)->with(['ppbjs:id,ppbj_no'])->when($search, fn ($q) => $q->where(function ($q2) use ($search) {
             $q2->where('nomor_sp', 'like', "%{$search}%")
@@ -292,14 +305,12 @@ class SpController extends Controller
         ];
     }
 
-    private function activeSpMasterOptionNames(string $type)
+    private function queryActiveSpMasterOptionNames(string $type)
     {
-        return Cache::remember("sp_master_options:{$type}:active_names", 3600, function () use ($type) {
-            return SpMasterOption::active()
-                ->where('type', $type)
-                ->orderBy('nama')
-                ->pluck('nama');
-        });
+        return SpMasterOption::active()
+            ->where('type', $type)
+            ->orderBy('nama')
+            ->pluck('nama');
     }
 
     private function spphVendorMetaForPpbj(object $ppbj): array
@@ -951,18 +962,18 @@ class SpController extends Controller
 
                     foreach ($ppbjNumbers as $linkedNumber) {
                         app(ProcurementJourneyService::class)->notifyByPrNumber(
-                        $linkedNumber,
-                        'sp_created',
-                        'Surat Pesanan dibuat',
-                        "Umum membuat SP {$sp->nomor_sp} untuk vendor {$vendorName}.",
-                        [
-                            'progress' => 'SP/Kontrak',
-                            'document_no' => $sp->nomor_sp,
-                            'vendors' => [$vendorName],
-                            'nilai' => $sp->nilai_sp,
-                            'promised_date' => $sp->promised_date,
-                        ],
-                        $request->user()
+                            $linkedNumber,
+                            'sp_created',
+                            'Surat Pesanan dibuat',
+                            "Umum membuat SP {$sp->nomor_sp} untuk vendor {$vendorName}.",
+                            [
+                                'progress' => 'SP/Kontrak',
+                                'document_no' => $sp->nomor_sp,
+                                'vendors' => [$vendorName],
+                                'nilai' => $sp->nilai_sp,
+                                'promised_date' => $sp->promised_date,
+                            ],
+                            $request->user()
                         );
                     }
                 } else {
@@ -1137,18 +1148,18 @@ class SpController extends Controller
                     $this->syncSpPpbjs($sp, $newPpbjs);
                     foreach ($ppbjNumbers as $linkedNumber) {
                         app(ProcurementJourneyService::class)->notifyByPrNumber(
-                        $linkedNumber,
-                        'sp_updated',
-                        'Surat Pesanan diperbarui',
-                        "Data SP {$sp->nomor_sp} diperbarui oleh Umum.",
-                        [
-                            'progress' => 'Update SP/Kontrak',
-                            'document_no' => $sp->nomor_sp,
-                            'vendors' => [$sp->nama_vendor],
-                            'nilai' => $sp->nilai_sp,
-                            'promised_date' => $sp->promised_date,
-                        ],
-                        $request->user()
+                            $linkedNumber,
+                            'sp_updated',
+                            'Surat Pesanan diperbarui',
+                            "Data SP {$sp->nomor_sp} diperbarui oleh Umum.",
+                            [
+                                'progress' => 'Update SP/Kontrak',
+                                'document_no' => $sp->nomor_sp,
+                                'vendors' => [$sp->nama_vendor],
+                                'nilai' => $sp->nilai_sp,
+                                'promised_date' => $sp->promised_date,
+                            ],
+                            $request->user()
                         );
                     }
                 } else {

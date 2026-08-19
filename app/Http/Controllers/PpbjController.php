@@ -2,32 +2,32 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Ppbj;
-use App\Models\PpbjRealTracking;
-use App\Models\Torpr;
-use App\Models\PrReceiptApproval;  // ← TAMBAHAN: import model approval
-use Illuminate\Http\Request;
-use App\Models\User;
 use App\Models\MasterBuyer;
-use App\Models\MasterPortofolio;
 use App\Models\MasterMetodePengadaan;
 use App\Models\MasterPenyediaEksternal;
-use Illuminate\Validation\Rule;
-use App\Http\Controllers\DashboardController;
-use Illuminate\Support\Facades\DB;
+use App\Models\MasterPortofolio;
+use App\Models\Ppbj;  // ← TAMBAHAN: import model approval
+use App\Models\PpbjRealTracking;
+use App\Models\PrReceiptApproval;
+use App\Models\Torpr;
+use App\Models\User;
+use App\Services\PrArchiveService;
+use App\Services\ProcurementJourneyService;
+use App\Support\CacheBatch;
+use Carbon\Carbon;
+use Illuminate\Database\QueryException;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
-use Illuminate\Database\QueryException;
-use Carbon\Carbon;
+use Illuminate\Validation\Rule;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
-use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
-use PhpOffice\PhpSpreadsheet\Style\Fill;
-use PhpOffice\PhpSpreadsheet\Style\Border;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
-use App\Services\PrArchiveService;
-use App\Services\ProcurementJourneyService;
+use PhpOffice\PhpSpreadsheet\Style\Border;
+use PhpOffice\PhpSpreadsheet\Style\Fill;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 
 class PpbjController extends Controller
 {
@@ -121,7 +121,7 @@ class PpbjController extends Controller
 
         if ($request->filled('search')) {
             $keyword = trim($request->search);
-            $likeKeyword = '%' . $keyword . '%';
+            $likeKeyword = '%'.$keyword.'%';
 
             $query->where(function ($q) use ($likeKeyword) {
                 $q->where('uraian', 'like', $likeKeyword)
@@ -236,7 +236,7 @@ class PpbjController extends Controller
         // satu sumber di model, tanpa query tambahan dan tanpa kalkulasi Blade ganda.
         $ppbj->setCollection(
             $ppbj->getCollection()->map(
-                fn ($row) => (new Ppbj())->newFromBuilder((array) $row)
+                fn ($row) => (new Ppbj)->newFromBuilder((array) $row)
             )
         );
 
@@ -289,30 +289,17 @@ class PpbjController extends Controller
             $searchContext['matched_fields'] = $matchedFields;
         }
 
-        $portofolios = Cache::remember(
-            'master_portofolios',
-            3600,
-            fn() =>
-            MasterPortofolio::orderBy('nama')->pluck('nama', 'id')
-        );
-        $buyers = Cache::remember(
-            'master_buyers',
-            3600,
-            fn() =>
-            MasterBuyer::orderBy('nama')->pluck('nama', 'id')
-        );
-        $metodePengadaans = Cache::remember(
-            'master_metode_pengadaan',
-            3600,
-            fn() =>
-            MasterMetodePengadaan::orderBy('nama')->pluck('nama')
-        );
-        $penyediaEksternals = Cache::remember(
-            'master_penyedia_eksternal',
-            3600,
-            fn() =>
-            MasterPenyediaEksternal::orderBy('nama')->pluck('nama')
-        );
+        $masterData = CacheBatch::remember([
+            'master_portofolios' => fn () => MasterPortofolio::orderBy('nama')->pluck('nama', 'id'),
+            'master_buyers' => fn () => MasterBuyer::orderBy('nama')->pluck('nama', 'id'),
+            'master_metode_pengadaan' => fn () => MasterMetodePengadaan::orderBy('nama')->pluck('nama'),
+            'master_penyedia_eksternal' => fn () => MasterPenyediaEksternal::orderBy('nama')->pluck('nama'),
+        ], 3600);
+
+        $portofolios = $masterData['master_portofolios'];
+        $buyers = $masterData['master_buyers'];
+        $metodePengadaans = $masterData['master_metode_pengadaan'];
+        $penyediaEksternals = $masterData['master_penyedia_eksternal'];
 
         return view('ppbj.index', compact(
             'ppbj',
@@ -674,8 +661,8 @@ class PpbjController extends Controller
         }
 
         foreach (range(1, 10) as $version) {
-            Cache::forget('tracking_pr_' . md5(strtolower($nomor)) . '_v' . $version);
-            Cache::forget('tracking_ppbj_' . md5(strtolower($nomor)) . '_v' . $version);
+            Cache::forget('tracking_pr_'.md5(strtolower($nomor)).'_v'.$version);
+            Cache::forget('tracking_ppbj_'.md5(strtolower($nomor)).'_v'.$version);
         }
     }
 
@@ -741,10 +728,10 @@ class PpbjController extends Controller
 
     private function nextGeneralRegistrationNumber(int $year): string
     {
-        $prefix = 'REG-UMUM/' . $year . '/';
+        $prefix = 'REG-UMUM/'.$year.'/';
 
         $registrationQuery = DB::table('ppbj')
-            ->where('general_registration_number', 'like', $prefix . '%')
+            ->where('general_registration_number', 'like', $prefix.'%')
             ->lockForUpdate();
 
         // Produksi memakai MySQL/MariaDB: urutkan bagian sequence secara numerik
@@ -765,7 +752,7 @@ class PpbjController extends Controller
             $next = ((int) $matches[1]) + 1;
         }
 
-        return $prefix . str_pad((string) $next, 3, '0', STR_PAD_LEFT);
+        return $prefix.str_pad((string) $next, 3, '0', STR_PAD_LEFT);
     }
 
     // =====================
@@ -828,11 +815,11 @@ class PpbjController extends Controller
 
         // ── Jika mode EDIT (ignore_id diisi), skip cek approval sama sekali ──
         // User hanya mengubah data, bukan membuat baru
-        if (!$ignoreId) {
+        if (! $ignoreId) {
             // Mode TAMBAH: cek ke approval PR, tapi HANYA yang PENDING
             $approval = PrReceiptApproval::whereHas(
                 'torpr',
-                fn($q) => $q->where('nomor_pr', $ppbjNo)
+                fn ($q) => $q->where('nomor_pr', $ppbjNo)
             )
                 ->where('status', 'PENDING')   // ← hanya blokir jika masih PENDING
                 ->with(['requestedBy'])
@@ -890,7 +877,7 @@ class PpbjController extends Controller
         $user = $request->user();
         $verifier = $this->resolvePpbjCancelVerifier($ppbj, $request);
 
-        if (!$verifier) {
+        if (! $verifier) {
             return response()->json([
                 'message' => 'User verifikasi tidak ditemukan, sehingga password cancel tidak bisa dicek.',
             ], 422);
@@ -906,14 +893,14 @@ class PpbjController extends Controller
             $retryAfter = (int) ceil(max(1, now()->diffInSeconds($lockedUntilAt, false)));
 
             return response()->json([
-                'message' => 'Terlalu banyak percobaan password salah. Silakan coba lagi sekitar ' . ceil($retryAfter / 60) . ' menit lagi.',
+                'message' => 'Terlalu banyak percobaan password salah. Silakan coba lagi sekitar '.ceil($retryAfter / 60).' menit lagi.',
                 'locked' => true,
                 'retry_after' => $retryAfter,
                 'locked_until' => $lockedUntilAt->toIso8601String(),
             ], 429);
         }
 
-        if (!Hash::check((string) $request->creator_password, (string) $verifier->password)) {
+        if (! Hash::check((string) $request->creator_password, (string) $verifier->password)) {
             $attempts = ((int) Cache::get($attemptKey, 0)) + 1;
             $remainingAttempts = max(0, 3 - $attempts);
             Cache::put($attemptKey, $attempts, now()->addMinutes(15));
@@ -932,7 +919,7 @@ class PpbjController extends Controller
             }
 
             return response()->json([
-                'message' => 'Password pembuat PPBJ tidak sesuai. Sisa percobaan: ' . $remainingAttempts . '.',
+                'message' => 'Password pembuat PPBJ tidak sesuai. Sisa percobaan: '.$remainingAttempts.'.',
                 'attempts_remaining' => $remainingAttempts,
             ], 422);
         }
@@ -960,7 +947,7 @@ class PpbjController extends Controller
                     'model_type' => Ppbj::class,
                     'model_id' => $ppbj->id,
                     'action' => 'cancelled',
-                    'description' => 'PPBJ di-cancel: ' . ($ppbj->ppbj_no ?: 'PPBJ-' . $ppbj->id),
+                    'description' => 'PPBJ di-cancel: '.($ppbj->ppbj_no ?: 'PPBJ-'.$ppbj->id),
                     'changes' => [
                         'ppbj_no' => $ppbj->ppbj_no,
                         'reason' => $request->reason,
@@ -1033,11 +1020,11 @@ class PpbjController extends Controller
     // =====================
     public function export(Request $request)
     {
-        $filename = 'PPBJ_Export_' . now()->format('Ymd_His') . '.csv';
+        $filename = 'PPBJ_Export_'.now()->format('Ymd_His').'.csv';
 
         return response()->streamDownload(function () use ($request) {
             $out = fopen('php://output', 'w');
-            fprintf($out, chr(0xEF) . chr(0xBB) . chr(0xBF));
+            fprintf($out, chr(0xEF).chr(0xBB).chr(0xBF));
 
             fputcsv($out, [
                 'No PPBJ',
@@ -1092,14 +1079,17 @@ class PpbjController extends Controller
 
             if ($request->filled('uraian')) {
                 $keyword = trim($request->uraian);
-                $query->whereRaw('MATCH(ppbj_no, uraian) AGAINST(? IN BOOLEAN MODE)', ['*' . $keyword . '*']);
+                $query->whereRaw('MATCH(ppbj_no, uraian) AGAINST(? IN BOOLEAN MODE)', ['*'.$keyword.'*']);
             }
-            if ($request->filled('portofolio'))
+            if ($request->filled('portofolio')) {
                 $query->where('portofolio', $request->portofolio);
-            if ($request->filled('buyer'))
+            }
+            if ($request->filled('buyer')) {
                 $query->where('buyer', $request->buyer);
-            if ($request->filled('penyedia_eksternal'))
+            }
+            if ($request->filled('penyedia_eksternal')) {
                 $query->where('penyedia_eksternal', $request->penyedia_eksternal);
+            }
 
             if ($request->filled('status_sla')) {
                 $this->applyLiveSlaStatusFilter($query, (string) $request->status_sla);
@@ -1211,7 +1201,7 @@ class PpbjController extends Controller
         }, $filename, [
             'Content-Type' => 'text/csv; charset=UTF-8',
             'Cache-Control' => 'no-store, no-cache',
-            'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+            'Content-Disposition' => 'attachment; filename="'.$filename.'"',
         ]);
     }
 
@@ -1220,7 +1210,7 @@ class PpbjController extends Controller
     // =====================
     public function downloadTemplate()
     {
-        $spreadsheet = new Spreadsheet();
+        $spreadsheet = new Spreadsheet;
         $sheet = $spreadsheet->getActiveSheet();
 
         $spreadsheet->getProperties()
@@ -1399,7 +1389,7 @@ class PpbjController extends Controller
 
         $spreadsheet->setActiveSheetIndex(0);
 
-        $filename = 'Template_Import_PPBJ_' . now()->format('Ymd') . '.xlsx';
+        $filename = 'Template_Import_PPBJ_'.now()->format('Ymd').'.xlsx';
         $tempFile = tempnam(sys_get_temp_dir(), 'excel_');
         $writer = new Xlsx($spreadsheet);
         $writer->save($tempFile);
@@ -1513,6 +1503,7 @@ class PpbjController extends Controller
 
                 if (mb_strtolower($number) === 'ppbj001/2026') {
                     $warnings[] = "Baris {$sourceRowNumber}: baris contoh dilewati";
+
                     continue;
                 }
 
@@ -1620,6 +1611,7 @@ class PpbjController extends Controller
 
             if (isset($item['status']) && $item['status'] === 'error') {
                 $failed++;
+
                 continue;
             }
 
@@ -1627,7 +1619,8 @@ class PpbjController extends Controller
 
             if (! $isValid) {
                 $failed++;
-                $errors[] = "Baris {$rowNumber}: " . implode(', ', $validationErrors);
+                $errors[] = "Baris {$rowNumber}: ".implode(', ', $validationErrors);
+
                 continue;
             }
 
@@ -1635,6 +1628,7 @@ class PpbjController extends Controller
             if (isset($seenPpbjNumbers[$normalizedNumber])) {
                 $failed++;
                 $errors[] = "Baris {$rowNumber}: PPBJ No {$validatedItem['ppbj_no']} duplikat dalam data import";
+
                 continue;
             }
 
@@ -1659,6 +1653,7 @@ class PpbjController extends Controller
             if ($existingNumbers->has(mb_strtolower(trim($number)))) {
                 $failed++;
                 $errors[] = "Baris {$preparedItem['row_number']}: PPBJ No {$number} sudah terdaftar";
+
                 continue;
             }
 
@@ -1755,7 +1750,7 @@ class PpbjController extends Controller
 
     private function formatGeneralRegistrationNumber(int $year, int $sequence): string
     {
-        return 'REG-UMUM/' . $year . '/' . str_pad((string) $sequence, 3, '0', STR_PAD_LEFT);
+        return 'REG-UMUM/'.$year.'/'.str_pad((string) $sequence, 3, '0', STR_PAD_LEFT);
     }
 
     private function validatePpbjImportItem(array $item): array
@@ -1816,7 +1811,7 @@ class PpbjController extends Controller
             $clean[$field] = $value === null || $value === '' ? null : $this->parseDate($value);
 
             if (($value !== null && $value !== '') && ! $clean[$field]) {
-                $errors[] = ucwords(str_replace('_', ' ', $field)) . ' format tidak valid';
+                $errors[] = ucwords(str_replace('_', ' ', $field)).' format tidak valid';
             }
         }
 
@@ -2000,7 +1995,6 @@ class PpbjController extends Controller
 
     /**
      * @param  array<int|string, array<mixed>>  $rows
-     * @return int|string|null
      */
     private function findImportHeaderRow(array $rows): int|string|null
     {
@@ -2015,7 +2009,6 @@ class PpbjController extends Controller
 
     /**
      * @param  array<int|string, array<mixed>>  $rows
-     * @return int|string|null
      */
     private function findFirstImportDataRow(array $rows): int|string|null
     {
@@ -2089,9 +2082,9 @@ class PpbjController extends Controller
                         ->orderBy('portofolio')
                         ->pluck('portofolio')
                 )
-                ->map(fn($value) => trim((string) $value))
+                ->map(fn ($value) => trim((string) $value))
                 ->filter()
-                ->unique(fn($value) => mb_strtolower($value))
+                ->unique(fn ($value) => mb_strtolower($value))
                 ->sort(SORT_NATURAL | SORT_FLAG_CASE)
                 ->values();
         });
@@ -2106,9 +2099,9 @@ class PpbjController extends Controller
                         ->orderBy('penyedia_eksternal')
                         ->pluck('penyedia_eksternal')
                 )
-                ->map(fn($value) => trim((string) $value))
+                ->map(fn ($value) => trim((string) $value))
                 ->filter()
-                ->unique(fn($value) => mb_strtolower($value))
+                ->unique(fn ($value) => mb_strtolower($value))
                 ->sort(SORT_NATURAL | SORT_FLAG_CASE)
                 ->values();
         });
@@ -2194,11 +2187,11 @@ class PpbjController extends Controller
     public function reportExport(Request $request)
     {
         $period = $request->get('period', 'monthly');
-        $filename = 'Laporan_PPBJ_' . ucfirst($period) . '_' . now()->format('Ymd_His') . '.csv';
+        $filename = 'Laporan_PPBJ_'.ucfirst($period).'_'.now()->format('Ymd_His').'.csv';
 
         return response()->streamDownload(function () use ($request) {
             $out = fopen('php://output', 'w');
-            fprintf($out, chr(0xEF) . chr(0xBB) . chr(0xBF));
+            fprintf($out, chr(0xEF).chr(0xBB).chr(0xBF));
             fputcsv($out, ['No PPBJ', 'Tanggal Dibuat', 'Uraian', 'Portofolio', 'Buyer', 'Penyedia/Vendor', 'Total PR (Rp)', 'Nilai SP/SPK (Rp)', 'Nilai BPG (Rp)', 'Status SLA', 'Sisa SLA (Hari)', 'Progress (%)', 'Status']);
 
             $query = $this->applyReportFilters(Ppbj::query(), $request);
@@ -2216,8 +2209,8 @@ class PpbjController extends Controller
                         number_format($r->nilai_sp_spk ?? 0, 0, ',', '.'),
                         number_format($r->nilai_bpg ?? 0, 0, ',', '.'),
                         $r->status_sla,
-                        $r->sisa_target_sla . ' hari',
-                        $r->progres . '%',
+                        $r->sisa_target_sla.' hari',
+                        $r->progres.'%',
                         $r->status ?? 'ACTIVE',
                     ]));
                 }
@@ -2272,11 +2265,11 @@ class PpbjController extends Controller
 
     private function multiFilterValues(Request $request, string $key): array
     {
-        $value = $request->input($key, $request->input($key . 's', []));
+        $value = $request->input($key, $request->input($key.'s', []));
 
         return collect(is_array($value) ? $value : [$value])
-            ->flatMap(fn($item) => is_string($item) ? explode(',', $item) : [$item])
-            ->map(fn($item) => trim((string) $item))
+            ->flatMap(fn ($item) => is_string($item) ? explode(',', $item) : [$item])
+            ->map(fn ($item) => trim((string) $item))
             ->filter()
             ->unique()
             ->values()
@@ -2290,8 +2283,8 @@ class PpbjController extends Controller
      */
     private function applyLiveSlaStatusFilter($query, string $status): void
     {
-        $startDateSql = "COALESCE(tgl_diserahkan, tgl_terima_pr, tgl_ppbj)";
-        $targetSql = "CASE WHEN COALESCE(total_sebelum_ppn, 0) <= 0 THEN 0 WHEN total_sebelum_ppn <= 50000000 THEN 10 ELSE 14 END";
+        $startDateSql = 'COALESCE(tgl_diserahkan, tgl_terima_pr, tgl_ppbj)';
+        $targetSql = 'CASE WHEN COALESCE(total_sebelum_ppn, 0) <= 0 THEN 0 WHEN total_sebelum_ppn <= 50000000 THEN 10 ELSE 14 END';
         $remainingSql = "(($targetSql) - GREATEST(DATEDIFF(CURDATE(), $startDateSql), 0))";
 
         $applyIncomplete = static function ($builder) {
@@ -2302,6 +2295,7 @@ class PpbjController extends Controller
 
         if ($status === 'CANCELLED') {
             $query->where('status', 'CANCELLED');
+
             return;
         }
 
@@ -2313,6 +2307,7 @@ class PpbjController extends Controller
             $query->whereNotNull('awarding_sp')->where('awarding_sp', '!=', '')
                 ->whereNotNull('tgl_awarding_sp')
                 ->whereNotNull('tgl_spk');
+
             return;
         }
 
@@ -2320,6 +2315,7 @@ class PpbjController extends Controller
 
         if ($status === 'BELUM DIHITUNG') {
             $query->whereRaw("(($targetSql) <= 0 OR $startDateSql IS NULL)");
+
             return;
         }
 
@@ -2339,8 +2335,9 @@ class PpbjController extends Controller
     // =====================
     private function parseDate($value)
     {
-        if (empty($value))
+        if (empty($value)) {
             return null;
+        }
         $value = trim((string) $value);
 
         if (is_numeric($value) && $value > 25569) {
@@ -2353,8 +2350,9 @@ class PpbjController extends Controller
         foreach (['Y-m-d', 'd/m/Y', 'd-m-Y', 'd.m.Y', 'm/d/Y', 'Y/m/d'] as $format) {
             try {
                 $date = \DateTime::createFromFormat($format, $value);
-                if ($date && $date->format($format) === $value)
+                if ($date && $date->format($format) === $value) {
                     return $date->format('Y-m-d');
+                }
             } catch (\Exception $e) {
                 continue;
             }

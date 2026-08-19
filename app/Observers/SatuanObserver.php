@@ -10,15 +10,18 @@ class SatuanObserver
     public function created(Satuan $satuan): void
     {
         Cache::forget('satuans:all');
+        Cache::forget('satuans:index');
     }
 
     public function updated(Satuan $satuan): void
     {
         Cache::forget('satuans:all');
+        Cache::forget('satuans:index');
     }
 
     public function deleted(Satuan $satuan): void
     {
         Cache::forget('satuans:all');
+        Cache::forget('satuans:index');
     }
 }

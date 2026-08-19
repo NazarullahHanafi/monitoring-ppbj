@@ -9,6 +9,7 @@ use App\Models\SpphItem;
 use App\Models\User;
 use App\Models\Vendor;
 use App\Services\ProcurementJourneyService;
+use App\Support\CacheBatch;
 use App\Support\PrintPreviewFile;
 use App\Traits\HasPresence;
 use Illuminate\Database\QueryException;
@@ -45,30 +46,27 @@ class SpphController extends Controller
         $dari = $request->get('dari', '');
         $sampai = $request->get('sampai', '');
 
-        $vendors = Cache::remember(
-            'vendors:active',
-            3600,
-            fn () => Vendor::active()->select(['id', 'nama_vendor'])->orderBy('nama_vendor')->get()
-        );
+        $referenceData = CacheBatch::remember([
+            'vendors:active' => fn () => Vendor::active()
+                ->select(['id', 'nama_vendor'])
+                ->orderBy('nama_vendor')
+                ->get(),
+            'pics:umum' => fn () => User::where('department', 'umum')
+                ->orderBy('name')
+                ->pluck('name')
+                ->toArray(),
+            'satuans:all' => fn () => \App\Models\Satuan::orderBy('nama_satuan')
+                ->pluck('nama_satuan')
+                ->toArray(),
+            'spph:last_nomor' => fn () => Spph::select('nomor_spph', 'sequence_number')
+                ->orderBy('sequence_number', 'desc')
+                ->first(),
+        ], 3600);
 
-        $pics = Cache::remember(
-            'pics:umum',
-            3600,
-            fn () => User::where('department', 'umum')->orderBy('name')->pluck('name')->toArray()
-        );
-
-        $satuans = Cache::remember(
-            'satuans:all',
-            3600,
-            fn () => \App\Models\Satuan::orderBy('nama_satuan')->pluck('nama_satuan')->toArray()
-        );
-
-        $lastSpph = Cache::remember(
-            'spph:last_nomor',
-            300,
-            fn () => Spph::select('nomor_spph', 'sequence_number')
-                ->orderBy('sequence_number', 'desc')->first()
-        );
+        $vendors = $referenceData['vendors:active'];
+        $pics = $referenceData['pics:umum'];
+        $satuans = $referenceData['satuans:all'];
+        $lastSpph = $referenceData['spph:last_nomor'];
         $lastNomor = $lastSpph?->nomor_spph;
 
         $spphs = Spph::select([
@@ -465,16 +463,16 @@ class SpphController extends Controller
 
                     foreach ($ppbjRecords as $ppbjRecord) {
                         app(ProcurementJourneyService::class)->notifyByPrNumber(
-                        $ppbjRecord->ppbj_no,
-                        'spph_created',
-                        'SPPH dibuat oleh Umum',
-                        $journeyMessage,
-                        [
-                            'progress' => 'SPPH/RFQ',
-                            'document_no' => $spph->nomor_spph,
-                            'vendors' => $vendorNames,
-                        ],
-                        $request->user()
+                            $ppbjRecord->ppbj_no,
+                            'spph_created',
+                            'SPPH dibuat oleh Umum',
+                            $journeyMessage,
+                            [
+                                'progress' => 'SPPH/RFQ',
+                                'document_no' => $spph->nomor_spph,
+                                'vendors' => $vendorNames,
+                            ],
+                            $request->user()
                         );
                     }
                 }
@@ -549,7 +547,7 @@ class SpphController extends Controller
         $oldVendorName = $spph->nama_vendor;
 
         try {
-            return DB::transaction(function () use ($request, $spph, $nomorPr, $nomorPrType, $oldNomorPr, $oldVendorName, $ppbjNumbers) {
+            return DB::transaction(function () use ($request, $spph, $nomorPr, $nomorPrType, $oldVendorName, $ppbjNumbers) {
                 $newPpbjs = collect();
                 $oldDocumentNumber = $spph->nomor_spph;
                 $oldPpbjs = Ppbj::where('spph_rfq_1', $oldDocumentNumber)->lockForUpdate()->get();
@@ -581,12 +579,12 @@ class SpphController extends Controller
 
                 $newIds = $newPpbjs->pluck('id')->all();
                 foreach ($oldPpbjs->whereNotIn('id', $newIds) as $oldPpbj) {
-                        $oldPpbj->spph_rfq_1 = null;
-                        $oldPpbj->tgl_spph = null;
-                        if (trim((string) $oldPpbj->penyedia_eksternal) === trim((string) $oldVendorName)) {
-                            $oldPpbj->penyedia_eksternal = null;
-                        }
-                        $oldPpbj->save();
+                    $oldPpbj->spph_rfq_1 = null;
+                    $oldPpbj->tgl_spph = null;
+                    if (trim((string) $oldPpbj->penyedia_eksternal) === trim((string) $oldVendorName)) {
+                        $oldPpbj->penyedia_eksternal = null;
+                    }
+                    $oldPpbj->save();
                 }
 
                 if ($nomorPrType === 'ppbj' && $newPpbjs->isNotEmpty()) {
@@ -696,12 +694,12 @@ class SpphController extends Controller
 
             $linkedPpbjs = Ppbj::where('spph_rfq_1', $spph->nomor_spph)->lockForUpdate()->get();
             foreach ($linkedPpbjs as $ppbj) {
-                    $ppbj->spph_rfq_1 = null;
-                    $ppbj->tgl_spph = null;
-                    if (trim((string) $ppbj->penyedia_eksternal) === trim((string) $spph->nama_vendor)) {
-                        $ppbj->penyedia_eksternal = null;
-                    }
-                    $ppbj->save();
+                $ppbj->spph_rfq_1 = null;
+                $ppbj->tgl_spph = null;
+                if (trim((string) $ppbj->penyedia_eksternal) === trim((string) $spph->nama_vendor)) {
+                    $ppbj->penyedia_eksternal = null;
+                }
+                $ppbj->save();
             }
             $spph->delete();
             Cache::forget('spph:last_nomor');

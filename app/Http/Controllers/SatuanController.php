@@ -11,7 +11,12 @@ class SatuanController extends Controller
 {
     public function index()
     {
-        $satuans = Satuan::orderBy('nama_satuan')->get();
+        $satuans = Cache::remember(
+            'satuans:index',
+            3600,
+            fn () => Satuan::orderBy('nama_satuan')->get()
+        );
+
         return view('satuan.index', compact('satuans'));
     }
 
@@ -19,15 +24,16 @@ class SatuanController extends Controller
     {
         $request->validate([
             'nama_satuan' => ['required', 'string', 'max:100', Rule::unique('satuans', 'nama_satuan')],
-            'keterangan'  => 'nullable|string|max:255',
+            'keterangan' => 'nullable|string|max:255',
         ]);
 
         $satuan = Satuan::create([
             'nama_satuan' => trim($request->nama_satuan),
-            'keterangan'  => $request->keterangan ? trim($request->keterangan) : null,
+            'keterangan' => $request->keterangan ? trim($request->keterangan) : null,
         ]);
 
         Cache::forget('satuans:all');
+        Cache::forget('satuans:index');
 
         if ($request->expectsJson()) {
             return response()->json([
@@ -48,15 +54,16 @@ class SatuanController extends Controller
     {
         $request->validate([
             'nama_satuan' => ['required', 'string', 'max:100', Rule::unique('satuans', 'nama_satuan')->ignore($satuan->id)],
-            'keterangan'  => 'nullable|string|max:255',
+            'keterangan' => 'nullable|string|max:255',
         ]);
 
         $satuan->update([
             'nama_satuan' => trim($request->nama_satuan),
-            'keterangan'  => $request->keterangan ? trim($request->keterangan) : null,
+            'keterangan' => $request->keterangan ? trim($request->keterangan) : null,
         ]);
 
         Cache::forget('satuans:all');
+        Cache::forget('satuans:index');
 
         if ($request->expectsJson()) {
             return response()->json([
@@ -77,6 +84,8 @@ class SatuanController extends Controller
     {
         $satuan->delete();
         Cache::forget('satuans:all');
+        Cache::forget('satuans:index');
+
         return redirect()->route('satuan.index')->with('success', 'Satuan berhasil dihapus!');
     }
 
