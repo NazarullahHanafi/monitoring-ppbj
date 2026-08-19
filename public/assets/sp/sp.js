@@ -525,8 +525,14 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
 
             const moveToTop = () => {
                 modal.scrollTop = 0;
-                const scrollArea = modal.querySelector('.overflow-y-auto');
-                if (scrollArea) scrollArea.scrollTop = 0;
+                const scrollArea = id === 'addModal'
+                    ? document.getElementById('addModalScrollArea')
+                    : modal.querySelector('.overflow-y-auto');
+                if (scrollArea) {
+                    scrollArea.scrollTop = 0;
+                    scrollArea.scrollLeft = 0;
+                    scrollArea.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+                }
             };
 
             moveToTop();
@@ -547,6 +553,25 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
                     }
                 }
             }
+        }
+
+        function stabilizeAddModalAtTop() {
+            const modal = document.getElementById('addModal');
+            const scrollArea = document.getElementById('addModalScrollArea');
+            if (!modal || !scrollArea) return;
+
+            const active = document.activeElement;
+            if (active && modal.contains(active) && active.id !== 'nomorSpInput') {
+                active.blur();
+            }
+
+            [0, 40, 120, 250].forEach(delay => {
+                setTimeout(() => resetModalScroll('addModal'), delay);
+            });
+
+            setTimeout(() => {
+                resetModalScroll('addModal', '#nomorSpInput');
+            }, 280);
         }
 
         function openModal(id) {
@@ -2226,9 +2251,9 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
                     }, 0);
                 });
 
-            // Tombol Tambah
-            document.querySelector('button[onclick="openModal(\'addModal\')"]').addEventListener('click', () => {
-                loadSuggestionsSp();
+            // Tombol Tambah. Form disiapkan saat modal masih tertutup supaya browser
+            // tidak memindahkan scroll mengikuti elemen yang baru dirender.
+            document.getElementById('openAddSpModalButton')?.addEventListener('click', () => {
                 document.getElementById('nomorSpInput').value = '';
                 document.getElementById('nilaiSpInput').value = '';
                 document.getElementById('nilaiPrInput').value = '';
@@ -2268,7 +2293,9 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
                 renderSpphVendorRecommendation('add', [], null);
                 restoreSpModeDraftToAdd();
                 updateOracleReadinessChecklist('add');
-                resetModalScroll('addModal', '#nomorSpInput');
+                openModal('addModal');
+                stabilizeAddModalAtTop();
+                loadSuggestionsSp();
             });
 
             // Vendor toggle

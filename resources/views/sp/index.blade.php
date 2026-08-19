@@ -78,7 +78,7 @@
                             </svg>
                             <span class="text-sm">Vendor</span>
                         </a>
-                        <button onclick="openModal('addModal')"
+                        <button type="button" id="openAddSpModalButton"
                             class="flex items-center gap-2 bg-white text-blue-700 font-bold px-5 py-3 rounded-xl hover:bg-blue-50 transition-all shadow-lg shadow-black/20 whitespace-nowrap group">
                             <svg class="w-5 h-5 group-hover:rotate-90 transition-transform duration-300" fill="none"
                                 stroke="currentColor" viewBox="0 0 24 24">
@@ -477,7 +477,9 @@
     {{-- ═══ MODAL TAMBAH ═══ --}}
     <div id="addModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4">
          <div class="modal-overlay absolute inset-0"></div>
-        <div class="relative bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-xl max-h-[90vh] overflow-y-auto">
+        <div id="addModalScrollArea" tabindex="-1"
+            class="relative bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-xl max-h-[90vh] overflow-y-auto"
+            style="overflow-anchor: none;">
             <div class="sp-header-gradient px-6 py-4 rounded-t-2xl">
                 <h2 class="text-white font-bold text-lg">{{ $oracleMode ? 'Tambah SP Oracle' : 'Tambah SP Baru' }}</h2>
             </div>
@@ -1392,7 +1394,7 @@
     <script>
         window.SP_PAGE_CONFIG = @json($spPageConfig);
     </script>
-    <script src="{{ asset('assets/sp/sp.js') }}?v=20260819b" defer></script>
+    <script src="{{ asset('assets/sp/sp.js') }}?v=20260819c" defer></script>
 @endpush
 
 @include('components.archive-upload-popup')
