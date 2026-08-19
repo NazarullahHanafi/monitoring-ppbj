@@ -527,3 +527,17 @@ mark.search-hl {
             box-shadow: inset 0 0 0 1px #fb923c !important;
             text-shadow: 0 1px 1px rgba(0, 0, 0, 0.28) !important;
         }
+
+        .ppbj-contract-status[data-contract-tone="very-critical"] {
+            background-color: #fee2e2 !important;
+            color: #991b1b !important;
+            box-shadow: inset 0 0 0 1px #f87171 !important;
+            text-shadow: none !important;
+        }
+
+        html.dark .ppbj-contract-status[data-contract-tone="very-critical"] {
+            background-color: #991b1b !important;
+            color: #ffffff !important;
+            box-shadow: inset 0 0 0 1px #fca5a5, 0 2px 8px rgba(127, 29, 29, 0.35) !important;
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55) !important;
+        }

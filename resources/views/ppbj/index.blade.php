@@ -516,9 +516,11 @@
                             $contractStatusClass = method_exists($row, 'contractStatusColorClass')
                                 ? $row->contractStatusColorClass()
                                 : 'bg-slate-100 text-slate-700 ring-slate-200 dark:bg-slate-700 dark:text-slate-200 dark:ring-slate-600';
-                            $contractStatusTone = in_array($contractStatus, ['KRITIS', 'SANGAT KRITIS', 'BERAKHIR HARI INI'], true)
-                                ? 'critical'
-                                : 'default';
+                            $contractStatusTone = match ($contractStatus) {
+                                'SANGAT KRITIS', 'BERAKHIR HARI INI' => 'very-critical',
+                                'KRITIS' => 'critical',
+                                default => 'default',
+                            };
                             $contractExplanation = method_exists($row, 'contractExplanation')
                                 ? $row->contractExplanation()
                                 : 'Informasi masa pemenuhan belum tersedia.';
@@ -1138,7 +1140,7 @@
 @endsection
 
 @push('styles')
-    <link rel="stylesheet" href="{{ asset('assets/ppbj/ppbj.css') }}?v=20260819a">
+    <link rel="stylesheet" href="{{ asset('assets/ppbj/ppbj.css') }}?v=20260819b">
 @endpush
 
 @push('scripts')
