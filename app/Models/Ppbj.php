@@ -4,19 +4,36 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Log;
 
 class Ppbj extends Model
 {
     protected $table = 'ppbj';
 
+    /** @var array<string, mixed>|null */
+    protected ?array $pendingDoAudit = null;
+
     protected static function booted()
     {
         static::creating(function ($ppbj) {
             $ppbj->applySlaCalculation();
+            $ppbj->prepareDoAudit(null);
         });
 
         static::updating(function ($ppbj) {
             $ppbj->applySlaCalculation();
+
+            if ($ppbj->isDirty('do_no')) {
+                $ppbj->prepareDoAudit($ppbj->getOriginal('do_no'));
+            }
+        });
+
+        static::created(function (Ppbj $ppbj) {
+            $ppbj->writePendingDoAudit();
+        });
+
+        static::updated(function (Ppbj $ppbj) {
+            $ppbj->writePendingDoAudit();
         });
 
         static::deleting(function (Ppbj $ppbj) {
@@ -77,6 +94,8 @@ class Ppbj extends Model
         'time_left',
 
         'do_no',
+        'do_updated_at',
+        'do_updated_by_user_id',
         'bpg_no',
         'nilai_bpg',
         'tgl_bpg',
@@ -108,6 +127,7 @@ class Ppbj extends Model
         'promised_date' => 'date:Y-m-d',
         'goods_arrived_at' => 'datetime',
         'goods_confirmed_at' => 'datetime',
+        'do_updated_at' => 'datetime',
     ];
 
     public function createdBy()
@@ -138,6 +158,74 @@ class Ppbj extends Model
     public function goodsConfirmedBy()
     {
         return $this->belongsTo(User::class, 'goods_confirmed_by_user_id');
+    }
+
+    public function doUpdatedBy()
+    {
+        return $this->belongsTo(User::class, 'do_updated_by_user_id');
+    }
+
+    private function prepareDoAudit($oldValue): void
+    {
+        $oldNumber = trim((string) ($oldValue ?? ''));
+        $newNumber = trim((string) ($this->do_no ?? ''));
+
+        if ($oldNumber === $newNumber) {
+            return;
+        }
+
+        $changedAt = now();
+        $userId = auth()->id();
+
+        $this->do_updated_at = $changedAt;
+        $this->do_updated_by_user_id = $userId;
+        $this->pendingDoAudit = [
+            'old' => $oldNumber !== '' ? $oldNumber : null,
+            'new' => $newNumber !== '' ? $newNumber : null,
+            'changed_at' => $changedAt->toIso8601String(),
+            'changed_by_user_id' => $userId,
+        ];
+    }
+
+    private function writePendingDoAudit(): void
+    {
+        $audit = $this->pendingDoAudit;
+        $this->pendingDoAudit = null;
+
+        if ($audit === null) {
+            return;
+        }
+
+        $action = $audit['new'] === null
+            ? 'do_cleared'
+            : ($audit['old'] === null ? 'do_recorded' : 'do_updated');
+
+        try {
+            ActivityLog::create([
+                'user_id' => $audit['changed_by_user_id'],
+                'model_type' => self::class,
+                'model_id' => $this->getKey(),
+                'action' => $action,
+                'description' => match ($action) {
+                    'do_recorded' => 'Nomor DO / Surat Jalan / BAST dicatat.',
+                    'do_updated' => 'Nomor DO / Surat Jalan / BAST diperbarui.',
+                    default => 'Nomor DO / Surat Jalan / BAST dikosongkan.',
+                },
+                'changes' => [
+                    'do_no' => [
+                        'old' => $audit['old'],
+                        'new' => $audit['new'],
+                    ],
+                    'changed_at' => $audit['changed_at'],
+                ],
+            ]);
+        } catch (\Throwable $e) {
+            // Audit tidak boleh menggagalkan transaksi utama PPBJ.
+            Log::warning('Gagal mencatat audit perubahan DO PPBJ.', [
+                'ppbj_id' => $this->getKey(),
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 
     public function realTrackings()

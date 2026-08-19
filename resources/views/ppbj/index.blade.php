@@ -822,7 +822,7 @@
                     'tgl_spk' => ['Tanggal SPK', 'date'],
                     'nilai_sp_spk' => ['Nilai SP/SPK', 'currency'],
                     'promised_date' => ['Tanggal Pemenuhan / Berakhir Kontrak', 'date'],
-                    'do_no' => ['DO No', 'text'],
+                    'do_no' => ['No. DO / Surat Jalan / BAST', 'text'],
                     'bpg_no' => ['BPG No', 'text'],
                     'nilai_bpg' => ['Nilai BPG', 'currency'],
                     'tgl_bpg' => ['Tanggal BPG', 'date'],

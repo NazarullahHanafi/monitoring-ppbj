@@ -1357,6 +1357,8 @@
                     'goods_arrived_by_user_id',
                     'goods_confirmed_by_user_id',
                     'general_registered_by_user_id',
+                    'do_updated_by_user_id',
+                    'do_updated_by_name',
                 ]);
                 const detailLabelMap = {
                     ppbj_no: 'Nomor PPBJ / PR',
@@ -1388,6 +1390,8 @@
                     goods_confirmed_by_user_id: 'ID Konfirmasi Operasional',
                     goods_confirmed_by_name: 'Dikonfirmasi Oleh',
                     goods_confirmed_note: 'Catatan Konfirmasi Operasional',
+                    do_no: 'No. DO / Surat Jalan / BAST',
+                    do_updated_at: 'Audit DO Terakhir',
                 };
                 const slaResultLabel = d.sla_outcome_label || (d.sla_is_complete ? 'SLA berhenti' : d.sla_final_label || '-');
                 const slaRemainingValue = Number((d.sla_current_remaining_days ?? d.sisa_target_sla) || 0);
@@ -1512,6 +1516,10 @@
                     }
                     if (k === 'progres' && v !== null && v !== undefined && v !== '-') {
                         displayVal = `${v}%`;
+                    }
+                    if (k === 'do_updated_at' && v) {
+                        const actor = d.do_updated_by_name || 'Sistem';
+                        displayVal = `${formatPpbjAuditDate(v)} • oleh ${actor}`;
                     }
 
                     html += `

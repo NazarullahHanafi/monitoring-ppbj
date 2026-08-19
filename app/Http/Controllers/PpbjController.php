@@ -77,6 +77,8 @@ class PpbjController extends Controller
                 'goods_confirmed_note',
                 'time_left',
                 'do_no',
+                'do_updated_at',
+                'do_updated_by_user_id',
                 'bpg_no',
                 'nilai_bpg',
                 'tgl_bpg',
@@ -106,7 +108,7 @@ class PpbjController extends Controller
             'awarding_sp' => 'Awarding / SP / Kontrak',
             'sph' => 'SPH',
             'spph_rfq_1' => 'SPPH / RFQ 1',
-            'do_no' => 'No. DO (Delivery Order)',
+            'do_no' => 'No. DO / Surat Jalan / BAST',
             'bpg_no' => 'No. BPG (Bukti Penerimaan Gudang)',
             'bpb_no' => 'No. BPB (Bukti Pengeluaran Barang)',
             'no_invoice' => 'No. Invoice',
@@ -245,6 +247,7 @@ class PpbjController extends Controller
             'goods_arrived_by_user_id' => 'goods_arrived_by_name',
             'goods_confirmed_by_user_id' => 'goods_confirmed_by_name',
             'general_registered_by_user_id' => 'general_registered_by_name',
+            'do_updated_by_user_id' => 'do_updated_by_name',
         ];
 
         $userIds = collect($ppbj->items())
