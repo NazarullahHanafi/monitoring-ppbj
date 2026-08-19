@@ -21,16 +21,27 @@ class SendContractFulfillmentReminders extends Command
 
         Ppbj::query()
             ->select([
-                'id', 'ppbj_no', 'uraian', 'tgl_spk', 'promised_date',
+                'id', 'ppbj_no', 'uraian', 'tgl_spk', 'promised_date', 'closed_date',
                 'goods_confirmed_at', 'status', 'awarding_sp', 'tgl_awarding_sp',
             ])
             ->whereNotNull('tgl_spk')
-            ->whereNotNull('promised_date')
+            ->where(function ($query) {
+                $query->whereNotNull('promised_date')
+                    ->orWhereNotNull('closed_date');
+            })
             ->whereNull('goods_confirmed_at')
             ->where(function ($query) {
                 $query->whereNull('status')->orWhere('status', '!=', 'CANCELLED');
             })
-            ->whereDate('promised_date', '<=', now()->addDays(30)->toDateString())
+            ->where(function ($query) {
+                $deadline = now()->addDays(30)->toDateString();
+
+                $query->where('promised_date', '<=', $deadline)
+                    ->orWhere(function ($fallback) use ($deadline) {
+                        $fallback->whereNull('promised_date')
+                            ->where('closed_date', '<=', $deadline);
+                    });
+            })
             ->orderBy('id')
             ->chunkById(100, function ($rows) use ($journey, &$reminders, &$sent) {
                 foreach ($rows as $ppbj) {
@@ -62,7 +73,8 @@ class SendContractFulfillmentReminders extends Command
                             'document_no' => $ppbj->awarding_sp,
                             'description' => $ppbj->uraian,
                             'progress' => $status,
-                            'promised_date' => $ppbj->promised_date,
+                            'promised_date' => $ppbj->contractEndDate()?->toDateString(),
+                            'date_source' => $ppbj->contractEndDateSourceLabel(),
                             'remaining_days' => $remaining,
                         ]
                     );

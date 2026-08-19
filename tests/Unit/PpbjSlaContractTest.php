@@ -98,4 +98,44 @@ class PpbjSlaContractTest extends TestCase
 
         $this->assertSame('SUDAH TERPENUHI', $ppbj->contractStatusLabel());
     }
+
+    public function test_promised_date_menjadi_prioritas_batas_pemenuhan(): void
+    {
+        $ppbj = new Ppbj([
+            'tgl_spk' => '2026-08-01',
+            'promised_date' => '2026-08-20',
+            'closed_date' => '2026-08-25',
+        ]);
+
+        $this->assertSame('2026-08-20', $ppbj->contractEndDate()?->toDateString());
+        $this->assertSame('Promised Date', $ppbj->contractEndDateSourceLabel());
+    }
+
+    public function test_closed_date_dipakai_sebagai_fallback_jika_promised_date_kosong(): void
+    {
+        Carbon::setTestNow('2026-08-10 09:00:00');
+
+        $ppbj = new Ppbj([
+            'tgl_spk' => '2026-08-01',
+            'closed_date' => '2026-08-25',
+        ]);
+
+        $this->assertSame('2026-08-25', $ppbj->contractEndDate()?->toDateString());
+        $this->assertSame('Closed Date (fallback)', $ppbj->contractEndDateSourceLabel());
+        $this->assertSame(15, $ppbj->contractRemainingDays());
+        $this->assertStringContainsString('Closed Date (fallback)', $ppbj->contractExplanation());
+    }
+
+    public function test_masa_pemenuhan_tidak_dihitung_jika_kedua_tanggal_kosong(): void
+    {
+        $ppbj = new Ppbj([
+            'tgl_spk' => '2026-08-01',
+        ]);
+
+        $this->assertNull($ppbj->contractEndDate());
+        $this->assertNull($ppbj->contractEndDateSourceLabel());
+        $this->assertNull($ppbj->contractRemainingDays());
+        $this->assertNull($ppbj->contractDurationDays());
+        $this->assertSame('BATAS BELUM DIATUR', $ppbj->contractStatusLabel());
+    }
 }

@@ -453,7 +453,20 @@ class Ppbj extends Model
 
     public function contractEndDate(): ?Carbon
     {
-        return $this->parseSlaDate($this->promised_date);
+        return $this->parseSlaDate($this->promised_date ?: $this->closed_date);
+    }
+
+    public function contractEndDateSourceLabel(): ?string
+    {
+        if ($this->parseSlaDate($this->promised_date)) {
+            return 'Promised Date';
+        }
+
+        if ($this->parseSlaDate($this->closed_date)) {
+            return 'Closed Date (fallback)';
+        }
+
+        return null;
     }
 
     public function contractDurationDays(): ?int
@@ -539,20 +552,21 @@ class Ppbj extends Model
         $remaining = $this->contractRemainingDays();
         $startLabel = $start->translatedFormat('d F Y');
         $endLabel = $end->translatedFormat('d F Y');
+        $endSource = $this->contractEndDateSourceLabel() ?: 'tanggal batas';
 
         if ($duration !== null && $duration < 0) {
-            return "Tanggal pemenuhan ({$endLabel}) lebih awal dari tanggal SPK/kontrak ({$startLabel}). Periksa kembali kedua tanggal tersebut.";
+            return "Batas dari {$endSource} ({$endLabel}) lebih awal dari tanggal SPK/kontrak ({$startLabel}). Periksa kembali kedua tanggal tersebut.";
         }
 
         if ($remaining !== null && $remaining < 0) {
-            return "Masa pemenuhan dimulai {$startLabel}, berakhir {$endLabel}, dan telah melewati batas " . abs($remaining) . ' hari.';
+            return "Masa pemenuhan dimulai {$startLabel}, memakai {$endSource} sebagai batas ({$endLabel}), dan telah melewati batas " . abs($remaining) . ' hari.';
         }
 
         if ($remaining === 0) {
-            return "Masa pemenuhan dimulai {$startLabel} dan berakhir hari ini ({$endLabel}).";
+            return "Masa pemenuhan dimulai {$startLabel} dan batas dari {$endSource} berakhir hari ini ({$endLabel}).";
         }
 
-        return "Masa pemenuhan dimulai {$startLabel}, berakhir {$endLabel}, berdurasi {$duration} hari, dan tersisa {$remaining} hari.";
+        return "Masa pemenuhan dimulai {$startLabel}, memakai {$endSource} sebagai batas ({$endLabel}), berdurasi {$duration} hari, dan tersisa {$remaining} hari.";
     }
 
     protected function parseSlaDate($date): ?Carbon
@@ -579,7 +593,7 @@ class Ppbj extends Model
             $targetSla,
             $this->tgl_diserahkan ?: $this->tgl_terima_pr ?: $this->tgl_ppbj
         );
-        $timeLeft = self::hitungTimeLeft($this->promised_date);
+        $timeLeft = self::hitungTimeLeft($this->promised_date ?: $this->closed_date);
         $qtLeft = self::hitungQtLeft($this->tgl_spph);
         $progres = self::hitungProgresByTahapan($this);
         $persentaseRealisasi = self::hitungPersentaseRealisasi($nilaiSpSpk, $total);
@@ -618,7 +632,7 @@ class Ppbj extends Model
         );
 
         $this->time_left = self::hitungTimeLeft(
-            $this->promised_date
+            $this->promised_date ?: $this->closed_date
         );
 
         $this->qt_left = self::hitungQtLeft(

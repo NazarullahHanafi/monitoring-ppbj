@@ -520,6 +520,8 @@
                                 ? $row->contractExplanation()
                                 : 'Informasi masa pemenuhan belum tersedia.';
                             $contractRemaining = method_exists($row, 'contractRemainingDays') ? $row->contractRemainingDays() : null;
+                            $contractEndDate = method_exists($row, 'contractEndDate') ? $row->contractEndDate() : null;
+                            $contractEndSource = method_exists($row, 'contractEndDateSourceLabel') ? $row->contractEndDateSourceLabel() : null;
                         @endphp
 
                         <tr id="row_{{ $row->id }}"
@@ -589,15 +591,20 @@
                                     <span class="inline-flex items-center rounded-full px-2 py-1 text-[9px] font-extrabold ring-1 {{ $contractStatusClass }}">
                                         {{ $contractStatus }}
                                     </span>
-                                    @if(!empty($row->promised_date))
+                                    @if($contractEndDate)
                                         <span class="text-[10px] font-semibold text-slate-500 dark:text-slate-300">
-                                            {{ \Carbon\Carbon::parse($row->promised_date)->translatedFormat('d M Y') }}
+                                            {{ $contractEndDate->translatedFormat('d M Y') }}
                                             @if($contractRemaining !== null && !$row->goods_confirmed_at)
                                                 · {{ $contractRemaining >= 0 ? $contractRemaining . ' hari lagi' : 'lewat ' . abs($contractRemaining) . ' hari' }}
                                             @endif
                                         </span>
+                                        @if($contractEndSource)
+                                            <span class="text-[9px] font-bold text-slate-400 dark:text-slate-400">
+                                                {{ $contractEndSource }}
+                                            </span>
+                                        @endif
                                     @else
-                                        <span class="text-[10px] text-slate-400">Tanggal belum diatur</span>
+                                        <span class="text-[10px] text-slate-400">Promised Date dan Closed Date kosong</span>
                                     @endif
                                 </div>
                             </td>
@@ -1235,6 +1242,9 @@
                         : null;
                     $data['contract_end_date_label'] = method_exists($item, 'contractEndDate') && $item->contractEndDate()
                         ? $item->contractEndDate()->translatedFormat('d F Y')
+                        : null;
+                    $data['contract_end_date_source_label'] = method_exists($item, 'contractEndDateSourceLabel')
+                        ? $item->contractEndDateSourceLabel()
                         : null;
                     $data['contract_explanation'] = method_exists($item, 'contractExplanation')
                         ? $item->contractExplanation()

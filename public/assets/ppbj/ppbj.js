@@ -1352,6 +1352,7 @@
                     'contract_duration_days',
                     'contract_start_date_label',
                     'contract_end_date_label',
+                    'contract_end_date_source_label',
                     'contract_explanation',
                     'goods_arrived_by_user_id',
                     'goods_confirmed_by_user_id',
@@ -1471,6 +1472,7 @@
                             <div class="rounded-xl border border-slate-200 bg-white/80 p-3 dark:border-gray-700 dark:bg-gray-900/50">
                                 <div class="text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Batas pemenuhan</div>
                                 <div class="mt-1 text-sm font-black text-slate-900 dark:text-white">${escapeHtml(d.contract_end_date_label || '-')}</div>
+                                <div class="mt-1 text-[10px] font-bold text-slate-500 dark:text-slate-400">${escapeHtml(d.contract_end_date_source_label || 'Tidak dihitung')}</div>
                             </div>
                             <div class="rounded-xl border border-slate-200 bg-white/80 p-3 dark:border-gray-700 dark:bg-gray-900/50">
                                 <div class="text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Durasi</div>
