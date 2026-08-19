@@ -508,3 +508,22 @@ mark.search-hl {
             box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
             background-color: #fff;
         }
+
+        /*
+         * Status KRITIS harus tetap terbaca di kedua tema. Selector statis ini
+         * sengaja tidak bergantung pada class Tailwind dinamis dari model agar
+         * tidak terhapus saat proses build/purge CSS.
+         */
+        .ppbj-contract-status[data-contract-tone="critical"] {
+            background-color: #fff7ed !important;
+            color: #9a3412 !important;
+            box-shadow: inset 0 0 0 1px #fdba74 !important;
+            text-shadow: none !important;
+        }
+
+        .dark .ppbj-contract-status[data-contract-tone="critical"] {
+            background-color: #7c2d12 !important;
+            color: #ffedd5 !important;
+            box-shadow: inset 0 0 0 1px #fb923c !important;
+            text-shadow: 0 1px 1px rgba(0, 0, 0, 0.28) !important;
+        }

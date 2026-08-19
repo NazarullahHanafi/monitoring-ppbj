@@ -516,6 +516,9 @@
                             $contractStatusClass = method_exists($row, 'contractStatusColorClass')
                                 ? $row->contractStatusColorClass()
                                 : 'bg-slate-100 text-slate-700 ring-slate-200 dark:bg-slate-700 dark:text-slate-200 dark:ring-slate-600';
+                            $contractStatusTone = in_array($contractStatus, ['KRITIS', 'SANGAT KRITIS', 'BERAKHIR HARI INI'], true)
+                                ? 'critical'
+                                : 'default';
                             $contractExplanation = method_exists($row, 'contractExplanation')
                                 ? $row->contractExplanation()
                                 : 'Informasi masa pemenuhan belum tersedia.';
@@ -588,7 +591,8 @@
 
                             <td class="px-4 py-3 text-center" title="{{ $contractExplanation }}">
                                 <div class="inline-flex max-w-[170px] flex-col items-center gap-1">
-                                    <span class="inline-flex items-center rounded-full px-2 py-1 text-[9px] font-extrabold ring-1 {{ $contractStatusClass }}">
+                                    <span data-contract-tone="{{ $contractStatusTone }}"
+                                        class="ppbj-contract-status inline-flex items-center rounded-full px-2 py-1 text-[9px] font-extrabold ring-1 {{ $contractStatusClass }}">
                                         {{ $contractStatus }}
                                     </span>
                                     @if($contractEndDate)
@@ -1134,7 +1138,7 @@
 @endsection
 
 @push('styles')
-    <link rel="stylesheet" href="{{ asset('assets/ppbj/ppbj.css') }}?v=20260818b">
+    <link rel="stylesheet" href="{{ asset('assets/ppbj/ppbj.css') }}?v=20260819a">
 @endpush
 
 @push('scripts')
