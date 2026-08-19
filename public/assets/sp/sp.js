@@ -519,16 +519,43 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
         // ═══════════════════════════════════════
         // MODAL
         // ═══════════════════════════════════════
+        function resetModalScroll(id, focusSelector = null) {
+            const modal = document.getElementById(id);
+            if (!modal) return;
+
+            const moveToTop = () => {
+                modal.scrollTop = 0;
+                const scrollArea = modal.querySelector('.overflow-y-auto');
+                if (scrollArea) scrollArea.scrollTop = 0;
+            };
+
+            moveToTop();
+            requestAnimationFrame(() => {
+                moveToTop();
+                requestAnimationFrame(moveToTop);
+            });
+            setTimeout(moveToTop, 100);
+
+            if (focusSelector) {
+                const focusTarget = modal.querySelector(focusSelector);
+                if (focusTarget) {
+                    try {
+                        focusTarget.focus({ preventScroll: true });
+                    } catch {
+                        focusTarget.focus();
+                        moveToTop();
+                    }
+                }
+            }
+        }
+
         function openModal(id) {
             const modal = document.getElementById(id);
             if (!modal) return;
 
             modal.classList.remove('hidden');
             modal.classList.add('flex');
-            modal.scrollTop = 0;
-
-            const scrollArea = modal.querySelector('.overflow-y-auto');
-            if (scrollArea) scrollArea.scrollTop = 0;
+            resetModalScroll(id);
 
             document.body.style.overflow = 'hidden';
             modalOpen = true;
@@ -2241,6 +2268,7 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
                 renderSpphVendorRecommendation('add', [], null);
                 restoreSpModeDraftToAdd();
                 updateOracleReadinessChecklist('add');
+                resetModalScroll('addModal', '#nomorSpInput');
             });
 
             // Vendor toggle
