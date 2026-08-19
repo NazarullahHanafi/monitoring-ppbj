@@ -96,7 +96,59 @@ class PpbjSlaContractTest extends TestCase
             'goods_confirmed_at' => '2026-08-11 10:00:00',
         ]));
 
-        $this->assertSame('SUDAH TERPENUHI', $ppbj->contractStatusLabel());
+        $this->assertSame('SANGAT KRITIS', $ppbj->contractStatusLabel());
+        $this->assertStringContainsString('belum dinyatakan selesai', $ppbj->contractExplanation());
+    }
+
+    public function test_serah_terima_selesai_lebih_cepat_berdasarkan_nomor_dan_tanggal_do(): void
+    {
+        Carbon::setTestNow('2026-08-25 09:00:00');
+
+        $ppbj = new Ppbj([
+            'tgl_spk' => '2026-08-01',
+            'promised_date' => '2026-08-20',
+            'do_no' => 'BAST/001/2026',
+            'do_date' => '2026-08-18',
+        ]);
+
+        $this->assertTrue($ppbj->isHandoverComplete());
+        $this->assertNull($ppbj->contractRemainingDays());
+        $this->assertSame(-2, $ppbj->handoverDeviationDays());
+        $this->assertSame('LEBIH CEPAT 2 HARI', $ppbj->handoverPerformanceLabel());
+        $this->assertSame('SERAH TERIMA SELESAI', $ppbj->contractStatusLabel());
+        $this->assertStringContainsString('lebih cepat 2 hari', $ppbj->contractExplanation());
+    }
+
+    public function test_serah_terima_terlambat_memakai_closed_date_sebagai_fallback(): void
+    {
+        $ppbj = new Ppbj([
+            'tgl_spk' => '2026-08-01',
+            'closed_date' => '2026-08-20',
+            'do_no' => 'DO/002/2026',
+            'do_date' => '2026-08-23',
+        ]);
+
+        $this->assertSame(3, $ppbj->handoverDeviationDays());
+        $this->assertSame('TERLAMBAT 3 HARI', $ppbj->handoverPerformanceLabel());
+        $this->assertSame('SERAH TERIMA TERLAMBAT', $ppbj->contractStatusLabel());
+        $this->assertStringContainsString('Closed Date (fallback)', $ppbj->contractExplanation());
+    }
+
+    public function test_nomor_atau_tanggal_do_saja_belum_menyelesaikan_serah_terima(): void
+    {
+        $onlyNumber = new Ppbj([
+            'promised_date' => '2026-08-20',
+            'do_no' => 'DO/003/2026',
+        ]);
+        $onlyDate = new Ppbj([
+            'promised_date' => '2026-08-20',
+            'do_date' => '2026-08-19',
+        ]);
+
+        $this->assertFalse($onlyNumber->isHandoverComplete());
+        $this->assertFalse($onlyDate->isHandoverComplete());
+        $this->assertSame('DOKUMEN SERAH TERIMA BELUM LENGKAP', $onlyNumber->contractStatusLabel());
+        $this->assertSame('DOKUMEN SERAH TERIMA BELUM LENGKAP', $onlyDate->contractStatusLabel());
     }
 
     public function test_promised_date_menjadi_prioritas_batas_pemenuhan(): void

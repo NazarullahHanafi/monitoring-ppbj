@@ -17,14 +17,17 @@ class Ppbj extends Model
     {
         static::creating(function ($ppbj) {
             $ppbj->applySlaCalculation();
-            $ppbj->prepareDoAudit(null);
+            $ppbj->prepareDoAudit(null, null);
         });
 
         static::updating(function ($ppbj) {
             $ppbj->applySlaCalculation();
 
-            if ($ppbj->isDirty('do_no')) {
-                $ppbj->prepareDoAudit($ppbj->getOriginal('do_no'));
+            if ($ppbj->isDirty('do_no') || $ppbj->isDirty('do_date')) {
+                $ppbj->prepareDoAudit(
+                    $ppbj->getOriginal('do_no'),
+                    $ppbj->getOriginal('do_date')
+                );
             }
         });
 
@@ -94,6 +97,7 @@ class Ppbj extends Model
         'time_left',
 
         'do_no',
+        'do_date',
         'do_updated_at',
         'do_updated_by_user_id',
         'bpg_no',
@@ -125,6 +129,7 @@ class Ppbj extends Model
         // mencegah toArray()/JSON mengubah nilainya menjadi timestamp UTC sehingga
         // tanggal pemenuhan tetap tampil pada modal info dan edit Management PPBJ.
         'promised_date' => 'date:Y-m-d',
+        'do_date' => 'date:Y-m-d',
         'goods_arrived_at' => 'datetime',
         'goods_confirmed_at' => 'datetime',
         'do_updated_at' => 'datetime',
@@ -165,12 +170,14 @@ class Ppbj extends Model
         return $this->belongsTo(User::class, 'do_updated_by_user_id');
     }
 
-    private function prepareDoAudit($oldValue): void
+    private function prepareDoAudit($oldNumberValue, $oldDateValue): void
     {
-        $oldNumber = trim((string) ($oldValue ?? ''));
+        $oldNumber = trim((string) ($oldNumberValue ?? ''));
         $newNumber = trim((string) ($this->do_no ?? ''));
+        $oldDate = $this->normalizeDoDateForAudit($oldDateValue);
+        $newDate = $this->normalizeDoDateForAudit($this->do_date);
 
-        if ($oldNumber === $newNumber) {
+        if ($oldNumber === $newNumber && $oldDate === $newDate) {
             return;
         }
 
@@ -180,11 +187,18 @@ class Ppbj extends Model
         $this->do_updated_at = $changedAt;
         $this->do_updated_by_user_id = $userId;
         $this->pendingDoAudit = [
-            'old' => $oldNumber !== '' ? $oldNumber : null,
-            'new' => $newNumber !== '' ? $newNumber : null,
+            'old_number' => $oldNumber !== '' ? $oldNumber : null,
+            'new_number' => $newNumber !== '' ? $newNumber : null,
+            'old_date' => $oldDate,
+            'new_date' => $newDate,
             'changed_at' => $changedAt->toIso8601String(),
             'changed_by_user_id' => $userId,
         ];
+    }
+
+    private function normalizeDoDateForAudit($value): ?string
+    {
+        return $this->parseSlaDate($value)?->toDateString();
     }
 
     private function writePendingDoAudit(): void
@@ -196,9 +210,9 @@ class Ppbj extends Model
             return;
         }
 
-        $action = $audit['new'] === null
+        $action = $audit['new_number'] === null && $audit['new_date'] === null
             ? 'do_cleared'
-            : ($audit['old'] === null ? 'do_recorded' : 'do_updated');
+            : ($audit['old_number'] === null && $audit['old_date'] === null ? 'do_recorded' : 'do_updated');
 
         try {
             ActivityLog::create([
@@ -207,14 +221,18 @@ class Ppbj extends Model
                 'model_id' => $this->getKey(),
                 'action' => $action,
                 'description' => match ($action) {
-                    'do_recorded' => 'Nomor DO / Surat Jalan / BAST dicatat.',
-                    'do_updated' => 'Nomor DO / Surat Jalan / BAST diperbarui.',
-                    default => 'Nomor DO / Surat Jalan / BAST dikosongkan.',
+                    'do_recorded' => 'Dokumen DO / Surat Jalan / BAST dicatat.',
+                    'do_updated' => 'Dokumen DO / Surat Jalan / BAST diperbarui.',
+                    default => 'Dokumen DO / Surat Jalan / BAST dikosongkan.',
                 },
                 'changes' => [
                     'do_no' => [
-                        'old' => $audit['old'],
-                        'new' => $audit['new'],
+                        'old' => $audit['old_number'],
+                        'new' => $audit['new_number'],
+                    ],
+                    'do_date' => [
+                        'old' => $audit['old_date'],
+                        'new' => $audit['new_date'],
                     ],
                     'changed_at' => $audit['changed_at'],
                 ],
@@ -574,15 +592,78 @@ class Ppbj extends Model
 
     public function contractRemainingDays(): ?int
     {
+        if ($this->isHandoverComplete()) {
+            return null;
+        }
+
         $end = $this->contractEndDate();
 
         return $end ? (int) now()->startOfDay()->diffInDays($end->copy()->startOfDay(), false) : null;
     }
 
+    public function handoverDate(): ?Carbon
+    {
+        return $this->parseSlaDate($this->do_date);
+    }
+
+    public function isHandoverComplete(): bool
+    {
+        return trim((string) ($this->do_no ?? '')) !== '' && $this->handoverDate() !== null;
+    }
+
+    /**
+     * Selisih positif berarti terlambat, negatif berarti lebih cepat.
+     * Perhitungan murni dari data baris aktif sehingga tidak menambah query.
+     */
+    public function handoverDeviationDays(): ?int
+    {
+        $target = $this->contractEndDate();
+        $actual = $this->handoverDate();
+
+        if (! $target || ! $actual || ! $this->isHandoverComplete()) {
+            return null;
+        }
+
+        return (int) $target->copy()->startOfDay()->diffInDays($actual->copy()->startOfDay(), false);
+    }
+
+    public function handoverPerformanceLabel(): string
+    {
+        if (! $this->isHandoverComplete()) {
+            if (trim((string) ($this->do_no ?? '')) !== '' || $this->handoverDate()) {
+                return 'DATA SERAH TERIMA BELUM LENGKAP';
+            }
+
+            return 'BELUM SERAH TERIMA';
+        }
+
+        $deviation = $this->handoverDeviationDays();
+
+        if ($deviation === null) {
+            return 'SELESAI - TARGET BELUM ADA';
+        }
+
+        if ($deviation > 0) {
+            return 'TERLAMBAT ' . $deviation . ' HARI';
+        }
+
+        if ($deviation < 0) {
+            return 'LEBIH CEPAT ' . abs($deviation) . ' HARI';
+        }
+
+        return 'TEPAT WAKTU';
+    }
+
     public function contractStatusLabel(): string
     {
-        if ($this->goods_confirmed_at) {
-            return 'SUDAH TERPENUHI';
+        if ($this->isHandoverComplete()) {
+            return $this->handoverDeviationDays() > 0
+                ? 'SERAH TERIMA TERLAMBAT'
+                : 'SERAH TERIMA SELESAI';
+        }
+
+        if (trim((string) ($this->do_no ?? '')) !== '' || $this->handoverDate()) {
+            return 'DOKUMEN SERAH TERIMA BELUM LENGKAP';
         }
 
         if (! $this->contractStartDate()) {
@@ -613,7 +694,9 @@ class Ppbj extends Model
     public function contractStatusColorClass(): string
     {
         return match ($this->contractStatusLabel()) {
-            'SUDAH TERPENUHI' => 'bg-emerald-50 text-emerald-700 ring-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-200 dark:ring-emerald-500/30',
+            'SERAH TERIMA SELESAI' => 'bg-emerald-50 text-emerald-700 ring-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-200 dark:ring-emerald-500/30',
+            'SERAH TERIMA TERLAMBAT' => 'bg-rose-50 text-rose-700 ring-rose-200 dark:bg-rose-500/15 dark:text-rose-200 dark:ring-rose-500/30',
+            'DOKUMEN SERAH TERIMA BELUM LENGKAP' => 'bg-amber-50 text-amber-700 ring-amber-200 dark:bg-amber-500/15 dark:text-amber-200 dark:ring-amber-500/30',
             'AKTIF' => 'bg-blue-50 text-blue-700 ring-blue-200 dark:bg-blue-500/15 dark:text-blue-200 dark:ring-blue-500/30',
             'SEGERA BERAKHIR' => 'bg-amber-50 text-amber-700 ring-amber-200 dark:bg-amber-500/15 dark:text-amber-200 dark:ring-amber-500/30',
             'KRITIS', 'SANGAT KRITIS', 'BERAKHIR HARI INI' => 'bg-orange-50 text-orange-700 ring-orange-200 dark:bg-orange-500/15 dark:text-orange-200 dark:ring-orange-500/30',
@@ -627,8 +710,31 @@ class Ppbj extends Model
         $start = $this->contractStartDate();
         $end = $this->contractEndDate();
 
+        if ($this->isHandoverComplete()) {
+            $actual = $this->handoverDate();
+            $actualLabel = $actual?->translatedFormat('d F Y');
+            $documentNumber = trim((string) $this->do_no);
+            $deviation = $this->handoverDeviationDays();
+
+            if (! $end || $deviation === null) {
+                return "Serah terima selesai berdasarkan dokumen {$documentNumber} tanggal {$actualLabel}. Promised Date dan Closed Date kosong, sehingga ketepatan waktu belum dapat dibandingkan.";
+            }
+
+            $targetLabel = $end->translatedFormat('d F Y');
+            $source = $this->contractEndDateSourceLabel() ?: 'tanggal target';
+            $result = $deviation > 0
+                ? 'terlambat ' . $deviation . ' hari'
+                : ($deviation < 0 ? 'lebih cepat ' . abs($deviation) . ' hari' : 'tepat waktu');
+
+            return "Serah terima selesai berdasarkan dokumen {$documentNumber} tanggal {$actualLabel}. Dibandingkan {$source} ({$targetLabel}), realisasi {$result}.";
+        }
+
+        if (trim((string) ($this->do_no ?? '')) !== '' || $this->handoverDate()) {
+            return 'Dokumen serah terima belum lengkap. Nomor dan tanggal DO / Surat Jalan / BAST harus diisi agar pekerjaan dinyatakan selesai dan kinerja waktunya dapat dihitung.';
+        }
+
         if ($this->goods_confirmed_at) {
-            return 'Barang/pekerjaan telah dikonfirmasi diterima oleh Operasional. Pemantauan batas pemenuhan dinyatakan selesai.';
+            return 'Barang/pekerjaan sudah dikonfirmasi diterima oleh Operasional, tetapi pekerjaan belum dinyatakan selesai sampai nomor dan tanggal DO / Surat Jalan / BAST dicatat.';
         }
 
         if (! $start) {
@@ -913,6 +1019,7 @@ class Ppbj extends Model
 
             'promised_date',
             'do_no',
+            'do_date',
             'bpg_no',
             'nilai_bpg',
             'tgl_bpg',

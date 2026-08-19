@@ -1354,6 +1354,10 @@
                     'contract_end_date_label',
                     'contract_end_date_source_label',
                     'contract_explanation',
+                    'handover_is_complete',
+                    'handover_date_label',
+                    'handover_deviation_days',
+                    'handover_performance_label',
                     'goods_arrived_by_user_id',
                     'goods_confirmed_by_user_id',
                     'general_registered_by_user_id',
@@ -1391,6 +1395,7 @@
                     goods_confirmed_by_name: 'Dikonfirmasi Oleh',
                     goods_confirmed_note: 'Catatan Konfirmasi Operasional',
                     do_no: 'No. DO / Surat Jalan / BAST',
+                    do_date: 'Tanggal DO / Surat Jalan / BAST',
                     do_updated_at: 'Audit DO Terakhir',
                 };
                 const slaResultLabel = d.sla_outcome_label || (d.sla_is_complete ? 'SLA berhenti' : d.sla_final_label || '-');
@@ -1444,11 +1449,11 @@
 
                 const contractStatus = d.contract_status_label || 'BELUM AKTIF';
                 const contractRemaining = d.contract_remaining_days;
-                const contractTone = ['MELEWATI BATAS', 'TANGGAL TIDAK VALID'].includes(contractStatus)
+                const contractTone = ['MELEWATI BATAS', 'TANGGAL TIDAK VALID', 'SERAH TERIMA TERLAMBAT'].includes(contractStatus)
                     ? 'bg-rose-50 text-rose-700 ring-rose-200 dark:bg-rose-500/15 dark:text-rose-200 dark:ring-rose-500/30'
-                    : (['SANGAT KRITIS', 'KRITIS', 'BERAKHIR HARI INI', 'SEGERA BERAKHIR'].includes(contractStatus)
+                    : (['SANGAT KRITIS', 'KRITIS', 'BERAKHIR HARI INI', 'SEGERA BERAKHIR', 'DOKUMEN SERAH TERIMA BELUM LENGKAP'].includes(contractStatus)
                         ? 'bg-amber-50 text-amber-700 ring-amber-200 dark:bg-amber-500/15 dark:text-amber-200 dark:ring-amber-500/30'
-                        : (contractStatus === 'SUDAH TERPENUHI'
+                        : (contractStatus === 'SERAH TERIMA SELESAI'
                             ? 'bg-emerald-50 text-emerald-700 ring-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-200 dark:ring-emerald-500/30'
                             : 'bg-blue-50 text-blue-700 ring-blue-200 dark:bg-blue-500/15 dark:text-blue-200 dark:ring-blue-500/30'));
                 const remainingText = contractRemaining === null || contractRemaining === undefined
@@ -1456,6 +1461,10 @@
                     : (Number(contractRemaining) >= 0
                         ? `${Number(contractRemaining)} hari lagi`
                         : `Lewat ${Math.abs(Number(contractRemaining))} hari`);
+                const handoverComplete = Boolean(d.handover_is_complete);
+                const timingText = handoverComplete
+                    ? (d.handover_performance_label || 'Selesai')
+                    : remainingText;
 
                 html += `
                     <div class="md:col-span-2 rounded-2xl border border-violet-200 bg-gradient-to-br from-violet-50 via-white to-cyan-50 p-4 shadow-sm dark:border-violet-500/30 dark:from-violet-950/30 dark:via-gray-800 dark:to-cyan-950/30">
@@ -1468,7 +1477,7 @@
                                 ${escapeHtml(contractStatus)}
                             </span>
                         </div>
-                        <div class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-4">
+                        <div class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
                             <div class="rounded-xl border border-slate-200 bg-white/80 p-3 dark:border-gray-700 dark:bg-gray-900/50">
                                 <div class="text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Mulai kontrak</div>
                                 <div class="mt-1 text-sm font-black text-slate-900 dark:text-white">${escapeHtml(d.contract_start_date_label || '-')}</div>
@@ -1483,8 +1492,12 @@
                                 <div class="mt-1 text-sm font-black text-slate-900 dark:text-white">${escapeHtml(d.contract_duration_days === null || d.contract_duration_days === undefined ? '-' : `${d.contract_duration_days} hari`)}</div>
                             </div>
                             <div class="rounded-xl border border-slate-200 bg-white/80 p-3 dark:border-gray-700 dark:bg-gray-900/50">
-                                <div class="text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Sisa waktu</div>
-                                <div class="mt-1 text-sm font-black text-slate-900 dark:text-white">${escapeHtml(remainingText)}</div>
+                                <div class="text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Realisasi serah terima</div>
+                                <div class="mt-1 text-sm font-black text-slate-900 dark:text-white">${escapeHtml(d.handover_date_label || '-')}</div>
+                            </div>
+                            <div class="rounded-xl border border-slate-200 bg-white/80 p-3 dark:border-gray-700 dark:bg-gray-900/50">
+                                <div class="text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">${handoverComplete ? 'Kinerja final' : 'Sisa waktu'}</div>
+                                <div class="mt-1 text-sm font-black text-slate-900 dark:text-white">${escapeHtml(timingText)}</div>
                             </div>
                         </div>
                         <p class="mt-4 rounded-xl border border-violet-100 bg-white/75 p-3 text-sm font-semibold leading-relaxed text-slate-700 dark:border-violet-500/20 dark:bg-gray-950/30 dark:text-slate-200">

@@ -594,7 +594,7 @@
                                     @if($contractEndDate)
                                         <span class="text-[10px] font-semibold text-slate-500 dark:text-slate-300">
                                             {{ $contractEndDate->translatedFormat('d M Y') }}
-                                            @if($contractRemaining !== null && !$row->goods_confirmed_at)
+                                            @if($contractRemaining !== null)
                                                 · {{ $contractRemaining >= 0 ? $contractRemaining . ' hari lagi' : 'lewat ' . abs($contractRemaining) . ' hari' }}
                                             @endif
                                         </span>
@@ -823,6 +823,7 @@
                     'nilai_sp_spk' => ['Nilai SP/SPK', 'currency'],
                     'promised_date' => ['Tanggal Pemenuhan / Berakhir Kontrak', 'date'],
                     'do_no' => ['No. DO / Surat Jalan / BAST', 'text'],
+                    'do_date' => ['Tanggal DO / Surat Jalan / BAST', 'date'],
                     'bpg_no' => ['BPG No', 'text'],
                     'nilai_bpg' => ['Nilai BPG', 'currency'],
                     'tgl_bpg' => ['Tanggal BPG', 'date'],
@@ -1249,6 +1250,14 @@
                     $data['contract_explanation'] = method_exists($item, 'contractExplanation')
                         ? $item->contractExplanation()
                         : 'Informasi masa pemenuhan belum tersedia.';
+                    $data['handover_is_complete'] = method_exists($item, 'isHandoverComplete') ? $item->isHandoverComplete() : false;
+                    $data['handover_date_label'] = method_exists($item, 'handoverDate') && $item->handoverDate()
+                        ? $item->handoverDate()->translatedFormat('d F Y')
+                        : null;
+                    $data['handover_deviation_days'] = method_exists($item, 'handoverDeviationDays') ? $item->handoverDeviationDays() : null;
+                    $data['handover_performance_label'] = method_exists($item, 'handoverPerformanceLabel')
+                        ? $item->handoverPerformanceLabel()
+                        : 'BELUM SERAH TERIMA';
 
                     if (! empty($data['general_registered_at'])) {
                         try {

@@ -24,11 +24,15 @@ class PpbjDoAuditTest extends TestCase
         ]);
 
         Carbon::setTestNow('2026-08-19 10:15:30');
-        $ppbj->update(['do_no' => 'DO/001/2026']);
+        $ppbj->update([
+            'do_no' => 'DO/001/2026',
+            'do_date' => '2026-08-19',
+        ]);
 
         $ppbj->refresh();
 
         $this->assertSame('DO/001/2026', $ppbj->do_no);
+        $this->assertSame('2026-08-19', $ppbj->do_date?->format('Y-m-d'));
         $this->assertSame($user->id, $ppbj->do_updated_by_user_id);
         $this->assertSame('2026-08-19 10:15:30', $ppbj->do_updated_at?->format('Y-m-d H:i:s'));
         $this->assertDatabaseHas('activity_logs', [

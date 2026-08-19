@@ -77,6 +77,7 @@ class PpbjController extends Controller
                 'goods_confirmed_note',
                 'time_left',
                 'do_no',
+                'do_date',
                 'do_updated_at',
                 'do_updated_by_user_id',
                 'bpg_no',
@@ -692,6 +693,7 @@ class PpbjController extends Controller
                 'date',
                 Rule::when($request->filled('tgl_spk'), ['after_or_equal:tgl_spk']),
             ],
+            'do_date' => ['nullable', 'date'],
         ], [
             'ppbj_no.unique' => 'No PPBJ tersebut sudah ada.',
             'ppbj_no.required' => 'No PPBJ wajib diisi.',
@@ -791,6 +793,7 @@ class PpbjController extends Controller
                 'date',
                 Rule::when($request->filled('tgl_spk'), ['after_or_equal:tgl_spk']),
             ],
+            'do_date' => ['nullable', 'date'],
         ], [
             'ppbj_no.unique' => 'No PPBJ tersebut sudah ada.',
             'promised_date.after_or_equal' => 'Tanggal pemenuhan/berakhir kontrak tidak boleh lebih awal dari tanggal SPK/kontrak.',
@@ -1063,6 +1066,7 @@ class PpbjController extends Controller
                 'Promised Date',
                 'Time Left (Hari)',
                 'DO No',
+                'Tanggal DO / Surat Jalan / BAST',
                 'BPG No',
                 'Nilai BPG',
                 'Tanggal BPG',
@@ -1179,6 +1183,7 @@ class PpbjController extends Controller
                         $r->promised_date ? Carbon::parse($r->promised_date)->format('Y-m-d') : '',
                         $r->time_left,
                         $r->do_no,
+                        $r->do_date ? Carbon::parse($r->do_date)->format('Y-m-d') : '',
                         $r->bpg_no,
                         $r->nilai_bpg,
                         $r->tgl_bpg ? Carbon::parse($r->tgl_bpg)->format('Y-m-d') : '',
@@ -1258,6 +1263,7 @@ class PpbjController extends Controller
             'AE1' => 'Tanggal Invoice',
             'AF1' => 'Keterangan',
             'AG1' => 'Tanggal Diserahkan',
+            'AH1' => 'Tanggal DO / Surat Jalan / BAST',
         ];
 
         foreach ($headers as $cell => $value) {
@@ -1270,10 +1276,10 @@ class PpbjController extends Controller
             'borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN, 'color' => ['rgb' => '000000']]],
             'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
         ];
-        $sheet->getStyle('A1:AG1')->applyFromArray($headerStyle);
+        $sheet->getStyle('A1:AH1')->applyFromArray($headerStyle);
         $sheet->getRowDimension(1)->setRowHeight(25);
         $sheet->freezePane('A2');
-        $sheet->setAutoFilter('A1:AG1');
+        $sheet->setAutoFilter('A1:AH1');
 
         $exampleData = [
             'PPBJ001/2026',
@@ -1309,9 +1315,10 @@ class PpbjController extends Controller
             '2026-01-27',
             'Proses berjalan lancar',
             '2026-01-11',
+            '2026-01-28',
         ];
         $sheet->fromArray($exampleData, null, 'A2');
-        $sheet->getStyle('A2:AG2')->applyFromArray([
+        $sheet->getStyle('A2:AH2')->applyFromArray([
             'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => 'E7E6E6']],
             'font' => ['italic' => true, 'color' => ['rgb' => '666666']],
         ]);
@@ -1777,6 +1784,7 @@ class PpbjController extends Controller
             'nilai_sp_spk' => ['nullable', 'max:60'],
             'promised_date' => ['nullable', 'max:60'],
             'do_no' => ['nullable', 'string', 'max:255'],
+            'do_date' => ['nullable', 'max:60'],
             'bpg_no' => ['nullable', 'string', 'max:255'],
             'nilai_bpg' => ['nullable', 'max:60'],
             'tgl_bpg' => ['nullable', 'max:60'],
@@ -1801,7 +1809,7 @@ class PpbjController extends Controller
         $errors = [];
         foreach ([
             'tgl_ppbj', 'tgl_terima_pr', 'tgl_spph', 'closed_date', 'tgl_sph',
-            'tgl_awarding_sp', 'tgl_spk', 'promised_date', 'tgl_bpg', 'tgl_bpb',
+            'tgl_awarding_sp', 'tgl_spk', 'promised_date', 'do_date', 'tgl_bpg', 'tgl_bpb',
             'tgl_invoice', 'tgl_diserahkan',
         ] as $field) {
             $value = $clean[$field] ?? null;
@@ -1907,6 +1915,7 @@ class PpbjController extends Controller
             'nilai_sp_spk' => 'Nilai SP/SPK',
             'promised_date' => 'Promised Date',
             'do_no' => 'DO No',
+            'do_date' => 'Tanggal DO / Surat Jalan / BAST',
             'bpg_no' => 'BPG No',
             'nilai_bpg' => 'Nilai BPG',
             'tgl_bpg' => 'Tanggal BPG',
@@ -1946,6 +1955,7 @@ class PpbjController extends Controller
             'nilai_sp_spk' => ['Nilai SP/SPK', 'Nilai SP', 'Harga SP', 'Nilai Kontrak'],
             'promised_date' => ['Promised Date', 'Tanggal Pemenuhan', 'Estimasi Datang'],
             'do_no' => ['DO No', 'No DO', 'Nomor DO'],
+            'do_date' => ['Tanggal DO / Surat Jalan / BAST', 'Tanggal DO', 'Tgl DO', 'Tanggal BAST', 'Tanggal Surat Jalan'],
             'bpg_no' => ['BPG No', 'No BPG', 'Nomor BPG'],
             'nilai_bpg' => ['Nilai BPG'],
             'tgl_bpg' => ['Tanggal BPG', 'Tgl BPG'],
