@@ -13,8 +13,9 @@ class EnsureNotSoftMaintenance
 {
     public function handle(Request $request, Closure $next): Response
     {
-        $this->expireMaintenanceIfNeeded();
-
+        // Jalur normal cukup satu kali membaca cache. Sebelumnya setiap request
+        // selalu membaca maintenance_until lebih dulu walaupun mode maintenance
+        // sedang tidak aktif.
         if (! Cache::get('simonpr:maintenance_mode', false)) {
             return $next($request);
         }
@@ -23,9 +24,16 @@ class EnsureNotSoftMaintenance
             return $next($request);
         }
 
+        $until = $this->maintenanceUntil();
+
+        if ($until && $until->isPast()) {
+            $this->endExpiredMaintenance();
+
+            return $next($request);
+        }
+
         $message = trim((string) Cache::get('simonpr:maintenance_message', ''))
             ?: 'SIMONPR sedang maintenance. Mohon coba lagi beberapa saat.';
-        $until = $this->maintenanceUntil();
         $remainingSeconds = $until ? max(0, now()->diffInSeconds($until, false)) : null;
 
         if ($request->expectsJson() || $request->ajax()) {
@@ -43,15 +51,11 @@ class EnsureNotSoftMaintenance
         ]);
     }
 
-    private function expireMaintenanceIfNeeded(): void
+    private function endExpiredMaintenance(): void
     {
-        $until = $this->maintenanceUntil();
-
-        if ($until && $until->isPast()) {
-            Cache::forget('simonpr:maintenance_mode');
-            Cache::forget('simonpr:maintenance_until');
-            Cache::forever('simonpr:maintenance_changed_at', now()->toIso8601String());
-        }
+        Cache::forget('simonpr:maintenance_mode');
+        Cache::forget('simonpr:maintenance_until');
+        Cache::forever('simonpr:maintenance_changed_at', now()->toIso8601String());
     }
 
     private function maintenanceUntil(): ?Carbon

@@ -13,16 +13,25 @@ class MonitorPerformance
 {
     public function handle(Request $request, Closure $next): Response
     {
-        $startedAt = microtime(true);
-        $response = null;
+        // Simpan waktu mulai di Request karena Laravel dapat membuat ulang
+        // instance terminating middleware setelah response selesai dikirim.
+        $request->attributes->set('_simonpr_performance_started_at', microtime(true));
 
-        try {
-            $response = $next($request);
+        return $next($request);
+    }
 
-            return $response;
-        } finally {
-            $this->record($request, $response, $startedAt);
-        }
+    /**
+     * Catat metrik setelah response disiapkan/dikirim agar operasi cache dan
+     * alert Telegram tidak menambah waktu tunggu halaman bagi pengguna.
+     */
+    public function terminate(Request $request, Response $response): void
+    {
+        $startedAt = (float) $request->attributes->get(
+            '_simonpr_performance_started_at',
+            defined('LARAVEL_START') ? LARAVEL_START : microtime(true)
+        );
+
+        $this->record($request, $response, $startedAt);
     }
 
     private function record(Request $request, ?Response $response, float $startedAt): void
