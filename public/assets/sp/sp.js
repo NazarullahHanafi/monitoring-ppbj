@@ -519,7 +519,21 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
         // ═══════════════════════════════════════
         // MODAL
         // ═══════════════════════════════════════
-        function openModal(id) { document.getElementById(id).classList.remove('hidden'); document.getElementById(id).classList.add('flex'); document.body.style.overflow = 'hidden'; modalOpen = true; startHeartbeat(); }
+        function openModal(id) {
+            const modal = document.getElementById(id);
+            if (!modal) return;
+
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            modal.scrollTop = 0;
+
+            const scrollArea = modal.querySelector('.overflow-y-auto');
+            if (scrollArea) scrollArea.scrollTop = 0;
+
+            document.body.style.overflow = 'hidden';
+            modalOpen = true;
+            startHeartbeat();
+        }
         function closeModal(id) { document.getElementById(id).classList.add('hidden'); document.getElementById(id).classList.remove('flex'); document.body.style.overflow = ''; modalOpen = false; stopHeartbeat(); }
         function secureDeletePad(value) {
             return String(Math.max(0, Math.floor(Number(value) || 0))).padStart(2, '0');
@@ -1950,7 +1964,7 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
             scheduleSpModeGuard(mode);
         }
 
-        function addRow(mode, item = null) {
+        function addRow(mode, item = null, shouldScroll = false) {
             const wrapper = document.getElementById(mode === 'add' ? 'addRows' : 'editRows');
             const idx = mode === 'add' ? addIdx++ : editIdx++;
             const prefix = mode === 'add' ? 'add' : 'edit';
@@ -2023,7 +2037,7 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
             updateGrandTotal(mode);
 
             const newRow = wrapper.lastElementChild;
-            if (newRow) {
+            if (newRow && shouldScroll) {
                 newRow.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
             }
         }

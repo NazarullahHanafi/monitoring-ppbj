@@ -791,7 +791,7 @@
                     </div>
 
                     <div class="sticky-add-wrap">
-                        <button type="button" onclick="addRow('add')" class="btn-add-row"
+                        <button type="button" onclick="addRow('add', null, true)" class="btn-add-row"
                             style="background: linear-gradient(135deg, #0ea5e9, #6366f1);">
                             <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
@@ -1026,7 +1026,7 @@
                     </div>
 
                     <div class="sticky-add-wrap">
-                        <button type="button" onclick="addRow('edit')" class="btn-add-row"
+                        <button type="button" onclick="addRow('edit', null, true)" class="btn-add-row"
                             style="background: linear-gradient(135deg, #f59e0b, #ea580c);">
                             <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
@@ -1392,7 +1392,7 @@
     <script>
         window.SP_PAGE_CONFIG = @json($spPageConfig);
     </script>
-    <script src="{{ asset('assets/sp/sp.js') }}?v=20260814c" defer></script>
+    <script src="{{ asset('assets/sp/sp.js') }}?v=20260819a" defer></script>
 @endpush
 
 @include('components.archive-upload-popup')
