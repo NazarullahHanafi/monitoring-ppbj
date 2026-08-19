@@ -574,6 +574,59 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
             }, 280);
         }
 
+        // Dipanggil langsung oleh tombol Tambah SP. Jalur global ini sengaja tidak
+        // bergantung pada urutan inisialisasi plugin di document.ready, sehingga
+        // modal tetap dapat dibuka ketika salah satu plugin opsional gagal dimuat.
+        window.openAddSpCreateModal = function () {
+            try {
+                document.getElementById('nomorSpInput').value = '';
+                document.getElementById('nilaiSpInput').value = '';
+                document.getElementById('nilaiPrInput').value = '';
+                document.getElementById('addSph').value = '';
+                document.getElementById('addTglSph').value = '';
+                document.getElementById('addPromisedDate').value = '';
+                document.getElementById('addRfq').value = '';
+                document.getElementById('addNomorPemenang').value = '';
+                document.getElementById('addTanggalPemenang').value = '';
+                document.getElementById('addAwalKontrak').value = '';
+                document.getElementById('addAkhirKontrak').value = '';
+                document.getElementById('addBidangIpItu').value = '';
+                document.getElementById('addPenandatanganSci').value = '';
+                document.getElementById('addJabatanSci').value = '';
+                updateJampelPreview('add');
+                addIdx = 0;
+                document.getElementById('addRows').innerHTML = '';
+                document.getElementById('addSubtotalDisplay').style.display = 'none';
+                document.getElementById('addItemCount').textContent = '0 item';
+                $('#addModeGuardSp').addClass('hidden').html('');
+                addRow('add');
+                for (let k in rtSavedSel) { if (k.startsWith('rt-add-')) delete rtSavedSel[k]; }
+                for (let k in sizeDebounce) { if (k.startsWith('rt-add-')) { clearTimeout(sizeDebounce[k]); delete sizeDebounce[k]; } }
+                setStatus(document.getElementById('nomorSpInput'), document.getElementById('nomorStatusSp'), null, '');
+                $('#addDeskripsi').val('');
+                $('#addDeskripsiBadge').addClass('hidden').html('');
+                $('#addNilaiPrBadge').addClass('hidden').html('');
+                setPrMode('ppbj');
+                $('#ppbjSelect').val(null).trigger('change');
+                $('#nomorPrManual').val('');
+                $('#ppbjInfo').addClass('hidden');
+                $('#ppbjStatus').html('');
+                $('#nomorPrFinal').val('');
+                $('#addVendorMismatchConfirmed').val('0');
+                document.getElementById('newVendorBoxSp')?.classList.add('hidden');
+                resetNewVendorForm();
+                renderSpphVendorRecommendation('add', [], null);
+                restoreSpModeDraftToAdd();
+                updateOracleReadinessChecklist('add');
+            } catch (error) {
+                console.error('Gagal menyiapkan form Tambah SP:', error);
+            }
+
+            openModal('addModal');
+            stabilizeAddModalAtTop();
+            loadSuggestionsSp();
+        };
+
         function openModal(id) {
             const modal = document.getElementById(id);
             if (!modal) return;
@@ -2250,53 +2303,6 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
                         scheduleSpModeGuard('edit');
                     }, 0);
                 });
-
-            // Tombol Tambah. Form disiapkan saat modal masih tertutup supaya browser
-            // tidak memindahkan scroll mengikuti elemen yang baru dirender.
-            document.getElementById('openAddSpModalButton')?.addEventListener('click', () => {
-                document.getElementById('nomorSpInput').value = '';
-                document.getElementById('nilaiSpInput').value = '';
-                document.getElementById('nilaiPrInput').value = '';
-                document.getElementById('addSph').value = '';
-                document.getElementById('addTglSph').value = '';
-                document.getElementById('addPromisedDate').value = '';
-                document.getElementById('addRfq').value = '';
-                document.getElementById('addNomorPemenang').value = '';
-                document.getElementById('addTanggalPemenang').value = '';
-                document.getElementById('addAwalKontrak').value = '';
-                document.getElementById('addAkhirKontrak').value = '';
-                document.getElementById('addBidangIpItu').value = '';
-                document.getElementById('addPenandatanganSci').value = '';
-                document.getElementById('addJabatanSci').value = '';
-                updateJampelPreview('add');
-                addIdx = 0;
-                document.getElementById('addRows').innerHTML = '';
-                document.getElementById('addSubtotalDisplay').style.display = 'none';
-                document.getElementById('addItemCount').textContent = '0 item';
-                $('#addModeGuardSp').addClass('hidden').html('');
-                addRow('add');
-                for (let k in rtSavedSel) { if (k.startsWith('rt-add-')) delete rtSavedSel[k]; }
-                for (let k in sizeDebounce) { if (k.startsWith('rt-add-')) { clearTimeout(sizeDebounce[k]); delete sizeDebounce[k]; } }
-                setStatus(document.getElementById('nomorSpInput'), document.getElementById('nomorStatusSp'), null, '');
-                $('#addDeskripsi').val('');
-                $('#addDeskripsiBadge').addClass('hidden').html('');
-                $('#addNilaiPrBadge').addClass('hidden').html('');
-                setPrMode('ppbj');
-                $('#ppbjSelect').val(null).trigger('change');
-                $('#nomorPrManual').val('');
-                $('#ppbjInfo').addClass('hidden');
-                $('#ppbjStatus').html('');
-                $('#nomorPrFinal').val('');
-                $('#addVendorMismatchConfirmed').val('0');
-                document.getElementById('newVendorBoxSp')?.classList.add('hidden');
-                resetNewVendorForm();
-                renderSpphVendorRecommendation('add', [], null);
-                restoreSpModeDraftToAdd();
-                updateOracleReadinessChecklist('add');
-                openModal('addModal');
-                stabilizeAddModalAtTop();
-                loadSuggestionsSp();
-            });
 
             // Vendor toggle
             $('#vendorSelectSp').on('change', function () {

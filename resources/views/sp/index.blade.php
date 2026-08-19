@@ -78,7 +78,7 @@
                             </svg>
                             <span class="text-sm">Vendor</span>
                         </a>
-                        <button type="button" id="openAddSpModalButton"
+                        <button type="button" id="openAddSpModalButton" onclick="openAddSpCreateModal()"
                             class="flex items-center gap-2 bg-white text-blue-700 font-bold px-5 py-3 rounded-xl hover:bg-blue-50 transition-all shadow-lg shadow-black/20 whitespace-nowrap group">
                             <svg class="w-5 h-5 group-hover:rotate-90 transition-transform duration-300" fill="none"
                                 stroke="currentColor" viewBox="0 0 24 24">
@@ -1394,7 +1394,7 @@
     <script>
         window.SP_PAGE_CONFIG = @json($spPageConfig);
     </script>
-    <script src="{{ asset('assets/sp/sp.js') }}?v=20260819c" defer></script>
+    <script src="{{ asset('assets/sp/sp.js') }}?v=20260819d" defer></script>
 @endpush
 
 @include('components.archive-upload-popup')
