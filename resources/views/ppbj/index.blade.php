@@ -521,6 +521,13 @@
                                 'KRITIS' => 'critical',
                                 default => 'default',
                             };
+                            // Status kritis memakai warna inline berkontras tinggi agar tidak
+                            // dapat ditimpa oleh class tema/Tailwind lama yang masih tercache.
+                            $contractStatusStyle = match ($contractStatusTone) {
+                                'very-critical' => 'background-color:#991b1b !important;color:#ffffff !important;border:1px solid #fca5a5 !important;box-shadow:0 2px 8px rgba(127,29,29,.35) !important;text-shadow:none !important;',
+                                'critical' => 'background-color:#9a3412 !important;color:#ffffff !important;border:1px solid #fb923c !important;box-shadow:0 2px 8px rgba(154,52,18,.28) !important;text-shadow:none !important;',
+                                default => '',
+                            };
                             $contractExplanation = method_exists($row, 'contractExplanation')
                                 ? $row->contractExplanation()
                                 : 'Informasi masa pemenuhan belum tersedia.';
@@ -594,7 +601,8 @@
                             <td class="px-4 py-3 text-center" title="{{ $contractExplanation }}">
                                 <div class="inline-flex max-w-[170px] flex-col items-center gap-1">
                                     <span data-contract-tone="{{ $contractStatusTone }}"
-                                        class="ppbj-contract-status inline-flex items-center rounded-full px-2 py-1 text-[9px] font-extrabold ring-1 {{ $contractStatusClass }}">
+                                        @if($contractStatusStyle !== '') style="{{ $contractStatusStyle }}" @endif
+                                        class="ppbj-contract-status inline-flex items-center rounded-full px-2 py-1 text-[9px] font-extrabold ring-1 {{ $contractStatusTone === 'default' ? $contractStatusClass : '' }}">
                                         {{ $contractStatus }}
                                     </span>
                                     @if($contractEndDate)
