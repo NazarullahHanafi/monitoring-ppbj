@@ -111,6 +111,15 @@ class PpbjSlaContractTest extends TestCase
         $this->assertSame('Promised Date', $ppbj->contractEndDateSourceLabel());
     }
 
+    public function test_promised_date_diserialisasi_dalam_format_input_html_date(): void
+    {
+        $ppbj = new Ppbj([
+            'promised_date' => '2026-09-19',
+        ]);
+
+        $this->assertSame('2026-09-19', $ppbj->toArray()['promised_date']);
+    }
+
     public function test_closed_date_dipakai_sebagai_fallback_jika_promised_date_kosong(): void
     {
         Carbon::setTestNow('2026-08-10 09:00:00');

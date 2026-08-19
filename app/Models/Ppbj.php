@@ -102,7 +102,10 @@ class Ppbj extends Model
 
     protected $casts = [
         'general_registered_at' => 'datetime',
-        'promised_date' => 'date',
+        // Input HTML `type=date` hanya menerima YYYY-MM-DD. Format cast eksplisit
+        // mencegah toArray()/JSON mengubah nilainya menjadi timestamp UTC sehingga
+        // tanggal pemenuhan tetap tampil pada modal info dan edit Management PPBJ.
+        'promised_date' => 'date:Y-m-d',
         'goods_arrived_at' => 'datetime',
         'goods_confirmed_at' => 'datetime',
     ];
