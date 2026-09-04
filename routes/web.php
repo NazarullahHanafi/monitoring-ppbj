@@ -202,6 +202,14 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
         Route::get('/approval/pr-receipts', [PrReceiptApprovalController::class, 'index'])
             ->name('approval.pr.index');
 
+        Route::get('/approval/pr-receipts/export/excel', [PrReceiptApprovalController::class, 'exportExcel'])
+            ->middleware('throttle:10,1')
+            ->name('approval.pr.export.excel');
+
+        Route::get('/approval/pr-receipts/export/pdf', [PrReceiptApprovalController::class, 'exportPdf'])
+            ->middleware('throttle:10,1')
+            ->name('approval.pr.export.pdf');
+
         Route::post('/approval/pr-receipts/{id}/approve', [PrReceiptApprovalController::class, 'approve'])
             ->name('approval.pr.approve');
 

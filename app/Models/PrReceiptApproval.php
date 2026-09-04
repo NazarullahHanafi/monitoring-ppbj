@@ -30,8 +30,8 @@ class PrReceiptApproval extends Model
      */
     protected $casts = [
         'requested_at' => 'datetime',
-        'approved_at'  => 'datetime',
-        'rejected_at'  => 'datetime', // ✅ Tambahkan ini
+        'approved_at' => 'datetime',
+        'rejected_at' => 'datetime', // ✅ Tambahkan ini
     ];
 
     /**
@@ -70,5 +70,13 @@ class PrReceiptApproval extends Model
     public function rejectedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'rejected_by_user_id');
+    }
+
+    /**
+     * Riwayat penolakan yang menjadi asal pengajuan ulang.
+     */
+    public function previousRejection(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'previous_rejection_id');
     }
 }

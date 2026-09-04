@@ -4,14 +4,32 @@
 
 @section('content')
     {{-- HEADER --}}
-    <div class="mb-6">
-        <h1 class="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-            <span class="text-3xl">✅</span>
-            Approval Penerimaan PR
-        </h1>
-        <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">
-            Konfirmasi penerimaan PR oleh Department Umum
-        </p>
+    <div class="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                <span class="text-3xl">✅</span>
+                Approval Penerimaan PR
+            </h1>
+            <p class="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                Konfirmasi penerimaan PR oleh Department Umum
+            </p>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+            <a href="{{ route('approval.pr.export.excel', request()->only(['q', 'status'])) }}"
+                class="inline-flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm font-bold text-emerald-700 shadow-sm transition hover:-translate-y-0.5 hover:bg-emerald-100 hover:shadow-md dark:border-emerald-700/70 dark:bg-emerald-900/25 dark:text-emerald-300 dark:hover:bg-emerald-900/40">
+                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2h-5.586a1 1 0 01-.707-.293l-1.414-1.414A1 1 0 0010.586 2H5a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                </svg>
+                Export Excel
+            </a>
+            <a href="{{ route('approval.pr.export.pdf', request()->only(['q', 'status'])) }}"
+                class="inline-flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-sm font-bold text-rose-700 shadow-sm transition hover:-translate-y-0.5 hover:bg-rose-100 hover:shadow-md dark:border-rose-700/70 dark:bg-rose-900/25 dark:text-rose-300 dark:hover:bg-rose-900/40">
+                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3M7 3h6l4 4v10a2 2 0 01-2 2H7a2 2 0 01-2-2V5a2 2 0 012-2z" />
+                </svg>
+                Export PDF
+            </a>
+        </div>
     </div>
 
     {{-- ALERTS --}}
@@ -180,7 +198,7 @@
                     @forelse($rows as $row)
                         @php
                             $isResubmit = !is_null($row->previous_rejection_id);
-                            $previousRejection = $isResubmit ? \App\Models\PrReceiptApproval::find($row->previous_rejection_id) : null;
+                            $previousRejection = $isResubmit ? $row->previousRejection : null;
                             $nilaiPrRaw = $row->torpr?->jumlah_pr;
                             $nilaiPrFormatted = filled($nilaiPrRaw) && (float) $nilaiPrRaw > 0
                                 ? 'Rp ' . number_format((float) $nilaiPrRaw, 0, ',', '.')
