@@ -28,6 +28,9 @@ class SpPrintBidangPrTest extends TestCase
 
         $response->assertOk();
         $response->assertSee('id="spBidangPrintModal"', false);
+        $response->assertSee('class="sp-print-choice-overlay"', false);
+        $response->assertSee('.sp-print-choice-card', false);
+        $response->assertSee("modal.classList.add('is-open')", false);
         $response->assertSee('window.openSpPrintPreview = function', false);
         $response->assertSee('DUKUNGAN BISNIS');
         $response->assertSee('PENGUJIAN DAN KONSULTANSI');

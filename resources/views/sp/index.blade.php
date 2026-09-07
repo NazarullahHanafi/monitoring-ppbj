@@ -10,6 +10,118 @@
 
 @push('styles')
     <link rel="stylesheet" href="{{ asset('assets/sp/sp.css') }}?v=20260814a">
+    <style>
+        body.sp-print-modal-open { overflow: hidden; }
+        .sp-print-choice-overlay {
+            position: fixed; inset: 0; z-index: 10000; display: none;
+            align-items: center; justify-content: center; padding: 20px;
+            background: rgba(15, 23, 42, .72);
+            -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+        }
+        .sp-print-choice-overlay.is-open { display: flex; }
+        .sp-print-choice-card {
+            width: min(100%, 520px); max-height: calc(100vh - 40px); overflow: hidden auto;
+            border: 1px solid #dbeafe; border-radius: 22px; background: #fff; color: #172033;
+            box-shadow: 0 28px 80px rgba(15, 23, 42, .32);
+        }
+        .sp-print-choice-header {
+            display: flex; align-items: flex-start; justify-content: space-between; gap: 18px;
+            padding: 22px 24px; color: #fff;
+            background: linear-gradient(125deg, #087bea 0%, #4263eb 52%, #7c3aed 100%);
+        }
+        .sp-print-choice-heading { display: flex; align-items: center; gap: 13px; min-width: 0; }
+        .sp-print-choice-icon {
+            display: inline-flex; flex: 0 0 42px; width: 42px; height: 42px;
+            align-items: center; justify-content: center; border: 1px solid rgba(255,255,255,.3);
+            border-radius: 13px; background: rgba(255,255,255,.16);
+        }
+        .sp-print-choice-icon svg { width: 21px; height: 21px; }
+        .sp-print-choice-eyebrow {
+            margin: 0 0 3px; color: #dbeafe; font-size: 10px; font-weight: 800;
+            letter-spacing: .16em; text-transform: uppercase;
+        }
+        .sp-print-choice-title { margin: 0; color: #fff; font-size: 20px; font-weight: 800; line-height: 1.2; }
+        .sp-print-choice-number {
+            margin: 4px 0 0; overflow: hidden; color: #e0e7ff; font-size: 12px;
+            font-weight: 600; text-overflow: ellipsis; white-space: nowrap;
+        }
+        .sp-print-choice-close {
+            display: inline-flex; flex: 0 0 36px; width: 36px; height: 36px; align-items: center;
+            justify-content: center; border: 1px solid rgba(255,255,255,.25); border-radius: 11px;
+            background: rgba(255,255,255,.12); color: #fff; cursor: pointer;
+            transition: background .18s ease, transform .18s ease;
+        }
+        .sp-print-choice-close:hover { background: rgba(255,255,255,.24); transform: translateY(-1px); }
+        .sp-print-choice-close svg { width: 19px; height: 19px; }
+        .sp-print-choice-body { padding: 22px 24px 24px; }
+        .sp-print-choice-label {
+            display: block; margin-bottom: 8px; color: #1e293b; font-size: 13px; font-weight: 800;
+        }
+        .sp-print-choice-required { color: #ef4444; }
+        .sp-print-choice-select {
+            display: block; width: 100%; min-height: 49px; padding: 0 42px 0 14px;
+            border: 1px solid #cbd5e1; border-radius: 12px; background-color: #fff;
+            color: #0f172a; font-size: 13px; font-weight: 700; outline: none; cursor: pointer;
+            transition: border-color .18s ease, box-shadow .18s ease;
+        }
+        .sp-print-choice-select:focus { border-color: #3b82f6; box-shadow: 0 0 0 4px rgba(59,130,246,.13); }
+        .sp-print-choice-preview {
+            display: flex; align-items: flex-start; gap: 11px; margin-top: 16px; padding: 14px 15px;
+            border: 1px solid #bfdbfe; border-radius: 13px;
+            background: linear-gradient(135deg, #eff6ff, #f5f3ff); color: #1e3a8a;
+        }
+        .sp-print-choice-preview-icon {
+            display: inline-flex; flex: 0 0 31px; width: 31px; height: 31px; align-items: center;
+            justify-content: center; border-radius: 9px; background: #dbeafe; font-size: 15px;
+        }
+        .sp-print-choice-preview-label {
+            margin: 0 0 3px; color: #2563eb; font-size: 9px; font-weight: 900;
+            letter-spacing: .12em; text-transform: uppercase;
+        }
+        .sp-print-choice-preview-text { margin: 0; font-size: 12px; line-height: 1.55; }
+        .sp-print-choice-footer {
+            display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-top: 20px;
+        }
+        .sp-print-choice-manage { color: #2563eb; font-size: 11px; font-weight: 800; text-decoration: none; }
+        .sp-print-choice-manage:hover { text-decoration: underline; }
+        .sp-print-choice-actions { display: flex; gap: 9px; }
+        .sp-print-choice-button {
+            display: inline-flex; min-height: 42px; align-items: center; justify-content: center;
+            padding: 0 17px; border-radius: 11px; font-size: 12px; font-weight: 800;
+            text-decoration: none; cursor: pointer;
+            transition: transform .18s ease, background .18s ease, box-shadow .18s ease;
+        }
+        .sp-print-choice-button:hover { transform: translateY(-1px); }
+        .sp-print-choice-button-secondary { border: 1px solid #cbd5e1; background: #fff; color: #475569; }
+        .sp-print-choice-button-secondary:hover { background: #f8fafc; }
+        .sp-print-choice-button-primary {
+            border: 1px solid #2563eb; background: linear-gradient(135deg, #2563eb, #4f46e5);
+            color: #fff; box-shadow: 0 9px 22px rgba(37,99,235,.22);
+        }
+        .sp-print-choice-button-primary:hover { background: linear-gradient(135deg, #1d4ed8, #4338ca); }
+        .sp-print-choice-button-primary.is-disabled { opacity: .5; pointer-events: none; }
+        .dark .sp-print-choice-card { border-color: #334155; background: #111827; color: #e5e7eb; }
+        .dark .sp-print-choice-label { color: #f1f5f9; }
+        .dark .sp-print-choice-select { border-color: #475569; background-color: #172033; color: #f8fafc; }
+        .dark .sp-print-choice-preview {
+            border-color: #1e40af;
+            background: linear-gradient(135deg, rgba(30,58,138,.35), rgba(76,29,149,.25)); color: #dbeafe;
+        }
+        .dark .sp-print-choice-preview-icon { background: rgba(37,99,235,.28); }
+        .dark .sp-print-choice-preview-label, .dark .sp-print-choice-manage { color: #93c5fd; }
+        .dark .sp-print-choice-button-secondary {
+            border-color: #475569; background: #172033; color: #e2e8f0;
+        }
+        .dark .sp-print-choice-button-secondary:hover { background: #1e293b; }
+        @media (max-width: 640px) {
+            .sp-print-choice-overlay { padding: 12px; }
+            .sp-print-choice-card { max-height: calc(100vh - 24px); border-radius: 18px; }
+            .sp-print-choice-header, .sp-print-choice-body { padding: 18px; }
+            .sp-print-choice-footer { align-items: stretch; flex-direction: column-reverse; }
+            .sp-print-choice-manage { text-align: center; }
+            .sp-print-choice-actions, .sp-print-choice-button { flex: 1; }
+        }
+    </style>
 @endpush
 
 @section('content')
@@ -1367,34 +1479,38 @@
         <span class="ob-float-tooltip">Lihat Pembaruan SP</span>
     </button>
 
-    <div id="spBidangPrintModal"
-        class="fixed inset-0 z-[80] hidden items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm"
+    <div id="spBidangPrintModal" class="sp-print-choice-overlay"
         role="dialog" aria-modal="true" aria-labelledby="spBidangPrintTitle">
-        <div class="w-full max-w-lg overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900">
-            <div class="bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 px-6 py-5 text-white">
-                <div class="flex items-start justify-between gap-4">
-                    <div>
-                        <p class="text-xs font-bold uppercase tracking-[0.18em] text-blue-100">Cetak SP / Kontrak</p>
-                        <h2 id="spBidangPrintTitle" class="mt-1 text-xl font-extrabold">Pilih Bidang PR</h2>
-                        <p id="spBidangPrintNumber" class="mt-1 text-sm text-blue-100"></p>
-                    </div>
-                    <button type="button" onclick="closeSpPrintPreview()"
-                        class="rounded-lg bg-white/15 p-2 text-white transition hover:bg-white/25"
-                        aria-label="Tutup pilihan Bidang PR">
-                        <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+        <div class="sp-print-choice-card">
+            <div class="sp-print-choice-header">
+                <div class="sp-print-choice-heading">
+                    <span class="sp-print-choice-icon" aria-hidden="true">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l3.414 3.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                         </svg>
-                    </button>
+                    </span>
+                    <div style="min-width: 0">
+                        <p class="sp-print-choice-eyebrow">Cetak SP / Kontrak</p>
+                        <h2 id="spBidangPrintTitle" class="sp-print-choice-title">Pilih Bidang PR</h2>
+                        <p id="spBidangPrintNumber" class="sp-print-choice-number"></p>
+                    </div>
                 </div>
+                <button type="button" onclick="closeSpPrintPreview()" class="sp-print-choice-close"
+                    aria-label="Tutup pilihan Bidang PR">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
             </div>
 
-            <div class="space-y-5 p-6">
+            <div class="sp-print-choice-body">
                 <div>
-                    <label for="spBidangPrintSelect" class="mb-2 block text-sm font-bold text-slate-800 dark:text-slate-100">
-                        Bidang pemilik PR <span class="text-red-500">*</span>
+                    <label for="spBidangPrintSelect" class="sp-print-choice-label">
+                        Bidang pemilik PR <span class="sp-print-choice-required">*</span>
                     </label>
                     <select id="spBidangPrintSelect" onchange="updateSpPrintPreviewUrl()"
-                        class="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 dark:border-slate-600 dark:bg-slate-800 dark:text-white"
+                        class="sp-print-choice-select"
                         @disabled(collect($bidangPrs ?? [])->isEmpty())>
                         @forelse(collect($bidangPrs ?? []) as $bidangPr)
                             <option value="{{ $bidangPr }}" @selected(strcasecmp((string) $bidangPr, 'DUKUNGAN BISNIS') === 0)>
@@ -1406,23 +1522,26 @@
                     </select>
                 </div>
 
-                <div class="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm leading-relaxed text-blue-900 dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-100">
-                    <p class="text-xs font-bold uppercase tracking-wide text-blue-600 dark:text-blue-300">Pratinjau catatan</p>
-                    <p class="mt-1">Memenuhi PR Bidang <strong id="spBidangPrintExample">DUKUNGAN BISNIS</strong> PT Sucofindo Cabang Pekanbaru.</p>
+                <div class="sp-print-choice-preview">
+                    <span class="sp-print-choice-preview-icon" aria-hidden="true">&#128196;</span>
+                    <div>
+                        <p class="sp-print-choice-preview-label">Pratinjau catatan</p>
+                        <p class="sp-print-choice-preview-text">Memenuhi PR Bidang <strong id="spBidangPrintExample">DUKUNGAN BISNIS</strong> PT Sucofindo Cabang Pekanbaru.</p>
+                    </div>
                 </div>
 
-                <div class="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div class="sp-print-choice-footer">
                     <a href="{{ route('sp-master-options.index', ['type' => 'bidang_pr']) }}"
-                        class="text-center text-xs font-bold text-blue-600 hover:underline dark:text-blue-300">
+                        class="sp-print-choice-manage">
                         Kelola Master Bidang PR
                     </a>
-                    <div class="flex gap-2">
+                    <div class="sp-print-choice-actions">
                         <button type="button" onclick="closeSpPrintPreview()"
-                            class="flex-1 rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800 sm:flex-none">
+                            class="sp-print-choice-button sp-print-choice-button-secondary">
                             Batal
                         </button>
                         <a id="spBidangPrintContinue" href="#" target="_blank" rel="noopener"
-                            class="flex-1 rounded-xl bg-blue-600 px-5 py-2.5 text-center text-sm font-bold text-white shadow-lg shadow-blue-500/20 transition hover:bg-blue-700 sm:flex-none">
+                            class="sp-print-choice-button sp-print-choice-button-primary">
                             Lanjut Preview
                         </a>
                     </div>
@@ -1471,7 +1590,7 @@
 
             if (!value || !modal.dataset.previewUrl) {
                 link.href = '#';
-                link.classList.add('pointer-events-none', 'opacity-50');
+                link.classList.add('is-disabled');
                 link.setAttribute('aria-disabled', 'true');
                 return;
             }
@@ -1479,7 +1598,7 @@
             const url = new URL(modal.dataset.previewUrl, window.location.origin);
             url.searchParams.set('bidang_pr', value);
             link.href = url.toString();
-            link.classList.remove('pointer-events-none', 'opacity-50');
+            link.classList.remove('is-disabled');
             link.removeAttribute('aria-disabled');
         };
 
@@ -1493,18 +1612,16 @@
             modal.dataset.previewUrl = previewUrl;
             const number = document.getElementById('spBidangPrintNumber');
             if (number) number.textContent = nomorSp || 'Dokumen SP';
-            modal.classList.remove('hidden');
-            modal.classList.add('flex');
-            document.body.classList.add('overflow-hidden');
+            modal.classList.add('is-open');
+            document.body.classList.add('sp-print-modal-open');
             window.updateSpPrintPreviewUrl();
             window.requestAnimationFrame(() => document.getElementById('spBidangPrintSelect')?.focus());
         };
 
         window.closeSpPrintPreview = function () {
             const modal = document.getElementById('spBidangPrintModal');
-            modal?.classList.add('hidden');
-            modal?.classList.remove('flex');
-            document.body.classList.remove('overflow-hidden');
+            modal?.classList.remove('is-open');
+            document.body.classList.remove('sp-print-modal-open');
         };
 
         document.getElementById('spBidangPrintContinue')?.addEventListener('click', function (event) {
