@@ -14,6 +14,7 @@ class SpMasterOptionController extends Controller
 {
     private const TYPES = [
         'bidang_ip_itu' => 'Bidang IP / ITU',
+        'bidang_pr' => 'Bidang PR',
         'penandatangan_sci' => 'Penandatangan SCI',
         'jabatan_sci' => 'Jabatan SCI',
     ];
@@ -33,12 +34,15 @@ class SpMasterOptionController extends Controller
 
         $types = self::TYPES;
 
-        $stats = [
-            'total' => SpMasterOption::count(),
-            'bidang_ip_itu' => SpMasterOption::where('type', 'bidang_ip_itu')->count(),
-            'penandatangan_sci' => SpMasterOption::where('type', 'penandatangan_sci')->count(),
-            'jabatan_sci' => SpMasterOption::where('type', 'jabatan_sci')->count(),
-        ];
+        $counts = SpMasterOption::query()
+            ->selectRaw('type, COUNT(*) as total')
+            ->groupBy('type')
+            ->pluck('total', 'type');
+
+        $stats = collect(self::TYPES)
+            ->mapWithKeys(fn ($label, $key) => [$key => (int) ($counts[$key] ?? 0)])
+            ->prepend((int) $counts->sum(), 'total')
+            ->all();
 
         return view('sp_master_options.index', compact('options', 'types', 'type', 'search', 'stats'));
     }

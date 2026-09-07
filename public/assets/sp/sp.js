@@ -12,6 +12,8 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
         const PPBJ_OPTIONS_URL = SP_PAGE_CONFIG.ppbjOptionsUrl;
         const PPBJ_CHECK_URL = SP_PAGE_CONFIG.ppbjCheckUrl;
         const VENDOR_SEARCH_URL = SP_PAGE_CONFIG.vendorSearchUrl;
+        const BIDANG_PR_OPTIONS = Array.isArray(SP_PAGE_CONFIG.bidangPrOptions) ? SP_PAGE_CONFIG.bidangPrOptions : [];
+        const BIDANG_PR_MASTER_URL = SP_PAGE_CONFIG.bidangPrMasterUrl;
         const ORACLE_MODE_SP = Boolean(SP_PAGE_CONFIG.oracleMode);
         const SP_AUTO_URL = SP_PAGE_CONFIG.autoUrl;
         const SP_ORACLE_URL = SP_PAGE_CONFIG.oracleUrl;
@@ -21,6 +23,56 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
         let currentPrMode = 'ppbj', currentEditPrMode = 'ppbj';
         const IS_FIRST_PAGE = Boolean(SP_PAGE_CONFIG.firstPage);
         const HAS_FILTER = Boolean(SP_PAGE_CONFIG.hasFilter);
+
+        window.openSpPrintPreview = async function (previewUrl, nomorSp) {
+            const dark = document.documentElement.classList.contains('dark');
+            const options = BIDANG_PR_OPTIONS.reduce((result, name) => {
+                const value = String(name || '').trim();
+                if (value) result[value] = value;
+                return result;
+            }, {});
+
+            if (!Object.keys(options).length) {
+                const missingResult = await Swal.fire({
+                    icon: 'warning',
+                    title: 'Master Bidang PR belum tersedia',
+                    html: `Tambahkan dan aktifkan Bidang PR terlebih dahulu di <a href="${BIDANG_PR_MASTER_URL}" class="font-bold text-blue-600 underline">Master Kontrak SP</a>.`,
+                    confirmButtonText: 'Buka Master',
+                    showCancelButton: true,
+                    cancelButtonText: 'Batal',
+                    background: dark ? '#1f2937' : '#fff',
+                    color: dark ? '#f3f4f6' : '#111827'
+                });
+
+                if (missingResult.isConfirmed) window.location.href = BIDANG_PR_MASTER_URL;
+                return;
+            }
+
+            const preferred = Object.keys(options).find((name) => name.toUpperCase() === 'DUKUNGAN BISNIS')
+                || Object.keys(options)[0];
+            const result = await Swal.fire({
+                icon: 'question',
+                title: 'Pilih Bidang PR',
+                html: `<div class="text-sm leading-relaxed">Bidang terpilih akan mengisi catatan dokumen <strong>${String(nomorSp || 'SP')}</strong>:<br><span class="text-xs">Memenuhi PR Bidang <strong>(pilihan)</strong> PT Sucofindo Cabang Pekanbaru.</span></div>`,
+                input: 'select',
+                inputOptions: options,
+                inputValue: preferred,
+                inputPlaceholder: '-- pilih bidang PR --',
+                showCancelButton: true,
+                confirmButtonText: 'Lanjut Preview',
+                cancelButtonText: 'Batal',
+                confirmButtonColor: '#2563eb',
+                background: dark ? '#1f2937' : '#fff',
+                color: dark ? '#f3f4f6' : '#111827',
+                inputValidator: (value) => value ? undefined : 'Bidang PR wajib dipilih sebelum mencetak.'
+            });
+
+            if (!result.isConfirmed || !result.value) return;
+
+            const url = new URL(previewUrl, window.location.origin);
+            url.searchParams.set('bidang_pr', result.value);
+            window.open(url.toString(), '_blank', 'noopener');
+        };
 
         // ── FIX BUG 2: Flag untuk mencegah change handler PPBJ menimpa field saat load edit ──
         let _suppressEditPpbjChange = false;

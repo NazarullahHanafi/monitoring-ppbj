@@ -231,6 +231,7 @@
     @php
         $typeBadges = [
             'bidang_ip_itu' => 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300',
+            'bidang_pr' => 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300',
             'penandatangan_sci' => 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300',
             'jabatan_sci' => 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300',
         ];
@@ -246,7 +247,7 @@
                         <h1 class="text-2xl font-extrabold tracking-tight">Master Kontrak SP</h1>
                     </div>
                     <p class="text-sm mt-1">
-                        Kelola Bidang IP/ITU, Penandatangan SCI, dan Jabatan SCI untuk dropdown Penomoran SP.
+                        Kelola Bidang PR, Bidang IP/ITU, Penandatangan SCI, dan Jabatan SCI untuk dropdown serta cetak Penomoran SP.
                     </p>
                 </div>
 
@@ -274,7 +275,7 @@
             </div>
         @endif
 
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
             <div class="rounded-xl bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 p-4 shadow-sm">
                 <div class="text-xs text-gray-500 dark:text-gray-400">Total Master</div>
                 <div class="text-2xl font-bold text-gray-900 dark:text-white">{{ number_format($stats['total']) }}</div>
@@ -282,6 +283,10 @@
             <div class="rounded-xl bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 p-4 shadow-sm">
                 <div class="text-xs text-gray-500 dark:text-gray-400">Bidang IP / ITU</div>
                 <div class="text-2xl font-bold text-blue-600 dark:text-blue-400">{{ number_format($stats['bidang_ip_itu']) }}</div>
+            </div>
+            <div class="rounded-xl bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 p-4 shadow-sm">
+                <div class="text-xs text-gray-500 dark:text-gray-400">Bidang PR</div>
+                <div class="text-2xl font-bold text-violet-600 dark:text-violet-400">{{ number_format($stats['bidang_pr']) }}</div>
             </div>
             <div class="rounded-xl bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 p-4 shadow-sm">
                 <div class="text-xs text-gray-500 dark:text-gray-400">Penandatangan SCI</div>

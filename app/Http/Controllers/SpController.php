@@ -161,6 +161,7 @@ class SpController extends Controller
                 ->orderBy('sequence_number', 'desc')
                 ->value('nomor_sp'),
             'sp_master_options:bidang_ip_itu:active_names' => fn() => $this->queryActiveSpMasterOptionNames('bidang_ip_itu'),
+            'sp_master_options:bidang_pr:active_names' => fn() => $this->queryActiveSpMasterOptionNames('bidang_pr'),
             'sp_master_options:penandatangan_sci:active_names' => fn() => $this->queryActiveSpMasterOptionNames('penandatangan_sci'),
             'sp_master_options:jabatan_sci:active_names' => fn() => $this->queryActiveSpMasterOptionNames('jabatan_sci'),
         ], 3600);
@@ -169,6 +170,7 @@ class SpController extends Controller
         $satuans = $referenceData['satuans:all'];
         $lastNomor = $referenceData[$lastNumberCacheKey];
         $bidangIpItus = $referenceData['sp_master_options:bidang_ip_itu:active_names'];
+        $bidangPrs = $referenceData['sp_master_options:bidang_pr:active_names'];
         $penandatanganScis = $referenceData['sp_master_options:penandatangan_sci:active_names'];
         $jabatanScis = $referenceData['sp_master_options:jabatan_sci:active_names'];
 
@@ -209,7 +211,7 @@ class SpController extends Controller
 
         $spVendorAuditMap = $this->buildSpVendorAuditMap($sps->getCollection());
 
-        return view('sp.index', compact('pics', 'satuans', 'sps', 'lastNomor', 'search', 'pic', 'dari', 'sampai', 'stats', 'bidangIpItus', 'penandatanganScis', 'jabatanScis', 'oracleMode', 'spVendorAuditMap'));
+        return view('sp.index', compact('pics', 'satuans', 'sps', 'lastNomor', 'search', 'pic', 'dari', 'sampai', 'stats', 'bidangIpItus', 'bidangPrs', 'penandatanganScis', 'jabatanScis', 'oracleMode', 'spVendorAuditMap'));
     }
 
     // =========================================================
@@ -361,6 +363,52 @@ class SpController extends Controller
             ->where('type', $type)
             ->orderBy('nama')
             ->pluck('nama');
+    }
+
+    /**
+     * Pastikan nilai bidang pada dokumen hanya berasal dari master aktif.
+     * Fallback menjaga link cetak lama tetap bisa dipakai setelah fitur dirilis.
+     */
+    private function resolvePrintBidangPr(?string $requested): string
+    {
+        $fallback = [
+            'DUKUNGAN BISNIS',
+            'INSPEKSI TEKNIK',
+            'INSPEKSI UMUM',
+            'PENGUJIAN DAN KONSULTANSI',
+        ];
+
+        $available = collect(Cache::remember(
+            'sp_master_options:bidang_pr:active_names',
+            3600,
+            fn() => $this->queryActiveSpMasterOptionNames('bidang_pr')
+        ))
+            ->map(fn($name) => trim((string) $name))
+            ->filter()
+            ->values();
+
+        if ($available->isEmpty()) {
+            $available = collect($fallback);
+        }
+
+        $requested = trim((string) $requested);
+        if ($requested === '') {
+            return (string) ($available->first(
+                fn(string $name) => strcasecmp($name, 'DUKUNGAN BISNIS') === 0
+            ) ?? $available->first());
+        }
+
+        $matched = $available->first(
+            fn(string $name) => strcasecmp($name, $requested) === 0
+        );
+
+        if ($matched === null) {
+            throw ValidationException::withMessages([
+                'bidang_pr' => 'Bidang PR tidak valid atau sedang dinonaktifkan. Silakan pilih ulang dari master aktif.',
+            ]);
+        }
+
+        return (string) $matched;
     }
 
     private function spphVendorMetaForPpbj(object $ppbj): array
@@ -1450,12 +1498,13 @@ class SpController extends Controller
     // =========================================================
     // CETAK SP → WORD (dengan tabel items dinamis)
     // =========================================================
-    public function previewCetak(Sp $sp)
+    public function previewCetak(Request $request, Sp $sp)
     {
+        $bidangPr = $this->resolvePrintBidangPr($request->query('bidang_pr'));
         $nomor = trim((string) ($sp->nomor_sp ?: 'SP-' . $sp->id));
         $filename = $this->previewDownloadName('SP ' . $nomor . '.docx');
         $mode = strtolower((string) ($sp->numbering_mode ?? 'auto')) === 'oracle' ? 'oracle' : 'auto';
-        $preview = PrintPreviewFile::store($this->cetakSp($sp), $filename);
+        $preview = PrintPreviewFile::store($this->cetakSp($sp, $bidangPr), $filename);
 
         return view('documents.print-preview', [
             'title' => 'Preview Cetak SP',
@@ -1473,30 +1522,32 @@ class SpController extends Controller
                 'Vendor' => $sp->nama_vendor ?: '-',
                 'Nilai SP' => $sp->nilai_sp ? 'Rp ' . number_format((float) $sp->nilai_sp, 0, ',', '.') : '-',
                 'PIC' => $sp->pic ?: '-',
+                'Bidang PR' => $bidangPr,
                 'Link berlaku sampai' => $preview['expiresText'],
             ],
         ]);
     }
 
-    public function cetakSp(Sp $sp)
+    public function cetakSp(Sp $sp, ?string $bidangPr = null)
     {
         $sp->load('items');
+        $bidangPr = $this->resolvePrintBidangPr($bidangPr ?? request()->query('bidang_pr'));
         $nilaiAcuan = $this->hitungNilaiAcuan($sp);
 
         // 500 juta ke atas memakai template Kontrak Ringkas Jasa Subkon > 500 jt.
         // Jangan arahkan ke kontrak lama, karena formatnya berbeda dari template yang diupload.
         if ($nilaiAcuan >= 500_000_000) {
-            return $this->cetakKontrakRingkas500($sp, $nilaiAcuan);
+            return $this->cetakKontrakRingkas500($sp, $nilaiAcuan, $bidangPr);
         }
 
         // 300 juta s.d. sebelum 500 juta memakai template Kontrak Ringkas Jasa Subkon > 300 jt.
         if ($nilaiAcuan >= 300_000_000 && $nilaiAcuan < 500_000_000) {
-            return $this->cetakKontrakRingkas300($sp, $nilaiAcuan);
+            return $this->cetakKontrakRingkas300($sp, $nilaiAcuan, $bidangPr);
         }
 
         // 50 juta s.d. sebelum 300 juta tetap memakai template kontrak lama.
         if ($nilaiAcuan >= 50_000_000) {
-            return $this->cetakKontrak($sp, $nilaiAcuan);
+            return $this->cetakKontrak($sp, $nilaiAcuan, $bidangPr);
         }
 
         $phpWord = new PhpWord;
@@ -1838,7 +1889,7 @@ class SpController extends Controller
                 : null;
 
             $catatanSegments[] = ['text' => 'Memenuhi PR Bidang ', 'bold' => false];
-            $catatanSegments[] = ['text' => '(.....................)', 'bold' => true];
+            $catatanSegments[] = ['text' => $bidangPr, 'bold' => true];
             $catatanSegments[] = ['text' => ' PT Sucofindo Cabang Pekanbaru Sesuai Nomor PR ', 'bold' => false];
             $catatanSegments[] = ['text' => $sp->linkedPpbjLabel(), 'bold' => true];
 
@@ -2077,8 +2128,9 @@ class SpController extends Controller
         return response()->download($tempPath, $filename)->deleteFileAfterSend(true);
     }
 
-    public function cetakKontrakRingkas300(Sp $sp, ?float $nilaiAcuan = null)
+    public function cetakKontrakRingkas300(Sp $sp, ?float $nilaiAcuan = null, ?string $bidangPr = null)
     {
+        $bidangPr = $this->resolvePrintBidangPr($bidangPr ?? request()->query('bidang_pr'));
         $sp->load('items');
 
         $phpWord = new PhpWord;
@@ -2319,8 +2371,8 @@ class SpController extends Controller
         }
 
         $catatanPr = $sp->nomor_pr
-            ? 'Memenuhi Permintaan Bidang (....................) sesuai PR No. ' . $sp->linkedPpbjLabel() . ' tanggal ' . $tglPr . '.'
-            : 'Memenuhi Permintaan Bidang .................... sesuai PR No. (....................) tanggal (....................).';
+            ? 'Memenuhi PR Bidang ' . $bidangPr . ' PT Sucofindo Cabang Pekanbaru sesuai PR No. ' . $sp->linkedPpbjLabel() . ' tanggal ' . $tglPr . '.'
+            : 'Memenuhi PR Bidang ' . $bidangPr . ' PT Sucofindo Cabang Pekanbaru sesuai PR No. (....................) tanggal (....................).';
         $catatanPr .= $this->ppbjRegistrationNoteByPr($sp->nomor_pr);
 
         // Summary: kolom Catatan dibuat vertical merge 3 baris supaya tidak muncul garis
@@ -2800,8 +2852,9 @@ class SpController extends Controller
         return response()->download($tempPath, $filename)->deleteFileAfterSend(true);
     }
 
-    public function cetakKontrakRingkas500(Sp $sp, ?float $nilaiAcuan = null)
+    public function cetakKontrakRingkas500(Sp $sp, ?float $nilaiAcuan = null, ?string $bidangPr = null)
     {
+        $bidangPr = $this->resolvePrintBidangPr($bidangPr ?? request()->query('bidang_pr'));
         // Template Kontrak Ringkas Jasa Subkon Diatas 500 jt.
         // Isi mengikuti dokumen template >500: Pasal 1 s.d. Pasal 13, Jaminan Pelaksanaan,
         // tanda tangan, Pakta Integritas, dan Formulir Uji Kelayakan Penyedia Eksternal.
@@ -3045,8 +3098,8 @@ class SpController extends Controller
         }
 
         $catatanPr = $sp->nomor_pr
-            ? 'Memenuhi Permintaan Bidang Dukungan Bisnis sesuai PR No. ' . $sp->linkedPpbjLabel() . ' tanggal ' . $tglPr . '.'
-            : 'Memenuhi Permintaan Bidang Dukungan Bisnis sesuai PR No. (....................) tanggal (....................).';
+            ? 'Memenuhi PR Bidang ' . $bidangPr . ' PT Sucofindo Cabang Pekanbaru sesuai PR No. ' . $sp->linkedPpbjLabel() . ' tanggal ' . $tglPr . '.'
+            : 'Memenuhi PR Bidang ' . $bidangPr . ' PT Sucofindo Cabang Pekanbaru sesuai PR No. (....................) tanggal (....................).';
         $catatanPr .= $this->ppbjRegistrationNoteByPr($sp->nomor_pr);
 
         // Summary: kolom Catatan dibuat vertical merge 3 baris supaya tidak muncul garis
@@ -3526,8 +3579,9 @@ class SpController extends Controller
         return response()->download($tempPath, $filename)->deleteFileAfterSend(true);
     }
 
-    public function cetakKontrak(Sp $sp, ?float $nilaiAcuan = null)
+    public function cetakKontrak(Sp $sp, ?float $nilaiAcuan = null, ?string $bidangPr = null)
     {
+        $bidangPr = $this->resolvePrintBidangPr($bidangPr ?? request()->query('bidang_pr'));
         $sp->load('items');
 
         $phpWord = new PhpWord;
@@ -3795,8 +3849,8 @@ class SpController extends Controller
         // Catatan kiri + Summary kanan dalam satu baris supaya tidak pakai vMerge.
         $tglPrText = $tglPr ?: '(....................)';
         $catatanPr = $sp->nomor_pr
-            ? 'Memenuhi PR Bidang Dukungan Bisnis PT Sucofindo Cabang Pekanbaru sesuai PR No. ' . $sp->linkedPpbjLabel() . ' tanggal ' . $tglPrText
-            : 'Memenuhi PR Bidang Dukungan Bisnis PT Sucofindo Cabang Pekanbaru sesuai PR No. (....................) tanggal (....................)';
+            ? 'Memenuhi PR Bidang ' . $bidangPr . ' PT Sucofindo Cabang Pekanbaru sesuai PR No. ' . $sp->linkedPpbjLabel() . ' tanggal ' . $tglPrText
+            : 'Memenuhi PR Bidang ' . $bidangPr . ' PT Sucofindo Cabang Pekanbaru sesuai PR No. (....................) tanggal (....................)';
         $catatanPr .= $this->ppbjRegistrationNoteByPr($sp->nomor_pr);
 
         $tbl->addRow();
