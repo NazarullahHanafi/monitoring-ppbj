@@ -1991,7 +1991,7 @@ class SpController extends Controller
 
         // Row 4: Jabatan
         $sigTbl->addRow();
-        $sigTbl->addCell(4500)->addText('Pj. Kepala Bidang Dukungan Bisnis', $sigNrm, $sigPC);
+        $sigTbl->addCell(4500)->addText('Pgs. Kepala Bidang Dukungan Bisnis', $sigNrm, $sigPC);
         $sigTbl->addCell(4500)->addText($jabatanVendor, $sigNrm, $sigPC);
 
         // === GENERATE FILE ===
@@ -3536,13 +3536,13 @@ class SpController extends Controller
             : '(....................)';
 
         $bidangIpItu = trim((string) ($sp->bidang_ip_itu ?? ''));
-        $bidangIpItu = $bidangIpItu !== '' ? $bidangIpItu : 'Pj. Kepala Bidang Dukungan Bisnis';
+        $bidangIpItu = $bidangIpItu !== '' ? $bidangIpItu : 'Pgs. Kepala Bidang Dukungan Bisnis';
 
         $penandatanganSci = trim((string) ($sp->penandatangan_sci ?? ''));
         $penandatanganSci = $penandatanganSci !== '' ? $penandatanganSci : 'Jumelda';
 
         $jabatanSci = trim((string) ($sp->jabatan_sci ?? ''));
-        $jabatanSci = $jabatanSci !== '' ? $jabatanSci : 'Pj. Kepala Bidang Dukungan Bisnis';
+        $jabatanSci = $jabatanSci !== '' ? $jabatanSci : 'Pgs. Kepala Bidang Dukungan Bisnis';
 
         $vendorUp = strtoupper(trim((string) $sp->nama_vendor));
         $alamatV = ($vendor && trim((string) ($vendor->alamat ?? '')) !== '') ? trim((string) $vendor->alamat) : '(.....................................)';
