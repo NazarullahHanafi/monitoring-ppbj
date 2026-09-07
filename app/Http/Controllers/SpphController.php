@@ -1206,7 +1206,7 @@ class SpphController extends Controller
         $signers = [
             'jumelda' => [
                 'name' => 'Jumelda',
-                'title' => 'Pj. Kepala Bidang Dukungan Bisnis',
+                'title' => 'Pgs. Kepala Bidang Dukungan Bisnis',
             ],
             'bambang' => [
                 'name' => 'Bambang Harwanta',
