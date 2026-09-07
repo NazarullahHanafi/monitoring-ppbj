@@ -6,6 +6,7 @@ use App\Http\Controllers\SpController;
 use App\Models\Ppbj;
 use App\Models\Sp;
 use App\Models\SpMasterOption;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Validation\ValidationException;
@@ -15,6 +16,22 @@ use ZipArchive;
 class SpPrintBidangPrTest extends TestCase
 {
     use RefreshDatabase;
+
+    public function test_sp_page_renders_native_bidang_pr_print_dialog_and_handler(): void
+    {
+        $user = User::factory()->create([
+            'department' => 'umum',
+            'role' => 'user',
+        ]);
+
+        $response = $this->actingAs($user)->get(route('sp.index'));
+
+        $response->assertOk();
+        $response->assertSee('id="spBidangPrintModal"', false);
+        $response->assertSee('window.openSpPrintPreview = function', false);
+        $response->assertSee('DUKUNGAN BISNIS');
+        $response->assertSee('PENGUJIAN DAN KONSULTANSI');
+    }
 
     public function test_selected_bidang_pr_is_written_to_sp_document_note(): void
     {

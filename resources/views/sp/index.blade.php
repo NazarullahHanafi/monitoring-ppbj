@@ -1366,6 +1366,70 @@
         </svg>
         <span class="ob-float-tooltip">Lihat Pembaruan SP</span>
     </button>
+
+    <div id="spBidangPrintModal"
+        class="fixed inset-0 z-[80] hidden items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm"
+        role="dialog" aria-modal="true" aria-labelledby="spBidangPrintTitle">
+        <div class="w-full max-w-lg overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900">
+            <div class="bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 px-6 py-5 text-white">
+                <div class="flex items-start justify-between gap-4">
+                    <div>
+                        <p class="text-xs font-bold uppercase tracking-[0.18em] text-blue-100">Cetak SP / Kontrak</p>
+                        <h2 id="spBidangPrintTitle" class="mt-1 text-xl font-extrabold">Pilih Bidang PR</h2>
+                        <p id="spBidangPrintNumber" class="mt-1 text-sm text-blue-100"></p>
+                    </div>
+                    <button type="button" onclick="closeSpPrintPreview()"
+                        class="rounded-lg bg-white/15 p-2 text-white transition hover:bg-white/25"
+                        aria-label="Tutup pilihan Bidang PR">
+                        <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+            </div>
+
+            <div class="space-y-5 p-6">
+                <div>
+                    <label for="spBidangPrintSelect" class="mb-2 block text-sm font-bold text-slate-800 dark:text-slate-100">
+                        Bidang pemilik PR <span class="text-red-500">*</span>
+                    </label>
+                    <select id="spBidangPrintSelect" onchange="updateSpPrintPreviewUrl()"
+                        class="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 dark:border-slate-600 dark:bg-slate-800 dark:text-white"
+                        @disabled(collect($bidangPrs ?? [])->isEmpty())>
+                        @forelse(collect($bidangPrs ?? []) as $bidangPr)
+                            <option value="{{ $bidangPr }}" @selected(strcasecmp((string) $bidangPr, 'DUKUNGAN BISNIS') === 0)>
+                                {{ $bidangPr }}
+                            </option>
+                        @empty
+                            <option value="">Master Bidang PR belum tersedia</option>
+                        @endforelse
+                    </select>
+                </div>
+
+                <div class="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm leading-relaxed text-blue-900 dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-100">
+                    <p class="text-xs font-bold uppercase tracking-wide text-blue-600 dark:text-blue-300">Pratinjau catatan</p>
+                    <p class="mt-1">Memenuhi PR Bidang <strong id="spBidangPrintExample">DUKUNGAN BISNIS</strong> PT Sucofindo Cabang Pekanbaru.</p>
+                </div>
+
+                <div class="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <a href="{{ route('sp-master-options.index', ['type' => 'bidang_pr']) }}"
+                        class="text-center text-xs font-bold text-blue-600 hover:underline dark:text-blue-300">
+                        Kelola Master Bidang PR
+                    </a>
+                    <div class="flex gap-2">
+                        <button type="button" onclick="closeSpPrintPreview()"
+                            class="flex-1 rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800 sm:flex-none">
+                            Batal
+                        </button>
+                        <a id="spBidangPrintContinue" href="#" target="_blank" rel="noopener"
+                            class="flex-1 rounded-xl bg-blue-600 px-5 py-2.5 text-center text-sm font-bold text-white shadow-lg shadow-blue-500/20 transition hover:bg-blue-700 sm:flex-none">
+                            Lanjut Preview
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 @endsection
 
 @push('scripts')
@@ -1383,8 +1447,6 @@
             'ppbjCheckUrl' => route('sp.check-ppbj'),
             'vendorSearchUrl' => route('vendor.search'),
             'vendorStoreUrl' => route('vendor.store'),
-            'bidangPrOptions' => collect($bidangPrs ?? [])->values()->all(),
-            'bidangPrMasterUrl' => route('sp-master-options.index', ['type' => 'bidang_pr']),
             'oracleMode' => $oracleMode,
             'autoUrl' => $normalSpUrl,
             'oracleUrl' => $oracleSpUrl,
@@ -1396,8 +1458,72 @@
     @endphp
     <script>
         window.SP_PAGE_CONFIG = @json($spPageConfig);
+
+        window.updateSpPrintPreviewUrl = function () {
+            const modal = document.getElementById('spBidangPrintModal');
+            const select = document.getElementById('spBidangPrintSelect');
+            const link = document.getElementById('spBidangPrintContinue');
+            const example = document.getElementById('spBidangPrintExample');
+            const value = String(select?.value || '').trim();
+
+            if (example) example.textContent = value || '(belum dipilih)';
+            if (!link || !modal) return;
+
+            if (!value || !modal.dataset.previewUrl) {
+                link.href = '#';
+                link.classList.add('pointer-events-none', 'opacity-50');
+                link.setAttribute('aria-disabled', 'true');
+                return;
+            }
+
+            const url = new URL(modal.dataset.previewUrl, window.location.origin);
+            url.searchParams.set('bidang_pr', value);
+            link.href = url.toString();
+            link.classList.remove('pointer-events-none', 'opacity-50');
+            link.removeAttribute('aria-disabled');
+        };
+
+        window.openSpPrintPreview = function (previewUrl, nomorSp) {
+            const modal = document.getElementById('spBidangPrintModal');
+            if (!modal) {
+                window.location.href = previewUrl;
+                return;
+            }
+
+            modal.dataset.previewUrl = previewUrl;
+            const number = document.getElementById('spBidangPrintNumber');
+            if (number) number.textContent = nomorSp || 'Dokumen SP';
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            document.body.classList.add('overflow-hidden');
+            window.updateSpPrintPreviewUrl();
+            window.requestAnimationFrame(() => document.getElementById('spBidangPrintSelect')?.focus());
+        };
+
+        window.closeSpPrintPreview = function () {
+            const modal = document.getElementById('spBidangPrintModal');
+            modal?.classList.add('hidden');
+            modal?.classList.remove('flex');
+            document.body.classList.remove('overflow-hidden');
+        };
+
+        document.getElementById('spBidangPrintContinue')?.addEventListener('click', function (event) {
+            if (this.getAttribute('aria-disabled') === 'true') {
+                event.preventDefault();
+                return;
+            }
+            window.closeSpPrintPreview();
+        });
+
+        document.getElementById('spBidangPrintModal')?.addEventListener('click', function (event) {
+            if (event.target === this) window.closeSpPrintPreview();
+        });
+
+        document.addEventListener('keydown', function (event) {
+            if (event.key === 'Escape') window.closeSpPrintPreview();
+        });
     </script>
-    <script src="{{ asset('assets/sp/sp.js') }}?v=20260907a" defer></script>
+    <script src="{{ asset('assets/sp/sp.js') }}?v=20260907b" defer></script>
 @endpush
 
 @include('components.archive-upload-popup')
