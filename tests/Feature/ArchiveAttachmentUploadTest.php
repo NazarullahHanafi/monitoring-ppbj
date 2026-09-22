@@ -327,4 +327,20 @@ class ArchiveAttachmentUploadTest extends TestCase
         $this->assertStringContainsString('uploadArchiveAfterSave', $script);
         $this->assertStringContainsString('/archive-attachment', $script);
     }
+
+    public function test_rendered_ppbj_page_exposes_archive_popup_and_row_upload_action(): void
+    {
+        $user = User::factory()->create(['department' => 'umum', 'role' => 'user']);
+        Ppbj::create([
+            'ppbj_no' => 'PKB/PR-26/CON/0778',
+            'uraian' => 'Uji tampilan upload arsip PPBJ',
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('ppbj.index'))
+            ->assertOk()
+            ->assertSee('openPpbjArchiveUpload', false)
+            ->assertSee('openArchiveAttachmentUpload', false)
+            ->assertSee('Simpan &amp; Upload', false);
+    }
 }
