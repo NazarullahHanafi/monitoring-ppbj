@@ -911,25 +911,33 @@
                 }
             }
 
-            formArchiveUpload?.addEventListener('click', async function () {
+            window.handlePpbjFormArchiveUpload = async function (event) {
+                event?.preventDefault();
+                event?.stopPropagation();
+
                 const id = Number(ppbjIdInput?.value || 0);
                 if (id) {
                     await window.openPpbjArchiveUpload(window.ppbjData?.[id]);
-                    return;
+                    return false;
                 }
 
                 uploadArchiveAfterSave = true;
                 ppbjForm.requestSubmit();
-            });
+                return false;
+            };
 
             btnSave?.addEventListener('click', function () {
                 uploadArchiveAfterSave = false;
             });
 
-            formArchiveView?.addEventListener('click', async function () {
+            window.handlePpbjFormArchiveView = async function (event) {
+                event?.preventDefault();
+                event?.stopPropagation();
+
                 const id = Number(ppbjIdInput?.value || 0);
                 if (id) await window.openPpbjArchiveList(window.ppbjData?.[id]);
-            });
+                return false;
+            };
 
             // ===== MASTER CONFIG =====
             let currentMasterType = null;

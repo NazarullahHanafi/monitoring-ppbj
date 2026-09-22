@@ -1,6 +1,8 @@
 @once
     @push('styles')
         <style>
+            /* Popup arsip harus selalu berada di atas modal Tambah/Edit PPBJ. */
+            .swal2-container { z-index: 100000 !important; }
             .archive-browser-shell { text-align: left; color: #334155; }
             .archive-browser-summary {
                 display: flex; align-items: flex-start; justify-content: space-between; gap: 16px;

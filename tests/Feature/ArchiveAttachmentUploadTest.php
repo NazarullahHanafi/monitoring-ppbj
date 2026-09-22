@@ -325,8 +325,12 @@ class ArchiveAttachmentUploadTest extends TestCase
 
         $this->assertStringContainsString('openPpbjArchiveUpload', $view);
         $this->assertStringContainsString('ppbjFormArchiveUpload', $view);
+        $this->assertStringContainsString('onclick="handlePpbjFormArchiveUpload(event)"', $view);
+        $this->assertStringContainsString('onclick="handlePpbjFormArchiveView(event)"', $view);
         $this->assertStringContainsString("@include('components.archive-upload-popup')", $view);
         $this->assertStringContainsString('uploadArchiveAfterSave', $script);
+        $this->assertStringContainsString('window.handlePpbjFormArchiveUpload', $script);
+        $this->assertStringContainsString('window.handlePpbjFormArchiveView', $script);
         $this->assertStringContainsString('/archive-attachment', $script);
     }
 

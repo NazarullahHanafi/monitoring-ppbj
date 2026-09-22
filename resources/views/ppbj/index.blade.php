@@ -948,11 +948,13 @@
                             </div>
                             <div class="flex shrink-0 flex-wrap gap-2">
                                 <button id="ppbjFormArchiveView" type="button"
-                                    class="hidden rounded-xl border border-violet-200 bg-white px-3 py-2 text-xs font-extrabold text-violet-700 transition hover:bg-violet-100 dark:border-violet-500/30 dark:bg-slate-800 dark:text-violet-200 dark:hover:bg-slate-700">
+                                    onclick="handlePpbjFormArchiveView(event)"
+                                    class="relative z-10 hidden cursor-pointer rounded-xl border border-violet-200 bg-white px-3 py-2 text-xs font-extrabold text-violet-700 transition hover:bg-violet-100 dark:border-violet-500/30 dark:bg-slate-800 dark:text-violet-200 dark:hover:bg-slate-700">
                                     Lihat Arsip
                                 </button>
                                 <button id="ppbjFormArchiveUpload" type="button"
-                                    class="rounded-xl bg-violet-600 px-3 py-2 text-xs font-extrabold text-white shadow-md shadow-violet-500/20 transition hover:-translate-y-0.5 hover:bg-violet-700">
+                                    onclick="handlePpbjFormArchiveUpload(event)"
+                                    class="relative z-10 cursor-pointer rounded-xl bg-violet-600 px-3 py-2 text-xs font-extrabold text-white shadow-md shadow-violet-500/20 transition hover:-translate-y-0.5 hover:bg-violet-700">
                                     Simpan &amp; Upload
                                 </button>
                             </div>
@@ -1365,7 +1367,7 @@
             });
         };
     </script>
-    <script src="{{ asset('assets/ppbj/ppbj.js') }}?v=20260922b" defer></script>
+    <script src="{{ asset('assets/ppbj/ppbj.js') }}?v=20260922c" defer></script>
 
 @endpush
 
