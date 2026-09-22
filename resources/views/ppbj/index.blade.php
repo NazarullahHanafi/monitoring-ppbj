@@ -1337,8 +1337,35 @@
     @endphp
     <script>
         window.PPBJ_PAGE_CONFIG = @json($ppbjPageConfig);
+
+        // Handler ringan disediakan langsung oleh halaman sebagai fallback. Tombol upload
+        // tetap responsif walaupun bundle PPBJ masih diambil dari cache browser.
+        window.openPpbjArchiveUpload = async function (id) {
+            const records = window.PPBJ_PAGE_CONFIG?.ppbjData || {};
+            const record = records[id] || records[String(id)] || null;
+
+            if (!record || typeof window.openArchiveAttachmentUpload !== 'function') {
+                if (window.Swal) {
+                    await Swal.fire({
+                        icon: 'warning',
+                        title: 'Upload belum siap',
+                        text: 'Muat ulang halaman satu kali, lalu coba kembali.',
+                        confirmButtonColor: '#2563eb'
+                    });
+                }
+                return;
+            }
+
+            await window.openArchiveAttachmentUpload({
+                module: 'PPBJ',
+                nomor: record.ppbj_no || `PPBJ #${id}`,
+                nomor_pr: record.ppbj_no || '-',
+                vendor: record.penyedia_eksternal || '-',
+                url: `/ppbj/${id}/archive-attachment`
+            });
+        };
     </script>
-    <script src="{{ asset('assets/ppbj/ppbj.js') }}?v=20260922a" defer></script>
+    <script src="{{ asset('assets/ppbj/ppbj.js') }}?v=20260922b" defer></script>
 
 @endpush
 

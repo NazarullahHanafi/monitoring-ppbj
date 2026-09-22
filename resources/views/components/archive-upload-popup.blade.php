@@ -157,6 +157,7 @@
                 const defaultDocumentType = moduleName === 'SPPH'
                     ? 'Dokumen SPPH'
                     : (moduleName === 'PPBJ' ? 'Dokumen PPBJ/PR' : 'Dokumen SP');
+                let droppedArchiveFile = null;
 
                 const result = await Swal.fire({
                     title: `Upload lampiran ${moduleName}`,
@@ -180,12 +181,18 @@
                                     <option value="Lainnya">Lainnya</option>
                                 </select>
                             </label>
-                            <label class="block">
+                            <div class="block">
                                 <span class="mb-1 block text-xs font-bold text-slate-700 dark:text-slate-200">File pendukung</span>
-                                <input id="archiveUploadFile" type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.csv,.txt,.jpg,.jpeg,.png,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,text/csv,text/plain,image/jpeg,image/png"
-                                    class="w-full rounded-xl border border-dashed border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 file:mr-3 file:rounded-lg file:border-0 file:bg-blue-600 file:px-3 file:py-1.5 file:text-xs file:font-bold file:text-white dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100">
+                                <div id="archiveDropZone" role="button" tabindex="0"
+                                    class="group cursor-pointer rounded-2xl border-2 border-dashed border-slate-300 bg-white px-5 py-5 text-center transition hover:border-blue-500 hover:bg-blue-50 dark:border-slate-600 dark:bg-slate-800 dark:hover:border-blue-400 dark:hover:bg-blue-950/30">
+                                    <input id="archiveUploadFile" type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.csv,.txt,.jpg,.jpeg,.png,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,text/csv,text/plain,image/jpeg,image/png" class="hidden">
+                                    <div class="mx-auto flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-100 text-2xl transition group-hover:scale-105 dark:bg-blue-900/50">📤</div>
+                                    <p class="mt-2 text-sm font-extrabold text-slate-800 dark:text-slate-100">Tarik &amp; lepas file di sini</p>
+                                    <p class="mt-1 text-[11px] text-slate-500 dark:text-slate-400">atau klik untuk memilih dari perangkat</p>
+                                    <div id="archiveSelectedFile" class="mt-3 hidden rounded-xl bg-emerald-50 px-3 py-2 text-left text-xs font-bold text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-200 dark:ring-emerald-700"></div>
+                                </div>
                                 <p class="mt-1 text-[11px] text-slate-500 dark:text-slate-400">Format: PDF, Word, Excel, PowerPoint, CSV/TXT, JPG/PNG. Maksimal mengikuti setting server arsip.</p>
-                            </label>
+                            </div>
                             <label class="block">
                                 <span class="mb-1 block text-xs font-bold text-slate-700 dark:text-slate-200">Catatan singkat</span>
                                 <textarea id="archiveUploadNotes" rows="2" maxlength="500" placeholder="Contoh: penawaran final vendor / dokumen pendukung audit..."
@@ -203,9 +210,62 @@
                     color: dark ? '#f8fafc' : '#0f172a',
                     width: 560,
                     focusConfirm: false,
+                    didOpen: () => {
+                        const dropZone = document.getElementById('archiveDropZone');
+                        const input = document.getElementById('archiveUploadFile');
+                        const selected = document.getElementById('archiveSelectedFile');
+
+                        const showFile = (file) => {
+                            if (!file) return;
+                            droppedArchiveFile = file;
+                            const size = file.size >= 1048576
+                                ? `${(file.size / 1048576).toFixed(2)} MB`
+                                : `${Math.max(1, Math.round(file.size / 1024))} KB`;
+                            if (selected) {
+                                selected.textContent = `✓ ${file.name} · ${size}`;
+                                selected.classList.remove('hidden');
+                            }
+                            if (dropZone) {
+                                dropZone.style.borderColor = '#10b981';
+                                dropZone.style.backgroundColor = dark ? 'rgba(6,78,59,.28)' : '#ecfdf5';
+                            }
+                        };
+
+                        dropZone?.addEventListener('click', (event) => {
+                            if (event.target === input) return;
+                            input?.click();
+                        });
+                        dropZone?.addEventListener('keydown', (event) => {
+                            if (event.key === 'Enter' || event.key === ' ') {
+                                event.preventDefault();
+                                input?.click();
+                            }
+                        });
+                        input?.addEventListener('change', () => showFile(input.files?.[0]));
+
+                        ['dragenter', 'dragover'].forEach((eventName) => {
+                            dropZone?.addEventListener(eventName, (event) => {
+                                event.preventDefault();
+                                event.stopPropagation();
+                                dropZone.style.borderColor = '#2563eb';
+                                dropZone.style.backgroundColor = dark ? 'rgba(30,58,138,.32)' : '#eff6ff';
+                            });
+                        });
+                        ['dragleave', 'drop'].forEach((eventName) => {
+                            dropZone?.addEventListener(eventName, (event) => {
+                                event.preventDefault();
+                                event.stopPropagation();
+                                if (!droppedArchiveFile) {
+                                    dropZone.style.borderColor = '';
+                                    dropZone.style.backgroundColor = '';
+                                }
+                            });
+                        });
+                        dropZone?.addEventListener('drop', (event) => showFile(event.dataTransfer?.files?.[0]));
+                    },
                     preConfirm: () => {
                         const type = document.getElementById('archiveUploadType')?.value || '';
-                        const file = document.getElementById('archiveUploadFile')?.files?.[0] || null;
+                        const file = droppedArchiveFile || document.getElementById('archiveUploadFile')?.files?.[0] || null;
                         const notes = document.getElementById('archiveUploadNotes')?.value || '';
 
                         if (!type) {

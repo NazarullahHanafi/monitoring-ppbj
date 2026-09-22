@@ -314,6 +314,8 @@ class ArchiveAttachmentUploadTest extends TestCase
         $archivePopup = file_get_contents(resource_path('views/components/archive-upload-popup.blade.php'));
         $this->assertStringContainsString('window.openArchiveAttachmentList', $archivePopup);
         $this->assertStringContainsString('renderArchiveAttachmentList', $archivePopup);
+        $this->assertStringContainsString('archiveDropZone', $archivePopup);
+        $this->assertStringContainsString("addEventListener('drop'", $archivePopup);
     }
 
     public function test_ppbj_page_supports_row_create_and_edit_archive_upload_flows(): void
@@ -341,6 +343,7 @@ class ArchiveAttachmentUploadTest extends TestCase
             ->assertOk()
             ->assertSee('openPpbjArchiveUpload', false)
             ->assertSee('openArchiveAttachmentUpload', false)
+            ->assertSee('archiveDropZone', false)
             ->assertSee('Simpan &amp; Upload', false);
     }
 }
