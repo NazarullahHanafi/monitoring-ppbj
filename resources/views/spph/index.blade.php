@@ -275,6 +275,20 @@
                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.586-6.586a4 4 0 10-5.657-5.657L5.757 10.757a6 6 0 108.486 8.486L20.5 12.986" />
                                             </svg>
                                         </button>
+                                        <button type="button"
+                                            onclick="openArchiveAttachmentList({
+                                                module: 'SPPH',
+                                                nomor: @js($s->nomor_spph ?? ('SPPH-' . $s->id)),
+                                                nomor_prs: @js($linkedPpbjNumbers),
+                                                url: @js(route('spph.archive', $s))
+                                            })"
+                                            class="p-1.5 rounded-lg text-cyan-600 hover:bg-cyan-50 dark:text-cyan-300 dark:hover:bg-cyan-900/30 transition-colors"
+                                            title="Cek seluruh lampiran arsip SPPH" aria-label="Cek seluruh lampiran arsip SPPH">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                    d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7zm12.5 5.5l3 3m-1.5-1.5a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" />
+                                            </svg>
+                                        </button>
                                         <a href="{{ route('spph.cetak.preview', ['spph' => $s, 'vendor' => $vendorList[0] ?? $s->nama_vendor]) }}" target="_blank"
                                             onclick="event.preventDefault(); openSpphPrint(this.href);"
                                             class="p-1.5 rounded-lg text-sky-600 hover:bg-sky-50 dark:hover:bg-sky-900/30 transition-colors"

@@ -2,6 +2,8 @@
 
 namespace Tests\Feature;
 
+use App\Models\Sp;
+use App\Models\Spph;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
@@ -166,6 +168,77 @@ class PrArchiveIntegrationTest extends TestCase
         $this->assertStringContainsString('Lokasi fisik:', $ppbjScript);
         $this->assertStringNotContainsString('data-archive-status', $torprView);
         $this->assertStringNotContainsString('/torpr/${id}/archive', $torprView);
+    }
+
+    public function test_sp_and_spph_archive_endpoints_load_linked_pr_documents_on_demand(): void
+    {
+        config([
+            'services.pr_archive.base_url' => 'https://arsip.example.test',
+            'services.pr_archive.pr_path' => '/api/pr/documents',
+        ]);
+
+        Http::fake(function (Request $request) {
+            $prNumber = str_contains($request->url(), 'PR-MULTI-002') ? 'PR-MULTI-002' : 'PR-MULTI-001';
+
+            return Http::response([
+                'has_archive' => true,
+                'document_count' => 1,
+                'documents' => [[
+                    'id' => $prNumber === 'PR-MULTI-001' ? 101 : 102,
+                    'name' => 'Lampiran '.$prNumber,
+                    'preview_url' => '/api/archive/'.rawurlencode($prNumber).'/preview',
+                ]],
+            ]);
+        });
+
+        [$user, $firstPpbjId] = $this->generalUserAndPpbj('PR-MULTI-001');
+        $secondPpbjId = DB::table('ppbj')->insertGetId([
+            'ppbj_no' => 'PR-MULTI-002',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $sp = Sp::create([
+            'nomor_sp' => '001/PKU-IX/SP/2026',
+            'sequence_number' => 1,
+            'tanggal_sp' => '2026-09-22',
+            'nomor_pr' => 'PR-MULTI-001',
+            'nama_vendor' => 'PT Arsip Cepat',
+            'deskripsi_pengadaan' => 'Pengujian arsip SP',
+            'pic' => 'Tester',
+        ]);
+        $sp->ppbjs()->attach([
+            $firstPpbjId => ['urutan' => 1],
+            $secondPpbjId => ['urutan' => 2],
+        ]);
+
+        $spph = Spph::create([
+            'nomor_spph' => '001/PKU-IX/SPPH/2026',
+            'sequence_number' => 1,
+            'tanggal' => '2026-09-22',
+            'nomor_pr' => 'PR-MULTI-001',
+            'nama_vendor' => 'PT Arsip Cepat',
+            'deskripsi_pengadaan' => 'Pengujian arsip SPPH',
+            'pic' => 'Tester',
+        ]);
+        $spph->ppbjs()->attach($firstPpbjId, ['urutan' => 1]);
+
+        $this->actingAs($user)
+            ->getJson(route('sp.archive', $sp))
+            ->assertOk()
+            ->assertJsonPath('state', 'available')
+            ->assertJsonPath('document_count', 2)
+            ->assertJsonPath('documents.0.nomor_pr', 'PR-MULTI-001')
+            ->assertJsonPath('documents.1.nomor_pr', 'PR-MULTI-002');
+
+        $this->actingAs($user)
+            ->getJson(route('spph.archive', $spph))
+            ->assertOk()
+            ->assertJsonPath('state', 'available')
+            ->assertJsonPath('document_count', 1)
+            ->assertJsonPath('documents.0.nomor_pr', 'PR-MULTI-001');
+
+        Http::assertSentCount(2);
     }
 
     private function generalUserAndPpbj(string $prNumber): array

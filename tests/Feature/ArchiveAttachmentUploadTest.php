@@ -255,7 +255,15 @@ class ArchiveAttachmentUploadTest extends TestCase
 
         $this->assertStringContainsString('openArchiveAttachmentUpload', $spView);
         $this->assertStringContainsString('route(\'sp.archive-attachment\'', $spView);
+        $this->assertStringContainsString('openArchiveAttachmentList', $spView);
+        $this->assertStringContainsString('route(\'sp.archive\'', $spView);
         $this->assertStringContainsString('openArchiveAttachmentUpload', $spphView);
         $this->assertStringContainsString('route(\'spph.archive-attachment\'', $spphView);
+        $this->assertStringContainsString('openArchiveAttachmentList', $spphView);
+        $this->assertStringContainsString('route(\'spph.archive\'', $spphView);
+
+        $archivePopup = file_get_contents(resource_path('views/components/archive-upload-popup.blade.php'));
+        $this->assertStringContainsString('window.openArchiveAttachmentList', $archivePopup);
+        $this->assertStringContainsString('renderArchiveAttachmentList', $archivePopup);
     }
 }

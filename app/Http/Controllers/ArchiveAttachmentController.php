@@ -4,8 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Models\Sp;
 use App\Models\Spph;
-use App\Services\ProcurementJourneyService;
 use App\Services\PrArchiveService;
+use App\Services\ProcurementJourneyService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -117,6 +117,118 @@ class ArchiveAttachmentController extends Controller
         return response()->json($result, $this->statusCode($result));
     }
 
+    public function showSp(Request $request, Sp $sp, PrArchiveService $archiveService): JsonResponse
+    {
+        $sp->loadMissing('ppbjs:id,ppbj_no');
+
+        return $this->showLinkedArchives(
+            $request,
+            $archiveService,
+            'SP',
+            $sp->id,
+            (string) ($sp->nomor_sp ?: 'SP-'.$sp->id),
+            $sp->linkedPpbjNumbers()
+        );
+    }
+
+    public function showSpph(Request $request, Spph $spph, PrArchiveService $archiveService): JsonResponse
+    {
+        $spph->loadMissing('ppbjs:id,ppbj_no');
+
+        return $this->showLinkedArchives(
+            $request,
+            $archiveService,
+            'SPPH',
+            $spph->id,
+            (string) ($spph->nomor_spph ?: 'SPPH-'.$spph->id),
+            $spph->linkedPpbjNumbers()
+        );
+    }
+
+    /**
+     * Ambil arsip hanya saat user menekan tombol Cek Arsip. Dengan begitu,
+     * halaman daftar tetap bebas dari request API arsip per baris (N+1 HTTP).
+     */
+    private function showLinkedArchives(
+        Request $request,
+        PrArchiveService $archiveService,
+        string $module,
+        int $recordId,
+        string $documentNumber,
+        array $prNumbers
+    ): JsonResponse {
+        $numbers = collect($prNumbers)
+            ->map(fn ($number) => trim((string) $number))
+            ->filter()
+            ->unique()
+            ->take(20)
+            ->values();
+
+        if ($numbers->isEmpty()) {
+            return response()->json([
+                'module' => $module,
+                'record_id' => $recordId,
+                'document_number' => $documentNumber,
+                'state' => 'empty',
+                'has_archive' => false,
+                'document_count' => 0,
+                'documents' => [],
+                'packages' => [],
+                'sources' => [],
+                'message' => 'Nomor PR/PPBJ belum tersedia pada dokumen ini.',
+                'checked_at' => now()->toIso8601String(),
+            ]);
+        }
+
+        $sources = $numbers->map(function (string $number) use ($archiveService, $request) {
+            $archive = $archiveService->findByPrNumber($number, $request->boolean('refresh'));
+
+            $archive['nomor_pr'] = $number;
+            $archive['documents'] = collect($archive['documents'] ?? [])
+                ->map(fn (array $document) => array_merge($document, ['nomor_pr' => $number]))
+                ->values()
+                ->all();
+            $archive['packages'] = collect($archive['packages'] ?? [])
+                ->map(fn (array $package) => array_merge($package, ['nomor_pr' => $number]))
+                ->values()
+                ->all();
+
+            return $archive;
+        });
+
+        $documents = $sources->flatMap(fn (array $source) => $source['documents'] ?? [])->values();
+        $packages = $sources->flatMap(fn (array $source) => $source['packages'] ?? [])->values();
+        $hasArchive = $sources->contains(fn (array $source) => (bool) ($source['has_archive'] ?? false));
+        $hasUnavailable = $sources->contains(fn (array $source) => in_array($source['state'] ?? '', ['unavailable', 'failed'], true));
+        $allUnconfigured = $sources->every(fn (array $source) => ($source['state'] ?? '') === 'unconfigured');
+        $state = $hasArchive ? 'available' : ($allUnconfigured ? 'unconfigured' : ($hasUnavailable ? 'unavailable' : 'empty'));
+        $documentCount = max(
+            $documents->count(),
+            (int) $sources->sum(fn (array $source) => (int) ($source['document_count'] ?? 0))
+        );
+
+        $message = match ($state) {
+            'available' => $documentCount.' dokumen arsip ditemukan untuk '.$numbers->count().' nomor PR/PPBJ.',
+            'unconfigured' => 'Koneksi ke Sistem Arsip belum dikonfigurasi.',
+            'unavailable' => 'Sebagian atau seluruh data arsip sedang tidak dapat dihubungi.',
+            default => 'Belum ada arsip atau laporan untuk nomor PR/PPBJ terkait.',
+        };
+
+        return response()->json([
+            'module' => $module,
+            'record_id' => $recordId,
+            'document_number' => $documentNumber,
+            'state' => $state,
+            'has_archive' => $hasArchive,
+            'document_count' => $documentCount,
+            'documents' => $documents->all(),
+            'packages' => $packages->all(),
+            'sources' => $sources->values()->all(),
+            'message' => $message,
+            'checked_at' => now()->toIso8601String(),
+        ], 200, [], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    }
+
     private function validateUpload(Request $request): array
     {
         $maxKb = max(512, (int) config('services.pr_archive.upload_max_kb', 10240));
@@ -138,8 +250,8 @@ class ArchiveAttachmentController extends Controller
             'document_file' => [
                 'required',
                 'file',
-                'mimes:' . implode(',', self::ALLOWED_EXTENSIONS),
-                'max:' . $maxKb,
+                'mimes:'.implode(',', self::ALLOWED_EXTENSIONS),
+                'max:'.$maxKb,
             ],
             'notes' => ['nullable', 'string', 'max:500'],
             'replace_existing' => ['nullable', 'boolean'],
