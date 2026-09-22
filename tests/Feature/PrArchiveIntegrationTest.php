@@ -223,13 +223,15 @@ class PrArchiveIntegrationTest extends TestCase
         ]);
         $spph->ppbjs()->attach($firstPpbjId, ['urutan' => 1]);
 
-        $this->actingAs($user)
+        $spResponse = $this->actingAs($user)
             ->getJson(route('sp.archive', $sp))
             ->assertOk()
             ->assertJsonPath('state', 'available')
             ->assertJsonPath('document_count', 2)
             ->assertJsonPath('documents.0.nomor_pr', 'PR-MULTI-001')
             ->assertJsonPath('documents.1.nomor_pr', 'PR-MULTI-002');
+        $spResponse->assertJsonMissingPath('sources.0.documents');
+        $spResponse->assertJsonMissingPath('sources.0.packages');
 
         $this->actingAs($user)
             ->getJson(route('spph.archive', $spph))

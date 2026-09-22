@@ -223,7 +223,13 @@ class ArchiveAttachmentController extends Controller
             'document_count' => $documentCount,
             'documents' => $documents->all(),
             'packages' => $packages->all(),
-            'sources' => $sources->values()->all(),
+            'sources' => $sources->map(fn (array $source) => [
+                'nomor_pr' => $source['nomor_pr'] ?? null,
+                'state' => $source['state'] ?? 'empty',
+                'has_archive' => (bool) ($source['has_archive'] ?? false),
+                'document_count' => (int) ($source['document_count'] ?? 0),
+                'message' => $source['message'] ?? null,
+            ])->values()->all(),
             'message' => $message,
             'checked_at' => now()->toIso8601String(),
         ], 200, [], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
