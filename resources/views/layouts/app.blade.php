@@ -7,7 +7,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>@yield('title', 'Monitoring PPBJ')</title>
-    @vite(['resources/css/app.css', 'resources/js/app.js'])
+    {{-- Alpine/Axios hanya dibutuhkan oleh Dashboard dan Profile. Halaman data besar
+         memakai JavaScript khusus masing-masing sehingga tidak perlu membayar biaya
+         unduh, parse, dan pemindaian DOM Alpine pada setiap navigasi. --}}
+    @if(request()->routeIs('dashboard.*', 'profile.*'))
+        @vite(['resources/css/app.css', 'resources/js/app.js'])
+    @else
+        @vite(['resources/css/app.css'])
+    @endif
     {{-- UI vendor assets are served locally so rendering is not blocked by CDN/DNS latency. --}}
     {{-- Mulai unduh library sejak awal, tetapi eksekusinya dilakukan setelah HTML utama selesai
          diparse. Ini menjaga API global lama tetap tersedia sebelum @stack('scripts') tanpa
