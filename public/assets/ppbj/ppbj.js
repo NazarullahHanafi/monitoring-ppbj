@@ -840,6 +840,9 @@
             const btnSave = document.getElementById('btnSave');
             const btnSaveSpinner = document.getElementById('btnSaveSpinner');
             const btnSaveText = document.getElementById('btnSaveText');
+            const formArchiveUpload = document.getElementById('ppbjFormArchiveUpload');
+            const formArchiveView = document.getElementById('ppbjFormArchiveView');
+            const formArchiveHint = document.getElementById('ppbjFormArchiveHint');
 
             const inpPpbjNo = document.getElementById('ppbj_no');
             const errPpbjNo = document.getElementById('err_ppbj_no');
@@ -853,6 +856,80 @@
 
             // data server
             window.ppbjData = ppbjPageConfig.ppbjData || {};
+            let uploadArchiveAfterSave = false;
+
+            function ppbjArchivePayload(record, mode = 'upload') {
+                const id = Number(record?.id || 0);
+                if (!id) return null;
+
+                return {
+                    module: 'PPBJ',
+                    nomor: record?.ppbj_no || `PPBJ #${id}`,
+                    nomor_pr: record?.ppbj_no || '-',
+                    vendor: record?.penyedia_eksternal || '-',
+                    url: mode === 'list'
+                        ? (record?.archive_status_url || `/ppbj/${id}/archive`)
+                        : (record?.archive_upload_url || `/ppbj/${id}/archive-attachment`)
+                };
+            }
+
+            window.openPpbjArchiveUpload = async function (idOrRecord) {
+                const record = typeof idOrRecord === 'object'
+                    ? idOrRecord
+                    : window.ppbjData?.[idOrRecord];
+                const payload = ppbjArchivePayload(record, 'upload');
+
+                if (!payload || typeof window.openArchiveAttachmentUpload !== 'function') {
+                    toastErr('Upload belum tersedia', 'Data PPBJ belum tersimpan atau komponen arsip belum siap.');
+                    return;
+                }
+
+                await window.openArchiveAttachmentUpload(payload);
+            };
+
+            window.openPpbjArchiveList = async function (idOrRecord) {
+                const record = typeof idOrRecord === 'object'
+                    ? idOrRecord
+                    : window.ppbjData?.[idOrRecord];
+                const payload = ppbjArchivePayload(record, 'list');
+
+                if (!payload || typeof window.openArchiveAttachmentList !== 'function') return;
+                await window.openArchiveAttachmentList(payload);
+            };
+
+            function syncFormArchiveActions(record = null) {
+                if (!formArchiveUpload) return;
+
+                const isEdit = Number(record?.id || ppbjIdInput?.value || 0) > 0;
+                formArchiveUpload.textContent = isEdit ? 'Upload Lampiran' : 'Simpan & Upload';
+                formArchiveView?.classList.toggle('hidden', !isEdit);
+
+                if (formArchiveHint) {
+                    formArchiveHint.textContent = isEdit
+                        ? 'Upload file baru atau review seluruh lampiran dalam paket PR yang sama.'
+                        : 'Data PPBJ disimpan lebih dulu, kemudian popup upload dibuka otomatis.';
+                }
+            }
+
+            formArchiveUpload?.addEventListener('click', async function () {
+                const id = Number(ppbjIdInput?.value || 0);
+                if (id) {
+                    await window.openPpbjArchiveUpload(window.ppbjData?.[id]);
+                    return;
+                }
+
+                uploadArchiveAfterSave = true;
+                ppbjForm.requestSubmit();
+            });
+
+            btnSave?.addEventListener('click', function () {
+                uploadArchiveAfterSave = false;
+            });
+
+            formArchiveView?.addEventListener('click', async function () {
+                const id = Number(ppbjIdInput?.value || 0);
+                if (id) await window.openPpbjArchiveList(window.ppbjData?.[id]);
+            });
 
             // ===== MASTER CONFIG =====
             let currentMasterType = null;
@@ -1604,10 +1681,12 @@
                     }
                 }).then((result) => {
                     if (result.isConfirmed) {
+                        uploadArchiveAfterSave = false;
                         clearDraft();
                         ppbjForm.reset();
                         ppbjIdInput.value = '';
                         formTitle.innerText = 'Tambah PPBJ';
+                        syncFormArchiveActions();
 
                         formModal.classList.remove('hidden');
                         formModal.classList.add('flex');
@@ -1629,6 +1708,8 @@
                 ppbjForm.reset();
                 ppbjIdInput.value = d.id;
                 formTitle.innerText = 'Edit PPBJ';
+                uploadArchiveAfterSave = false;
+                syncFormArchiveActions(d);
 
                 setFieldError(inpPpbjNo, errPpbjNo, null);
                 if (hintPpbjNo) hintPpbjNo.classList.add('hidden');
@@ -1654,6 +1735,7 @@
             };
 
             window.closeForm = function () {
+                uploadArchiveAfterSave = false;
                 removeApprovalWarning();
                 formModal.classList.add('hidden');
                 formModal.classList.remove('flex');
@@ -1898,8 +1980,31 @@
                 })
                     .then(async (r) => {
                         if (r.ok) {
+                            const responseBody = await r.json().catch(() => ({}));
                             if (!id) clearDraft();
                             toastOk('Tersimpan', 'Data berhasil disimpan');
+
+                            if (responseBody?.data?.id) {
+                                const saved = responseBody.data;
+                                window.ppbjData[saved.id] = {
+                                    ...(window.ppbjData?.[saved.id] || {}),
+                                    ...payload,
+                                    ...saved
+                                };
+                                ppbjIdInput.value = saved.id;
+                                syncFormArchiveActions(window.ppbjData[saved.id]);
+                            }
+
+                            if (uploadArchiveAfterSave && responseBody?.data?.id) {
+                                uploadArchiveAfterSave = false;
+                                setSaving(false);
+                                await window.openPpbjArchiveUpload(window.ppbjData[responseBody.data.id]);
+
+                                const url = new URL(window.location.href);
+                                url.searchParams.set('_t', Date.now());
+                                window.location.href = url.toString();
+                                return;
+                            }
 
                             setTimeout(() => {
                                 const url = new URL(window.location.href);

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Sp;
 use App\Models\Spph;
+use App\Models\Ppbj;
 use App\Services\PrArchiveService;
 use App\Services\ProcurementJourneyService;
 use Illuminate\Http\JsonResponse;
@@ -64,6 +65,52 @@ class ArchiveAttachmentController extends Controller
                     'progress' => 'Lampiran arsip',
                     'document_no' => $sp->nomor_sp,
                     'vendors' => [$sp->nama_vendor],
+                    'note' => $validated['notes'] ?? null,
+                ],
+                $request->user()
+            );
+        }
+
+        return response()->json($result, $this->statusCode($result));
+    }
+
+    public function storePpbj(Request $request, Ppbj $ppbj, PrArchiveService $archiveService): JsonResponse
+    {
+        $validated = $this->validateUpload($request);
+
+        $result = $archiveService->uploadDocument([
+            'source' => 'SIMONPR',
+            'source_module' => 'PPBJ',
+            'nomor_pr' => $ppbj->ppbj_no,
+            'nomor_ppbj' => $ppbj->ppbj_no,
+            'nomor_dokumen' => $ppbj->ppbj_no,
+            'jenis_dokumen' => $validated['document_type'],
+            'nama_vendor' => $ppbj->penyedia_eksternal,
+            'deskripsi' => $ppbj->uraian,
+            'pic' => $ppbj->buyer,
+            'nilai' => $ppbj->total_sebelum_ppn,
+            'tanggal_dokumen' => $ppbj->tgl_ppbj
+                ? \Carbon\Carbon::parse($ppbj->tgl_ppbj)->toDateString()
+                : null,
+            'uploaded_by' => $request->user()?->name,
+            'uploaded_by_email' => $request->user()?->email,
+            'notes' => $validated['notes'] ?? null,
+            'replace_existing' => (bool) ($validated['replace_existing'] ?? false),
+            'audit_package_key' => $this->auditPackageKey($ppbj->ppbj_no, $ppbj->ppbj_no),
+        ], $request->file('document_file'));
+
+        $this->logUploadResult('PPBJ', $ppbj->id, $result);
+
+        if (($result['state'] ?? null) === 'uploaded') {
+            app(ProcurementJourneyService::class)->notifyByPrNumber(
+                $ppbj->ppbj_no,
+                'ppbj_attachment_uploaded',
+                'Lampiran PPBJ masuk Arsip',
+                "Lampiran {$validated['document_type']} untuk {$ppbj->ppbj_no} berhasil masuk sistem arsip.",
+                [
+                    'progress' => 'Lampiran arsip',
+                    'document_no' => $ppbj->ppbj_no,
+                    'vendors' => array_values(array_filter([$ppbj->penyedia_eksternal])),
                     'note' => $validated['notes'] ?? null,
                 ],
                 $request->user()
@@ -247,6 +294,7 @@ class ArchiveAttachmentController extends Controller
                 Rule::in([
                     'Dokumen SP',
                     'Dokumen SPPH',
+                    'Dokumen PPBJ/PR',
                     'Penawaran Vendor',
                     'Kontrak',
                     'BA / Pendukung',

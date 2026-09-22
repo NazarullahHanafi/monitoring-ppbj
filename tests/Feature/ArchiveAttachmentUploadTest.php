@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Sp;
 use App\Models\Spph;
+use App\Models\Ppbj;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
@@ -131,6 +132,54 @@ class ArchiveAttachmentUploadTest extends TestCase
                 && str_contains($body, 'name="nomor_spph"')
                 && str_contains($body, '570/PKU-VII/SPPH/2026')
                 && str_contains($body, 'Vendor Pembanding');
+        });
+    }
+
+    public function test_ppbj_attachment_is_uploaded_to_same_pr_archive_package(): void
+    {
+        config([
+            'services.pr_archive.base_url' => 'https://arsip.example.test',
+            'services.pr_archive.upload_path' => '/api/documents',
+        ]);
+
+        Http::fake([
+            'https://arsip.example.test/*' => Http::response([
+                'document' => [
+                    'id' => 125,
+                    'nama_dokumen' => 'Dokumen PPBJ/PR',
+                    'preview_url' => '/documents/125/preview',
+                ],
+            ], 201),
+        ]);
+
+        $user = User::factory()->create(['name' => 'Nazar', 'department' => 'umum']);
+        $ppbj = Ppbj::create([
+            'ppbj_no' => 'PKB/PR-26/CON/0777',
+            'tgl_ppbj' => '2026-09-22',
+            'uraian' => 'Pengadaan uji lampiran PPBJ',
+            'penyedia_eksternal' => 'Vendor Arsip PPBJ',
+            'buyer' => 'Nazar',
+            'total_sebelum_ppn' => 12500000,
+        ]);
+
+        $this->actingAs($user)
+            ->postJson(route('ppbj.archive-attachment', $ppbj), [
+                'document_type' => 'Dokumen PPBJ/PR',
+                'notes' => 'Dokumen awal pengadaan',
+                'document_file' => UploadedFile::fake()->create('ppbj.docx', 90, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'),
+            ])
+            ->assertCreated()
+            ->assertJsonPath('state', 'uploaded');
+
+        Http::assertSent(function (Request $request) {
+            $body = $request->body();
+
+            return $request->hasFile('file', null, 'ppbj.docx')
+                && str_contains($body, 'name="source_module"')
+                && str_contains($body, 'PPBJ')
+                && str_contains($body, 'name="nomor_pr"')
+                && str_contains($body, 'PKB/PR-26/CON/0777')
+                && str_contains($body, 'Dokumen PPBJ/PR');
         });
     }
 
@@ -265,5 +314,17 @@ class ArchiveAttachmentUploadTest extends TestCase
         $archivePopup = file_get_contents(resource_path('views/components/archive-upload-popup.blade.php'));
         $this->assertStringContainsString('window.openArchiveAttachmentList', $archivePopup);
         $this->assertStringContainsString('renderArchiveAttachmentList', $archivePopup);
+    }
+
+    public function test_ppbj_page_supports_row_create_and_edit_archive_upload_flows(): void
+    {
+        $view = file_get_contents(resource_path('views/ppbj/index.blade.php'));
+        $script = file_get_contents(public_path('assets/ppbj/ppbj.js'));
+
+        $this->assertStringContainsString('openPpbjArchiveUpload', $view);
+        $this->assertStringContainsString('ppbjFormArchiveUpload', $view);
+        $this->assertStringContainsString("@include('components.archive-upload-popup')", $view);
+        $this->assertStringContainsString('uploadArchiveAfterSave', $script);
+        $this->assertStringContainsString('/archive-attachment', $script);
     }
 }

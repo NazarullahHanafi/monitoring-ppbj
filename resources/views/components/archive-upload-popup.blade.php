@@ -154,6 +154,9 @@
                 const nomor = payload?.nomor || '-';
                 const nomorPr = payload?.nomor_pr || '-';
                 const vendor = payload?.vendor || '-';
+                const defaultDocumentType = moduleName === 'SPPH'
+                    ? 'Dokumen SPPH'
+                    : (moduleName === 'PPBJ' ? 'Dokumen PPBJ/PR' : 'Dokumen SP');
 
                 const result = await Swal.fire({
                     title: `Upload lampiran ${moduleName}`,
@@ -170,7 +173,7 @@
                             <label class="block">
                                 <span class="mb-1 block text-xs font-bold text-slate-700 dark:text-slate-200">Jenis dokumen</span>
                                 <select id="archiveUploadType" class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100">
-                                    <option value="${moduleName === 'SPPH' ? 'Dokumen SPPH' : 'Dokumen SP'}">${moduleName === 'SPPH' ? 'Dokumen SPPH' : 'Dokumen SP'}</option>
+                                    <option value="${defaultDocumentType}">${defaultDocumentType}</option>
                                     <option value="Penawaran Vendor">Penawaran Vendor</option>
                                     <option value="Kontrak">Kontrak</option>
                                     <option value="BA / Pendukung">BA / Pendukung</option>

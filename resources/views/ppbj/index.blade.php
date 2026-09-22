@@ -650,6 +650,16 @@
                                         <span class="h-1 w-1 rounded-full bg-slate-400"></span>
                                         Cek Arsip
                                     </button>
+                                    @if(!auth()->user()?->isReadOnly())
+                                        <button type="button" onclick="openPpbjArchiveUpload({{ $row->id }})"
+                                            title="Upload lampiran PPBJ ke Sistem Arsip"
+                                            aria-label="Upload lampiran {{ $row->ppbj_no }}"
+                                            class="group inline-flex h-7 w-7 items-center justify-center rounded-lg bg-violet-50 text-violet-600 ring-1 ring-violet-200 transition hover:-translate-y-0.5 hover:bg-violet-600 hover:text-white hover:shadow-md dark:bg-violet-500/15 dark:text-violet-200 dark:ring-violet-500/30 dark:hover:bg-violet-500">
+                                            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5M5 14v4a2 2 0 002 2h10a2 2 0 002-2v-4" />
+                                            </svg>
+                                        </button>
+                                    @endif
                                     <button type="button" onclick="openRealTracking({{ $row->id }})"
                                         class="inline-flex items-center gap-0.5 rounded-md bg-cyan-50 px-1.5 py-0.5 text-[9px] font-bold leading-none text-cyan-700 ring-1 ring-cyan-200 transition hover:bg-cyan-100 dark:bg-cyan-900/30 dark:text-cyan-200 dark:ring-cyan-700/60">
                                         <span>Tracking Real</span>
@@ -918,6 +928,37 @@
                         @endif
                     </div>
                 @endforeach
+
+                @if(!auth()->user()?->isReadOnly())
+                    <div id="ppbjFormArchiveCard"
+                        class="md:col-span-2 rounded-2xl border border-violet-200 bg-gradient-to-r from-violet-50 via-blue-50 to-cyan-50 p-4 dark:border-violet-500/30 dark:from-violet-950/40 dark:via-blue-950/35 dark:to-cyan-950/30">
+                        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                            <div class="flex min-w-0 items-start gap-3">
+                                <span class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-600 text-white shadow-lg shadow-violet-500/20">
+                                    <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5M5 14v4a2 2 0 002 2h10a2 2 0 002-2v-4" />
+                                    </svg>
+                                </span>
+                                <div class="min-w-0">
+                                    <p class="text-sm font-extrabold text-slate-900 dark:text-white">Lampiran PPBJ terhubung Sistem Arsip</p>
+                                    <p id="ppbjFormArchiveHint" class="mt-1 text-xs leading-relaxed text-slate-600 dark:text-slate-300">
+                                        Simpan data PPBJ, lalu sistem langsung membuka upload tanpa perlu mencari ulang nomor PR.
+                                    </p>
+                                </div>
+                            </div>
+                            <div class="flex shrink-0 flex-wrap gap-2">
+                                <button id="ppbjFormArchiveView" type="button"
+                                    class="hidden rounded-xl border border-violet-200 bg-white px-3 py-2 text-xs font-extrabold text-violet-700 transition hover:bg-violet-100 dark:border-violet-500/30 dark:bg-slate-800 dark:text-violet-200 dark:hover:bg-slate-700">
+                                    Lihat Arsip
+                                </button>
+                                <button id="ppbjFormArchiveUpload" type="button"
+                                    class="rounded-xl bg-violet-600 px-3 py-2 text-xs font-extrabold text-white shadow-md shadow-violet-500/20 transition hover:-translate-y-0.5 hover:bg-violet-700">
+                                    Simpan &amp; Upload
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                @endif
 
                 <div class="md:col-span-2 flex flex-col sm:flex-row justify-end gap-2 mt-4">
                     <button id="btnSave" type="submit"
@@ -1297,6 +1338,8 @@
     <script>
         window.PPBJ_PAGE_CONFIG = @json($ppbjPageConfig);
     </script>
-    <script src="{{ asset('assets/ppbj/ppbj.js') }}?v=20260818b" defer></script>
+    <script src="{{ asset('assets/ppbj/ppbj.js') }}?v=20260922a" defer></script>
 
 @endpush
+
+@include('components.archive-upload-popup')

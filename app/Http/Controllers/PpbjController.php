@@ -688,12 +688,12 @@ class PpbjController extends Controller
         ]);
 
         try {
-            DB::transaction(function () use ($request) {
+            $ppbj = DB::transaction(function () use ($request) {
                 $data = $request->only(Ppbj::manualFields());
                 $data['created_by_user_id'] = auth()->id();
                 $data = array_merge($data, $this->generalRegistrationPayload($request));
 
-                Ppbj::create($data);
+                return Ppbj::create($data);
             }, 3);
         } catch (QueryException $e) {
             return response()->json([
@@ -705,7 +705,10 @@ class PpbjController extends Controller
 
         DashboardController::clearCache();
 
-        return response()->json(['message' => 'Data berhasil disimpan']);
+        return response()->json([
+            'message' => 'Data berhasil disimpan',
+            'data' => $this->archiveUploadContext($ppbj),
+        ]);
     }
 
     private function generalRegistrationPayload(Request $request): array
@@ -797,7 +800,22 @@ class PpbjController extends Controller
 
         DashboardController::clearCache();
 
-        return response()->json(['message' => 'Data berhasil diperbarui']);
+        return response()->json([
+            'message' => 'Data berhasil diperbarui',
+            'data' => $this->archiveUploadContext($ppbj->fresh()),
+        ]);
+    }
+
+    private function archiveUploadContext(Ppbj $ppbj): array
+    {
+        return [
+            'id' => $ppbj->id,
+            'ppbj_no' => $ppbj->ppbj_no,
+            'uraian' => $ppbj->uraian,
+            'penyedia_eksternal' => $ppbj->penyedia_eksternal,
+            'archive_upload_url' => route('ppbj.archive-attachment', $ppbj),
+            'archive_status_url' => route('ppbj.archive', $ppbj->id),
+        ];
     }
 
     // =====================

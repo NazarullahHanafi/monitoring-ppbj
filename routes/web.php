@@ -158,6 +158,9 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
 
         Route::get('/ppbj', [PpbjController::class, 'index'])->name('ppbj.index');
         Route::get('/ppbj/{id}/archive', [PpbjController::class, 'archiveStatus'])->name('ppbj.archive');
+        Route::post('/ppbj/{ppbj}/archive-attachment', [ArchiveAttachmentController::class, 'storePpbj'])
+            ->name('ppbj.archive-attachment')
+            ->middleware('throttle:10,1');
         Route::get('/ppbj/{id}/real-tracking', [PpbjController::class, 'realTracking'])->name('ppbj.realTracking')->middleware('throttle:60,1');
         Route::post('/ppbj/{id}/real-tracking', [PpbjController::class, 'storeRealTracking'])->name('ppbj.realTracking.store')->middleware('throttle:20,1');
         Route::patch('/ppbj-real-tracking/{tracking}', [PpbjController::class, 'updateRealTracking'])->name('ppbj.realTracking.update')->middleware('throttle:20,1');
