@@ -23,8 +23,10 @@ class PollingPerformanceTest extends TestCase
         $torpr = file_get_contents(resource_path('views/torpr/index.blade.php'));
         $appCss = file_get_contents(resource_path('css/app.css'));
 
-        $this->assertSame(1, substr_count($layout, 'sweetalert2.all.min.js'));
-        $this->assertSame(1, substr_count($layout, 'select2.min.js'));
+        $this->assertSame(1, substr_count($layout, '<script src="{{ asset(\'assets/vendor/ui/sweetalert2.all.min.js\') }}"></script>'));
+        $this->assertSame(1, substr_count($layout, '<script src="{{ asset(\'assets/vendor/ui/select2.min.js\') }}"></script>'));
+        $this->assertStringContainsString('rel="preload" href="{{ asset(\'assets/vendor/ui/sweetalert2.all.min.js\') }}" as="script"', $layout);
+        $this->assertStringContainsString('rel="preload" href="{{ asset(\'assets/vendor/ui/select2.min.js\') }}" as="script"', $layout);
         $this->assertStringContainsString('jquery-3.7.1.min.js', $layout);
         $this->assertStringNotContainsString('https://code.jquery.com', $layout);
         $this->assertStringNotContainsString('https://cdn.jsdelivr.net/npm/sweetalert2', $layout);

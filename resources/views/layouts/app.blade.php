@@ -9,54 +9,13 @@
     <title>@yield('title', 'Monitoring PPBJ')</title>
     @vite(['resources/css/app.css', 'resources/js/app.js'])
     {{-- UI vendor assets are served locally so rendering is not blocked by CDN/DNS latency. --}}
-    <script src="{{ asset('assets/vendor/ui/jquery-3.7.1.min.js') }}"></script>
+    {{-- Mulai unduh library sejak awal, tetapi eksekusinya dilakukan setelah HTML utama selesai
+         diparse. Ini menjaga API global lama tetap tersedia sebelum @stack('scripts') tanpa
+         menahan first paint halaman. --}}
+    <link rel="preload" href="{{ asset('assets/vendor/ui/jquery-3.7.1.min.js') }}" as="script">
+    <link rel="preload" href="{{ asset('assets/vendor/ui/sweetalert2.all.min.js') }}" as="script">
+    <link rel="preload" href="{{ asset('assets/vendor/ui/select2.min.js') }}" as="script">
     <link rel="stylesheet" href="{{ asset('assets/vendor/ui/sweetalert2.min.css') }}">
-    <script src="{{ asset('assets/vendor/ui/sweetalert2.all.min.js') }}"></script>
-    <script>
-        (function () {
-            function installSweetAlertDurationGuard() {
-                if (!window.Swal || window.Swal.__simonprDurationGuard) return;
-
-                var originalFire = window.Swal.fire.bind(window.Swal);
-
-                window.Swal.fire = function () {
-                    var args = Array.prototype.slice.call(arguments);
-
-                    if (args.length === 1 && args[0] && typeof args[0] === 'object') {
-                        var options = Object.assign({}, args[0]);
-                        var icon = String(options.icon || '').toLowerCase();
-                        var currentTimer = Number(options.timer || 0);
-
-                        if (options.toast === true) {
-                            var toastMinimum = (icon === 'error' || icon === 'warning') ? 6500 : 4500;
-                            if (!currentTimer || currentTimer < toastMinimum) {
-                                options.timer = toastMinimum;
-                            }
-                            if (options.timerProgressBar !== false) {
-                                options.timerProgressBar = true;
-                            }
-                        } else if (icon && options.showConfirmButton === false && currentTimer > 0) {
-                            var modalMinimum = (icon === 'error' || icon === 'warning') ? 6500 : 4500;
-                            if (currentTimer < modalMinimum) {
-                                options.timer = modalMinimum;
-                            }
-                            if (options.timerProgressBar !== false) {
-                                options.timerProgressBar = true;
-                            }
-                        }
-
-                        args[0] = options;
-                    }
-
-                    return originalFire.apply(window.Swal, args);
-                };
-
-                window.Swal.__simonprDurationGuard = true;
-            }
-
-            installSweetAlertDurationGuard();
-        })();
-    </script>
     <link rel="icon" href="{{ asset('images/logo4.png') }}" type="image/x-icon">
     <link href="{{ asset('assets/vendor/ui/select2.min.css') }}" rel="stylesheet">
     <script>
@@ -98,7 +57,6 @@
             applyTheme(useDark ? 'dark' : 'light');
         })();
     </script>
-    <script src="{{ asset('assets/vendor/ui/select2.min.js') }}"></script>
     @stack('styles')
 
 </head>
@@ -513,6 +471,43 @@
             <div class="cp-char" id="cpChar">0/500</div>
         </div>
     </div>
+
+    <script src="{{ asset('assets/vendor/ui/jquery-3.7.1.min.js') }}"></script>
+    <script src="{{ asset('assets/vendor/ui/sweetalert2.all.min.js') }}"></script>
+    <script src="{{ asset('assets/vendor/ui/select2.min.js') }}"></script>
+    <script>
+        (function () {
+            if (!window.Swal || window.Swal.__simonprDurationGuard) return;
+
+            var originalFire = window.Swal.fire.bind(window.Swal);
+
+            window.Swal.fire = function () {
+                var args = Array.prototype.slice.call(arguments);
+
+                if (args.length === 1 && args[0] && typeof args[0] === 'object') {
+                    var options = Object.assign({}, args[0]);
+                    var icon = String(options.icon || '').toLowerCase();
+                    var currentTimer = Number(options.timer || 0);
+
+                    if (options.toast === true) {
+                        var toastMinimum = (icon === 'error' || icon === 'warning') ? 6500 : 4500;
+                        if (!currentTimer || currentTimer < toastMinimum) options.timer = toastMinimum;
+                        if (options.timerProgressBar !== false) options.timerProgressBar = true;
+                    } else if (icon && options.showConfirmButton === false && currentTimer > 0) {
+                        var modalMinimum = (icon === 'error' || icon === 'warning') ? 6500 : 4500;
+                        if (currentTimer < modalMinimum) options.timer = modalMinimum;
+                        if (options.timerProgressBar !== false) options.timerProgressBar = true;
+                    }
+
+                    args[0] = options;
+                }
+
+                return originalFire.apply(window.Swal, args);
+            };
+
+            window.Swal.__simonprDurationGuard = true;
+        })();
+    </script>
 
     @stack('scripts')
 
