@@ -15,6 +15,12 @@ class TelegramWebhookController extends Controller
             abort(404);
         }
 
+        if ((bool) config('services.telegram.webhook_direct_reply', true)) {
+            $reply = $telegram->handleWebhookUpdate($request->all());
+
+            return response()->json($reply ?? ['ok' => true]);
+        }
+
         $telegram->handleUpdate($request->all());
 
         return response()->json(['ok' => true]);

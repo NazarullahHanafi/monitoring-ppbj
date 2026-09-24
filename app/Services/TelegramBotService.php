@@ -21,6 +21,24 @@ use Throwable;
 
 class TelegramBotService
 {
+    private bool $useWebhookReply = false;
+
+    private ?array $webhookReply = null;
+
+    public function handleWebhookUpdate(array $update): ?array
+    {
+        $this->useWebhookReply = true;
+        $this->webhookReply = null;
+
+        try {
+            $this->handleUpdate($update);
+
+            return $this->webhookReply;
+        } finally {
+            $this->useWebhookReply = false;
+        }
+    }
+
     public function handleUpdate(array $update): void
     {
         $callbackQuery = $update['callback_query'] ?? null;
@@ -114,6 +132,24 @@ class TelegramBotService
 
         if (! $token || trim((string) $chatId) === '') {
             return false;
+        }
+
+        // Telegram dapat mengeksekusi satu Bot API method langsung dari body
+        // respons webhook. Ini menghilangkan koneksi HTTP kedua ke Telegram
+        // (sekitar 2 detik pada shared hosting) untuk command berbasis teks.
+        if ($this->useWebhookReply && $this->webhookReply === null) {
+            $this->webhookReply = [
+                'method' => 'sendMessage',
+                'chat_id' => (string) $chatId,
+                'text' => $text,
+                'disable_web_page_preview' => true,
+            ];
+
+            if ($replyMarkup !== null) {
+                $this->webhookReply['reply_markup'] = $replyMarkup;
+            }
+
+            return true;
         }
 
         try {

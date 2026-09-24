@@ -21,6 +21,30 @@ class TelegramWebhookTest extends TestCase
             ->assertNotFound();
     }
 
+    public function test_telegram_webhook_can_return_direct_bot_api_reply_without_second_http_call(): void
+    {
+        config()->set('services.telegram.bot_token', 'TEST_TOKEN');
+        config()->set('services.telegram.webhook_secret', 'secret-ok');
+        config()->set('services.telegram.allowed_chat_ids', '12345');
+        config()->set('services.telegram.webhook_direct_reply', true);
+
+        Http::fake();
+
+        $response = $this->postJson('/telegram/webhook/secret-ok', [
+            'message' => [
+                'chat' => ['id' => 12345],
+                'text' => '/help',
+            ],
+        ]);
+
+        $response->assertOk()
+            ->assertJsonPath('method', 'sendMessage')
+            ->assertJsonPath('chat_id', '12345');
+
+        $this->assertStringContainsString('Command SIMONPR Telegram', (string) $response->json('text'));
+        Http::assertNothingSent();
+    }
+
     public function test_telegram_webhook_rejects_unknown_chat_id(): void
     {
         config()->set('services.telegram.bot_token', 'TEST_TOKEN');
