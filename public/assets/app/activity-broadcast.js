@@ -14,7 +14,8 @@
     var list = root.querySelector('[data-broadcast-list]');
     var items = [];
     var activeIndex = 0;
-    var rotateTimer = null;
+    var fallbackTimer = null;
+    var resizeTimer = null;
     var isPaused = false;
 
     var icons = {
@@ -48,17 +49,46 @@
         return days < 30 ? days + ' hari lalu' : safeText(value).slice(0, 10);
     }
 
-    function updateScrolling() {
+    function stopMotion() {
+        if (fallbackTimer) window.clearTimeout(fallbackTimer);
+        fallbackTimer = null;
         track.classList.remove('is-scrolling');
-        track.style.removeProperty('--broadcast-duration');
+    }
+
+    function scheduleNext(delay) {
+        if (fallbackTimer) window.clearTimeout(fallbackTimer);
+        fallbackTimer = window.setTimeout(function () {
+            if (isPaused || document.hidden || root.hidden) return;
+            show(activeIndex + 1);
+        }, delay);
+    }
+
+    function startMotion() {
+        stopMotion();
 
         window.requestAnimationFrame(function () {
-            var overflow = track.scrollWidth > viewport.clientWidth + 18;
-            if (!overflow || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+            if (isPaused || document.hidden || root.hidden) return;
 
-            var seconds = Math.min(32, Math.max(14, Math.round(track.scrollWidth / 55)));
-            track.style.setProperty('--broadcast-duration', seconds + 's');
-            track.classList.add('is-scrolling');
+            if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+                scheduleNext(8000);
+                return;
+            }
+
+            var viewportWidth = Math.max(1, viewport.clientWidth);
+            var textWidth = Math.max(1, track.scrollWidth);
+            var distance = viewportWidth + textWidth + 24;
+            var seconds = Math.min(34, Math.max(9, distance / 72));
+
+            track.style.setProperty('--broadcast-start', viewportWidth + 'px');
+            track.style.setProperty('--broadcast-end', -(textWidth + 24) + 'px');
+            track.style.setProperty('--broadcast-duration', seconds.toFixed(2) + 's');
+
+            window.requestAnimationFrame(function () {
+                if (!isPaused && !document.hidden && !root.hidden) {
+                    track.classList.add('is-scrolling');
+                    scheduleNext(Math.ceil(seconds * 1000) + 600);
+                }
+            });
         });
     }
 
@@ -67,25 +97,12 @@
         activeIndex = (index + items.length) % items.length;
         var item = items[activeIndex];
 
-        track.classList.remove('is-changing', 'is-scrolling');
+        stopMotion();
         text.textContent = displayText(item);
         counter.textContent = (activeIndex + 1) + '/' + items.length;
         root.dataset.severity = item.severity || 'info';
 
-        void track.offsetWidth;
-        track.classList.add('is-changing');
-        updateScrolling();
-    }
-
-    function stopRotation() {
-        if (rotateTimer) window.clearInterval(rotateTimer);
-        rotateTimer = null;
-    }
-
-    function startRotation() {
-        stopRotation();
-        if (items.length < 2 || isPaused || document.hidden) return;
-        rotateTimer = window.setInterval(function () { show(activeIndex + 1); }, 8000);
+        startMotion();
     }
 
     function makeElement(tag, className, value) {
@@ -128,41 +145,44 @@
     function openPanel() {
         panel.hidden = false;
         isPaused = true;
-        stopRotation();
+        stopMotion();
     }
 
     function closePanel() {
         panel.hidden = true;
         isPaused = false;
-        startRotation();
+        show(activeIndex);
     }
 
     function bindEvents() {
         root.querySelector('[data-broadcast-open]').addEventListener('click', openPanel);
         root.querySelector('[data-broadcast-panel-close]').addEventListener('click', closePanel);
-        root.querySelector('[data-broadcast-prev]').addEventListener('click', function () { show(activeIndex - 1); startRotation(); });
-        root.querySelector('[data-broadcast-next]').addEventListener('click', function () { show(activeIndex + 1); startRotation(); });
+        root.querySelector('[data-broadcast-prev]').addEventListener('click', function () { show(activeIndex - 1); });
+        root.querySelector('[data-broadcast-next]').addEventListener('click', function () { show(activeIndex + 1); });
         root.querySelector('[data-broadcast-close]').addEventListener('click', function () {
-            stopRotation();
+            stopMotion();
             root.hidden = true;
         });
 
-        root.addEventListener('mouseenter', function () { isPaused = true; stopRotation(); });
-        root.addEventListener('mouseleave', function () {
-            if (!panel.hidden) return;
-            isPaused = false;
-            startRotation();
+        track.addEventListener('animationend', function (event) {
+            if (event.animationName !== 'broadcast-marquee') return;
+            if (!isPaused && !document.hidden && !root.hidden) show(activeIndex + 1);
         });
 
         document.addEventListener('visibilitychange', function () {
-            if (document.hidden) stopRotation(); else startRotation();
+            if (document.hidden) stopMotion(); else if (!isPaused) show(activeIndex);
         });
 
         document.addEventListener('click', function (event) {
             if (!panel.hidden && !root.contains(event.target)) closePanel();
         });
 
-        window.addEventListener('resize', updateScrolling, { passive: true });
+        window.addEventListener('resize', function () {
+            if (resizeTimer) window.clearTimeout(resizeTimer);
+            resizeTimer = window.setTimeout(function () {
+                if (!isPaused && !root.hidden) show(activeIndex);
+            }, 180);
+        }, { passive: true });
     }
 
     function load() {
@@ -183,7 +203,6 @@
                 root.hidden = false;
                 renderList();
                 show(0);
-                startRotation();
             })
             .catch(function () {
                 root.hidden = true;

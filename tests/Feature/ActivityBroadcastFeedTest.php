@@ -26,6 +26,16 @@ class ActivityBroadcastFeedTest extends TestCase
             ->assertOk()
             ->assertSee('id="activityBroadcast"', false)
             ->assertSee('activity-broadcast.js', false);
+
+        $script = file_get_contents(public_path('assets/app/activity-broadcast.js'));
+        $style = file_get_contents(public_path('assets/app/activity-broadcast.css'));
+
+        $this->assertIsString($script);
+        $this->assertIsString($style);
+        $this->assertStringContainsString("track.addEventListener('animationend'", $script);
+        $this->assertStringContainsString("show(activeIndex + 1)", $script);
+        $this->assertStringContainsString('--broadcast-start', $style);
+        $this->assertStringContainsString('--broadcast-end', $style);
     }
 
     public function test_umum_receives_latest_procurement_updates_only(): void
