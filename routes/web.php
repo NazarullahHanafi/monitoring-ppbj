@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AccountController;
+use App\Http\Controllers\ActivityBroadcastController;
 use App\Http\Controllers\ArchiveAttachmentController;
 use App\Http\Controllers\ChatController;
 use App\Http\Controllers\ContactMessageController;
@@ -75,6 +76,10 @@ Route::get('/home', function () {
 })->middleware(['auth'])->name('dashboard');
 
 Route::middleware(['auth', 'readonly.block'])->group(function () {
+    Route::get('/activity-broadcast/feed', ActivityBroadcastController::class)
+        ->name('activity-broadcast.feed')
+        ->middleware([\App\Http\Middleware\DisableLoggingForPolling::class, 'throttle:60,1']);
+
     Route::get('/account', [AccountController::class, 'edit'])->name('account.edit');
     Route::post('/account/password', [AccountController::class, 'updatePassword'])->name('account.password');
     Route::post('/presence/heartbeat', [App\Http\Controllers\PresenceController::class, 'heartbeat'])

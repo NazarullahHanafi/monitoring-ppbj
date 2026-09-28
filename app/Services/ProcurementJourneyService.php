@@ -74,6 +74,7 @@ class ProcurementJourneyService
 
         try {
             DB::table('chat_messages')->insert($payload);
+            $this->forgetBroadcastCache();
 
             return true;
         } catch (\Throwable $e) {
@@ -170,6 +171,7 @@ class ProcurementJourneyService
         try {
             DB::table('chat_messages')->insert($payload);
             Cache::forget('chat:unread_count:' . $torpr->createdBy->id);
+            $this->forgetBroadcastCache((int) $torpr->createdBy->id);
 
             return true;
         } catch (\Throwable $e) {
@@ -193,6 +195,15 @@ class ProcurementJourneyService
             ->where('nomor_pr', $prNumber)
             ->latest('id')
             ->first();
+    }
+
+    private function forgetBroadcastCache(?int $targetUserId = null): void
+    {
+        Cache::forget('activity_broadcast:umum:v1');
+
+        if ($targetUserId) {
+            Cache::forget('activity_broadcast:user:'.$targetUserId.':v1');
+        }
     }
 
     private function buildMessage(

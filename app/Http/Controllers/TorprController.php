@@ -9,6 +9,7 @@ use App\Models\TorprEditRequest;
 use App\Models\User;
 use App\Services\NotificationService;
 use App\Services\PrArchiveService;
+use App\Services\ProcurementJourneyService;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -855,6 +856,19 @@ class TorprController extends Controller
         $this->forgetTrackingCache($torpr);
 
         $this->logActivity($torpr, 'created', "PR Baru Dibuat: {$torpr->nomor_pr}");
+
+        app(ProcurementJourneyService::class)->notifyByPrNumber(
+            $torpr->nomor_pr,
+            'torpr_created',
+            'TORPR dibuat',
+            "Operasional membuat TORPR {$torpr->nomor_pr}.",
+            [
+                'progress' => 'TORPR dibuat',
+                'document_no' => $torpr->nomor_pr,
+                'description' => $torpr->tujuan_pengadaan,
+            ],
+            $request->user()
+        );
 
         return response()->json(['ok' => true, 'id' => $torpr->id]);
     }

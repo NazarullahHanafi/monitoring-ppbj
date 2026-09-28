@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\MasterBuyer;
 use App\Models\Ppbj;
 use App\Models\PrReceiptApproval;
+use App\Services\ProcurementJourneyService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
@@ -427,6 +428,7 @@ class PrReceiptApprovalController extends Controller
                         return [
                             'type' => 'warning',
                             'msg' => 'PR berhasil dikonfirmasi diterima Umum. Tetapi PPBJ tidak dibuat karena nomor sudah ada: '.$torpr->nomor_pr,
+                            'nomor_pr' => $torpr->nomor_pr,
                         ];
                     }
 
@@ -443,6 +445,7 @@ class PrReceiptApprovalController extends Controller
                     return [
                         'type' => 'warning',
                         'msg' => 'PR berhasil dikonfirmasi diterima Umum. Tetapi PPBJ gagal dibuat karena nomor sudah ada: '.$torpr->nomor_pr,
+                        'nomor_pr' => $torpr->nomor_pr,
                     ];
                 }
 
@@ -453,8 +456,23 @@ class PrReceiptApprovalController extends Controller
                 return [
                     'type' => 'success',
                     'msg' => 'PR berhasil dikonfirmasi diterima Umum dan PPBJ berhasil dibuat.',
+                    'nomor_pr' => $torpr->nomor_pr,
                 ];
             }, 3);
+
+            if (in_array($result['type'] ?? null, ['success', 'warning'], true) && filled($result['nomor_pr'] ?? null)) {
+                app(ProcurementJourneyService::class)->notifyByPrNumber(
+                    $result['nomor_pr'],
+                    'pr_received_by_umum',
+                    'PR diterima Bagian Umum',
+                    'Bagian Umum telah menerima PR dan proses pengadaan dapat dilanjutkan.',
+                    [
+                        'progress' => 'Diterima Umum',
+                        'document_no' => $result['nomor_pr'],
+                    ],
+                    $request->user()
+                );
+            }
 
             if ($result['type'] === 'success') {
                 return back()->with('success', $result['msg']);
