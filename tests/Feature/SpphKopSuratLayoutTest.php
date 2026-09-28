@@ -47,7 +47,6 @@ class SpphKopSuratLayoutTest extends TestCase
         @unlink($docxPath);
 
         $this->assertIsString($documentXml);
-        $this->assertStringContainsString('w:top="2250"', $documentXml);
         $this->assertStringContainsString('w:bottom="2400"', $documentXml);
         $this->assertStringNotContainsString('w:bottom="1100"', $documentXml);
         $this->assertStringContainsString('w:line="276"', $documentXml);

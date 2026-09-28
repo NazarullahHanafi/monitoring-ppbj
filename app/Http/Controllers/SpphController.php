@@ -10,7 +10,6 @@ use App\Models\User;
 use App\Models\Vendor;
 use App\Services\ProcurementJourneyService;
 use App\Support\CacheBatch;
-use App\Support\LetterheadLayout;
 use App\Support\PrintPreviewFile;
 use App\Traits\HasPresence;
 use Illuminate\Database\QueryException;
@@ -959,11 +958,11 @@ class SpphController extends Controller
         $section = $phpWord->addSection([
             'pageSizeW' => 11906,
             'pageSizeH' => 16838,
-            'marginTop' => LetterheadLayout::BODY_TOP_TWIPS,
+            'marginTop' => 1900,
             'marginBottom' => 2400,
             'marginLeft' => 1320,
             'marginRight' => 1320,
-            'headerHeight' => LetterheadLayout::SPPH_HEADER_DISTANCE_TWIPS,
+            'headerHeight' => 1440,
             'footerHeight' => 0,
         ]);
 
@@ -1142,7 +1141,7 @@ class SpphController extends Controller
                 $tempPath,
                 $imagePath,
                 file_exists($imagePath2) ? $imagePath2 : null,
-                LetterheadLayout::SPPH_HEADER_DISTANCE_TWIPS,
+                1700,
                 0,
                 595.3,
                 841.9
@@ -1648,7 +1647,7 @@ class SpphController extends Controller
         string $docxPath,
         string $imagePath,
         ?string $imagePath2 = null,
-        int $headerHeightTwips = LetterheadLayout::SPPH_HEADER_DISTANCE_TWIPS,
+        int $headerHeightTwips = 1440,
         float $logoShiftPt = -8,
         float $shapeWidthPt = 595.2,
         float $shapeHeightPt = 841.9

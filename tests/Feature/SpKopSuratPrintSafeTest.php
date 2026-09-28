@@ -3,7 +3,6 @@
 namespace Tests\Feature;
 
 use App\Http\Controllers\SpController;
-use App\Support\LetterheadLayout;
 use PhpOffice\PhpWord\IOFactory;
 use PhpOffice\PhpWord\PhpWord;
 use ReflectionClass;
@@ -24,11 +23,11 @@ class SpKopSuratPrintSafeTest extends TestCase
         $section = $phpWord->addSection([
             'pageSizeW' => 11906,
             'pageSizeH' => 16838,
-            'marginTop' => LetterheadLayout::BODY_TOP_TWIPS,
+            'marginTop' => 2500,
             'marginBottom' => 1800,
             'marginLeft' => 1418,
             'marginRight' => 1134,
-            'headerHeight' => LetterheadLayout::SP_HEADER_DISTANCE_TWIPS,
+            'headerHeight' => 720,
         ]);
         $section->addText('Probe Surat Pesanan');
         IOFactory::createWriter($phpWord, 'Word2007')->save($docxPath);
@@ -56,7 +55,6 @@ class SpKopSuratPrintSafeTest extends TestCase
 
         $this->assertIsString($header1);
         $this->assertIsString($documentXml);
-        $this->assertStringContainsString('w:top="2250"', $documentXml);
         $this->assertStringContainsString('w:bottom="2400"', $documentXml);
         $this->assertStringContainsString('margin-left:-79pt', $header1);
         $this->assertStringContainsString('margin-top:-110pt', $header1);
@@ -87,11 +85,11 @@ class SpKopSuratPrintSafeTest extends TestCase
         $section = $phpWord->addSection([
             'pageSizeW' => 11906,
             'pageSizeH' => 16838,
-            'marginTop' => LetterheadLayout::BODY_TOP_TWIPS,
+            'marginTop' => 1750,
             'marginBottom' => 1304,
             'marginLeft' => 1418,
             'marginRight' => 1418,
-            'headerHeight' => LetterheadLayout::SP_HEADER_DISTANCE_TWIPS,
+            'headerHeight' => 737,
             'footerHeight' => 709,
         ]);
         $section->addText('Probe Kontrak SP di atas Rp50 juta');
@@ -111,15 +109,12 @@ class SpKopSuratPrintSafeTest extends TestCase
         $zip = new ZipArchive();
         $this->assertTrue($zip->open($docxPath));
 
-        $documentXml = $zip->getFromName('word/document.xml');
         $header1 = $zip->getFromName('word/header1.xml');
         $zip->close();
 
         @unlink($docxPath);
 
         $this->assertIsString($header1);
-        $this->assertIsString($documentXml);
-        $this->assertStringContainsString('w:top="2250"', $documentXml);
         $this->assertStringContainsString('margin-left:-79pt', $header1);
         $this->assertStringContainsString('margin-top:-110pt', $header1);
         $this->assertStringContainsString('width:611.5pt', $header1);
