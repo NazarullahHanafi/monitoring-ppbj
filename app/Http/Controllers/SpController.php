@@ -12,6 +12,7 @@ use App\Models\User;
 use App\Models\Vendor;
 use App\Services\ProcurementJourneyService;
 use App\Support\CacheBatch;
+use App\Support\LetterheadLayout;
 use App\Support\PrintPreviewFile;
 use App\Traits\HasPresence;
 use Illuminate\Database\QueryException;
@@ -1564,11 +1565,11 @@ class SpController extends Controller
         $section = $phpWord->addSection([
             'pageSizeW' => 11906,
             'pageSizeH' => 16838,
-            'marginTop' => 2500,
+            'marginTop' => LetterheadLayout::BODY_TOP_TWIPS,
             'marginBottom' => 1800,
             'marginLeft' => 1418,
             'marginRight' => 1134,
-            'headerHeight' => 720,
+            'headerHeight' => LetterheadLayout::SP_HEADER_DISTANCE_TWIPS,
         ]);
 
         // === JUDUL ===
@@ -2155,11 +2156,11 @@ class SpController extends Controller
         $section = $phpWord->addSection([
             'pageSizeW' => 11906,
             'pageSizeH' => 16838,
-            'marginTop' => 1750,
+            'marginTop' => LetterheadLayout::BODY_TOP_TWIPS,
             'marginBottom' => 1304,
             'marginLeft' => 1418,
             'marginRight' => 1418,
-            'headerHeight' => 737,
+            'headerHeight' => LetterheadLayout::SP_HEADER_DISTANCE_TWIPS,
             'footerHeight' => 709,
         ]);
 
@@ -2691,11 +2692,11 @@ class SpController extends Controller
         $paktaSection = $phpWord->addSection([
             'pageSizeW' => 11906,
             'pageSizeH' => 16838,
-            'marginTop' => 1750,
+            'marginTop' => LetterheadLayout::BODY_TOP_TWIPS,
             'marginBottom' => 1304,
             'marginLeft' => 1418,
             'marginRight' => 1418,
-            'headerHeight' => 737,
+            'headerHeight' => LetterheadLayout::SP_HEADER_DISTANCE_TWIPS,
             'footerHeight' => 709,
         ]);
 
@@ -2882,11 +2883,11 @@ class SpController extends Controller
         $section = $phpWord->addSection([
             'pageSizeW' => 11906,
             'pageSizeH' => 16838,
-            'marginTop' => 1750,
+            'marginTop' => LetterheadLayout::BODY_TOP_TWIPS,
             'marginBottom' => 1304,
             'marginLeft' => 1418,
             'marginRight' => 1418,
-            'headerHeight' => 737,
+            'headerHeight' => LetterheadLayout::SP_HEADER_DISTANCE_TWIPS,
             'footerHeight' => 709,
         ]);
 
@@ -3418,11 +3419,11 @@ class SpController extends Controller
         $paktaSection = $phpWord->addSection([
             'pageSizeW' => 11906,
             'pageSizeH' => 16838,
-            'marginTop' => 1750,
+            'marginTop' => LetterheadLayout::BODY_TOP_TWIPS,
             'marginBottom' => 1304,
             'marginLeft' => 1418,
             'marginRight' => 1418,
-            'headerHeight' => 737,
+            'headerHeight' => LetterheadLayout::SP_HEADER_DISTANCE_TWIPS,
             'footerHeight' => 709,
         ]);
 
@@ -3602,11 +3603,11 @@ class SpController extends Controller
         $section = $phpWord->addSection([
             'pageSizeW' => 11906,
             'pageSizeH' => 16838,
-            'marginTop' => 1750,
+            'marginTop' => LetterheadLayout::BODY_TOP_TWIPS,
             'marginBottom' => 1304,
             'marginLeft' => 1418,
             'marginRight' => 1418,
-            'headerHeight' => 737,
+            'headerHeight' => LetterheadLayout::SP_HEADER_DISTANCE_TWIPS,
             'footerHeight' => 709,
         ]);
 
@@ -4222,11 +4223,11 @@ class SpController extends Controller
         $paktaSection = $phpWord->addSection([
             'pageSizeW' => 11906,
             'pageSizeH' => 16838,
-            'marginTop' => 1750,
+            'marginTop' => LetterheadLayout::BODY_TOP_TWIPS,
             'marginBottom' => 1304,
             'marginLeft' => 1418,
             'marginRight' => 1418,
-            'headerHeight' => 737,
+            'headerHeight' => LetterheadLayout::SP_HEADER_DISTANCE_TWIPS,
             'footerHeight' => 709,
         ]);
 
@@ -5098,7 +5099,7 @@ class SpController extends Controller
 
             // Posisi kop halaman pertama disamakan untuk Surat Pesanan biasa
             // dan dokumen kontrak/SP di atas Rp50 juta agar hasil cetak konsisten.
-            $firstPageShapeTop = '-110pt';
+            $firstPageShapeTop = LetterheadLayout::SP_FIRST_PAGE_SHAPE_TOP_PT;
 
             $putString('word/header1.xml', $makeHeaderXml('rId1', 'kop_surat_halaman_1', 'WordPictureWatermark27082704', '', $firstPageShapeTop, false));
             $putString('word/header2.xml', $makeHeaderXml('rId1', 'kop_surat_lanjutan', 'WordPictureWatermark27082705', $lanjutan, '-113.5pt', true));
@@ -5195,7 +5196,15 @@ class SpController extends Controller
                         }
 
                         $bottomMargin = $isSuratPesananBiasa ? '2400' : '1304';
-                        $sect = preg_replace('/<w:pgMar\b[^>]*\/>/', '<w:pgMar w:top="1750" w:right="1418" w:bottom="' . $bottomMargin . '" w:left="1418" w:header="737" w:footer="709" w:gutter="0"/>', $sect, 1);
+                        $sect = preg_replace(
+                            '/<w:pgMar\b[^>]*\/>/',
+                            '<w:pgMar w:top="' . LetterheadLayout::BODY_TOP_TWIPS
+                                . '" w:right="1418" w:bottom="' . $bottomMargin
+                                . '" w:left="1418" w:header="' . LetterheadLayout::SP_HEADER_DISTANCE_TWIPS
+                                . '" w:footer="709" w:gutter="0"/>',
+                            $sect,
+                            1
+                        );
 
                         return $sect;
                     }, $docXml);
@@ -5427,11 +5436,11 @@ class SpController extends Controller
         $section = $phpWord->addSection([
             'pageSizeW' => 11906,
             'pageSizeH' => 16838,
-            'marginTop' => 1750,
+            'marginTop' => LetterheadLayout::BODY_TOP_TWIPS,
             'marginBottom' => 1304,
             'marginLeft' => 1418,
             'marginRight' => 1418,
-            'headerHeight' => 737,
+            'headerHeight' => LetterheadLayout::SP_HEADER_DISTANCE_TWIPS,
             'footerHeight' => 709,
         ]);
 
