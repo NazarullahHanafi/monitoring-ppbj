@@ -433,7 +433,7 @@ CHATBOT WIDGET PPBJ - MODERN VERSION WITH STARTER MESSAGES
         }
 </style>
 
-<script>
+<script type="text/plain" id="chatbot-runtime-source">
     let conversationHistory = [];
     let isLoading = false;
     let greetingLoaded = false;
@@ -527,7 +527,7 @@ CHATBOT WIDGET PPBJ - MODERN VERSION WITH STARTER MESSAGES
                 }).catch(() => { });
         }
         updateNotifBadge();
-        setInterval(updateNotifBadge, 60000);
+        setInterval(updateNotifBadge, 120000);
     @endauth
 
     // =====================================================
@@ -1070,5 +1070,43 @@ Ada pertanyaan lain? 😊`,
         // Resize listener: Jika rotate layar, cek posisi lagi
         window.addEventListener('resize', ensureInView);
 
+    })();
+</script>
+<script>
+    (function () {
+        var source = document.getElementById('chatbot-runtime-source');
+        var toggle = document.getElementById('chatbot-toggle-btn');
+        var loaded = false;
+
+        function loadRuntime() {
+            if (loaded || !source) return;
+            loaded = true;
+
+            var runtime = document.createElement('script');
+            runtime.text = source.textContent;
+            document.body.appendChild(runtime);
+            source.remove();
+            source = null;
+        }
+
+        if (toggle) {
+            toggle.addEventListener('click', function loadOnFirstClick(event) {
+                if (loaded) return;
+                event.preventDefault();
+                event.stopImmediatePropagation();
+                loadRuntime();
+                window.setTimeout(function () {
+                    if (typeof window.toggleChatbot === 'function') window.toggleChatbot();
+                }, 0);
+            }, true);
+        }
+
+        window.setTimeout(function () {
+            if ('requestIdleCallback' in window) {
+                window.requestIdleCallback(loadRuntime, { timeout: 1800 });
+            } else {
+                loadRuntime();
+            }
+        }, 4200);
     })();
 </script>

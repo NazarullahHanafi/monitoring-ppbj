@@ -27,8 +27,8 @@ class ActivityBroadcastController extends Controller
 
         $canSeeAll = $user->department === 'umum' || $user->role === 'superadmin' || $user->isOwner();
         $cacheKey = $canSeeAll
-            ? 'activity_broadcast:umum:v1'
-            : 'activity_broadcast:user:'.$user->id.':v1';
+            ? 'activity_broadcast:umum:v2'
+            : 'activity_broadcast:user:'.$user->id.':v2';
 
         $items = Cache::remember($cacheKey, now()->addSeconds(20), function () use ($user, $canSeeAll) {
             $rows = DB::table('chat_messages')

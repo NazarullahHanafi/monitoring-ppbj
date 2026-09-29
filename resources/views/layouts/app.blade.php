@@ -22,6 +22,7 @@
     <link rel="preload" href="{{ asset('assets/vendor/ui/jquery-3.7.1.min.js') }}" as="script">
     <link rel="preload" href="{{ asset('assets/vendor/ui/sweetalert2.all.min.js') }}" as="script">
     <link rel="preload" href="{{ asset('assets/vendor/ui/select2.min.js') }}" as="script">
+    <link rel="preload" href="{{ asset('assets/app/app-shell.js') }}?v={{ filemtime(public_path('assets/app/app-shell.js')) }}" as="script">
     <link rel="stylesheet" href="{{ asset('assets/vendor/ui/sweetalert2.min.css') }}">
     <link rel="icon" href="{{ asset('images/logo4.png') }}" type="image/x-icon">
     <link href="{{ asset('assets/vendor/ui/select2.min.css') }}" rel="stylesheet">
@@ -530,7 +531,7 @@
             userName: @json(auth()->user()->name ?? 'User')
         });
     </script>
-    <script src="{{ asset('assets/app/app-shell.js') }}?v={{ filemtime(public_path('assets/app/app-shell.js')) }}"></script>
+    <script src="{{ asset('assets/app/app-shell.js') }}?v={{ filemtime(public_path('assets/app/app-shell.js')) }}" defer></script>
     <script src="{{ asset('assets/app/activity-broadcast.js') }}?v={{ filemtime(public_path('assets/app/activity-broadcast.js')) }}" defer></script>
     <script>
         @if(auth()->user()?->department === 'umum')

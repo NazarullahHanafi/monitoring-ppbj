@@ -34,6 +34,9 @@ class ActivityBroadcastFeedTest extends TestCase
         $this->assertIsString($style);
         $this->assertStringContainsString("track.addEventListener('animationend'", $script);
         $this->assertStringContainsString("show(activeIndex + 1)", $script);
+        $this->assertStringContainsString('window.sessionStorage.getItem(cacheKey)', $script);
+        $this->assertStringContainsString('cacheTtl = 60000', $script);
+        $this->assertStringContainsString('window.setTimeout(load, 1800)', $script);
         $this->assertStringContainsString('--broadcast-start', $style);
         $this->assertStringContainsString('--broadcast-end', $style);
     }
@@ -47,7 +50,7 @@ class ActivityBroadcastFeedTest extends TestCase
         DB::table('chat_messages')->insert($this->messagePayload($actor, 2, 'Pesan chat biasa', null, []));
         $this->insertJourney($actor, 3, 'SP terbaru', []);
 
-        Cache::forget('activity_broadcast:umum:v1');
+        Cache::forget('activity_broadcast:umum:v2');
         DB::flushQueryLog();
         DB::enableQueryLog();
         $response = $this->actingAs($umum)->getJson('/activity-broadcast/feed');

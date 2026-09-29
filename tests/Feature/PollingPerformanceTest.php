@@ -22,12 +22,20 @@ class PollingPerformanceTest extends TestCase
         $layout = file_get_contents(resource_path('views/layouts/app.blade.php'));
         $torpr = file_get_contents(resource_path('views/torpr/index.blade.php'));
         $appCss = file_get_contents(resource_path('css/app.css'));
+        $appShell = file_get_contents(public_path('assets/app/app-shell.js'));
+        $chatbot = file_get_contents(resource_path('views/components/chatbot.blade.php'));
 
         $this->assertSame(1, substr_count($layout, '<script src="{{ asset(\'assets/vendor/ui/sweetalert2.all.min.js\') }}"></script>'));
         $this->assertSame(1, substr_count($layout, '<script src="{{ asset(\'assets/vendor/ui/select2.min.js\') }}"></script>'));
         $this->assertStringContainsString('rel="preload" href="{{ asset(\'assets/vendor/ui/sweetalert2.all.min.js\') }}" as="script"', $layout);
         $this->assertStringContainsString('rel="preload" href="{{ asset(\'assets/vendor/ui/select2.min.js\') }}" as="script"', $layout);
         $this->assertStringContainsString('jquery-3.7.1.min.js', $layout);
+        $this->assertStringContainsString('assets/app/app-shell.js', $layout);
+        $this->assertStringContainsString("filemtime(public_path('assets/app/app-shell.js')) }}\" defer", $layout);
+        $this->assertStringContainsString('startTimer = setTimeout(launch, 2500)', $appShell);
+        $this->assertStringContainsString('mentionStartTimer = setTimeout(launch, 3600)', $appShell);
+        $this->assertStringContainsString('type="text/plain" id="chatbot-runtime-source"', $chatbot);
+        $this->assertStringContainsString('}, 4200);', $chatbot);
         $this->assertStringNotContainsString('https://code.jquery.com', $layout);
         $this->assertStringNotContainsString('https://cdn.jsdelivr.net/npm/sweetalert2', $layout);
         $this->assertStringNotContainsString('https://cdn.jsdelivr.net/npm/select2', $layout);

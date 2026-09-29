@@ -2,6 +2,7 @@
     id="activityBroadcast"
     class="activity-broadcast"
     data-feed-url="{{ route('activity-broadcast.feed') }}"
+    data-cache-key="{{ (int) auth()->id() }}"
     hidden
     aria-label="Informasi aktivitas pengadaan"
 >

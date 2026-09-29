@@ -243,11 +243,24 @@
                     window.quickMoodChat(payload);
                 }
             });
-            var pt = document.getElementById('presenceTrigger'); if (pt) pt.addEventListener('click', function (e) { e.stopPropagation(); tPP() });
+            var pt = document.getElementById('presenceTrigger'); if (pt) pt.addEventListener('click', function (e) { e.stopPropagation(); start(true); tPP() });
             var mb = document.getElementById('btnChangeMood'); if (mb) mb.addEventListener('click', sMP);
             document.addEventListener('click', function (e) { var w = document.getElementById('presenceWrap'); if (pO && w && !w.contains(e.target)) cPP() });
-            function start() { if (tm) return; hb(); cmM(); tm = setInterval(hb, IV) } function stop() { clearInterval(tm); tm = null }
-            document.addEventListener('visibilitychange', function () { document.hidden ? stop() : start() }); if (!document.hidden) start();
+            var startTimer = null;
+            function start(immediate) {
+                if (tm) return;
+                if (startTimer) { clearTimeout(startTimer); startTimer = null }
+                function launch() {
+                    startTimer = null;
+                    if (document.hidden || tm) return;
+                    hb();
+                    setTimeout(function () { if (!document.hidden) cmM() }, 700);
+                    tm = setInterval(hb, IV);
+                }
+                if (immediate) launch(); else startTimer = setTimeout(launch, 2500);
+            }
+            function stop() { if (startTimer) clearTimeout(startTimer); startTimer = null; clearInterval(tm); tm = null }
+            document.addEventListener('visibilitychange', function () { document.hidden ? stop() : start(false) }); if (!document.hidden) start(false);
         })();
 
         /* ═══════════════════════════════════════
@@ -1280,16 +1293,32 @@
             function stopPoll() { if (chatTimer) { clearInterval(chatTimer); chatTimer = null } }
             function startReactionPoll() { if (reactionTimer) return; refreshVisibleReactions(); reactionTimer = setInterval(refreshVisibleReactions, 30000) }
             function stopReactionPoll() { if (reactionTimer) { clearInterval(reactionTimer); reactionTimer = null } }
-            function startMentionPoll() { if (mentionTimer) return; refreshMentionSummary(); mentionTimer = setInterval(refreshMentionSummary, 30000) }
-            function stopMentionPoll() { if (mentionTimer) { clearInterval(mentionTimer); mentionTimer = null } }
+            var mentionStartTimer = null;
+            function startMentionPoll(immediate) {
+                if (mentionTimer) return;
+                if (mentionStartTimer) { clearTimeout(mentionStartTimer); mentionStartTimer = null }
+                function launch() {
+                    mentionStartTimer = null;
+                    if (document.hidden || mentionTimer) return;
+                    refreshMentionSummary();
+                    mentionTimer = setInterval(refreshMentionSummary, 30000);
+                }
+                if (immediate) launch(); else mentionStartTimer = setTimeout(launch, 3600);
+            }
+            function stopMentionPoll() {
+                if (mentionStartTimer) clearTimeout(mentionStartTimer);
+                mentionStartTimer = null;
+                if (mentionTimer) { clearInterval(mentionTimer); mentionTimer = null }
+            }
             document.addEventListener('visibilitychange', function () {
                 if (document.hidden) { stopPoll(); stopReactionPoll(); if (!notifyEnabled && !soundEnabled) stopMentionPoll() }
-                else { startMentionPoll(); if (chatOpen) { startPoll(); startReactionPoll() } }
+                else { startMentionPoll(false); if (chatOpen) { startPoll(); startReactionPoll() } }
             });
-            if (!document.hidden) startMentionPoll();
+            if (!document.hidden) startMentionPoll(false);
 
             if (trigger) trigger.addEventListener('click', function (e) {
                 e.stopPropagation();
+                startMentionPoll(true);
                 if (chatMinimized) { restoreChat(); return }
                 if (mentionUnread > 0) {
                     if (!chatOpen) { doToggle() }

@@ -6,6 +6,8 @@
     root.dataset.initialized = '1';
 
     var endpoint = root.dataset.feedUrl;
+    var cacheKey = 'simonpr:activity-broadcast:v2:' + (root.dataset.cacheKey || 'guest');
+    var cacheTtl = 60000;
     var track = root.querySelector('[data-broadcast-track]');
     var text = root.querySelector('[data-broadcast-text]');
     var viewport = root.querySelector('[data-broadcast-viewport]');
@@ -185,6 +187,34 @@
         }, { passive: true });
     }
 
+    function readCache() {
+        try {
+            var cached = JSON.parse(window.sessionStorage.getItem(cacheKey) || 'null');
+            if (!cached || !Array.isArray(cached.items) || !cached.items.length) return null;
+            if ((Date.now() - Number(cached.savedAt || 0)) > cacheTtl) return null;
+            return cached.items;
+        } catch (error) {
+            return null;
+        }
+    }
+
+    function writeCache(feedItems) {
+        try {
+            window.sessionStorage.setItem(cacheKey, JSON.stringify({ savedAt: Date.now(), items: feedItems }));
+        } catch (error) {
+            // Cache adalah optimasi opsional; feed tetap berfungsi saat storage dibatasi browser.
+        }
+    }
+
+    function display(feedItems) {
+        items = feedItems;
+        if (!items.length) return;
+
+        root.hidden = false;
+        renderList();
+        show(0);
+    }
+
     function load() {
         if (!endpoint) return;
 
@@ -197,22 +227,21 @@
                 return response.json();
             })
             .then(function (payload) {
-                items = Array.isArray(payload.items) ? payload.items : [];
-                if (!items.length) return;
-
-                root.hidden = false;
-                renderList();
-                show(0);
+                var feedItems = Array.isArray(payload.items) ? payload.items : [];
+                if (!feedItems.length) return;
+                writeCache(feedItems);
+                display(feedItems);
             })
             .catch(function () {
-                root.hidden = true;
+                if (!items.length) root.hidden = true;
             });
     }
 
     bindEvents();
-    if ('requestIdleCallback' in window) {
-        window.requestIdleCallback(load, { timeout: 1200 });
+    var cachedItems = readCache();
+    if (cachedItems) {
+        display(cachedItems);
     } else {
-        window.setTimeout(load, 120);
+        window.setTimeout(load, 1800);
     }
 })();
