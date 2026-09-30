@@ -15,6 +15,8 @@ use Illuminate\Validation\Rule;
 
 class ChatController extends Controller
 {
+    private const SYSTEM_ACTIVITY_SHARE_TYPE = 'procurement_journey';
+
     private const PAGE_SIZE = 40;
 
     private const UNREAD_SCAN_LIMIT = 500;
@@ -55,6 +57,10 @@ class ChatController extends Controller
         $myId = Auth::id();
 
         $rows = DB::table('chat_messages')
+            ->where(function ($query) {
+                $query->whereNull('share_type')
+                    ->orWhere('share_type', '!=', self::SYSTEM_ACTIVITY_SHARE_TYPE);
+            })
             ->whereNotExists(function ($query) use ($myId) {
                 $query->selectRaw('1')
                     ->from('chat_message_deletions')
@@ -131,6 +137,10 @@ class ChatController extends Controller
 
         $messages = DB::table('chat_messages')
             ->where('user_id', '!=', $userId)
+            ->where(function ($query) {
+                $query->whereNull('share_type')
+                    ->orWhere('share_type', '!=', self::SYSTEM_ACTIVITY_SHARE_TYPE);
+            })
             ->whereNotExists(function ($query) use ($userId) {
                 $query->selectRaw('1')
                     ->from('chat_reads')
@@ -186,6 +196,10 @@ class ChatController extends Controller
         $like = '%'.$term.'%';
 
         $rows = DB::table('chat_messages')
+            ->where(function ($query) {
+                $query->whereNull('share_type')
+                    ->orWhere('share_type', '!=', self::SYSTEM_ACTIVITY_SHARE_TYPE);
+            })
             ->whereNotExists(function ($query) {
                 $query->selectRaw('1')
                     ->from('chat_message_deletions')

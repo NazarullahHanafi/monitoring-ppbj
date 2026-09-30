@@ -62,7 +62,37 @@ class ChatMentionSummaryTest extends TestCase
         $this->getJson('/chat/mentions/unread')->assertUnauthorized();
     }
 
-    private function insertMessage(User $sender, array $mentions): int
+    public function test_procurement_activity_only_appears_in_broadcast_not_team_chat(): void
+    {
+        $target = User::factory()->create();
+        $sender = User::factory()->create();
+
+        $this->insertMessage($sender, [
+            ['id' => $target->id, 'name' => $target->name],
+        ], 'procurement_journey');
+        $this->insertMessage($sender, [
+            ['id' => $target->id, 'name' => $target->name],
+        ]);
+
+        $this->actingAs($target)
+            ->getJson('/chat/messages')
+            ->assertOk()
+            ->assertJsonCount(1, 'messages')
+            ->assertJsonPath('messages.0.share_type', null);
+
+        $this->getJson('/chat/mentions/unread')
+            ->assertOk()
+            ->assertJson([
+                'count' => 1,
+                'unread_count' => 1,
+            ]);
+
+        $this->getJson('/chat/search?q=Pesan')
+            ->assertOk()
+            ->assertJsonCount(1, 'messages');
+    }
+
+    private function insertMessage(User $sender, array $mentions, ?string $shareType = null): int
     {
         return DB::table('chat_messages')->insertGetId([
             'user_id' => $sender->id,
@@ -74,6 +104,7 @@ class ChatMentionSummaryTest extends TestCase
             'reply_preview' => null,
             'reply_user' => null,
             'mentions' => json_encode($mentions),
+            'share_type' => $shareType,
             'created_at' => now(),
         ]);
     }
