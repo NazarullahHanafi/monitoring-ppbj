@@ -24,6 +24,7 @@
         let pollTimer = null, checkTimer = null, searchTimer = null, presTimer = null, hbTimer = null;
         let modalOpen = false, addIdx = 0, editIdx = 5000;
         let currentPrMode = 'ppbj', currentEditPrMode = 'ppbj';
+        let editModalLoadSerial = 0;
         const IS_FIRST = Boolean(SPPH_PAGE_CONFIG.firstPage);
         const HAS_FILTER = Boolean(SPPH_PAGE_CONFIG.hasFilter);
 
@@ -122,7 +123,8 @@
         // ════════════════════════════════════════════════════════════
         // PR MODE TOGGLE
         // ════════════════════════════════════════════════════════════
-        function setPrMode(mode) {
+        function setPrMode(mode, reset = false) {
+            const previousMode = currentPrMode;
             currentPrMode = mode;
             const $ppbjBox = $('#ppbjModeBox');
             const $manualBox = $('#manualModeBox');
@@ -139,18 +141,18 @@
                 $btnPpbj.addClass('active-mode');
                 $btnManual.removeClass('active-mode');
                 $('#nomorPrType').val('ppbj');
-                $('#nomorPrManual').val('');
-                $('#ppbjSelect').val(null).trigger('change.select2');
-
-                const manualVal = $('#nomorPrManual').val().trim();
-                if (manualVal) {
+                $('#ppbjSelect').prop('disabled', false).trigger('change.select2');
+                if (reset) {
                     $('#nomorPrManual').val('');
-                    $('#ppbjSelect').append(new Option(manualVal, manualVal, true, true)).trigger('change');
-                } else {
-                    $deskripsi.val('');
+                    $('#ppbjSelect').val(null).trigger('change');
+                    $deskripsi.val('').removeData('ppbjAutoValue');
                     $badge.addClass('hidden').html('');
-                    updatePrFinalValue();
+                    $info.addClass('hidden');
+                    $status.html('');
+                } else if (previousMode !== 'ppbj' && $('#ppbjSelect').val()?.length) {
+                    $('#ppbjSelect').trigger('change');
                 }
+                updatePrFinalValue();
             } else {
                 $ppbjBox.addClass('hidden');
                 $manualBox.removeClass('hidden');
@@ -160,40 +162,14 @@
                 $status.html('');
                 $('#nomorPrType').val('manual');
 
-                $('#ppbjSelect').val(null).trigger('change.select2');
-                $('#nomorPrManual').val('');
-                $('#nomorPrFinal').val('');
-
-                const selectVal = $('#ppbjSelect').val();
-                if (selectVal) {
-                    const ppbjNo = selectVal;
-                    $('#ppbjSelect').val(null).trigger('change');
-                    $('#nomorPrManual').val('');
-                    $('#nomorPrFinal').val('');
-
-                    $status.html(
-                        `<span class="text-red-600 dark:text-red-400 flex items-center gap-1">` +
-                        `<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">` +
-                        `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/>` +
-                        `</svg>` +
-                        `<strong>Peringatan:</strong> Nomor <span class="font-mono">${escapedHtml(ppbjNo)}</span> ada di database PPBJ! ` +
-                        `Gunakan mode <strong>"Pilih PPBJ"</strong> agar otomatis terhubung.</span>`
-                    );
-
-                    $info.addClass('hidden');
-                    $badge.addClass('hidden').html('');
-
-                    const $manualInput = $('#nomorPrManual');
-                    $manualInput.css({ 'border-color': '#ef4444', 'background-color': '#fef2f2' });
-                    setTimeout(() => { $manualInput.css({ 'border-color': '', 'background-color': '' }); }, 3000);
-                } else {
-                    $status.html('');
-                }
+                $('#ppbjSelect').prop('disabled', true).trigger('change.select2');
+                if (reset) $('#nomorPrManual').val('');
                 updatePrFinalValue();
             }
         }
 
-        function setEditPrMode(mode) {
+        function setEditPrMode(mode, reset = false) {
+            const previousMode = currentEditPrMode;
             currentEditPrMode = mode;
             const $ppbjBox = $('#editPpbjModeBox');
             const $manualBox = $('#editManualModeBox');
@@ -210,38 +186,18 @@
                 $btnPpbj.addClass('active-mode');
                 $btnManual.removeClass('active-mode');
                 $('#editNomorPrType').val('ppbj');
-                $('#editNomorPrManual').val('');
-                $('#editPpbjSelect').val(null).trigger('change.select2');
-
-                const manualVal = $('#editNomorPrManual').val().trim();
-                if (manualVal) {
-                    $.get(PPBJ_CHECK_URL, { ppbj_no: manualVal }, function (data) {
-                        if (data.status === 'available' || data.status === 'already_linked') {
-                            $('#editNomorPrManual').val('');
-                            const o = new Option(manualVal, manualVal, true, true);
-                            o.uraian = data.uraian;
-                            o.text = manualVal + (data.uraian ? ' — ' + data.uraian.substring(0, 40) : '');
-                            $('#editPpbjSelect').append(o).trigger('change');
-
-                            if ($deskripsi && data.uraian) {
-                                $deskripsi.val(data.uraian);
-                                showDeskripsiBadge($badge, data.uraian, data.status === 'already_linked');
-                            }
-                        } else {
-                            $('#editNomorPrManual').val('');
-                            $('#editPpbjSelect').val(null).trigger('change.select2');
-                            $deskripsi.val('');
-                            $badge.addClass('hidden').html('');
-                            updateEditPrFinalValue();
-                        }
-                    }).fail(() => {
-                        $('#editNomorPrManual').val('');
-                        $('#editPpbjSelect').val(null).trigger('change.select2');
-                        updateEditPrFinalValue();
-                    });
-                } else {
-                    updateEditPrFinalValue();
+                $('#editPpbjSelect').prop('disabled', false).trigger('change.select2');
+                if (reset) {
+                    $('#editNomorPrManual').val('');
+                    $('#editPpbjSelect').val(null).trigger('change');
+                    $deskripsi.val('').removeData('ppbjAutoValue');
+                    $badge.addClass('hidden').html('');
+                    $info.addClass('hidden');
+                    $status.html('');
+                } else if (previousMode !== 'ppbj' && $('#editPpbjSelect').val()?.length) {
+                    $('#editPpbjSelect').trigger('change');
                 }
+                updateEditPrFinalValue();
             } else {
                 $ppbjBox.addClass('hidden');
                 $manualBox.removeClass('hidden');
@@ -249,35 +205,8 @@
                 $btnManual.addClass('active-mode');
                 $('#editNomorPrType').val('manual');
 
-                $('#editPpbjSelect').val(null).trigger('change.select2');
-                $('#editNomorPrManual').val('');
-                $('#editNomorPrFinal').val('');
-
-                const selectVal = $('#editPpbjSelect').val();
-                if (selectVal) {
-                    const ppbjNo = selectVal;
-                    $('#editPpbjSelect').val(null).trigger('change.select2');
-                    $('#editNomorPrManual').val('');
-                    $('#editNomorPrFinal').val('');
-
-                    $status.html(
-                        `<span class="text-red-600 dark:text-red-400 flex items-center gap-1">` +
-                        `<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">` +
-                        `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/>` +
-                        `</svg>` +
-                        `<strong>Peringatan:</strong> Nomor <span class="font-mono">${escapedHtml(ppbjNo)}</span> ada di database PPBJ! ` +
-                        `Gunakan mode <strong>"Pilih PPBJ"</strong> agar otomatis terhubung.</span>`
-                    );
-
-                    $info.addClass('hidden');
-                    $badge.addClass('hidden').html('');
-
-                    const $manualInput = $('#editNomorPrManual');
-                    $manualInput.css({ 'border-color': '#ef4444', 'background-color': '#fef2f2' });
-                    setTimeout(() => { $manualInput.css({ 'border-color': '', 'background-color': '' }); }, 3000);
-                } else {
-                    $status.html('');
-                }
+                $('#editPpbjSelect').prop('disabled', true).trigger('change.select2');
+                if (reset) $('#editNomorPrManual').val('');
                 updateEditPrFinalValue();
             }
         }
@@ -287,6 +216,9 @@
         // ════════════════════════════════════════════════════════════
         function initPpbjSelect2(selector, infoBoxId, statusId, contentId, onChangeCb, deskripsiFieldId, badgeContainerId) {
             const $select = $(selector);
+            const modePrefix = selector.includes('edit') ? 'edit' : 'add';
+            let requestSerial = 0;
+            let activeRequest = null;
 
             // ✅ FIX: Tambahkan flag untuk mencegah auto-clear saat loading
             let isLoadingEdit = false;
@@ -323,9 +255,13 @@
                 }
             });
 
-            $select.on('change', function () {
+            $select.off('change.ppbjAutoFill').on('change.ppbjAutoFill', function () {
+                const requestId = ++requestSerial;
+                if (activeRequest && activeRequest.readyState !== 4) activeRequest.abort();
+                activeRequest = null;
                 const rawValue = $(this).val();
                 const selectedValues = Array.isArray(rawValue) ? rawValue.filter(Boolean) : (rawValue ? [rawValue] : []);
+                const selectionKey = JSON.stringify(selectedValues);
                 const val = selectedValues[0] || '';
                 const $info = $('#' + infoBoxId);
                 const $status = $('#' + statusId);
@@ -346,7 +282,11 @@
 
                 $status.html('<span class="text-gray-400">🔄 Memeriksa...</span>');
 
-                $.get(PPBJ_CHECK_URL, { ppbj_no: val, ppbj_nos: selectedValues }, function (data) {
+                activeRequest = $.get(PPBJ_CHECK_URL, { ppbj_no: val, ppbj_nos: selectedValues }).done(function (data) {
+                    const latestRawValue = $select.val();
+                    const latestValues = Array.isArray(latestRawValue) ? latestRawValue.filter(Boolean) : (latestRawValue ? [latestRawValue] : []);
+                    const isActiveMode = modePrefix === 'edit' ? currentEditPrMode === 'ppbj' : currentPrMode === 'ppbj';
+                    if (requestId !== requestSerial || JSON.stringify(latestValues) !== selectionKey || !isActiveMode) return;
                     $status.html('');
                     if (data.status === 'available') {
                         $status.html(`<span class="text-green-600 dark:text-green-400">✅ ${escapedHtml(data.message || 'PPBJ tersedia — akan otomatis terhubung')}</span>`);
@@ -369,7 +309,11 @@
                         $info.addClass('hidden');
                         if ($badge) $badge.addClass('hidden').html('');
                     }
-                }).fail(() => {
+                }).fail((xhr, status) => {
+                    if (status === 'abort' || requestId !== requestSerial) return;
+                    const latestRawValue = $select.val();
+                    const latestValues = Array.isArray(latestRawValue) ? latestRawValue.filter(Boolean) : (latestRawValue ? [latestRawValue] : []);
+                    if (JSON.stringify(latestValues) !== selectionKey) return;
                     $status.html('<span class="text-red-600">❌ Gagal memeriksa</span>');
                     $info.addClass('hidden');
                 });
@@ -428,9 +372,7 @@
             $('#addDeskripsi').val('');
             $('#addDeskripsiBadge').addClass('hidden').html('');
 
-            setPrMode('ppbj');
-            $('#ppbjSelect').val(null).trigger('change');
-            $('#nomorPrManual').val('');
+            setPrMode('ppbj', true);
             $('#ppbjInfo').addClass('hidden');
             $('#ppbjStatus').html('');
             $('#nomorPrFinal').val('');
@@ -444,7 +386,9 @@
         }
 
         async function openEditModal(id, nomor, tgl, nomorPr, vendorNames, deskripsi, pic, linkedPpbjNumbers = []) {
+            const editLoadId = ++editModalLoadSerial;
             ensureVendorUsageStats().then(() => {
+                if (editLoadId !== editModalLoadSerial || String(document.getElementById('editId').value) !== String(id)) return;
                 $('#editVendor').trigger('change.select2');
                 renderVendorUsagePanel('editVendor', 'editVendorUsagePanel');
             });
@@ -472,6 +416,7 @@
             if (editPpbjNumbers.length) {
                 nomorPr = editPpbjNumbers[0];
                 $.get(PPBJ_CHECK_URL, { ppbj_no: nomorPr, ppbj_nos: editPpbjNumbers }, function (data) {
+                    if (editLoadId !== editModalLoadSerial || String(document.getElementById('editId').value) !== String(id)) return;
                     if (data.status === 'available' || data.status === 'already_linked') {
                         setEditPrMode('ppbj');
 
@@ -505,6 +450,7 @@
                         $('#editDeskripsi').val(originalDeskripsi);
                     }
                 }).fail(() => {
+                    if (editLoadId !== editModalLoadSerial || String(document.getElementById('editId').value) !== String(id)) return;
                     setEditPrMode('manual');
                     $('#editNomorPrManual').val(nomorPr);
                     updateEditPrFinalValue();
@@ -539,6 +485,7 @@
         async function loadEditItems(spphId) {
             try {
                 const r = await fetch(`${ITEMS_BASE}${spphId}/items`); const data = await r.json();
+                if (String(document.getElementById('editId')?.value || '') !== String(spphId)) return;
                 document.getElementById('editRows').innerHTML = '';
                 (data.length ? data : [null]).forEach(item => addRow('edit', item));
             } catch { document.getElementById('editRows').innerHTML = '<p class="text-red-500 text-xs p-2">Gagal memuat data barang.</p>'; }

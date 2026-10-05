@@ -19,6 +19,7 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
         let lastIdSp = Number(SP_PAGE_CONFIG.lastId || 0);
         let pollTimer = null, checkTimer = null, searchTimer = null, presenceTimer = null, heartbeatTimer = null, modalOpen = false;
         let currentPrMode = 'ppbj', currentEditPrMode = 'ppbj';
+        let editModalLoadSerial = 0;
         const IS_FIRST_PAGE = Boolean(SP_PAGE_CONFIG.firstPage);
         const HAS_FILTER = Boolean(SP_PAGE_CONFIG.hasFilter);
 
@@ -39,7 +40,8 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
             $('#editNomorPrType').val(currentEditPrMode);
         }
 
-        function setPrMode(mode) {
+        function setPrMode(mode, reset = false) {
+            const previousMode = currentPrMode;
             currentPrMode = mode;
             const $badge = $('#addDeskripsiBadge');
             const $deskripsi = $('#addDeskripsi');
@@ -51,14 +53,19 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
                 $('#manualModeBox').addClass('hidden');
                 $('#btnPpbjMode').addClass('active-mode');
                 $('#btnManualMode').removeClass('active-mode');
-                $('#nomorPrManual').val('');
-                $('#ppbjSelect').val(null).trigger('change');
-                if ($deskripsi.length) $deskripsi.val('');
-                if ($badge.length) $badge.addClass('hidden').html('');
-                if ($nilaiPrBadge.length) $nilaiPrBadge.addClass('hidden').html('');
-                if ($nilaiPr.length) $nilaiPr.val('');
-                $('#ppbjInfo').addClass('hidden');
-                $('#ppbjStatus').html('');
+                $('#ppbjSelect').prop('disabled', false).trigger('change.select2');
+                if (reset) {
+                    $('#nomorPrManual').val('');
+                    $('#ppbjSelect').val(null).trigger('change');
+                    if ($deskripsi.length) $deskripsi.val('').removeData('ppbjAutoValue');
+                    if ($badge.length) $badge.addClass('hidden').html('');
+                    if ($nilaiPrBadge.length) $nilaiPrBadge.addClass('hidden').html('');
+                    if ($nilaiPr.length) $nilaiPr.val('');
+                    $('#ppbjInfo').addClass('hidden');
+                    $('#ppbjStatus').html('');
+                } else if (previousMode !== 'ppbj' && $('#ppbjSelect').val()?.length) {
+                    $('#ppbjSelect').trigger('change');
+                }
                 updatePrFinalValue();
             } else {
                 $('#ppbjModeBox').addClass('hidden');
@@ -69,15 +76,15 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
                 $('#ppbjStatus').html('');
                 if ($badge.length) $badge.addClass('hidden').html('');
                 if ($nilaiPrBadge.length) $nilaiPrBadge.addClass('hidden').html('');
-                const s = $('#ppbjSelect').val();
-                if (s) { $('#ppbjSelect').val(null).trigger('change'); }
-                $('#nomorPrManual').val('');
+                $('#ppbjSelect').prop('disabled', true).trigger('change.select2');
+                if (reset) $('#nomorPrManual').val('');
                 renderSpphVendorRecommendation('add', [], null);
                 updatePrFinalValue();
             }
         }
 
-        function setEditPrMode(mode) {
+        function setEditPrMode(mode, reset = false) {
+            const previousMode = currentEditPrMode;
             currentEditPrMode = mode;
             const $badge = $('#editDeskripsiBadge');
             const $deskripsi = $('#editDeskripsiSp');
@@ -89,14 +96,19 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
                 $('#editManualModeBox').addClass('hidden');
                 $('#editBtnPpbjMode').addClass('active-mode');
                 $('#editBtnManualMode').removeClass('active-mode');
-                $('#editNomorPrManual').val('');
-                $('#editPpbjSelect').val(null).trigger('change');
-                if ($deskripsi.length) $deskripsi.val('');
-                if ($badge.length) $badge.addClass('hidden').html('');
-                if ($nilaiPrBadge.length) $nilaiPrBadge.addClass('hidden').html('');
-                if ($nilaiPr.length) $nilaiPr.val('');
-                $('#editPpbjInfo').addClass('hidden');
-                $('#editPpbjStatus').html('');
+                $('#editPpbjSelect').prop('disabled', false).trigger('change.select2');
+                if (reset) {
+                    $('#editNomorPrManual').val('');
+                    $('#editPpbjSelect').val(null).trigger('change');
+                    if ($deskripsi.length) $deskripsi.val('').removeData('ppbjAutoValue');
+                    if ($badge.length) $badge.addClass('hidden').html('');
+                    if ($nilaiPrBadge.length) $nilaiPrBadge.addClass('hidden').html('');
+                    if ($nilaiPr.length) $nilaiPr.val('');
+                    $('#editPpbjInfo').addClass('hidden');
+                    $('#editPpbjStatus').html('');
+                } else if (previousMode !== 'ppbj' && $('#editPpbjSelect').val()?.length) {
+                    $('#editPpbjSelect').trigger('change');
+                }
                 updateEditPrFinalValue();
             } else {
                 $('#editPpbjModeBox').addClass('hidden');
@@ -107,9 +119,8 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
                 $('#editPpbjStatus').html('');
                 if ($badge.length) $badge.addClass('hidden').html('');
                 if ($nilaiPrBadge.length) $nilaiPrBadge.addClass('hidden').html('');
-                const s = $('#editPpbjSelect').val();
-                if (s) { $('#editPpbjSelect').val(null).trigger('change'); }
-                $('#editNomorPrManual').val('');
+                $('#editPpbjSelect').prop('disabled', true).trigger('change.select2');
+                if (reset) $('#editNomorPrManual').val('');
                 renderSpphVendorRecommendation('edit', [], null);
                 updateEditPrFinalValue();
             }
@@ -121,6 +132,8 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
         function initPpbjSelect2(selector, infoId, statusId, contentId, onChangeCb, deskripsiId, badgeId) {
             const $sel = $(selector);
             const vendorPrefix = selector === '.edit-sp-ppbj-select' ? 'edit' : 'add';
+            let requestSerial = 0;
+            let activeRequest = null;
             $sel.select2({
                 placeholder: $sel.data('placeholder') || 'Pilih No. PPBJ...',
                 allowClear: true, width: '100%', closeOnSelect: false, maximumSelectionLength: 20, minimumInputLength: 0,
@@ -135,7 +148,10 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
                 },
                 templateSelection: item => item.id ? $('<span class="font-mono font-semibold">').text(item.id) : item.text
             });
-            $sel.on('change', function (e) {
+            $sel.off('change.ppbjAutoFill').on('change.ppbjAutoFill', function (e) {
+                const requestId = ++requestSerial;
+                if (activeRequest && activeRequest.readyState !== 4) activeRequest.abort();
+                activeRequest = null;
                 // ── FIX BUG 2: Cek flag suppress — abaikan handler saat load edit modal ──
                 if (e._suppressCustom) {
                     if (onChangeCb) onChangeCb();
@@ -144,6 +160,7 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
 
                 const rawValue = $(this).val();
                 const selectedValues = Array.isArray(rawValue) ? rawValue.filter(Boolean) : (rawValue ? [rawValue] : []);
+                const selectionKey = JSON.stringify(selectedValues);
                 const val = selectedValues[0] || '';
                 const $info = $('#' + infoId), $status = $('#' + statusId), $content = $('#' + contentId);
                 const $deskripsi = deskripsiId ? $('#' + deskripsiId) : null;
@@ -162,7 +179,11 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
                     return;
                 }
                 $status.html('<span class="text-gray-400">🔄 Memeriksa...</span>');
-                $.get(PPBJ_CHECK_URL, { ppbj_no: val, ppbj_nos: selectedValues }, function (d) {
+                activeRequest = $.get(PPBJ_CHECK_URL, { ppbj_no: val, ppbj_nos: selectedValues }).done(function (d) {
+                    const latestRawValue = $sel.val();
+                    const latestValues = Array.isArray(latestRawValue) ? latestRawValue.filter(Boolean) : (latestRawValue ? [latestRawValue] : []);
+                    const isActiveMode = vendorPrefix === 'edit' ? currentEditPrMode === 'ppbj' : currentPrMode === 'ppbj';
+                    if (requestId !== requestSerial || JSON.stringify(latestValues) !== selectionKey || !isActiveMode) return;
                     $status.html('');
                     if (d.status === 'available') {
                         $status.html(`<span class="text-green-600 dark:text-green-400">✅ ${escapedHtml(d.message || 'PPBJ tersedia — akan otomatis terhubung')}</span>`);
@@ -220,7 +241,15 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
                         $status.html(`<span class="text-red-600 dark:text-red-400">❌ ${d.message}</span>`); $info.addClass('hidden');
                         renderSpphVendorRecommendation(vendorPrefix, [], null);
                     } else { $status.html('<span class="text-blue-600">📝 Manual</span>'); $info.addClass('hidden'); if ($badge) $badge.addClass('hidden').html(''); renderSpphVendorRecommendation(vendorPrefix, [], null); }
-                }).fail(() => { $status.html('<span class="text-red-600">❌ Gagal</span>'); $info.addClass('hidden'); renderSpphVendorRecommendation(vendorPrefix, [], null); });
+                }).fail((xhr, status) => {
+                    if (status === 'abort' || requestId !== requestSerial) return;
+                    const latestRawValue = $sel.val();
+                    const latestValues = Array.isArray(latestRawValue) ? latestRawValue.filter(Boolean) : (latestRawValue ? [latestRawValue] : []);
+                    if (JSON.stringify(latestValues) !== selectionKey) return;
+                    $status.html('<span class="text-red-600">❌ Gagal</span>');
+                    $info.addClass('hidden');
+                    renderSpphVendorRecommendation(vendorPrefix, [], null);
+                });
             });
         }
 
@@ -606,9 +635,7 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
                 $('#addDeskripsi').val('');
                 $('#addDeskripsiBadge').addClass('hidden').html('');
                 $('#addNilaiPrBadge').addClass('hidden').html('');
-                setPrMode('ppbj');
-                $('#ppbjSelect').val(null).trigger('change');
-                $('#nomorPrManual').val('');
+                setPrMode('ppbj', true);
                 $('#ppbjInfo').addClass('hidden');
                 $('#ppbjStatus').html('');
                 $('#nomorPrFinal').val('');
@@ -1323,6 +1350,7 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
             jabatanSci,
             linkedPpbjNumbers = []
         ) {
+            const editLoadId = ++editModalLoadSerial;
             document.getElementById('editFormSp').action = `/sp/${id}`;
             document.getElementById('editIdSp').value = id;
             document.getElementById('editNomorSp').value = nomor;
@@ -1369,6 +1397,7 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
                 _switchEditPpbjUiOnly('ppbj');
 
                 $.get(PPBJ_CHECK_URL, { ppbj_no: nomorPr }, function (d) {
+                    if (editLoadId !== editModalLoadSerial || String(document.getElementById('editIdSp').value) !== String(id)) return;
                     if (d.status === 'available' || d.status === 'already_linked') {
                         const o = new Option(
                             nomorPr + (d.uraian ? ' — ' + d.uraian.substring(0, 40) : ''),
@@ -1391,6 +1420,7 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
                         renderSpphVendorRecommendation('edit', [], null);
                     }
                 }).fail(() => {
+                    if (editLoadId !== editModalLoadSerial || String(document.getElementById('editIdSp').value) !== String(id)) return;
                     _switchEditPpbjUiOnly('manual');
                     $('#editNomorPrManual').val(nomorPr);
                     updateEditPrFinalValue();
@@ -1429,11 +1459,13 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
         function _switchEditPpbjUiOnly(mode) {
             currentEditPrMode = mode;
             if (mode === 'ppbj') {
+                $('#editPpbjSelect').prop('disabled', false).trigger('change.select2');
                 $('#editPpbjModeBox').removeClass('hidden');
                 $('#editManualModeBox').addClass('hidden');
                 $('#editBtnPpbjMode').addClass('active-mode');
                 $('#editBtnManualMode').removeClass('active-mode');
             } else {
+                $('#editPpbjSelect').prop('disabled', true).trigger('change.select2');
                 $('#editPpbjModeBox').addClass('hidden');
                 $('#editManualModeBox').removeClass('hidden');
                 $('#editBtnPpbjMode').removeClass('active-mode');
@@ -1488,7 +1520,14 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
         const VENDOR_STORE_URL = SP_PAGE_CONFIG.vendorStoreUrl;
         const CSRF_TOKEN = document.querySelector('meta[name="csrf-token"]').content;
 
-        function cancelNewVendor() { $('#vendorSelectSp').val('').trigger('change'); document.getElementById('newVendorBoxSp').classList.add('hidden'); resetNewVendorForm(); }
+        function cancelNewVendor() {
+            const $select = $('#vendorSelectSp');
+            const previousVendor = String($select.data('vendorBeforeAdd') || '').trim();
+            $select.val(previousVendor || null).trigger('change');
+            $select.removeData('vendorBeforeAdd');
+            document.getElementById('newVendorBoxSp').classList.add('hidden');
+            resetNewVendorForm();
+        }
         function resetNewVendorForm() { ['newVendorNama', 'newVendorAlamat', 'newVendorTelp', 'newVendorFax', 'newVendorEmail', 'newVendorNpwp', 'newVendorDirektur', 'newVendorJabatan'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; }); setVendorStatus('', ''); updateVendorProfileChecklistSp(); }
         function setVendorStatus(msg, type) { const el = document.getElementById('newVendorStatus'); if (!msg) { el.classList.add('hidden'); return; } el.classList.remove('hidden', 'bg-red-100', 'text-red-700', 'bg-green-100', 'text-green-700', 'dark:bg-red-900/30', 'dark:text-red-400', 'dark:bg-green-900/30', 'dark:text-green-400'); if (type === 'error') el.classList.add('bg-red-100', 'dark:bg-red-900/30', 'text-red-700', 'dark:text-red-400'); else el.classList.add('bg-green-100', 'dark:bg-green-900/30', 'text-green-700', 'dark:text-green-400'); el.textContent = msg; }
 
@@ -2185,6 +2224,7 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
                 });
                 if (!r.ok) throw new Error(`HTTP ${r.status}`);
                 const data = await r.json();
+                if (String(document.getElementById('editIdSp')?.value || '') !== String(spId)) return;
                 document.getElementById('editRows').innerHTML = '';
                 (data.length ? data : [null]).forEach(item => addRow('edit', item));
             } catch (err) {
@@ -2305,9 +2345,18 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
                 });
 
             // Vendor toggle
+            $('#vendorSelectSp').on('select2:selecting', function (event) {
+                if (event.params?.args?.data?.id === '__tambah__') {
+                    $(this).data('vendorBeforeAdd', $(this).val() || '');
+                }
+            });
             $('#vendorSelectSp').on('change', function () {
                 if ($(this).val() === '__tambah__') { document.getElementById('newVendorBoxSp').classList.remove('hidden'); document.getElementById('newVendorNama').focus(); }
-                else { document.getElementById('newVendorBoxSp').classList.add('hidden'); resetNewVendorForm(); }
+                else {
+                    document.getElementById('newVendorBoxSp').classList.add('hidden');
+                    $(this).removeData('vendorBeforeAdd');
+                    resetNewVendorForm();
+                }
                 updateSpphVendorRecommendation('add');
             });
             $('#editVendorSp').on('change', function () {
