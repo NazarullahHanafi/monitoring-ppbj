@@ -97,12 +97,23 @@ class EmojiChatController extends Controller
     // ── Set / hapus mood ─────────────────────────────────────────────────────
     public function setMood(Request $request)
     {
+        $user = Auth::user();
+
+        if (! $user->shouldDisplayMoodFeature()) {
+            Cache::forget('presence:mood:' . $user->id);
+
+            return response()->json([
+                'mood' => null,
+                'disabled' => true,
+            ]);
+        }
+
         $mood = $request->input('mood', '');
         if ($mood !== '' && !in_array($mood, self::ALLOWED_EMOJI, true)) {
             return response()->json(['error' => 'Mood tidak valid'], 422);
         }
 
-        $key = 'presence:mood:' . Auth::id();
+        $key = 'presence:mood:' . $user->id;
         if ($mood === '') {
             Cache::forget($key);
         } else {

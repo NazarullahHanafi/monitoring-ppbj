@@ -47,6 +47,18 @@ class User extends Authenticatable
         return $email !== '' && in_array($email, $ownerEmails, true);
     }
 
+    /**
+     * Tentukan apakah fitur mood ditampilkan untuk akun ini.
+     */
+    public function shouldDisplayMoodFeature(): bool
+    {
+        return ! (
+            mb_strtolower(trim((string) $this->name)) === 'nazar'
+            && mb_strtolower(trim((string) $this->role)) === 'superadmin'
+            && mb_strtolower(trim((string) $this->department)) === 'umum'
+        );
+    }
+
     public function ownerIdentityKeys(): array
     {
         return collect([

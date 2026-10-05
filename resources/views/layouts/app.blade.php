@@ -340,6 +340,7 @@
                                 $colors = ['#6366f1', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#3b82f6', '#ef4444', '#14b8a6'];
                                 $myColor = $colors[auth()->id() % count($colors)];
                                 $myInitials = strtoupper(mb_substr(auth()->user()->name, 0, 1));
+                                $moodFeatureEnabled = auth()->user()->shouldDisplayMoodFeature();
                                 if (strpos(auth()->user()->name, ' ') !== false) {
                                     $pp = explode(' ', auth()->user()->name);
                                     $myInitials = strtoupper(mb_substr($pp[0], 0, 1) . mb_substr($pp[1], 0, 1));
@@ -353,7 +354,9 @@
                                 <span class="hidden sm:inline">Online</span>
                                 <span id="onlineCountLabel"
                                     class="font-bold text-indigo-600 dark:text-indigo-400">1</span>
-                                <span id="myMoodFloat" class="my-mood-float hidden"></span>
+                                @if($moodFeatureEnabled)
+                                    <span id="myMoodFloat" class="my-mood-float hidden"></span>
+                                @endif
                             </div>
                         </button>
                         <div class="presence-panel" id="presencePanel">
@@ -368,8 +371,10 @@
                                     </div><span class="pp-me-tag">Kamu</span>
                                 </div>
                             </div>
-                            <div class="pp-footer"><button type="button" class="pp-footer-btn" id="btnChangeMood">✏️
-                                    Ganti mood</button></div>
+                            @if($moodFeatureEnabled)
+                                <div class="pp-footer"><button type="button" class="pp-footer-btn" id="btnChangeMood">✏️
+                                        Ganti mood</button></div>
+                            @endif
                         </div>
                     </div>
                     <button type="button" class="chat-trigger" id="chatTrigger" title="Chat Tim">
@@ -528,7 +533,8 @@
             presenceMoodUrl: @json(route('presence.mood')),
             userId: @json((int) auth()->id()),
             userGender: @json(auth()->user()->gender ?? null),
-            userName: @json(auth()->user()->name ?? 'User')
+            userName: @json(auth()->user()->name ?? 'User'),
+            moodEnabled: @json($moodFeatureEnabled)
         });
     </script>
     <script src="{{ asset('assets/app/app-shell.js') }}?v={{ filemtime(public_path('assets/app/app-shell.js')) }}" defer></script>

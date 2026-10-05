@@ -25,8 +25,15 @@ class PresenceController extends Controller
         $user = Auth::user();
         $this->markLastSeen($user);
 
-        // Ambil mood hari ini (jika ada)
-        $mood = Cache::get(self::MOOD_PREFIX . $user->id);
+        // Akun khusus yang mood-nya dinonaktifkan tidak boleh meninggalkan
+        // emoji lama di daftar presence pengguna lain.
+        $moodKey = self::MOOD_PREFIX . $user->id;
+        if ($user->shouldDisplayMoodFeature()) {
+            $mood = Cache::get($moodKey);
+        } else {
+            Cache::forget($moodKey);
+            $mood = null;
+        }
 
         Cache::put(
             self::CACHE_PREFIX . $user->id,
@@ -70,11 +77,22 @@ class PresenceController extends Controller
      */
     public function updateMood(Request $request)
     {
+        $user = Auth::user();
+
+        if (! $user->shouldDisplayMoodFeature()) {
+            $this->clearMoodFor($user);
+
+            return response()->json([
+                'success' => true,
+                'mood' => null,
+                'disabled' => true,
+            ]);
+        }
+
         $request->validate([
             'mood' => 'required|string|max:20', // ✅ emoji bisa multi-byte
         ]);
 
-        $user = Auth::user();
         $midnight = now()->copy()->endOfDay();
         $ttl = now()->diffInSeconds($midnight);
 
@@ -96,7 +114,18 @@ class PresenceController extends Controller
      */
     public function getMood()
     {
-        $mood = Cache::get(self::MOOD_PREFIX . Auth::id());
+        $user = Auth::user();
+
+        if (! $user->shouldDisplayMoodFeature()) {
+            $this->clearMoodFor($user);
+
+            return response()->json([
+                'mood' => null,
+                'disabled' => true,
+            ]);
+        }
+
+        $mood = Cache::get(self::MOOD_PREFIX . $user->id);
         return response()->json(['mood' => $mood]);
     }
 
@@ -128,6 +157,18 @@ class PresenceController extends Controller
             '#a855f7',
         ];
         return $colors[$id % count($colors)];
+    }
+
+    private function clearMoodFor(User $user): void
+    {
+        Cache::forget(self::MOOD_PREFIX . $user->id);
+
+        $presenceKey = self::CACHE_PREFIX . $user->id;
+        $presence = Cache::get($presenceKey);
+        if (is_array($presence)) {
+            $presence['mood'] = null;
+            Cache::put($presenceKey, $presence, self::PRESENCE_TTL);
+        }
     }
 
     /**
