@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', 'Procurement Command Center 360°')
+@section('title', 'Pusat Kendali Pengadaan')
 
 @push('styles')
     <link rel="stylesheet" href="{{ asset('assets/command-center/command-center.css') }}?v={{ filemtime(public_path('assets/command-center/command-center.css')) }}">
@@ -15,9 +15,9 @@
     <section class="cc-hero">
         <div class="cc-orb cc-orb-a"></div><div class="cc-orb cc-orb-b"></div>
         <div class="cc-hero-copy">
-            <div class="cc-kicker"><span class="cc-live-dot"></span> LIVE PROCUREMENT INTELLIGENCE</div>
-            <h1>Command Center <span>360°</span></h1>
-            <p>Satu pusat kendali untuk risiko, kontrak, perjalanan PR, nilai pengadaan, dan arsip digital.</p>
+            <div class="cc-kicker"><span class="cc-live-dot"></span> MONITORING EKSEKUTIF · DATA TERINTEGRASI</div>
+            <h1>Pusat Kendali <span>Pengadaan</span></h1>
+            <p>Ringkasan proses, risiko, nilai, kontrak, dan perjalanan pengadaan dalam satu tampilan.</p>
             <div class="cc-updated">Sinkronisasi terakhir: <strong id="ccUpdated">menyiapkan data…</strong></div>
         </div>
         <div class="cc-hero-actions">
@@ -54,23 +54,23 @@
     </section>
 
     <section class="cc-panel cc-flow-panel">
-        <div class="cc-panel-head"><div><span class="cc-eyebrow">DIGITAL PROCUREMENT TWIN</span><h2>Aliran Pengadaan End-to-End</h2></div><span class="cc-panel-note">Klik hasil pencarian untuk membuka perjalanan lengkap</span></div>
+        <div class="cc-panel-head"><div><span class="cc-eyebrow">RINGKASAN PROSES</span><h2>Alur Pengadaan End-to-End</h2></div><span class="cc-panel-note">Klik hasil pencarian untuk membuka perjalanan lengkap</span></div>
         <div class="cc-flow" id="ccFlow"></div>
     </section>
 
     <div class="cc-main-grid">
         <section class="cc-panel cc-risk-panel">
-            <div class="cc-panel-head"><div><span class="cc-eyebrow cc-red">EXPLAINABLE RISK RADAR</span><h2>Prioritas yang Harus Ditangani</h2></div><span class="cc-count" id="ccRiskCount">0 risiko</span></div>
+            <div class="cc-panel-head"><div><span class="cc-eyebrow cc-red">PRIORITAS & RISIKO</span><h2>Pengadaan yang Perlu Ditangani</h2></div><span class="cc-count" id="ccRiskCount">0 risiko</span></div>
             <div class="cc-risk-list" id="ccRisks"><div class="cc-empty">Menganalisis risiko pengadaan…</div></div>
         </section>
         <section class="cc-panel cc-contract-panel">
-            <div class="cc-panel-head"><div><span class="cc-eyebrow cc-amber">CONTRACT WATCH</span><h2>Radar Masa Pemenuhan</h2></div></div>
+            <div class="cc-panel-head"><div><span class="cc-eyebrow cc-amber">KENDALI KONTRAK</span><h2>Masa Pemenuhan Terdekat</h2></div></div>
             <div class="cc-contract-list" id="ccContracts"><div class="cc-empty">Membaca tanggal kontrak…</div></div>
         </section>
     </div>
 
     <section class="cc-panel cc-trend-panel">
-        <div class="cc-panel-head"><div><span class="cc-eyebrow">PORTFOLIO PULSE</span><h2>Irama Pengadaan Enam Bulan</h2></div><span class="cc-panel-note">Ringan, tanpa library grafik eksternal</span></div>
+        <div class="cc-panel-head"><div><span class="cc-eyebrow">TREN BULANAN</span><h2>Aktivitas Pengadaan Enam Bulan</h2></div><span class="cc-panel-note">Berdasarkan tanggal data dibuat</span></div>
         <div class="cc-trend" id="ccTrend"></div>
     </section>
 </div>
@@ -79,7 +79,7 @@
     <div class="cc-modal-backdrop" data-close-modal></div>
     <div class="cc-modal-card cc-results-card">
         <button class="cc-modal-close" data-close-modal>×</button>
-        <span class="cc-eyebrow">SMART DISCOVERY</span><h2 id="ccResultsTitle">Hasil Pencarian</h2>
+        <span class="cc-eyebrow">PENCARIAN TERPADU</span><h2 id="ccResultsTitle">Hasil Pencarian</h2>
         <p id="ccResultsSummary" class="cc-modal-summary"></p>
         <div id="ccResults" class="cc-result-list"></div>
     </div>

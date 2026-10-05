@@ -26,7 +26,7 @@ class CommandCenterController extends Controller
 {
     private const OVERVIEW_CACHE_KEY = 'command_center:overview:v1';
 
-    private const OVERVIEW_TTL = 60;
+    private const OVERVIEW_TTL = 300;
 
     private const SEARCH_LIMIT = 24;
 
@@ -281,7 +281,7 @@ class CommandCenterController extends Controller
             ->orderByRaw('CASE WHEN promised_date IS NULL THEN 1 ELSE 0 END')
             ->orderBy('promised_date')
             ->orderByDesc('updated_at')
-            ->limit(250)
+            ->limit(160)
             ->get();
 
         $risks = $candidates->map(fn (Ppbj $row) => $this->riskFor($row))

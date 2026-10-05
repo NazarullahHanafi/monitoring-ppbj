@@ -45,6 +45,17 @@ class CommandCenterTest extends TestCase
             ->assertJsonCount(5, 'flow');
     }
 
+    public function test_command_center_frontend_has_no_background_polling_or_heavy_blur(): void
+    {
+        $script = file_get_contents(public_path('assets/command-center/command-center.js'));
+        $styles = file_get_contents(public_path('assets/command-center/command-center.css'));
+
+        $this->assertStringNotContainsString('setInterval(', $script);
+        $this->assertStringContainsString('sessionStorage', $script);
+        $this->assertStringContainsString('notation: \'compact\'', $script);
+        $this->assertStringNotContainsString('backdrop-filter', $styles);
+    }
+
     public function test_search_finds_pr_by_pr_contract_and_linked_sp_values(): void
     {
         $pr = $this->makePpbj('PKB/PR-26/CON/0902', 50_000_000, 47_500_000);

@@ -1,31 +1,329 @@
-(function(){
+(function () {
     'use strict';
-    var root=document.getElementById('commandCenter'); if(!root)return;
-    var csrf=(document.querySelector('meta[name="csrf-token"]')||{}).content||'';
-    var urls={overview:root.dataset.overviewUrl,search:root.dataset.searchUrl,ask:root.dataset.askUrl,journey:root.dataset.journeyUrl};
-    var money=new Intl.NumberFormat('id-ID',{style:'currency',currency:'IDR',maximumFractionDigits:0});
-    function esc(v){return String(v==null?'':v).replace(/[&<>"']/g,function(c){return({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'})[c]})}
-    function fetchJson(url,opt){return fetch(url,Object.assign({headers:{'Accept':'application/json','X-CSRF-TOKEN':csrf}},opt||{})).then(function(r){return r.json().catch(function(){return{}}).then(function(d){if(!r.ok)throw new Error(d.message||'Permintaan gagal');return d})})}
-    function loading(btn,on){if(!btn)return;btn.disabled=on;btn.dataset.label=btn.dataset.label||btn.textContent;btn.textContent=on?'Memproses…':btn.dataset.label}
-    function showError(message){if(window.Swal)Swal.fire({icon:'error',title:'Belum berhasil',text:message});else alert(message)}
-    function openModal(id){var el=document.getElementById(id);if(el){el.classList.add('open');el.setAttribute('aria-hidden','false');document.body.style.overflow='hidden'}}
-    function closeModals(){document.querySelectorAll('.cc-modal.open').forEach(function(el){el.classList.remove('open');el.setAttribute('aria-hidden','true')});document.body.style.overflow=''}
-    document.querySelectorAll('[data-close-modal]').forEach(function(el){el.addEventListener('click',closeModals)});document.addEventListener('keydown',function(e){if(e.key==='Escape')closeModals()});
-    function renderStats(s){var data=[['Total Pengadaan',s.total,'Seluruh PR/PPBJ',''],['Sedang Aktif',s.active,'Proses yang berjalan',''],['Risk Tinggi',s.high_risk,'Butuh keputusan cepat','cc-stat-danger'],['Kontrak Kritis',s.critical_contracts,'≤7 hari atau terlambat','cc-stat-amber'],['Nilai PR',s.total_pr_label,'Nilai estimasi aktif',''],['Efisiensi',s.efficiency_label,'Selisih PR terhadap SP',s.efficiency>=0?'cc-stat-green':'cc-stat-danger']];document.getElementById('ccStats').innerHTML=data.map(function(x){return'<article class="cc-stat '+x[3]+'"><span>'+esc(x[0])+'</span><strong>'+esc(x[1])+'</strong><small>'+esc(x[2])+'</small></article>'}).join('')}
-    function renderFlow(rows){document.getElementById('ccFlow').innerHTML=(rows||[]).map(function(x){return'<div class="cc-flow-step"><strong>'+esc(x.count)+'</strong><span>'+esc(x.label)+'</span></div>'}).join('')}
-    function riskHtml(x){return'<article class="cc-risk-item"><div class="cc-risk-score '+esc(x.level)+'">'+esc(x.score)+'</div><div><div class="cc-item-title">'+esc(x.ppbj_no)+' · '+esc(x.uraian)+'</div><div class="cc-item-sub">'+esc(x.buyer)+' · '+esc(x.vendor)+' · '+esc(x.nilai_sp_label)+'</div><div class="cc-reasons">'+esc((x.reasons||[]).join(' • '))+'</div></div><button class="cc-open" data-journey="'+esc(x.id)+'">Buka Journey</button></article>'}
-    function renderRisks(rows){rows=rows||[];document.getElementById('ccRiskCount').textContent=rows.length+' prioritas';document.getElementById('ccRisks').innerHTML=rows.length?rows.map(riskHtml).join(''):'<div class="cc-empty">Tidak ada risiko penting yang terdeteksi.</div>'}
-    function renderContracts(rows){rows=rows||[];document.getElementById('ccContracts').innerHTML=rows.length?rows.map(function(x){var t=x.days<0?Math.abs(x.days)+' hari terlambat':x.days+' hari lagi';return'<article class="cc-contract-item"><div><div class="cc-item-title">'+esc(x.ppbj_no)+'</div><div class="cc-item-sub">'+esc(x.uraian)+' · '+esc(x.vendor)+'</div></div><div class="cc-deadline '+esc(x.level)+'">'+esc(t)+'<br>'+esc(x.deadline)+'</div></article>'}).join(''):'<div class="cc-empty">Tidak ada kontrak kritis dalam 30 hari.</div>'}
-    function renderTrend(rows){rows=rows||[];var max=Math.max.apply(null,rows.map(function(x){return Number(x.total)||0}).concat([1]));document.getElementById('ccTrend').innerHTML=rows.map(function(x){var h=Math.max(8,Math.round((Number(x.total)||0)/max*130));return'<div class="cc-bar-wrap"><span class="cc-bar-value">'+esc(x.total)+'</span><div class="cc-bar" style="height:'+h+'px"></div><span class="cc-bar-label">'+esc(String(x.month_no).padStart(2,'0')+'/'+x.year_no)+'</span></div>'}).join('')}
-    function loadOverview(force){var btn=document.getElementById('ccRefresh');loading(btn,true);return fetchJson(urls.overview+(force?'?refresh=1':'')).then(function(d){document.getElementById('ccUpdated').textContent=d.generated_at+' WIB';renderStats(d.stats);renderFlow(d.flow);renderRisks(d.risks);renderContracts(d.contracts);renderTrend(d.monthly)}).catch(function(e){showError(e.message)}).finally(function(){loading(btn,false)})}
-    function resultHtml(x){return'<article class="cc-result-item"><div><div class="cc-item-title">'+esc(x.ppbj_no)+' · '+esc(x.uraian)+'</div><div class="cc-item-sub">'+esc(x.portofolio)+' · '+esc(x.buyer)+' · '+esc(x.vendor)+'</div><div class="cc-result-values"><span class="cc-pill">PR '+esc(x.nilai_pr_label)+'</span><span class="cc-pill">SP '+esc(x.nilai_sp_label)+'</span><span class="cc-pill">Progress '+esc(x.progress)+'%</span>'+(x.matched_on?'<span class="cc-pill">Cocok: '+esc(x.matched_on)+'</span>':'')+'</div></div><button class="cc-open" data-journey="'+esc(x.id)+'">Digital Passport</button></article>'}
-    function showResults(title,summary,rows){document.getElementById('ccResultsTitle').textContent=title;document.getElementById('ccResultsSummary').textContent=summary||'';document.getElementById('ccResults').innerHTML=rows&&rows.length?rows.map(resultHtml).join(''):'<div class="cc-empty">Tidak ada data yang cocok.</div>';openModal('ccResultsModal')}
-    function doSearch(){var input=document.getElementById('ccSearchInput'),q=input.value.trim(),btn=document.getElementById('ccSearchButton');if(!q)return input.focus();loading(btn,true);fetchJson(urls.search+'?q='+encodeURIComponent(q)).then(function(d){showResults('Hasil untuk “'+q+'”',d.detected_value_label?'Nilai terdeteksi: '+d.detected_value_label+' · '+d.count+' data ditemukan':d.count+' data ditemukan',d.results)}).catch(function(e){showError(e.message)}).finally(function(){loading(btn,false)})}
-    function doAsk(question){var input=document.getElementById('ccAskInput'),q=(question||input.value).trim(),btn=document.getElementById('ccAskButton');if(!q)return input.focus();input.value=q;loading(btn,true);fetchJson(urls.ask,{method:'POST',headers:{'Accept':'application/json','Content-Type':'application/json','X-CSRF-TOKEN':csrf},body:JSON.stringify({question:q})}).then(function(d){showResults('Jawaban SIMONPR',d.answer,d.results)}).catch(function(e){showError(e.message)}).finally(function(){loading(btn,false)})}
-    function stageHtml(x){return'<div class="cc-stage '+esc(x.state)+'">'+(x.done?'✓ ':'')+esc(x.label)+(x.date_label?'<span class="cc-stage-date">'+esc(x.date_label)+'</span>':'')+'</div>'}
-    function timelineHtml(rows,empty){return rows&&rows.length?rows.map(function(x){return'<div class="cc-timeline-item"><strong>'+esc(x.title)+'</strong><span>'+esc(x.description||x.actor||'')+(x.date?' · '+esc(x.date):'')+(x.reminder?' · Reminder '+esc(x.reminder):'')+'</span></div>'}).join(''):'<div class="cc-empty">'+esc(empty)+'</div>'}
-    function openJourney(id){closeModals();openModal('ccJourneyModal');var host=document.getElementById('ccJourney');host.innerHTML='<div class="cc-empty">Menyusun perjalanan pengadaan…</div>';fetchJson(urls.journey+'/'+encodeURIComponent(id)).then(function(d){var r=d.record;host.innerHTML='<div class="cc-journey-head"><div><span class="cc-eyebrow">DIGITAL PASSPORT PENGADAAN</span><h2>'+esc(r.ppbj_no)+'</h2><p>'+esc(r.uraian)+'</p><div class="cc-result-values"><span class="cc-pill">'+esc(r.registration)+'</span><span class="cc-pill">'+esc(r.vendor)+'</span><span class="cc-pill">'+esc(r.nilai_sp_label)+'</span></div><div style="margin-top:.8rem;display:flex;gap:.5rem;flex-wrap:wrap"><a class="cc-button cc-button-light" href="'+esc(d.tracking_url)+'" target="_blank">Tracking Publik</a><button class="cc-button cc-button-ghost" id="ccArchiveButton">Cek Arsip</button></div></div><img class="cc-qr" src="'+esc(d.qr_url)+'" alt="QR Digital Passport"></div><div class="cc-stage-track">'+(d.stages||[]).map(stageHtml).join('')+'</div><div class="cc-journey-grid"><section><span class="cc-eyebrow">TRACKING REAL</span><div class="cc-timeline">'+timelineHtml(d.real_tracking,'Belum ada tracking real.')+'</div></section><section><span class="cc-eyebrow">AUDIT REPLAY</span><div class="cc-timeline">'+timelineHtml(d.audit,'Belum ada catatan audit.')+'</div></section></div>';var ab=document.getElementById('ccArchiveButton');if(ab)ab.addEventListener('click',function(){loading(ab,true);fetchJson(d.archive_url).then(function(a){var docs=a.documents||[];showResults('Arsip '+r.ppbj_no,(a.has_archive?'Arsip ditemukan':'Belum ada arsip')+' · '+docs.length+' dokumen',docs.map(function(x,i){return{id:r.id,ppbj_no:x.title||x.name||('Dokumen '+(i+1)),uraian:x.description||x.filename||'-',portofolio:'Arsip Digital',buyer:'-',vendor:'-',nilai_pr_label:'-',nilai_sp_label:'-',progress:100}}))}).catch(function(e){showError(e.message)}).finally(function(){loading(ab,false)})})}).catch(function(e){host.innerHTML='<div class="cc-empty">'+esc(e.message)+'</div>'})}
-    document.addEventListener('click',function(e){var j=e.target.closest('[data-journey]');if(j)openJourney(j.getAttribute('data-journey'))});
-    document.getElementById('ccSearchButton').addEventListener('click',doSearch);document.getElementById('ccSearchInput').addEventListener('keydown',function(e){if(e.key==='Enter')doSearch()});document.getElementById('ccAskButton').addEventListener('click',function(){doAsk()});document.getElementById('ccAskInput').addEventListener('keydown',function(e){if(e.key==='Enter')doAsk()});document.querySelectorAll('[data-question]').forEach(function(b){b.addEventListener('click',function(){doAsk(b.dataset.question)})});document.getElementById('ccRefresh').addEventListener('click',function(){loadOverview(true)});document.getElementById('ccFullscreen').addEventListener('click',function(){document.body.classList.toggle('cc-fullscreen');if(document.documentElement.requestFullscreen&&!document.fullscreenElement)document.documentElement.requestFullscreen().catch(function(){});else if(document.fullscreenElement)document.exitFullscreen().catch(function(){})});
-    loadOverview(false);var timer=setInterval(function(){if(!document.hidden)loadOverview(false)},60000);window.addEventListener('beforeunload',function(){clearInterval(timer)});
-})();
+
+    var root = document.getElementById('commandCenter');
+    if (!root) return;
+
+    var csrf = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+    var urls = {
+        overview: root.dataset.overviewUrl,
+        search: root.dataset.searchUrl,
+        ask: root.dataset.askUrl,
+        journey: root.dataset.journeyUrl
+    };
+    var overviewCacheKey = 'simonpr.command-center.overview.v2';
+    var overviewCacheLifetime = 120000;
+    var compactMoney = new Intl.NumberFormat('id-ID', {
+        style: 'currency', currency: 'IDR', notation: 'compact', maximumFractionDigits: 1
+    });
+
+    function esc(value) {
+        return String(value == null ? '' : value).replace(/[&<>"']/g, function (character) {
+            return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' })[character];
+        });
+    }
+
+    function fetchJson(url, options) {
+        var controller = new AbortController();
+        var timer = setTimeout(function () { controller.abort(); }, 12000);
+        var request = Object.assign({}, options || {});
+        request.signal = controller.signal;
+        request.headers = Object.assign({
+            'Accept': 'application/json',
+            'X-CSRF-TOKEN': csrf
+        }, request.headers || {});
+
+        return fetch(url, request)
+            .then(function (response) {
+                return response.json().catch(function () { return {}; }).then(function (data) {
+                    if (!response.ok) throw new Error(data.message || 'Permintaan gagal');
+                    return data;
+                });
+            })
+            .catch(function (error) {
+                if (error.name === 'AbortError') throw new Error('Respons terlalu lama. Silakan coba kembali.');
+                throw error;
+            })
+            .finally(function () { clearTimeout(timer); });
+    }
+
+    function setLoading(button, active) {
+        if (!button) return;
+        button.disabled = active;
+        button.dataset.label = button.dataset.label || button.textContent;
+        button.textContent = active ? 'Memproses…' : button.dataset.label;
+    }
+
+    function showError(message) {
+        if (window.Swal) {
+            window.Swal.fire({ icon: 'error', title: 'Belum berhasil', text: message, timer: 4500 });
+        } else {
+            window.alert(message);
+        }
+    }
+
+    function openModal(id) {
+        var modal = document.getElementById(id);
+        if (!modal) return;
+        modal.classList.add('open');
+        modal.setAttribute('aria-hidden', 'false');
+        document.body.style.overflow = 'hidden';
+    }
+
+    function closeModals() {
+        document.querySelectorAll('.cc-modal.open').forEach(function (modal) {
+            modal.classList.remove('open');
+            modal.setAttribute('aria-hidden', 'true');
+        });
+        document.body.style.overflow = '';
+    }
+
+    function renderStats(stats) {
+        var items = [
+            { label: 'Total Pengadaan', value: stats.total, note: 'Seluruh PR/PPBJ', style: '' },
+            { label: 'Sedang Aktif', value: stats.active, note: 'Proses yang berjalan', style: '' },
+            { label: 'Risiko Tinggi', value: stats.high_risk, note: 'Butuh keputusan cepat', style: 'cc-stat-danger' },
+            { label: 'Kontrak Kritis', value: stats.critical_contracts, note: '≤ 7 hari atau terlambat', style: 'cc-stat-amber' },
+            { label: 'Nilai PR', value: compactMoney.format(stats.total_pr || 0), note: stats.total_pr_label, style: '' },
+            { label: 'Efisiensi', value: compactMoney.format(stats.efficiency || 0), note: stats.efficiency_label, style: stats.efficiency >= 0 ? 'cc-stat-green' : 'cc-stat-danger' }
+        ];
+
+        document.getElementById('ccStats').innerHTML = items.map(function (item) {
+            return '<article class="cc-stat ' + item.style + '" title="' + esc(item.note) + '">' +
+                '<span>' + esc(item.label) + '</span><strong>' + esc(item.value) + '</strong><small>' + esc(item.note) + '</small></article>';
+        }).join('');
+    }
+
+    function renderFlow(rows) {
+        document.getElementById('ccFlow').innerHTML = (rows || []).map(function (row) {
+            return '<div class="cc-flow-step"><strong>' + esc(row.count) + '</strong><span>' + esc(row.label) + '</span></div>';
+        }).join('');
+    }
+
+    function riskHtml(row) {
+        return '<article class="cc-risk-item"><div class="cc-risk-score ' + esc(row.level) + '">' + esc(row.score) + '</div>' +
+            '<div><div class="cc-item-title">' + esc(row.ppbj_no) + ' · ' + esc(row.uraian) + '</div>' +
+            '<div class="cc-item-sub">' + esc(row.buyer) + ' · ' + esc(row.vendor) + ' · ' + esc(row.nilai_sp_label) + '</div>' +
+            '<div class="cc-reasons">' + esc((row.reasons || []).join(' • ')) + '</div></div>' +
+            '<button class="cc-open" data-journey="' + esc(row.id) + '">Lihat Detail</button></article>';
+    }
+
+    function renderRisks(rows) {
+        rows = rows || [];
+        document.getElementById('ccRiskCount').textContent = rows.length + ' prioritas';
+        document.getElementById('ccRisks').innerHTML = rows.length
+            ? rows.map(riskHtml).join('')
+            : '<div class="cc-empty">Tidak ada risiko penting yang terdeteksi.</div>';
+    }
+
+    function renderContracts(rows) {
+        rows = rows || [];
+        document.getElementById('ccContracts').innerHTML = rows.length ? rows.map(function (row) {
+            var condition = row.days < 0 ? Math.abs(row.days) + ' hari terlambat' : row.days + ' hari lagi';
+            return '<article class="cc-contract-item"><div><div class="cc-item-title">' + esc(row.ppbj_no) + '</div>' +
+                '<div class="cc-item-sub">' + esc(row.uraian) + ' · ' + esc(row.vendor) + '</div></div>' +
+                '<div class="cc-deadline ' + esc(row.level) + '">' + esc(condition) + '<br>' + esc(row.deadline) + '</div></article>';
+        }).join('') : '<div class="cc-empty">Tidak ada kontrak kritis dalam 30 hari.</div>';
+    }
+
+    function renderTrend(rows) {
+        rows = rows || [];
+        var maximum = Math.max.apply(null, rows.map(function (row) { return Number(row.total) || 0; }).concat([1]));
+        document.getElementById('ccTrend').innerHTML = rows.map(function (row) {
+            var height = Math.max(6, Math.round((Number(row.total) || 0) / maximum * 112));
+            return '<div class="cc-bar-wrap"><span class="cc-bar-value">' + esc(row.total) + '</span>' +
+                '<div class="cc-bar" style="height:' + height + 'px"></div>' +
+                '<span class="cc-bar-label">' + esc(String(row.month_no).padStart(2, '0') + '/' + row.year_no) + '</span></div>';
+        }).join('');
+    }
+
+    function renderOverview(data) {
+        document.getElementById('ccUpdated').textContent = data.generated_at + ' WIB';
+        renderStats(data.stats);
+        renderFlow(data.flow);
+        renderRisks(data.risks);
+        renderContracts(data.contracts);
+        renderTrend(data.monthly);
+    }
+
+    function readOverviewCache() {
+        try {
+            var cached = JSON.parse(sessionStorage.getItem(overviewCacheKey) || 'null');
+            return cached && Date.now() - cached.savedAt < overviewCacheLifetime ? cached.data : null;
+        } catch (error) {
+            return null;
+        }
+    }
+
+    function writeOverviewCache(data) {
+        try {
+            sessionStorage.setItem(overviewCacheKey, JSON.stringify({ savedAt: Date.now(), data: data }));
+        } catch (error) {
+            // Cache browser bersifat opsional dan tidak boleh mengganggu halaman.
+        }
+    }
+
+    function loadOverview(force) {
+        var refreshButton = document.getElementById('ccRefresh');
+        if (!force) {
+            var cached = readOverviewCache();
+            if (cached) {
+                renderOverview(cached);
+                return Promise.resolve(cached);
+            }
+        }
+
+        setLoading(refreshButton, true);
+        return fetchJson(urls.overview + (force ? '?refresh=1' : ''))
+            .then(function (data) {
+                renderOverview(data);
+                writeOverviewCache(data);
+                return data;
+            })
+            .catch(function (error) { showError(error.message); })
+            .finally(function () { setLoading(refreshButton, false); });
+    }
+
+    function resultHtml(row) {
+        return '<article class="cc-result-item"><div><div class="cc-item-title">' + esc(row.ppbj_no) + ' · ' + esc(row.uraian) + '</div>' +
+            '<div class="cc-item-sub">' + esc(row.portofolio) + ' · ' + esc(row.buyer) + ' · ' + esc(row.vendor) + '</div>' +
+            '<div class="cc-result-values"><span class="cc-pill">PR ' + esc(row.nilai_pr_label) + '</span>' +
+            '<span class="cc-pill">SP ' + esc(row.nilai_sp_label) + '</span><span class="cc-pill">Progress ' + esc(row.progress) + '%</span>' +
+            (row.matched_on ? '<span class="cc-pill">Cocok: ' + esc(row.matched_on) + '</span>' : '') + '</div></div>' +
+            '<button class="cc-open" data-journey="' + esc(row.id) + '">Digital Passport</button></article>';
+    }
+
+    function showResults(title, summary, rows) {
+        document.getElementById('ccResultsTitle').textContent = title;
+        document.getElementById('ccResultsSummary').textContent = summary || '';
+        document.getElementById('ccResults').innerHTML = rows && rows.length
+            ? rows.map(resultHtml).join('')
+            : '<div class="cc-empty">Tidak ada data yang cocok.</div>';
+        openModal('ccResultsModal');
+    }
+
+    function doSearch() {
+        var input = document.getElementById('ccSearchInput');
+        var query = input.value.trim();
+        var button = document.getElementById('ccSearchButton');
+        if (!query) return input.focus();
+        setLoading(button, true);
+        fetchJson(urls.search + '?q=' + encodeURIComponent(query))
+            .then(function (data) {
+                var summary = data.detected_value_label
+                    ? 'Nilai terdeteksi: ' + data.detected_value_label + ' · ' + data.count + ' data ditemukan'
+                    : data.count + ' data ditemukan';
+                showResults('Hasil untuk “' + query + '”', summary, data.results);
+            })
+            .catch(function (error) { showError(error.message); })
+            .finally(function () { setLoading(button, false); });
+    }
+
+    function doAsk(question) {
+        var input = document.getElementById('ccAskInput');
+        var query = (question || input.value).trim();
+        var button = document.getElementById('ccAskButton');
+        if (!query) return input.focus();
+        input.value = query;
+        setLoading(button, true);
+        fetchJson(urls.ask, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ question: query })
+        }).then(function (data) {
+            showResults('Jawaban SIMONPR', data.answer, data.results);
+        }).catch(function (error) {
+            showError(error.message);
+        }).finally(function () {
+            setLoading(button, false);
+        });
+    }
+
+    function stageHtml(stage) {
+        return '<div class="cc-stage ' + esc(stage.state) + '">' + (stage.done ? '✓ ' : '') + esc(stage.label) +
+            (stage.date_label ? '<span class="cc-stage-date">' + esc(stage.date_label) + '</span>' : '') + '</div>';
+    }
+
+    function timelineHtml(rows, emptyMessage) {
+        return rows && rows.length ? rows.map(function (row) {
+            return '<div class="cc-timeline-item"><strong>' + esc(row.title) + '</strong><span>' +
+                esc(row.description || row.actor || '') + (row.date ? ' · ' + esc(row.date) : '') +
+                (row.reminder ? ' · Reminder ' + esc(row.reminder) : '') + '</span></div>';
+        }).join('') : '<div class="cc-empty">' + esc(emptyMessage) + '</div>';
+    }
+
+    function openJourney(id) {
+        closeModals();
+        openModal('ccJourneyModal');
+        var host = document.getElementById('ccJourney');
+        host.innerHTML = '<div class="cc-empty">Menyiapkan digital passport…</div>';
+
+        fetchJson(urls.journey + '/' + encodeURIComponent(id)).then(function (data) {
+            var record = data.record;
+            host.innerHTML = '<div class="cc-journey-head"><div><span class="cc-eyebrow">DIGITAL PASSPORT PENGADAAN</span>' +
+                '<h2>' + esc(record.ppbj_no) + '</h2><p>' + esc(record.uraian) + '</p><div class="cc-result-values">' +
+                '<span class="cc-pill">' + esc(record.registration) + '</span><span class="cc-pill">' + esc(record.vendor) + '</span>' +
+                '<span class="cc-pill">' + esc(record.nilai_sp_label) + '</span></div><div style="margin-top:10px;display:flex;gap:7px;flex-wrap:wrap">' +
+                '<a class="cc-button cc-button-light" href="' + esc(data.tracking_url) + '" target="_blank">Tracking Publik</a>' +
+                '<button class="cc-button cc-button-ghost" id="ccArchiveButton">Cek Arsip</button></div></div>' +
+                '<img class="cc-qr" src="' + esc(data.qr_url) + '" alt="QR Digital Passport"></div>' +
+                '<div class="cc-stage-track">' + (data.stages || []).map(stageHtml).join('') + '</div>' +
+                '<div class="cc-journey-grid"><section><span class="cc-eyebrow">TRACKING REAL</span><div class="cc-timeline">' +
+                timelineHtml(data.real_tracking, 'Belum ada tracking real.') + '</div></section><section><span class="cc-eyebrow">AUDIT REPLAY</span>' +
+                '<div class="cc-timeline">' + timelineHtml(data.audit, 'Belum ada catatan audit.') + '</div></section></div>';
+
+            var archiveButton = document.getElementById('ccArchiveButton');
+            if (archiveButton) archiveButton.addEventListener('click', function () {
+                setLoading(archiveButton, true);
+                fetchJson(data.archive_url).then(function (archive) {
+                    var documents = archive.documents || [];
+                    showResults('Arsip ' + record.ppbj_no,
+                        (archive.has_archive ? 'Arsip ditemukan' : 'Belum ada arsip') + ' · ' + documents.length + ' dokumen',
+                        documents.map(function (document, index) {
+                            return {
+                                id: record.id,
+                                ppbj_no: document.title || document.name || ('Dokumen ' + (index + 1)),
+                                uraian: document.description || document.filename || '-',
+                                portofolio: 'Arsip Digital', buyer: '-', vendor: '-', nilai_pr_label: '-', nilai_sp_label: '-', progress: 100
+                            };
+                        }));
+                }).catch(function (error) {
+                    showError(error.message);
+                }).finally(function () {
+                    setLoading(archiveButton, false);
+                });
+            });
+        }).catch(function (error) {
+            host.innerHTML = '<div class="cc-empty">' + esc(error.message) + '</div>';
+        });
+    }
+
+    document.querySelectorAll('[data-close-modal]').forEach(function (element) { element.addEventListener('click', closeModals); });
+    document.addEventListener('keydown', function (event) { if (event.key === 'Escape') closeModals(); });
+    document.addEventListener('click', function (event) {
+        var journeyButton = event.target.closest('[data-journey]');
+        if (journeyButton) openJourney(journeyButton.getAttribute('data-journey'));
+    });
+    document.getElementById('ccSearchButton').addEventListener('click', doSearch);
+    document.getElementById('ccSearchInput').addEventListener('keydown', function (event) { if (event.key === 'Enter') doSearch(); });
+    document.getElementById('ccAskButton').addEventListener('click', function () { doAsk(); });
+    document.getElementById('ccAskInput').addEventListener('keydown', function (event) { if (event.key === 'Enter') doAsk(); });
+    document.querySelectorAll('[data-question]').forEach(function (button) {
+        button.addEventListener('click', function () { doAsk(button.dataset.question); });
+    });
+    document.getElementById('ccRefresh').addEventListener('click', function () {
+        try { sessionStorage.removeItem(overviewCacheKey); } catch (error) { /* opsional */ }
+        loadOverview(true);
+    });
+    document.getElementById('ccFullscreen').addEventListener('click', function () {
+        document.body.classList.toggle('cc-fullscreen');
+        if (document.documentElement.requestFullscreen && !document.fullscreenElement) {
+            document.documentElement.requestFullscreen().catch(function () {});
+        } else if (document.fullscreenElement) {
+            document.exitFullscreen().catch(function () {});
+        }
+    });
+
+    // Tidak ada polling otomatis. Data dimuat sekali dan dapat diperbarui manual.
+    loadOverview(false);
+}());
