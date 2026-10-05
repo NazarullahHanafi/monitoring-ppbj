@@ -54,6 +54,8 @@ class CommandCenterTest extends TestCase
         $this->assertStringContainsString('sessionStorage', $script);
         $this->assertStringContainsString('notation: \'compact\'', $script);
         $this->assertStringNotContainsString('backdrop-filter', $styles);
+        $this->assertStringContainsString('.dark .cc-modal', $styles);
+        $this->assertStringContainsString('z-index: 99990', $styles);
     }
 
     public function test_search_finds_pr_by_pr_contract_and_linked_sp_values(): void
