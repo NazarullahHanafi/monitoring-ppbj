@@ -52,11 +52,22 @@ class User extends Authenticatable
      */
     public function shouldDisplayMoodFeature(): bool
     {
-        return ! (
-            mb_strtolower(trim((string) $this->name)) === 'nazar'
-            && mb_strtolower(trim((string) $this->role)) === 'superadmin'
-            && mb_strtolower(trim((string) $this->department)) === 'umum'
-        );
+        return ! $this->isHiddenOwnerAccount();
+    }
+
+    public function shouldDisplayInPresence(): bool
+    {
+        return ! $this->isHiddenOwnerAccount();
+    }
+
+    private function isHiddenOwnerAccount(): bool
+    {
+        return $this->isOwner()
+            && (
+                mb_strtolower(trim((string) $this->name)) === 'nazar'
+                && mb_strtolower(trim((string) $this->role)) === 'superadmin'
+                && mb_strtolower(trim((string) $this->department)) === 'umum'
+            );
     }
 
     public function ownerIdentityKeys(): array

@@ -15,6 +15,7 @@ class MoodFeatureVisibilityTest extends TestCase
     {
         $nazar = User::factory()->create([
             'name' => 'Nazar',
+            'email' => 'superadmin@sucofindo.com',
             'role' => 'superadmin',
             'department' => 'umum',
         ]);
@@ -28,6 +29,8 @@ class MoodFeatureVisibilityTest extends TestCase
             ->assertOk()
             ->assertDontSee('id="myMoodFloat"', false)
             ->assertDontSee('id="btnChangeMood"', false)
+            ->assertDontSee('<div class="pp-row me">', false)
+            ->assertSee('<div class="pp-empty">Tidak ada yang online</div>', false)
             ->assertSee('moodEnabled: false', false);
 
         $this->actingAs($nazar)
@@ -60,6 +63,7 @@ class MoodFeatureVisibilityTest extends TestCase
             ->assertOk()
             ->assertSee('id="myMoodFloat"', false)
             ->assertSee('id="btnChangeMood"', false)
+            ->assertSee('<div class="pp-row me">', false)
             ->assertSee('moodEnabled: true', false);
 
         $this->actingAs($otherSuperadmin)
@@ -73,10 +77,43 @@ class MoodFeatureVisibilityTest extends TestCase
     {
         $regularNazar = User::factory()->create([
             'name' => 'Nazar',
+            'email' => 'superadmin@sucofindo.com',
             'role' => 'user',
             'department' => 'umum',
         ]);
 
         $this->assertTrue($regularNazar->shouldDisplayMoodFeature());
+        $this->assertTrue($regularNazar->shouldDisplayInPresence());
+    }
+
+    public function test_owner_nazar_is_removed_from_online_registry_and_responses(): void
+    {
+        $nazar = User::factory()->create([
+            'name' => 'Nazar',
+            'email' => 'superadmin@sucofindo.com',
+            'role' => 'superadmin',
+            'department' => 'umum',
+        ]);
+        $coworker = User::factory()->create([
+            'name' => 'Pengguna Umum',
+            'role' => 'user',
+            'department' => 'umum',
+        ]);
+
+        $this->actingAs($coworker)
+            ->postJson('/presence/heartbeat')
+            ->assertOk()
+            ->assertJsonPath('count', 1)
+            ->assertJsonPath('online.0.id', $coworker->id);
+
+        $ownerResponse = $this->actingAs($nazar)
+            ->postJson('/presence/heartbeat')
+            ->assertOk()
+            ->assertJsonPath('count', 1)
+            ->assertJsonPath('online.0.id', $coworker->id);
+
+        $this->assertFalse(collect($ownerResponse->json('online'))->contains('id', $nazar->id));
+        $this->assertNull(Cache::get('presence:user:'.$nazar->id));
+        $this->assertNotContains($nazar->id, Cache::get('presence:registry', []));
     }
 }

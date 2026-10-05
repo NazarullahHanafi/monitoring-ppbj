@@ -341,19 +341,22 @@
                                 $myColor = $colors[auth()->id() % count($colors)];
                                 $myInitials = strtoupper(mb_substr(auth()->user()->name, 0, 1));
                                 $moodFeatureEnabled = auth()->user()->shouldDisplayMoodFeature();
+                                $displayCurrentUserInPresence = auth()->user()->shouldDisplayInPresence();
                                 if (strpos(auth()->user()->name, ' ') !== false) {
                                     $pp = explode(' ', auth()->user()->name);
                                     $myInitials = strtoupper(mb_substr($pp[0], 0, 1) . mb_substr($pp[1], 0, 1));
                                 }
                             @endphp
                             <div class="avatar-stack hidden sm:flex" id="avatarStack">
-                                <div class="av" style="background:{{ $myColor }}">{{ $myInitials }}</div>
+                                @if($displayCurrentUserInPresence)
+                                    <div class="av" style="background:{{ $myColor }}">{{ $myInitials }}</div>
+                                @endif
                             </div>
                             <div class="online-indicator">
                                 <span class="green-dot"></span>
                                 <span class="hidden sm:inline">Online</span>
                                 <span id="onlineCountLabel"
-                                    class="font-bold text-indigo-600 dark:text-indigo-400">1</span>
+                                    class="font-bold text-indigo-600 dark:text-indigo-400">{{ $displayCurrentUserInPresence ? 1 : 0 }}</span>
                                 @if($moodFeatureEnabled)
                                     <span id="myMoodFloat" class="my-mood-float hidden"></span>
                                 @endif
@@ -361,15 +364,19 @@
                         </button>
                         <div class="presence-panel" id="presencePanel">
                             <div class="pp-header"><span class="green-dot"></span><span class="pp-title">Sedang
-                                    Online</span><span class="pp-count" id="ppCount">1</span></div>
+                                    Online</span><span class="pp-count" id="ppCount">{{ $displayCurrentUserInPresence ? 1 : 0 }}</span></div>
                             <div class="pp-list" id="ppList">
-                                <div class="pp-row me">
-                                    <div class="pp-av" style="background:{{ $myColor }}">{{ $myInitials }}</div>
-                                    <div class="pp-info">
-                                        <div class="pp-name">{{ auth()->user()->name }}</div>
-                                        <div class="pp-dept">{{ auth()->user()->department }}</div>
-                                    </div><span class="pp-me-tag">Kamu</span>
-                                </div>
+                                @if($displayCurrentUserInPresence)
+                                    <div class="pp-row me">
+                                        <div class="pp-av" style="background:{{ $myColor }}">{{ $myInitials }}</div>
+                                        <div class="pp-info">
+                                            <div class="pp-name">{{ auth()->user()->name }}</div>
+                                            <div class="pp-dept">{{ auth()->user()->department }}</div>
+                                        </div><span class="pp-me-tag">Kamu</span>
+                                    </div>
+                                @else
+                                    <div class="pp-empty">Tidak ada yang online</div>
+                                @endif
                             </div>
                             @if($moodFeatureEnabled)
                                 <div class="pp-footer"><button type="button" class="pp-footer-btn" id="btnChangeMood">✏️

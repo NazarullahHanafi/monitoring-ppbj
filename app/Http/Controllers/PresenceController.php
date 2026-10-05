@@ -35,20 +35,25 @@ class PresenceController extends Controller
             $mood = null;
         }
 
-        Cache::put(
-            self::CACHE_PREFIX . $user->id,
-            [
-                'id' => $user->id,
-                'name' => $user->name,
-                'department' => $user->department ?? '',
-                'initials' => $this->initials($user->name),
-                'color' => $this->colorFor($user->id),
-                'mood' => $mood,
-            ],
-            self::PRESENCE_TTL
-        );
+        $displayInPresence = $user->shouldDisplayInPresence();
+        if ($displayInPresence) {
+            Cache::put(
+                self::CACHE_PREFIX . $user->id,
+                [
+                    'id' => $user->id,
+                    'name' => $user->name,
+                    'department' => $user->department ?? '',
+                    'initials' => $this->initials($user->name),
+                    'color' => $this->colorFor($user->id),
+                    'mood' => $mood,
+                ],
+                self::PRESENCE_TTL
+            );
+        } else {
+            Cache::forget(self::CACHE_PREFIX . $user->id);
+        }
 
-        $registry = $this->registerOnlineUser((int) $user->id);
+        $registry = $this->registerOnlineUser((int) $user->id, $displayInPresence);
 
         $online = [];
         foreach ($registry as $uid) {
@@ -178,16 +183,20 @@ class PresenceController extends Controller
      *
      * @return array<int, int>
      */
-    private function registerOnlineUser(int $userId): array
+    private function registerOnlineUser(int $userId, bool $shouldRegister = true): array
     {
         try {
-            return Cache::lock(self::REGISTRY_KEY.':lock', 5)->block(2, function () use ($userId) {
+            return Cache::lock(self::REGISTRY_KEY.':lock', 5)->block(2, function () use ($userId, $shouldRegister) {
                 $registry = array_map('intval', (array) Cache::get(self::REGISTRY_KEY, []));
-                $registry[] = $userId;
+                if ($shouldRegister) {
+                    $registry[] = $userId;
+                } else {
+                    $registry = array_filter($registry, fn (int $id) => $id !== $userId);
+                }
 
                 $registry = array_values(array_filter(
                     array_unique($registry),
-                    fn (int $id) => $id === $userId || Cache::has(self::CACHE_PREFIX.$id)
+                    fn (int $id) => ($shouldRegister && $id === $userId) || Cache::has(self::CACHE_PREFIX.$id)
                 ));
 
                 Cache::put(self::REGISTRY_KEY, $registry, self::REGISTRY_TTL);
@@ -197,7 +206,11 @@ class PresenceController extends Controller
         } catch (\Throwable) {
             // Heartbeat tidak boleh gagal hanya karena lock registry sedang sibuk.
             $registry = array_map('intval', (array) Cache::get(self::REGISTRY_KEY, []));
-            $registry[] = $userId;
+            if ($shouldRegister) {
+                $registry[] = $userId;
+            } else {
+                $registry = array_filter($registry, fn (int $id) => $id !== $userId);
+            }
 
             return array_values(array_unique($registry));
         }
