@@ -2,20 +2,23 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Ppbj;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class DashboardController extends Controller
 {
-    private const CACHE_STATS      = 300;   // 5 menit
-    private const CACHE_CHARTS     = 600;   // 10 menit
-    private const CACHE_TOP_DATA   = 1800;  // 30 menit
+    private const CACHE_STATS = 300;   // 5 menit
+
+    private const CACHE_CHARTS = 600;   // 10 menit
+
+    private const CACHE_TOP_DATA = 1800;  // 30 menit
+
     private const CACHE_ACTIVITIES = 60;    // 1 menit
-    private const CACHE_WORKLOAD   = 60;    // 1 menit — pendek karena filter ad-hoc
+
+    private const CACHE_WORKLOAD = 60;    // 1 menit — pendek karena filter ad-hoc
 
     public function index()
     {
@@ -34,43 +37,43 @@ class DashboardController extends Controller
             'stats' => Cache::remember(
                 "dashboard_stats_{$cacheVersion}",
                 self::CACHE_STATS,
-                fn() => $this->getStats()
+                fn () => $this->getStats()
             ),
             'slaDistribution' => Cache::remember(
                 "dashboard_sla_{$cacheVersion}",
                 self::CACHE_CHARTS,
-                fn() => $this->getSlaDistribution()
+                fn () => $this->getSlaDistribution()
             ),
             'topBuyers' => Cache::remember(
                 "dashboard_top_buyers_{$cacheVersion}",
                 self::CACHE_TOP_DATA,
-                fn() => $this->getTopBuyers()
+                fn () => $this->getTopBuyers()
             ),
             'topPortofolios' => Cache::remember(
                 "dashboard_top_portfolios_{$cacheVersion}",
                 self::CACHE_TOP_DATA,
-                fn() => $this->getTopPortofolios()
+                fn () => $this->getTopPortofolios()
             ),
             'topPenyedias' => Cache::remember(
                 "dashboard_top_penyedias_{$cacheVersion}",
                 self::CACHE_TOP_DATA,
-                fn() => $this->getTopPenyedia()
+                fn () => $this->getTopPenyedia()
             ),
             'recentActivities' => Cache::remember(
                 "dashboard_recent_activities_{$cacheVersion}",
                 self::CACHE_ACTIVITIES,
-                fn() => $this->getRecentActivities()
+                fn () => $this->getRecentActivities()
             ),
             'monthlyDistribution' => Cache::remember(
                 "dashboard_monthly_{$cacheVersion}",
                 self::CACHE_CHARTS,
-                fn() => $this->getMonthlyDistribution()
+                fn () => $this->getMonthlyDistribution()
             ),
             // ── Key dinamis, TTL pendek ──
             'buyerWorkload' => Cache::remember(
                 $workloadCacheKey,
                 self::CACHE_WORKLOAD,
-                fn() => $this->getBuyerWorkload()
+                fn () => $this->getBuyerWorkload()
             ),
         ];
 
@@ -86,13 +89,13 @@ class DashboardController extends Controller
     {
         try {
             $registry = Cache::get('dashboard_buyer_workload_keys', []);
-            if (!in_array($key, $registry)) {
+            if (! in_array($key, $registry)) {
                 $registry[] = $key;
                 // Simpan registry selama 24 jam
                 Cache::put('dashboard_buyer_workload_keys', $registry, 86400);
             }
         } catch (\Exception $e) {
-            Log::warning('registerWorkloadCacheKey failed: ' . $e->getMessage());
+            Log::warning('registerWorkloadCacheKey failed: '.$e->getMessage());
         }
     }
 
@@ -151,19 +154,20 @@ class DashboardController extends Controller
                 ->first();
 
             return [
-                'total'        => (int)   ($stats->total        ?? 0),
-                'active'       => (int)   ($stats->active       ?? 0),
-                'cancelled'    => (int)   ($stats->cancelled    ?? 0),
-                'lengkap'      => (int)   ($stats->lengkap      ?? 0),
-                'on_track'     => (int)   ($stats->on_track     ?? 0),
-                'warning'      => (int)   ($stats->warning      ?? 0),
-                'overdue'      => (int)   ($stats->overdue      ?? 0),
+                'total' => (int) ($stats->total ?? 0),
+                'active' => (int) ($stats->active ?? 0),
+                'cancelled' => (int) ($stats->cancelled ?? 0),
+                'lengkap' => (int) ($stats->lengkap ?? 0),
+                'on_track' => (int) ($stats->on_track ?? 0),
+                'warning' => (int) ($stats->warning ?? 0),
+                'overdue' => (int) ($stats->overdue ?? 0),
                 'avg_progress' => (float) ($stats->avg_progress ?? 0),
-                'total_value'  => (float) ($stats->total_value  ?? 0),
+                'total_value' => (float) ($stats->total_value ?? 0),
             ];
 
         } catch (\Exception $e) {
-            Log::error('Dashboard getStats error: ' . $e->getMessage());
+            Log::error('Dashboard getStats error: '.$e->getMessage());
+
             return $this->getEmptyStats();
         }
     }
@@ -175,29 +179,29 @@ class DashboardController extends Controller
     {
         try {
             // ── Baca parameter filter dari request ──────────────────
-            $filterMode  = request('bw_filter', 'all');
-            $bulan       = (int) request('bw_bulan', now()->month);
-            $tahun       = (int) request('bw_tahun', now()->year);
-            $tglDari     = request('bw_tgl_dari');
-            $tglSampai   = request('bw_tgl_sampai');
+            $filterMode = request('bw_filter', 'all');
+            $bulan = (int) request('bw_bulan', now()->month);
+            $tahun = (int) request('bw_tahun', now()->year);
+            $tglDari = request('bw_tgl_dari');
+            $tglSampai = request('bw_tgl_sampai');
 
             // ── Tentukan range tanggal berdasarkan mode ─────────────
             [$dateFrom, $dateTo] = match ($filterMode) {
-                'today'  => [now()->copy()->startOfDay(),   now()->copy()->endOfDay()],
-                'week'   => [now()->copy()->startOfWeek(),  now()->copy()->endOfWeek()],
-                'month'  => [
+                'today' => [now()->copy()->startOfDay(),   now()->copy()->endOfDay()],
+                'week' => [now()->copy()->startOfWeek(),  now()->copy()->endOfWeek()],
+                'month' => [
                     Carbon::create($tahun, $bulan, 1)->startOfMonth(),
                     Carbon::create($tahun, $bulan, 1)->endOfMonth(),
                 ],
-                'year'   => [
-                    Carbon::create($tahun, 1,  1)->startOfYear(),
+                'year' => [
+                    Carbon::create($tahun, 1, 1)->startOfYear(),
                     Carbon::create($tahun, 12, 31)->endOfYear(),
                 ],
                 'custom' => [
-                    $tglDari   ? Carbon::parse($tglDari)->startOfDay()   : null,
-                    $tglSampai ? Carbon::parse($tglSampai)->endOfDay()   : null,
+                    $tglDari ? Carbon::parse($tglDari)->startOfDay() : null,
+                    $tglSampai ? Carbon::parse($tglSampai)->endOfDay() : null,
                 ],
-                default  => [null, null],
+                default => [null, null],
             };
 
             // ── Query utama ─────────────────────────────────────────
@@ -268,7 +272,7 @@ class DashboardController extends Controller
                 $query->where('tgl_ppbj', '<=', $dateTo->format('Y-m-d H:i:s'));
             }
 
-            $rows     = $query
+            $rows = $query
                 ->groupBy('buyer')
                 ->orderByRaw('overdue DESC, warning DESC, total_aktif DESC')
                 ->get();
@@ -277,41 +281,42 @@ class DashboardController extends Controller
 
             return [
                 'buyers' => $rows->map(function ($row) use ($maxAktif) {
-                    $totalAktif     = (int)   $row->total_aktif;
-                    $totalNilai     = (float) ($row->total_nilai     ?? 0);
+                    $totalAktif = (int) $row->total_aktif;
+                    $totalNilai = (float) ($row->total_nilai ?? 0);
                     $totalRealisasi = (float) ($row->total_realisasi ?? 0);
-                    $efisiensi      = $totalNilai > 0 ? $totalNilai - $totalRealisasi : 0;
-                    $efisiensiPct   = $totalNilai > 0 ? round(($efisiensi / $totalNilai) * 100, 1) : 0;
+                    $efisiensi = $totalNilai > 0 ? $totalNilai - $totalRealisasi : 0;
+                    $efisiensiPct = $totalNilai > 0 ? round(($efisiensi / $totalNilai) * 100, 1) : 0;
 
                     $riskLevel = match (true) {
                         (int) $row->overdue > 0 => 'high',
                         (int) $row->warning > 0 => 'medium',
-                        default                 => 'low',
+                        default => 'low',
                     };
 
                     return [
-                        'buyer'           => $row->buyer,
-                        'total_aktif'     => $totalAktif,
-                        'on_track'        => (int)   $row->on_track,
-                        'warning'         => (int)   $row->warning,
-                        'overdue'         => (int)   $row->overdue,
-                        'lengkap'         => (int)   $row->lengkap,
-                        'avg_progress'    => (float) ($row->avg_progress ?? 0),
-                        'total_nilai'     => $totalNilai,
+                        'buyer' => $row->buyer,
+                        'total_aktif' => $totalAktif,
+                        'on_track' => (int) $row->on_track,
+                        'warning' => (int) $row->warning,
+                        'overdue' => (int) $row->overdue,
+                        'lengkap' => (int) $row->lengkap,
+                        'avg_progress' => (float) ($row->avg_progress ?? 0),
+                        'total_nilai' => $totalNilai,
                         'total_realisasi' => $totalRealisasi,
-                        'efisiensi'       => $efisiensi,
-                        'efisiensi_pct'   => $efisiensiPct,
-                        'bar_pct'         => $maxAktif > 0 ? round(($totalAktif / $maxAktif) * 100) : 0,
-                        'risk_level'      => $riskLevel,
+                        'efisiensi' => $efisiensi,
+                        'efisiensi_pct' => $efisiensiPct,
+                        'bar_pct' => $maxAktif > 0 ? round(($totalAktif / $maxAktif) * 100) : 0,
+                        'risk_level' => $riskLevel,
                     ];
                 })->values()->toArray(),
-                'max_aktif'    => (int) $maxAktif,
+                'max_aktif' => (int) $maxAktif,
                 'total_buyers' => $rows->count(),
-                'filter_mode'  => $filterMode,
+                'filter_mode' => $filterMode,
             ];
 
         } catch (\Exception $e) {
-            Log::error('Dashboard getBuyerWorkload error: ' . $e->getMessage());
+            Log::error('Dashboard getBuyerWorkload error: '.$e->getMessage());
+
             return ['buyers' => [], 'max_aktif' => 0, 'total_buyers' => 0, 'filter_mode' => 'all'];
         }
     }
@@ -360,10 +365,10 @@ class DashboardController extends Controller
             return [
                 'labels' => ['ON TRACK', 'WARNING', 'OVERDUE', 'LENGKAP', 'CANCELLED'],
                 'values' => [
-                    (int) ($stats->on_track  ?? 0),
-                    (int) ($stats->warning   ?? 0),
-                    (int) ($stats->overdue   ?? 0),
-                    (int) ($stats->lengkap   ?? 0),
+                    (int) ($stats->on_track ?? 0),
+                    (int) ($stats->warning ?? 0),
+                    (int) ($stats->overdue ?? 0),
+                    (int) ($stats->lengkap ?? 0),
                     (int) ($stats->cancelled ?? 0),
                 ],
                 'colors' => [
@@ -376,7 +381,8 @@ class DashboardController extends Controller
             ];
 
         } catch (\Exception $e) {
-            Log::error('Dashboard getSlaDistribution error: ' . $e->getMessage());
+            Log::error('Dashboard getSlaDistribution error: '.$e->getMessage());
+
             return ['labels' => [], 'values' => [], 'colors' => []];
         }
     }
@@ -391,15 +397,16 @@ class DashboardController extends Controller
                 ->select('buyer', DB::raw('COUNT(*) as total'))
                 ->whereNotNull('buyer')
                 ->where('buyer', '!=', '')
-                ->where(fn($q) => $q->where('status', '!=', 'CANCELLED')->orWhereNull('status'))
+                ->where(fn ($q) => $q->where('status', '!=', 'CANCELLED')->orWhereNull('status'))
                 ->groupBy('buyer')
                 ->orderByDesc('total')
                 ->limit(5)
                 ->get()
-                ->map(fn($i) => (object) ['buyer' => $i->buyer, 'total' => (int) $i->total]);
+                ->map(fn ($i) => (object) ['buyer' => $i->buyer, 'total' => (int) $i->total]);
 
         } catch (\Exception $e) {
-            Log::error('Dashboard getTopBuyers error: ' . $e->getMessage());
+            Log::error('Dashboard getTopBuyers error: '.$e->getMessage());
+
             return collect();
         }
     }
@@ -414,15 +421,16 @@ class DashboardController extends Controller
                 ->select('portofolio', DB::raw('COUNT(*) as total'))
                 ->whereNotNull('portofolio')
                 ->where('portofolio', '!=', '')
-                ->where(fn($q) => $q->where('status', '!=', 'CANCELLED')->orWhereNull('status'))
+                ->where(fn ($q) => $q->where('status', '!=', 'CANCELLED')->orWhereNull('status'))
                 ->groupBy('portofolio')
                 ->orderByDesc('total')
                 ->limit(5)
                 ->get()
-                ->map(fn($i) => (object) ['portofolio' => $i->portofolio, 'total' => (int) $i->total]);
+                ->map(fn ($i) => (object) ['portofolio' => $i->portofolio, 'total' => (int) $i->total]);
 
         } catch (\Exception $e) {
-            Log::error('Dashboard getTopPortofolios error: ' . $e->getMessage());
+            Log::error('Dashboard getTopPortofolios error: '.$e->getMessage());
+
             return collect();
         }
     }
@@ -437,15 +445,16 @@ class DashboardController extends Controller
                 ->select('penyedia_eksternal', DB::raw('COUNT(*) as total'))
                 ->whereNotNull('penyedia_eksternal')
                 ->where('penyedia_eksternal', '!=', '')
-                ->where(fn($q) => $q->where('status', '!=', 'CANCELLED')->orWhereNull('status'))
+                ->where(fn ($q) => $q->where('status', '!=', 'CANCELLED')->orWhereNull('status'))
                 ->groupBy('penyedia_eksternal')
                 ->orderByDesc('total')
                 ->limit(5)
                 ->get()
-                ->map(fn($i) => (object) ['penyedia_eksternal' => $i->penyedia_eksternal, 'total' => (int) $i->total]);
+                ->map(fn ($i) => (object) ['penyedia_eksternal' => $i->penyedia_eksternal, 'total' => (int) $i->total]);
 
         } catch (\Exception $e) {
-            Log::error('Dashboard getTopPenyedia error: ' . $e->getMessage());
+            Log::error('Dashboard getTopPenyedia error: '.$e->getMessage());
+
             return collect();
         }
     }
@@ -467,30 +476,31 @@ class DashboardController extends Controller
                 ->get()
                 ->map(function ($item) {
                     $isCancelled = strtoupper($item->status ?? 'ACTIVE') === 'CANCELLED';
-                    $isLengkap   = !$isCancelled
+                    $isLengkap = ! $isCancelled
                         && (int) $item->progres === 100
-                        && !empty($item->no_invoice);
+                        && ! empty($item->no_invoice);
 
                     $displayStatus = $isCancelled ? 'CANCELLED'
                         : ($isLengkap ? 'LENGKAP'
                             : ($item->status_sla ?? 'ON TRACK'));
 
                     return (object) [
-                        'id'         => $item->id,
-                        'ppbj_no'    => $item->ppbj_no,
-                        'uraian'     => $item->uraian,
+                        'id' => $item->id,
+                        'ppbj_no' => $item->ppbj_no,
+                        'uraian' => $item->uraian,
                         'status_sla' => $displayStatus,
-                        'status'     => $item->status ?? 'ACTIVE',
-                        'progres'    => (int) $item->progres,
+                        'status' => $item->status ?? 'ACTIVE',
+                        'progres' => (int) $item->progres,
                         'no_invoice' => $item->no_invoice,
-                        'buyer'      => $item->buyer,
+                        'buyer' => $item->buyer,
                         'portofolio' => $item->portofolio,
                         'updated_at' => $item->updated_at,
                     ];
                 });
 
         } catch (\Exception $e) {
-            Log::error('Dashboard getRecentActivities error: ' . $e->getMessage());
+            Log::error('Dashboard getRecentActivities error: '.$e->getMessage());
+
             return collect();
         }
     }
@@ -506,7 +516,7 @@ class DashboardController extends Controller
             $data = DB::table('ppbj')
                 ->selectRaw("DATE_FORMAT(created_at, '%Y-%m') as month, COUNT(*) as count")
                 ->where('created_at', '>=', $sixMonthsAgo)
-                ->where(fn($q) => $q->where('status', '!=', 'CANCELLED')->orWhereNull('status'))
+                ->where(fn ($q) => $q->where('status', '!=', 'CANCELLED')->orWhereNull('status'))
                 ->groupBy('month')
                 ->orderBy('month')
                 ->get()
@@ -516,16 +526,17 @@ class DashboardController extends Controller
             $counts = [];
 
             for ($i = 5; $i >= 0; $i--) {
-                $date        = now()->subMonths($i);
-                $monthKey    = $date->format('Y-m');
-                $months[]    = $date->locale('id')->translatedFormat('M Y');
-                $counts[]    = (int) ($data->get($monthKey)->count ?? 0);
+                $date = now()->subMonths($i);
+                $monthKey = $date->format('Y-m');
+                $months[] = $date->locale('id')->translatedFormat('M Y');
+                $counts[] = (int) ($data->get($monthKey)->count ?? 0);
             }
 
             return ['labels' => $months, 'values' => $counts];
 
         } catch (\Exception $e) {
-            Log::error('Dashboard getMonthlyDistribution error: ' . $e->getMessage());
+            Log::error('Dashboard getMonthlyDistribution error: '.$e->getMessage());
+
             return ['labels' => [], 'values' => []];
         }
     }
@@ -535,6 +546,8 @@ class DashboardController extends Controller
     // ===================================================
     public static function clearCache(): void
     {
+        CommandCenterController::clearCache();
+
         $cacheVersion = config('app.cache_version', 'v1');
 
         // ── Static keys ────────────────────────────────────────
@@ -570,7 +583,7 @@ class DashboardController extends Controller
             }
             Cache::forget('dashboard_buyer_workload_keys');
         } catch (\Exception $e) {
-            Log::warning('clearCache workload registry failed: ' . $e->getMessage());
+            Log::warning('clearCache workload registry failed: '.$e->getMessage());
         }
 
         Log::info('Dashboard & master cache cleared');
@@ -584,6 +597,7 @@ class DashboardController extends Controller
         $this->ensureSuperadminUmum($request);
 
         self::clearCache();
+
         return response()->json(['message' => 'Cache berhasil di-refresh']);
     }
 
@@ -614,14 +628,14 @@ class DashboardController extends Controller
         $type = $request->get('type', 'stats');
 
         $data = match ($type) {
-            'stats'      => $this->getStats(),
-            'sla'        => $this->getSlaDistribution(),
-            'buyers'     => $this->getTopBuyers(),
+            'stats' => $this->getStats(),
+            'sla' => $this->getSlaDistribution(),
+            'buyers' => $this->getTopBuyers(),
             'portfolios' => $this->getTopPortofolios(),
-            'penyedias'  => $this->getTopPenyedia(),
+            'penyedias' => $this->getTopPenyedia(),
             'activities' => $this->getRecentActivities(),
-            'monthly'    => $this->getMonthlyDistribution(),
-            default      => ['error' => 'Invalid type'],
+            'monthly' => $this->getMonthlyDistribution(),
+            default => ['error' => 'Invalid type'],
         };
 
         return response()->json($data);
@@ -633,15 +647,15 @@ class DashboardController extends Controller
     private function getEmptyStats(): array
     {
         return [
-            'total'        => 0,
-            'active'       => 0,
-            'cancelled'    => 0,
-            'lengkap'      => 0,
-            'on_track'     => 0,
-            'warning'      => 0,
-            'overdue'      => 0,
+            'total' => 0,
+            'active' => 0,
+            'cancelled' => 0,
+            'lengkap' => 0,
+            'on_track' => 0,
+            'warning' => 0,
+            'overdue' => 0,
             'avg_progress' => 0,
-            'total_value'  => 0,
+            'total_value' => 0,
         ];
     }
 }

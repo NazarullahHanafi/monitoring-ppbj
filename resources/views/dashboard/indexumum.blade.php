@@ -18,6 +18,10 @@
                 </div>
             </div>
             <div class="flex items-center gap-2">
+                <a href="{{ route('command-center.index') }}"
+                    class="hidden sm:inline-flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-semibold rounded-xl shadow-lg shadow-indigo-500/20 transition-all duration-200 hover:-translate-y-0.5">
+                    <span>✦ Command Center 360°</span>
+                </a>
                 <button onclick="refreshDashboard()"
                     class="hidden sm:inline-flex items-center gap-2 px-3 py-2.5 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 font-semibold rounded-xl shadow-sm transition-all duration-200 active:scale-95 text-sm border border-gray-200 dark:border-gray-600">
                     <span id="refreshIcon">🔄</span>

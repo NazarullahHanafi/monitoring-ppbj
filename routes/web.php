@@ -5,6 +5,7 @@ use App\Http\Controllers\ActivityBroadcastController;
 use App\Http\Controllers\ArchiveAttachmentController;
 use App\Http\Controllers\ChatController;
 use App\Http\Controllers\ContactMessageController;
+use App\Http\Controllers\CommandCenterController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DocumentPreviewController;
 use App\Http\Controllers\LandingController;
@@ -200,6 +201,17 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
         Route::post('/dashboard/refresh-cache', [DashboardController::class, 'refreshCache'])
             ->middleware('throttle:5,1')
             ->name('dashboard.refresh');
+
+        Route::prefix('command-center')->name('command-center.')->group(function () {
+            Route::get('/', [CommandCenterController::class, 'index'])->name('index');
+            Route::get('/overview', [CommandCenterController::class, 'overview'])->middleware('throttle:60,1')->name('overview');
+            Route::get('/search', [CommandCenterController::class, 'search'])->middleware('throttle:60,1')->name('search');
+            Route::post('/ask', [CommandCenterController::class, 'ask'])->middleware('throttle:30,1')->name('ask');
+            Route::get('/journey/{ppbj}', [CommandCenterController::class, 'journey'])->middleware('throttle:60,1')->name('journey');
+            Route::get('/passport/{ppbj}/qr', [CommandCenterController::class, 'passportQr'])->middleware('throttle:60,1')->name('passport.qr');
+            Route::get('/meeting/pdf', [CommandCenterController::class, 'meetingPdf'])->middleware('throttle:10,1')->name('meeting.pdf');
+            Route::get('/meeting/excel', [CommandCenterController::class, 'meetingExcel'])->middleware('throttle:10,1')->name('meeting.excel');
+        });
 
         Route::post('/master/{type}', [MasterDataController::class, 'addMaster'])->middleware('throttle:20,1');
         Route::get('/master/{type}', [MasterDataController::class, 'index']);
