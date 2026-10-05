@@ -281,7 +281,7 @@ class CommandCenterController extends Controller
             ->orderByRaw('CASE WHEN promised_date IS NULL THEN 1 ELSE 0 END')
             ->orderBy('promised_date')
             ->orderByDesc('updated_at')
-            ->limit(160)
+            ->limit(250)
             ->get();
 
         $risks = $candidates->map(fn (Ppbj $row) => $this->riskFor($row))
