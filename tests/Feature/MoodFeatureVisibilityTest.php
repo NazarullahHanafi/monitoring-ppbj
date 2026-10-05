@@ -45,6 +45,10 @@ class MoodFeatureVisibilityTest extends TestCase
             ->assertJsonPath('mood', null)
             ->assertJsonPath('disabled', true);
 
+        $this->actingAs($nazar)
+            ->getJson('/presence/mood')
+            ->assertNoContent();
+
         $this->assertNull(Cache::get('presence:mood:'.$nazar->id));
     }
 

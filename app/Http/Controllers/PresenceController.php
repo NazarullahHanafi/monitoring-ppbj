@@ -124,10 +124,9 @@ class PresenceController extends Controller
         if (! $user->shouldDisplayMoodFeature()) {
             $this->clearMoodFor($user);
 
-            return response()->json([
-                'mood' => null,
-                'disabled' => true,
-            ]);
+            // 204 juga menghentikan app-shell versi lama agar tidak membuka
+            // popup wajib mood dari respons kosong.
+            return response()->noContent();
         }
 
         $mood = Cache::get(self::MOOD_PREFIX . $user->id);
