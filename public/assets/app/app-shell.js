@@ -11,7 +11,7 @@
             var b2 = document.getElementById('btnOpenMobile'); if (b2) b2.addEventListener('click', oSM);
             var b3 = document.getElementById('btnCloseMobile'); if (b3) b3.addEventListener('click', cSM);
             var b4 = document.getElementById('overlayCloseMobile'); if (b4) b4.addEventListener('click', cSM);
-            document.addEventListener('keydown', function (e) { if (e.key === 'Escape') { cSM(); cPP(); if (window._chatOpen) { if (window._chatHandleEscape) window._chatHandleEscape(); else window._chatToggle() } hideCtx() } });
+            document.addEventListener('keydown', function (e) { if (e.key === 'Escape') { cSM(); if (typeof cPP === 'function') cPP(); if (window._chatOpen) { if (window._chatHandleEscape) window._chatHandleEscape(); else window._chatToggle() } if (typeof window._chatHideContext === 'function') window._chatHideContext() } });
         })();
 
         /* ═══ THEME ═══ */
@@ -856,6 +856,7 @@
 
             function showCtx(x, y, data) { ctxMsgData = data; ctxMenu.style.display = 'block'; var r = ctxMenu.getBoundingClientRect(); if (x + r.width > window.innerWidth - 8) x = window.innerWidth - r.width - 8; if (y + r.height > window.innerHeight - 8) y -= r.height + 8; if (x < 8) x = 8; if (y < 8) y = 8; ctxMenu.style.left = x + 'px'; ctxMenu.style.top = y + 'px'; var cm = document.getElementById('ctxMention'); if (cm) cm.style.display = data.isMe ? 'none' : 'flex'; var ce = document.getElementById('ctxEdit'); if (ce) ce.style.display = data.isMe && data.canEdit ? 'flex' : 'none'; var cd = document.getElementById('ctxDelete'); if (cd) cd.style.display = data.isMe && data.canDelete ? 'flex' : 'none' }
             function hideCtx() { ctxMenu.style.display = 'none'; ctxMsgData = null }
+            window._chatHideContext = hideCtx;
             function copyChatText(text) {
                 text = (text || '').trim();
                 if (!text) { toast('Tidak ada teks untuk disalin', 'warning'); return }

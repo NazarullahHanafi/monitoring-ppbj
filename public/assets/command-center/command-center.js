@@ -315,14 +315,35 @@
         try { sessionStorage.removeItem(overviewCacheKey); } catch (error) { /* opsional */ }
         loadOverview(true);
     });
-    document.getElementById('ccFullscreen').addEventListener('click', function () {
-        document.body.classList.toggle('cc-fullscreen');
-        if (document.documentElement.requestFullscreen && !document.fullscreenElement) {
-            document.documentElement.requestFullscreen().catch(function () {});
-        } else if (document.fullscreenElement) {
-            document.exitFullscreen().catch(function () {});
+    var fullscreenButton = document.getElementById('ccFullscreen');
+
+    function syncFullscreenUi(active) {
+        document.body.classList.toggle('cc-fullscreen', active);
+        fullscreenButton.setAttribute('aria-pressed', active ? 'true' : 'false');
+        fullscreenButton.textContent = active ? '↙ Keluar Layar Penuh' : '⛶ Layar Penuh';
+    }
+
+    fullscreenButton.addEventListener('click', function () {
+        if (document.fullscreenElement) {
+            document.exitFullscreen().catch(function () { syncFullscreenUi(false); });
+            return;
         }
+
+        if (document.documentElement.requestFullscreen) {
+            document.documentElement.requestFullscreen().catch(function () { syncFullscreenUi(false); });
+            return;
+        }
+
+        syncFullscreenUi(!document.body.classList.contains('cc-fullscreen'));
     });
+
+    document.addEventListener('fullscreenchange', function () {
+        syncFullscreenUi(Boolean(document.fullscreenElement));
+    });
+    window.addEventListener('pageshow', function () {
+        syncFullscreenUi(Boolean(document.fullscreenElement));
+    });
+    syncFullscreenUi(Boolean(document.fullscreenElement));
 
     // Tidak ada polling otomatis. Data dimuat sekali dan dapat diperbarui manual.
     loadOverview(false);

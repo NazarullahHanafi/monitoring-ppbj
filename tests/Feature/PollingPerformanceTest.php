@@ -34,6 +34,8 @@ class PollingPerformanceTest extends TestCase
         $this->assertStringContainsString("filemtime(public_path('assets/app/app-shell.js')) }}\" defer", $layout);
         $this->assertStringContainsString('startTimer = setTimeout(launch, 2500)', $appShell);
         $this->assertStringContainsString('mentionStartTimer = setTimeout(launch, 3600)', $appShell);
+        $this->assertStringContainsString("typeof window._chatHideContext === 'function'", $appShell);
+        $this->assertStringNotContainsString(' } hideCtx() }', $appShell);
         $this->assertStringContainsString('type="text/plain" id="chatbot-runtime-source"', $chatbot);
         $this->assertStringContainsString('}, 4200);', $chatbot);
         $this->assertStringNotContainsString('https://code.jquery.com', $layout);

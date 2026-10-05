@@ -56,6 +56,9 @@ class CommandCenterTest extends TestCase
         $this->assertStringNotContainsString('backdrop-filter', $styles);
         $this->assertStringContainsString('.dark .cc-modal', $styles);
         $this->assertStringContainsString('z-index: 99990', $styles);
+        $this->assertStringContainsString("document.addEventListener('fullscreenchange'", $script);
+        $this->assertStringContainsString("margin-left: 0 !important", $styles);
+        $this->assertStringContainsString('content-visibility: auto', $styles);
     }
 
     public function test_search_finds_pr_by_pr_contract_and_linked_sp_values(): void
