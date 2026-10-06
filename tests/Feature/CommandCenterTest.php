@@ -113,6 +113,10 @@ class CommandCenterTest extends TestCase
             'tgl_bpg' => '2026-08-18',
             'no_invoice' => 'INV-UNIVERSAL-825',
         ]);
+        $this->makePpbj('PKB/PR-26/CON/0999', 2_500_000, 2_400_000, [
+            'bpb_no' => 'PKB/BPB26/00825',
+            'updated_at' => now()->addMinute(),
+        ]);
 
         $this->actingAs($this->user)
             ->getJson(route('command-center.search', ['q' => '0825']))

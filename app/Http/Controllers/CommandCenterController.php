@@ -438,8 +438,16 @@ class CommandCenterController extends Controller
     {
         $builder = $this->commandCenterSearchQuery();
         $this->applyUniversalSearchFilter($builder, $query, $money);
+        $like = '%'.$this->escapeLike($query).'%';
 
-        return $builder->orderByDesc('updated_at')->limit(self::SEARCH_LIMIT)->get()
+        return $builder
+            ->orderByRaw(
+                'CASE WHEN ppbj_no = ? THEN 0 WHEN ppbj_no LIKE ? THEN 1 WHEN general_registration_number LIKE ? THEN 2 ELSE 3 END',
+                [$query, $like, $like]
+            )
+            ->orderByDesc('updated_at')
+            ->limit(self::SEARCH_LIMIT)
+            ->get()
             ->map(fn (Ppbj $row) => $this->presentResult($row, $money, $query));
     }
 
