@@ -363,18 +363,22 @@ class CommandCenterController extends Controller
     {
         $critical = $this->reconciliationCriticalSql();
         $warning = $this->reconciliationWarningSql();
-        $active = "(status IS NULL OR status != 'CANCELLED')";
+        $active = "(ppbj.status IS NULL OR ppbj.status != 'CANCELLED')";
+        $groupTotals = $this->reconciliationGroupTotalsQuery();
+        $effectivePr = $this->reconciliationEffectivePrSql();
+        $primaryPackage = '(COALESCE(sp_groups.linked_count, 0) <= 1 OR ppbj.id = sp_groups.first_id)';
 
         $summary = DB::table('ppbj')
+            ->leftJoinSub(clone $groupTotals, 'sp_groups', 'sp_groups.awarding_sp', '=', 'ppbj.awarding_sp')
             ->whereRaw($active)
             ->selectRaw('COUNT(*) AS total')
             ->selectRaw("SUM(CASE WHEN ({$critical}) THEN 1 ELSE 0 END) AS critical")
             ->selectRaw("SUM(CASE WHEN NOT ({$critical}) AND ({$warning}) THEN 1 ELSE 0 END) AS warning")
             ->selectRaw("SUM(CASE WHEN NOT ({$critical}) AND NOT ({$warning}) THEN 1 ELSE 0 END) AS ready")
-            ->selectRaw('COALESCE(SUM(CASE WHEN COALESCE(total_sebelum_ppn, 0) > 0 AND COALESCE(nilai_sp_spk, 0) > 0 THEN ABS(total_sebelum_ppn - nilai_sp_spk) ELSE 0 END), 0) AS financial_gap')
+            ->selectRaw("COALESCE(SUM(CASE WHEN {$effectivePr} > 0 AND COALESCE(ppbj.nilai_sp_spk, 0) > 0 AND {$primaryPackage} THEN ABS({$effectivePr} - ppbj.nilai_sp_spk) ELSE 0 END), 0) AS financial_gap")
             ->first();
 
-        $issues = $this->commandCenterSearchQuery()
+        $issues = $this->reconciliationQuery(clone $groupTotals)
             ->whereRaw($active)
             ->whereRaw("({$critical}) OR ({$warning})")
             ->orderByRaw("CASE WHEN ({$critical}) THEN 0 ELSE 1 END")
@@ -409,28 +413,64 @@ class CommandCenterController extends Controller
 
     private function reconciliationCriticalSql(): string
     {
+        $effectivePr = $this->reconciliationEffectivePrSql();
+        $primaryPackage = '(COALESCE(sp_groups.linked_count, 0) <= 1 OR ppbj.id = sp_groups.first_id)';
+
         return <<<'SQL'
-            COALESCE(total_sebelum_ppn, 0) <= 0
-            OR (COALESCE(nilai_sp_spk, 0) > 0 AND nilai_sp_spk > total_sebelum_ppn)
-            OR (COALESCE(nilai_bpg, 0) > 0 AND COALESCE(nilai_sp_spk, 0) > 0 AND nilai_bpg > nilai_sp_spk)
-            OR (TRIM(COALESCE(no_invoice, '')) != '' AND TRIM(COALESCE(bpg_no, '')) = '')
-            OR (TRIM(COALESCE(bpg_no, '')) != '' AND TRIM(COALESCE(do_no, '')) = '')
-            OR ((TRIM(COALESCE(do_no, '')) = '') != (do_date IS NULL))
-            OR ((TRIM(COALESCE(bpg_no, '')) = '') != (tgl_bpg IS NULL))
-            OR ((TRIM(COALESCE(no_invoice, '')) = '') != (tgl_invoice IS NULL))
-        SQL;
+            COALESCE(ppbj.total_sebelum_ppn, 0) <= 0
+            OR (COALESCE(ppbj.nilai_bpg, 0) > 0 AND COALESCE(ppbj.nilai_sp_spk, 0) > 0 AND ppbj.nilai_bpg > ppbj.nilai_sp_spk)
+            OR (TRIM(COALESCE(ppbj.no_invoice, '')) != '' AND TRIM(COALESCE(ppbj.bpg_no, '')) = '')
+            OR (TRIM(COALESCE(ppbj.bpg_no, '')) != '' AND TRIM(COALESCE(ppbj.do_no, '')) = '')
+            OR ((TRIM(COALESCE(ppbj.do_no, '')) = '') != (ppbj.do_date IS NULL))
+            OR ((TRIM(COALESCE(ppbj.bpg_no, '')) = '') != (ppbj.tgl_bpg IS NULL))
+            OR ((TRIM(COALESCE(ppbj.no_invoice, '')) = '') != (ppbj.tgl_invoice IS NULL))
+        SQL
+            .' OR (COALESCE(ppbj.nilai_sp_spk, 0) > 0 AND ppbj.nilai_sp_spk > '.$effectivePr.' AND '.$primaryPackage.')';
     }
 
     private function reconciliationWarningSql(): string
     {
+        $effectivePr = $this->reconciliationEffectivePrSql();
+        $primaryPackage = '(COALESCE(sp_groups.linked_count, 0) <= 1 OR ppbj.id = sp_groups.first_id)';
+
         return <<<'SQL'
-            (TRIM(COALESCE(awarding_sp, '')) = '' AND COALESCE(nilai_sp_spk, 0) <= 0)
-            OR (COALESCE(total_sebelum_ppn, 0) > 0 AND COALESCE(nilai_sp_spk, 0) > 0 AND ABS(total_sebelum_ppn - nilai_sp_spk) / total_sebelum_ppn >= 0.20)
-            OR (TRIM(COALESCE(do_no, '')) != '' AND TRIM(COALESCE(bpg_no, '')) = '')
-            OR (TRIM(COALESCE(bpg_no, '')) != '' AND TRIM(COALESCE(no_invoice, '')) = '')
-            OR (COALESCE(nilai_bpg, 0) > 0 AND COALESCE(nilai_sp_spk, 0) > 0 AND ABS(nilai_bpg - nilai_sp_spk) > 1000)
-            OR (do_date IS NOT NULL AND promised_date IS NOT NULL AND do_date > promised_date)
-        SQL;
+            (TRIM(COALESCE(ppbj.awarding_sp, '')) = '' AND COALESCE(ppbj.nilai_sp_spk, 0) <= 0)
+            OR (TRIM(COALESCE(ppbj.do_no, '')) != '' AND TRIM(COALESCE(ppbj.bpg_no, '')) = '')
+            OR (TRIM(COALESCE(ppbj.bpg_no, '')) != '' AND TRIM(COALESCE(ppbj.no_invoice, '')) = '')
+            OR (COALESCE(ppbj.nilai_bpg, 0) > 0 AND COALESCE(ppbj.nilai_sp_spk, 0) > 0 AND ABS(ppbj.nilai_bpg - ppbj.nilai_sp_spk) > 1000)
+            OR (ppbj.do_date IS NOT NULL AND ppbj.promised_date IS NOT NULL AND ppbj.do_date > ppbj.promised_date)
+        SQL
+            .' OR ('.$effectivePr.' > 0 AND COALESCE(ppbj.nilai_sp_spk, 0) > 0 AND ABS('.$effectivePr.' - ppbj.nilai_sp_spk) / '.$effectivePr.' >= 0.20 AND '.$primaryPackage.')';
+    }
+
+    private function reconciliationGroupTotalsQuery()
+    {
+        return DB::table('ppbj as grouped')
+            ->select('grouped.awarding_sp')
+            ->selectRaw('SUM(COALESCE(grouped.total_sebelum_ppn, 0)) AS group_pr')
+            ->selectRaw('COUNT(*) AS linked_count')
+            ->selectRaw('MIN(grouped.id) AS first_id')
+            ->whereNotNull('grouped.awarding_sp')
+            ->where('grouped.awarding_sp', '!=', '')
+            ->where(fn ($query) => $query->whereNull('grouped.status')->orWhere('grouped.status', '!=', 'CANCELLED'))
+            ->groupBy('grouped.awarding_sp');
+    }
+
+    private function reconciliationEffectivePrSql(): string
+    {
+        return '(CASE WHEN COALESCE(sp_groups.linked_count, 0) > 1 THEN COALESCE(sp_groups.group_pr, 0) ELSE COALESCE(ppbj.total_sebelum_ppn, 0) END)';
+    }
+
+    private function reconciliationQuery($groupTotals): Builder
+    {
+        return Ppbj::query()
+            ->leftJoinSub($groupTotals, 'sp_groups', 'sp_groups.awarding_sp', '=', 'ppbj.awarding_sp')
+            ->select(array_map(fn (string $column) => 'ppbj.'.$column, $this->commandCenterSearchColumns()))
+            ->addSelect([
+                'sp_group_pr' => DB::raw('COALESCE(sp_groups.group_pr, ppbj.total_sebelum_ppn, 0)'),
+                'sp_linked_count' => DB::raw('COALESCE(sp_groups.linked_count, 1)'),
+                'sp_group_first_id' => DB::raw('COALESCE(sp_groups.first_id, ppbj.id)'),
+            ]);
     }
 
     private function buildOverview(): array
@@ -566,14 +606,17 @@ class CommandCenterController extends Controller
 
     private function commandCenterSearchQuery(): Builder
     {
-        $columns = array_values(array_unique(array_merge(
+        return Ppbj::query()->select($this->commandCenterSearchColumns());
+    }
+
+    private function commandCenterSearchColumns(): array
+    {
+        return array_values(array_unique(array_merge(
             ['id'],
             array_keys(self::SEARCH_TEXT_FIELDS),
             array_keys(self::SEARCH_DATE_FIELDS),
             array_keys(self::SEARCH_NUMBER_FIELDS)
         )));
-
-        return Ppbj::query()->select($columns);
     }
 
     private function applyUniversalSearchFilter(Builder $builder, string $query): void
@@ -747,12 +790,16 @@ class CommandCenterController extends Controller
         $pr = (float) ($row->total_sebelum_ppn ?? 0);
         $sp = (float) ($row->nilai_sp_spk ?? 0);
         $bpg = (float) ($row->nilai_bpg ?? 0);
+        $linkedCount = max(1, (int) ($row->sp_linked_count ?? 1));
+        $effectivePr = (float) ($row->sp_group_pr ?? $pr);
+        $isPackagePrimary = $linkedCount <= 1 || (int) $row->id === (int) ($row->sp_group_first_id ?? $row->id);
+        $prContext = $linkedCount > 1 ? 'total gabungan '.$linkedCount.' PR' : 'PR';
 
         if ($pr <= 0) {
             $critical[] = ['code' => 'missing_pr_value', 'message' => 'Nilai PR kosong atau nol.'];
         }
-        if ($sp > 0 && $pr > 0 && $sp > $pr) {
-            $critical[] = ['code' => 'sp_above_pr', 'message' => 'Nilai SP melebihi PR sebesar '.$this->rupiah($sp - $pr).'.'];
+        if ($isPackagePrimary && $sp > 0 && $effectivePr > 0 && $sp > $effectivePr) {
+            $critical[] = ['code' => 'sp_above_pr', 'message' => 'Nilai SP melebihi '.$prContext.' sebesar '.$this->rupiah($sp - $effectivePr).'.'];
         }
         if ($bpg > 0 && $sp > 0 && $bpg > $sp) {
             $critical[] = ['code' => 'bpg_above_sp', 'message' => 'Nilai BPG melebihi SP sebesar '.$this->rupiah($bpg - $sp).'.'];
@@ -770,8 +817,8 @@ class CommandCenterController extends Controller
         if (blank($row->awarding_sp) && $sp <= 0) {
             $warning[] = ['code' => 'missing_sp', 'message' => 'SP/Kontrak belum tercatat.'];
         }
-        if ($pr > 0 && $sp > 0 && abs($pr - $sp) / $pr >= 0.20) {
-            $warning[] = ['code' => 'large_pr_sp_gap', 'message' => 'Selisih PR dan SP mencapai '.number_format(abs($pr - $sp) / $pr * 100, 1, ',', '.').'%.'];
+        if ($isPackagePrimary && $effectivePr > 0 && $sp > 0 && abs($effectivePr - $sp) / $effectivePr >= 0.20) {
+            $warning[] = ['code' => 'large_pr_sp_gap', 'message' => 'Selisih '.$prContext.' dan SP mencapai '.number_format(abs($effectivePr - $sp) / $effectivePr * 100, 1, ',', '.').'%.'];
         }
         if (filled($row->do_no) && blank($row->bpg_no)) {
             $warning[] = ['code' => 'waiting_bpg', 'message' => 'Dokumen serah terima tersedia; BPG belum tercatat.'];
@@ -800,12 +847,17 @@ class CommandCenterController extends Controller
             'issues' => $issues,
             'next_action' => $issues[0]['message'] ?? 'Rangkaian PR sampai invoice konsisten.',
             'gaps' => [
-                'pr_sp' => $pr > 0 && $sp > 0 ? $this->rupiah($pr - $sp) : '-',
+                'pr_sp' => $isPackagePrimary && $effectivePr > 0 && $sp > 0 ? $this->rupiah($effectivePr - $sp) : '-',
                 'sp_bpg' => $sp > 0 && $bpg > 0 ? $this->rupiah($sp - $bpg) : '-',
+            ],
+            'package' => [
+                'is_grouped' => $linkedCount > 1,
+                'linked_pr_count' => $linkedCount,
+                'total_pr_label' => $this->rupiah($effectivePr),
             ],
             'stages' => [
                 ['key' => 'pr', 'label' => 'PR', 'state' => $pr > 0 ? 'done' : 'problem'],
-                ['key' => 'sp', 'label' => 'SP', 'state' => filled($row->awarding_sp) || $sp > 0 ? 'done' : 'empty'],
+                ['key' => 'sp', 'label' => $linkedCount > 1 ? 'SP ('.$linkedCount.' PR)' : 'SP', 'state' => filled($row->awarding_sp) || $sp > 0 ? 'done' : 'empty'],
                 ['key' => 'do', 'label' => 'DO/BAST', 'state' => filled($row->do_no) && filled($row->do_date) ? 'done' : (filled($row->do_no) || filled($row->do_date) ? 'problem' : 'empty')],
                 ['key' => 'bpg', 'label' => 'BPG', 'state' => filled($row->bpg_no) && filled($row->tgl_bpg) ? 'done' : (filled($row->bpg_no) || filled($row->tgl_bpg) ? 'problem' : 'empty')],
                 ['key' => 'invoice', 'label' => 'Invoice', 'state' => filled($row->no_invoice) && filled($row->tgl_invoice) ? 'done' : (filled($row->no_invoice) || filled($row->tgl_invoice) ? 'problem' : 'empty')],

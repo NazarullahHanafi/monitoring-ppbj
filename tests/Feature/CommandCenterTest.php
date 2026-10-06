@@ -260,6 +260,29 @@ class CommandCenterTest extends TestCase
         $this->assertSame(0, $cachedRequestQueries, 'Rekonsiliasi kedua harus dilayani dari cache.');
     }
 
+    public function test_reconciliation_compares_grouped_sp_against_total_linked_pr_without_false_alarm(): void
+    {
+        $sharedSp = '099/PKU-X/SP/2026';
+        $this->makePpbj('PKB/PR-26/CON/0930', 14_500_000, 29_000_000, [
+            'awarding_sp' => $sharedSp,
+        ]);
+        $this->makePpbj('PKB/PR-26/CON/0931', 14_500_000, 29_000_000, [
+            'awarding_sp' => $sharedSp,
+        ]);
+
+        CommandCenterController::clearCache();
+
+        $this->actingAs($this->user)
+            ->getJson(route('command-center.reconciliation'))
+            ->assertOk()
+            ->assertJsonPath('summary.total', 2)
+            ->assertJsonPath('summary.critical', 0)
+            ->assertJsonPath('summary.warning', 0)
+            ->assertJsonPath('summary.ready', 2)
+            ->assertJsonPath('summary.financial_gap', 0)
+            ->assertJsonCount(0, 'results');
+    }
+
     public function test_overview_is_cached_and_stays_within_a_small_query_budget(): void
     {
         foreach (range(1, 40) as $number) {
