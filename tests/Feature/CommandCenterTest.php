@@ -104,6 +104,39 @@ class CommandCenterTest extends TestCase
             ->assertJsonFragment(['id' => $linked->id]);
     }
 
+    public function test_universal_search_treats_leading_zero_as_pr_number_and_searches_business_columns(): void
+    {
+        $row = $this->makePpbj('PKB/PR-26/CON/0825', 12_500_000, 11_900_000, [
+            'note' => 'Pengiriman bertahap untuk laboratorium',
+            'metode_pengadaan' => 'Pengadaan Langsung',
+            'bpg_no' => 'PKB/BPG-26/00991',
+            'tgl_bpg' => '2026-08-18',
+            'no_invoice' => 'INV-UNIVERSAL-825',
+        ]);
+
+        $this->actingAs($this->user)
+            ->getJson(route('command-center.search', ['q' => '0825']))
+            ->assertOk()
+            ->assertJsonPath('detected_value', null)
+            ->assertJsonPath('results.0.id', $row->id)
+            ->assertJsonPath('results.0.matched_on', 'No. PR/PPBJ')
+            ->assertJsonPath('results.0.matched_value', 'PKB/PR-26/CON/0825')
+            ->assertJsonFragment(['label' => 'No. BPG', 'value' => 'PKB/BPG-26/00991']);
+
+        foreach ([
+            'PKB/PR-26/CON/0825' => 'No. PR/PPBJ',
+            'Pengiriman bertahap' => 'Catatan',
+            'PKB/BPG-26/00991' => 'No. BPG',
+            'INV-UNIVERSAL-825' => 'No. Invoice',
+            '18/08/2026' => 'Tanggal BPG',
+        ] as $term => $matchedField) {
+            $this->actingAs($this->user)
+                ->getJson(route('command-center.search', ['q' => $term]))
+                ->assertOk()
+                ->assertJsonFragment(['id' => $row->id, 'matched_on' => $matchedField]);
+        }
+    }
+
     public function test_ask_journey_and_passport_qr_return_safe_structured_data(): void
     {
         $row = $this->makePpbj('PKB/PR-26/CON/0905', 25_000_000, 0, [

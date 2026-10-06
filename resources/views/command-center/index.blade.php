@@ -31,7 +31,7 @@
     <section class="cc-intelligence">
         <div class="cc-search-block">
             <span class="cc-search-icon">⌕</span>
-            <input id="ccSearchInput" autocomplete="off" placeholder="Cari nomor PR, vendor, uraian, Rp 50.000.000, 50 juta, atau nilai SP…">
+            <input id="ccSearchInput" autocomplete="off" placeholder="Cari apa pun: nomor PR, catatan, vendor, dokumen, tanggal, status, atau nilai…">
             <button type="button" id="ccSearchButton">Temukan</button>
         </div>
         <div class="cc-ask-block">

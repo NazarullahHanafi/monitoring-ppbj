@@ -30,6 +30,73 @@ class CommandCenterController extends Controller
 
     private const SEARCH_LIMIT = 24;
 
+    /** Kolom bisnis PPBJ yang aman ditelusuri dari Command Center. */
+    private const SEARCH_TEXT_FIELDS = [
+        'ppbj_no' => 'No. PR/PPBJ',
+        'general_registration_number' => 'No. Registrasi Umum',
+        'uraian' => 'Uraian',
+        'note' => 'Catatan',
+        'portofolio' => 'Portofolio',
+        'buyer' => 'Buyer',
+        'penyedia_eksternal' => 'Penyedia/Vendor',
+        'metode_pengadaan' => 'Metode Pengadaan',
+        'spph_rfq_1' => 'SPPH/RFQ 1',
+        'rfq_2' => 'RFQ 2',
+        'rfq_3' => 'RFQ 3',
+        'sph' => 'SPH',
+        'awarding_sp' => 'Awarding/SP/Kontrak',
+        'pemenang' => 'Pemenang',
+        'do_no' => 'DO/Surat Jalan/BAST',
+        'bpg_no' => 'No. BPG',
+        'bpb_no' => 'No. BPB',
+        'no_invoice' => 'No. Invoice',
+        'receiving_transaction' => 'Receiving Transaction',
+        'goods_arrived_note' => 'Catatan Barang Datang',
+        'goods_confirmed_note' => 'Catatan Konfirmasi Barang',
+        'cancel_reason' => 'Alasan Pembatalan',
+        'keterangan' => 'Keterangan',
+        'status' => 'Status',
+        'status_sla' => 'Status SLA',
+    ];
+
+    private const SEARCH_DATE_FIELDS = [
+        'tgl_ppbj' => 'Tanggal PPBJ',
+        'tgl_terima_pr' => 'Tanggal Terima PR',
+        'tgl_diserahkan' => 'Tanggal Diserahkan',
+        'general_registered_at' => 'Tanggal Registrasi Umum',
+        'tgl_spph' => 'Tanggal SPPH',
+        'closed_date' => 'Closed Date',
+        'tgl_sph' => 'Tanggal SPH',
+        'tgl_awarding_sp' => 'Tanggal Awarding',
+        'tgl_pemenang' => 'Tanggal Pemenang',
+        'tgl_spk' => 'Tanggal SPK',
+        'promised_date' => 'Tanggal Pemenuhan/Berakhir Kontrak',
+        'goods_arrived_at' => 'Tanggal Barang Datang',
+        'goods_confirmed_at' => 'Tanggal Konfirmasi Barang',
+        'do_date' => 'Tanggal DO/Surat Jalan/BAST',
+        'do_updated_at' => 'Tanggal Perubahan DO',
+        'tgl_bpg' => 'Tanggal BPG',
+        'tgl_bpb' => 'Tanggal BPB',
+        'tgl_invoice' => 'Tanggal Invoice',
+        'cancelled_at' => 'Tanggal Pembatalan',
+        'created_at' => 'Tanggal Dibuat',
+        'updated_at' => 'Tanggal Diperbarui',
+    ];
+
+    private const SEARCH_NUMBER_FIELDS = [
+        'id' => 'ID Data',
+        'total_sebelum_ppn' => 'Nilai PR',
+        'nilai_sp_spk' => 'Nilai SP/Kontrak',
+        'nilai_bpg' => 'Nilai BPG',
+        'qt_left' => 'Sisa QT',
+        'persentase_realisasi' => 'Persentase Realisasi',
+        'time_left' => 'Sisa Waktu',
+        'progres' => 'Progress',
+        'sisa_target_sla' => 'Sisa SLA',
+        'target_sla_hari' => 'Target SLA',
+        'realisasi_sla' => 'Realisasi SLA',
+    ];
+
     public function index(): View
     {
         return view('command-center.index');
@@ -369,28 +436,84 @@ class CommandCenterController extends Controller
 
     private function searchRows(string $query, ?float $money)
     {
-        $builder = $this->commandCenterQuery();
-
-        if ($money !== null) {
-            $this->applyMoneyFilter($builder, $money);
-        } else {
-            $like = '%'.$this->escapeLike($query).'%';
-            $builder->where(function (Builder $q) use ($like) {
-                $q->where('ppbj_no', 'like', $like)
-                    ->orWhere('uraian', 'like', $like)
-                    ->orWhere('penyedia_eksternal', 'like', $like)
-                    ->orWhere('buyer', 'like', $like)
-                    ->orWhere('awarding_sp', 'like', $like)
-                    ->orWhere('spph_rfq_1', 'like', $like)
-                    ->orWhere('general_registration_number', 'like', $like);
-            });
-        }
+        $builder = $this->commandCenterSearchQuery();
+        $this->applyUniversalSearchFilter($builder, $query, $money);
 
         return $builder->orderByDesc('updated_at')->limit(self::SEARCH_LIMIT)->get()
-            ->map(fn (Ppbj $row) => $this->presentResult($row, $money));
+            ->map(fn (Ppbj $row) => $this->presentResult($row, $money, $query));
+    }
+
+    private function commandCenterSearchQuery(): Builder
+    {
+        $columns = array_values(array_unique(array_merge(
+            ['id'],
+            array_keys(self::SEARCH_TEXT_FIELDS),
+            array_keys(self::SEARCH_DATE_FIELDS),
+            array_keys(self::SEARCH_NUMBER_FIELDS)
+        )));
+
+        return Ppbj::query()->select($columns);
+    }
+
+    private function applyUniversalSearchFilter(Builder $builder, string $query, ?float $money): void
+    {
+        $like = '%'.$this->escapeLike($query).'%';
+        $normalizedDate = $this->normalizeSearchDate($query);
+        $plainNumber = $this->parsePlainNumber($query);
+        $moneyContext = $money !== null ? $this->moneyMatchContext($money) : null;
+
+        $builder->where(function (Builder $match) use ($like, $normalizedDate, $plainNumber, $moneyContext) {
+            $first = true;
+            foreach (array_keys(self::SEARCH_TEXT_FIELDS + self::SEARCH_DATE_FIELDS) as $column) {
+                $method = $first ? 'where' : 'orWhere';
+                $match->{$method}($column, 'like', $like);
+                $first = false;
+            }
+
+            if ($normalizedDate !== null) {
+                foreach (array_keys(self::SEARCH_DATE_FIELDS) as $column) {
+                    $match->orWhere($column, 'like', $normalizedDate.'%');
+                }
+            }
+
+            if ($plainNumber !== null) {
+                foreach (array_keys(self::SEARCH_NUMBER_FIELDS) as $column) {
+                    $match->orWhere($column, $plainNumber);
+                }
+            }
+
+            if ($moneyContext !== null) {
+                $match->orWhereBetween('total_sebelum_ppn', [$moneyContext['min'], $moneyContext['max']])
+                    ->orWhereBetween('nilai_sp_spk', [$moneyContext['min'], $moneyContext['max']])
+                    ->orWhereBetween('nilai_bpg', [$moneyContext['min'], $moneyContext['max']]);
+                if ($moneyContext['ppbj_ids'] !== []) {
+                    $match->orWhereIn('id', $moneyContext['ppbj_ids']);
+                }
+                if ($moneyContext['legacy_numbers'] !== []) {
+                    $match->orWhereIn('ppbj_no', $moneyContext['legacy_numbers']);
+                }
+            }
+        });
     }
 
     private function applyMoneyFilter(Builder $query, float $money): void
+    {
+        $context = $this->moneyMatchContext($money);
+
+        $query->where(function (Builder $q) use ($context) {
+            $q->whereBetween('total_sebelum_ppn', [$context['min'], $context['max']])
+                ->orWhereBetween('nilai_sp_spk', [$context['min'], $context['max']])
+                ->orWhereBetween('nilai_bpg', [$context['min'], $context['max']]);
+            if ($context['ppbj_ids'] !== []) {
+                $q->orWhereIn('id', $context['ppbj_ids']);
+            }
+            if ($context['legacy_numbers'] !== []) {
+                $q->orWhereIn('ppbj_no', $context['legacy_numbers']);
+            }
+        });
+    }
+
+    private function moneyMatchContext(float $money): array
     {
         $tolerance = max(0.5, abs($money) * 0.000001);
         $min = $money - $tolerance;
@@ -420,27 +543,28 @@ class CommandCenterController extends Controller
                 ->all();
         }
 
-        $query->where(function (Builder $q) use ($min, $max, $spPpbjIds, $legacyNumbers) {
-            $q->whereBetween('total_sebelum_ppn', [$min, $max])
-                ->orWhereBetween('nilai_sp_spk', [$min, $max]);
-            if ($spPpbjIds !== []) {
-                $q->orWhereIn('id', $spPpbjIds);
-            }
-            if ($legacyNumbers !== []) {
-                $q->orWhereIn('ppbj_no', $legacyNumbers);
-            }
-        });
+        return [
+            'min' => $min,
+            'max' => $max,
+            'ppbj_ids' => $spPpbjIds,
+            'legacy_numbers' => $legacyNumbers,
+        ];
     }
 
-    private function presentResult(Ppbj $row, ?float $searchedValue = null): array
+    private function presentResult(Ppbj $row, ?float $searchedValue = null, ?string $searchedText = null): array
     {
         $pr = (float) ($row->total_sebelum_ppn ?? 0);
         $sp = (float) ($row->nilai_sp_spk ?? 0);
         $matched = null;
-        if ($searchedValue !== null) {
+        $matchedValue = null;
+        if ($searchedText !== null) {
+            [$matched, $matchedValue] = $this->findMatchedField($row, $searchedText);
+        }
+        if ($matched === null && $searchedValue !== null) {
             $matched = abs($pr - $searchedValue) <= max(0.5, $searchedValue * 0.000001)
                 ? 'Nilai PR'
                 : (abs($sp - $searchedValue) <= max(0.5, $searchedValue * 0.000001) ? 'Nilai SP/Kontrak' : 'Nilai SP terhubung');
+            $matchedValue = $this->rupiah($searchedValue);
         }
 
         return [
@@ -462,6 +586,8 @@ class CommandCenterController extends Controller
             'status_sla' => $row->status_sla ?: 'BELUM DIHITUNG',
             'promised_date' => $row->promised_date ? Carbon::parse($row->promised_date)->format('d M Y') : '-',
             'matched_on' => $matched,
+            'matched_value' => $matchedValue,
+            'details' => $this->resultDetails($row),
         ];
     }
 
@@ -533,10 +659,140 @@ class CommandCenterController extends Controller
         })->values()->all();
     }
 
+    private function findMatchedField(Ppbj $row, string $query): array
+    {
+        $needle = mb_strtolower(trim($query));
+        $normalizedDate = $this->normalizeSearchDate($query);
+
+        foreach (self::SEARCH_TEXT_FIELDS as $column => $label) {
+            $value = trim((string) ($row->getAttribute($column) ?? ''));
+            if ($value !== '' && str_contains(mb_strtolower($value), $needle)) {
+                return [$label, $value];
+            }
+        }
+
+        foreach (self::SEARCH_DATE_FIELDS as $column => $label) {
+            $value = trim((string) ($row->getAttribute($column) ?? ''));
+            if ($value === '') {
+                continue;
+            }
+            if (str_contains(mb_strtolower($value), $needle) || ($normalizedDate !== null && str_starts_with($value, $normalizedDate))) {
+                return [$label, $this->formatSearchDate($value)];
+            }
+        }
+
+        $plainNumber = $this->parsePlainNumber($query);
+        if ($plainNumber !== null) {
+            foreach (self::SEARCH_NUMBER_FIELDS as $column => $label) {
+                $value = $row->getAttribute($column);
+                if (is_numeric($value) && (float) $value === $plainNumber) {
+                    return [$label, in_array($column, ['total_sebelum_ppn', 'nilai_sp_spk', 'nilai_bpg'], true)
+                        ? $this->rupiah((float) $value)
+                        : (string) $value];
+                }
+            }
+        }
+
+        return [null, null];
+    }
+
+    private function resultDetails(Ppbj $row): array
+    {
+        $details = [
+            'No. Registrasi Umum' => $row->general_registration_number,
+            'Tanggal PPBJ' => $this->formatSearchDate($row->tgl_ppbj),
+            'Tanggal Terima PR' => $this->formatSearchDate($row->tgl_terima_pr),
+            'Tanggal Diserahkan' => $this->formatSearchDate($row->tgl_diserahkan),
+            'Catatan' => $row->note,
+            'Portofolio' => $row->portofolio,
+            'Buyer' => $row->buyer,
+            'Penyedia/Vendor' => $row->penyedia_eksternal,
+            'Metode Pengadaan' => $row->metode_pengadaan,
+            'Nilai PR' => $row->total_sebelum_ppn !== null ? $this->rupiah((float) $row->total_sebelum_ppn) : null,
+            'SPPH/RFQ 1' => $row->spph_rfq_1,
+            'RFQ 2' => $row->rfq_2,
+            'RFQ 3' => $row->rfq_3,
+            'Tanggal SPPH' => $this->formatSearchDate($row->tgl_spph),
+            'SPH' => $row->sph,
+            'Tanggal SPH' => $this->formatSearchDate($row->tgl_sph),
+            'Awarding/SP/Kontrak' => $row->awarding_sp,
+            'Tanggal Awarding' => $this->formatSearchDate($row->tgl_awarding_sp),
+            'Pemenang' => $row->pemenang,
+            'Tanggal Pemenang' => $this->formatSearchDate($row->tgl_pemenang),
+            'Tanggal SPK' => $this->formatSearchDate($row->tgl_spk),
+            'Nilai SP/Kontrak' => $row->nilai_sp_spk !== null ? $this->rupiah((float) $row->nilai_sp_spk) : null,
+            'Tanggal Pemenuhan' => $this->formatSearchDate($row->promised_date),
+            'Closed Date' => $this->formatSearchDate($row->closed_date),
+            'DO/Surat Jalan/BAST' => $row->do_no,
+            'Tanggal DO/BAST' => $this->formatSearchDate($row->do_date),
+            'No. BPG' => $row->bpg_no,
+            'Nilai BPG' => $row->nilai_bpg !== null ? $this->rupiah((float) $row->nilai_bpg) : null,
+            'Tanggal BPG' => $this->formatSearchDate($row->tgl_bpg),
+            'No. BPB' => $row->bpb_no,
+            'Tanggal BPB' => $this->formatSearchDate($row->tgl_bpb),
+            'No. Invoice' => $row->no_invoice,
+            'Tanggal Invoice' => $this->formatSearchDate($row->tgl_invoice),
+            'Receiving Transaction' => $row->receiving_transaction,
+            'Progress' => $row->progres !== null ? ((float) $row->progres).'%' : null,
+            'Status SLA' => $row->status_sla,
+            'Sisa SLA' => $row->sisa_target_sla !== null ? $row->sisa_target_sla.' hari' : null,
+            'Target SLA' => $row->target_sla_hari !== null ? $row->target_sla_hari.' hari' : null,
+            'Realisasi SLA' => $row->realisasi_sla !== null ? $row->realisasi_sla.' hari' : null,
+            'Status' => $row->status,
+            'Keterangan' => $row->keterangan,
+        ];
+
+        return collect($details)
+            ->reject(fn ($value) => $value === null || trim((string) $value) === '')
+            ->map(fn ($value, $label) => ['label' => $label, 'value' => (string) $value])
+            ->values()
+            ->all();
+    }
+
+    private function normalizeSearchDate(string $value): ?string
+    {
+        $value = trim($value);
+        foreach (['d/m/Y', 'd-m-Y', 'Y-m-d'] as $format) {
+            try {
+                $date = Carbon::createFromFormat('!'.$format, $value);
+                if ($date !== false && $date->format($format) === $value) {
+                    return $date->format('Y-m-d');
+                }
+            } catch (\Throwable) {
+                // Bukan input tanggal lengkap; lanjut sebagai kata kunci biasa.
+            }
+        }
+
+        return null;
+    }
+
+    private function formatSearchDate(mixed $value): ?string
+    {
+        if (blank($value)) {
+            return null;
+        }
+
+        try {
+            return Carbon::parse($value)->format('d M Y H:i');
+        } catch (\Throwable) {
+            return (string) $value;
+        }
+    }
+
+    private function parsePlainNumber(string $value): ?float
+    {
+        $value = trim($value);
+        if (preg_match('/^0\d+$/', $value) === 1 || preg_match('/^\d+(?:[.,]\d+)?$/', $value) !== 1) {
+            return null;
+        }
+
+        return (float) str_replace(',', '.', $value);
+    }
+
     private function parseMoneyExpression(string $value): ?float
     {
         $text = mb_strtolower(trim($value));
-        $hasMoneyContext = preg_match('/\b(rp|nilai|harga|kontrak|sp|pr|juta|jt|miliar|milyar|ribu|rb)\b/u', $text) === 1;
+        $hasMoneyContext = preg_match('/\b(rp|nilai|harga|nominal|juta|jt|miliar|milyar|ribu|rb)\b/u', $text) === 1;
         $isOnlyNumber = preg_match('/^\s*(?:rp\s*)?[\d.,]+\s*(?:juta|jt|miliar|milyar|ribu|rb)?\s*$/u', $text) === 1;
         if (! $hasMoneyContext && ! $isOnlyNumber) {
             return null;
@@ -555,6 +811,11 @@ class CommandCenterController extends Controller
         }
 
         $digits = preg_replace('/\D/', '', $raw);
+
+        // Nomor urut PR seperti 0825 adalah identifier, bukan nominal Rp825.
+        if (! $hasMoneyContext && preg_match('/^0\d+$/', $digits) === 1) {
+            return null;
+        }
 
         return $digits === '' ? null : (float) $digits;
     }

@@ -184,12 +184,21 @@
             .finally(function () { setLoading(refreshButton, false); });
     }
 
+    function resultDetailsHtml(details) {
+        if (!details || !details.length) return '';
+        return '<details class="cc-result-details"><summary>Lihat data PPBJ lengkap (' + esc(details.length) + ' field)</summary>' +
+            '<dl>' + details.map(function (detail) {
+                return '<div><dt>' + esc(detail.label) + '</dt><dd>' + esc(detail.value) + '</dd></div>';
+            }).join('') + '</dl></details>';
+    }
+
     function resultHtml(row) {
         return '<article class="cc-result-item"><div><div class="cc-item-title">' + esc(row.ppbj_no) + ' · ' + esc(row.uraian) + '</div>' +
             '<div class="cc-item-sub">' + esc(row.portofolio) + ' · ' + esc(row.buyer) + ' · ' + esc(row.vendor) + '</div>' +
             '<div class="cc-result-values"><span class="cc-pill">PR ' + esc(row.nilai_pr_label) + '</span>' +
             '<span class="cc-pill">SP ' + esc(row.nilai_sp_label) + '</span><span class="cc-pill">Progress ' + esc(row.progress) + '%</span>' +
-            (row.matched_on ? '<span class="cc-pill">Cocok: ' + esc(row.matched_on) + '</span>' : '') + '</div></div>' +
+            (row.matched_on ? '<span class="cc-pill cc-pill-match">Cocok di ' + esc(row.matched_on) + (row.matched_value ? ': ' + esc(row.matched_value) : '') + '</span>' : '') + '</div>' +
+            resultDetailsHtml(row.details) + '</div>' +
             '<button class="cc-open" data-journey="' + esc(row.id) + '">Digital Passport</button></article>';
     }
 
