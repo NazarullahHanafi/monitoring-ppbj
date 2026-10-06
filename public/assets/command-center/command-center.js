@@ -299,7 +299,13 @@
     }
 
     document.querySelectorAll('[data-close-modal]').forEach(function (element) { element.addEventListener('click', closeModals); });
-    document.addEventListener('keydown', function (event) { if (event.key === 'Escape') closeModals(); });
+    document.addEventListener('keydown', function (event) {
+        if (event.key !== 'Escape') return;
+        closeModals();
+        if (!document.fullscreenElement && document.body.classList.contains('cc-fullscreen')) {
+            syncFullscreenUi(false);
+        }
+    });
     document.addEventListener('click', function (event) {
         var journeyButton = event.target.closest('[data-journey]');
         if (journeyButton) openJourney(journeyButton.getAttribute('data-journey'));

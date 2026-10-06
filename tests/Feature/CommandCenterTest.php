@@ -57,6 +57,8 @@ class CommandCenterTest extends TestCase
         $this->assertStringContainsString('.dark .cc-modal', $styles);
         $this->assertStringContainsString('z-index: 99990', $styles);
         $this->assertStringContainsString("document.addEventListener('fullscreenchange'", $script);
+        $this->assertStringContainsString("document.body.classList.contains('cc-fullscreen')", $script);
+        $this->assertStringContainsString('syncFullscreenUi(false)', $script);
         $this->assertStringContainsString("margin-left: 0 !important", $styles);
         $this->assertStringContainsString('content-visibility: auto', $styles);
     }
