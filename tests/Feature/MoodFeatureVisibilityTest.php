@@ -77,6 +77,16 @@ class MoodFeatureVisibilityTest extends TestCase
             ->assertJsonPath('mood', '😄');
     }
 
+    public function test_other_accounts_check_mood_immediately_and_retry_transient_failure(): void
+    {
+        $script = file_get_contents(public_path('assets/app/app-shell.js'));
+
+        $this->assertStringContainsString('scheduleMoodCheck(100);', $script);
+        $this->assertStringContainsString('moodCheckAttempts < 3', $script);
+        $this->assertStringContainsString('setTimeout(sMP, 250)', $script);
+        $this->assertStringNotContainsString('setTimeout(function () { if (!document.hidden) cmM() }, 700)', $script);
+    }
+
     public function test_nazar_with_a_different_role_is_not_excluded(): void
     {
         $regularNazar = User::factory()->create([

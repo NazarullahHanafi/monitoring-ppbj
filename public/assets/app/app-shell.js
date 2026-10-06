@@ -55,7 +55,7 @@
                 CL = ['#6366f1', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#3b82f6', '#ef4444', '#14b8a6', '#f97316', '#84cc16', '#06b6d4', '#a855f7'],
                 MO = [{ e: '\u{1F604}', l: 'Senang', d: 'Hari menyenangkan!' }, { e: '\u{1F60A}', l: 'Baik', d: 'Berjalan lancar' }, { e: '\u{1F60E}', l: 'Keren', d: 'On top of the world' }, { e: '\u{1F525}', l: 'Semangat', d: "Full energy!" }, { e: '\u{1F389}', l: 'Eksis', d: 'Ada spesial' }, { e: '\u{1F62E}', l: 'Wow', d: 'Banyak kejutan' }, { e: '\u{1F610}', l: 'Biasa', d: 'Gitu aja' }, { e: '\u{1F62B}', l: 'Lelah', d: 'Butuh kopi' }, { e: '\u{1F971}', l: 'Ngantuk', d: 'Mata 5 watt, jiwa tetap online ☕' }, { e: '\u{1F60C}', l: 'Santuy', d: 'Pelan-pelan asal kelar, bestie' }, { e: '\u{1F92F}', l: 'Overthinking', d: 'Mikirnya kejauhan, kerjaan tetap jalan' }, { e: '\u{1FAE0}', l: 'Meleleh', d: 'Capek tipis, tetap elegan awkwk' }, { e: '\u{1F4BC}', l: 'Sibuk', d: 'Mode fokus, balasnya kalau semesta mengizinkan' }, { e: '\u{1F6B6}', l: 'Away', d: 'Lagi geser dari radar, nanti muncul lagi' }, { e: '\u{26D4}', l: 'Jangan Ganggu', d: 'Sedang bertapa digital, urgent boleh colek' }, { e: '\u{1F621}', l: 'Badmood', d: 'Butuh ruang dulu, jangan disenggol 😅' }, { e: '\u{1F622}', l: 'Sedih', d: 'Besok lebih baik' }, { e: '\u{1F912}', l: 'Sakit', d: 'Tidak enak badan' }];
             var MY_GENDER = APP_SHELL.userGender || null, MY_NAME = APP_SHELL.userName || 'User', MOOD_ENABLED = APP_SHELL.moodEnabled !== false;
-            var tm = null, pO = false, myM = null, mC = false, mS = false;
+            var tm = null, pO = false, myM = null, mC = false, mS = false, moodCheckAttempts = 0, moodCheckTimer = null;
             window._presenceUsers = [];
             function eH(s) { return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;') }
             function moodText(mood) { for (var mi = 0; mi < MO.length; mi++) { if (MO[mi].e === mood) return MO[mi].l + ' — ' + MO[mi].d } return mood || '' }
@@ -104,7 +104,39 @@
                 }
             }
             function hb() { fetch(UH, { method: 'POST', headers: { 'X-CSRF-TOKEN': CSRF, 'Accept': 'application/json' } }).then(function (r) { if (!r.ok) throw 0; return r.json() }).then(function (d) { if (Array.isArray(d.online)) { render(d.online); ensurePresenceScrollTools(); } }).catch(function () { }) }
-            function cmM() { if (!MOOD_ENABLED) { mC = true; myM = null; window._myMood = null; return } if (mC) return; mC = true; fetch(UG, { headers: { 'Accept': 'application/json' } }).then(function (r) { if (r.status === 204) return { disabled: true }; if (!r.ok) throw 0; return r.json() }).then(function (d) { if (d.disabled) { myM = null; window._myMood = null; return } if (d.mood) { myM = d.mood; window._myMood = myM || null; if (window.updateQuickMoodButton) window.updateQuickMoodButton(); var mf = document.getElementById('myMoodFloat'); if (mf) { mf.textContent = myM; mf.classList.remove('hidden') } } else { setTimeout(sMP, 1500) } }).catch(function () { }) }
+            function scheduleMoodCheck(delay) {
+                if (!MOOD_ENABLED || moodCheckTimer || document.hidden) return;
+                moodCheckTimer = setTimeout(function () {
+                    moodCheckTimer = null;
+                    cmM();
+                }, delay);
+            }
+            function cmM() {
+                if (!MOOD_ENABLED) { mC = true; myM = null; window._myMood = null; return }
+                if (mC || document.hidden) return;
+                mC = true;
+                fetch(UG, { headers: { 'Accept': 'application/json' } }).then(function (r) {
+                    if (r.status === 204) return { disabled: true };
+                    if (!r.ok) throw new Error('Mood check gagal');
+                    return r.json();
+                }).then(function (d) {
+                    moodCheckAttempts = 0;
+                    if (d.disabled) { myM = null; window._myMood = null; return }
+                    if (d.mood) {
+                        myM = d.mood;
+                        window._myMood = myM || null;
+                        if (window.updateQuickMoodButton) window.updateQuickMoodButton();
+                        var mf = document.getElementById('myMoodFloat');
+                        if (mf) { mf.textContent = myM; mf.classList.remove('hidden') }
+                    } else {
+                        setTimeout(sMP, 250);
+                    }
+                }).catch(function () {
+                    mC = false;
+                    moodCheckAttempts += 1;
+                    if (moodCheckAttempts < 3) scheduleMoodCheck(1000 * moodCheckAttempts);
+                });
+            }
             function sMP() { if (!MOOD_ENABLED) return; if (typeof Swal !== 'undefined' && Swal.isVisible()) return; var de = document.createElement('div'); de.className = 'mood-desc'; de.textContent = 'Pilih salah satu'; var ge = document.createElement('div'); ge.className = 'mood-grid'; MO.forEach(function (m) { var b = document.createElement('button'); b.type = 'button'; b.className = 'mood-btn'; b.innerHTML = '<span class="m-emoji">' + m.e + '</span><span class="m-label">' + m.l + '</span>'; b.addEventListener('mouseenter', function () { de.textContent = m.d; de.style.color = '#6366f1' }); b.addEventListener('mouseleave', function () { de.textContent = 'Pilih salah satu'; de.style.color = '' }); b.addEventListener('click', function () { if (mS) return; mS = true; Swal.close(); fetch(US, { method: 'POST', headers: { 'X-CSRF-TOKEN': CSRF, 'Content-Type': 'application/json', 'Accept': 'application/json' }, body: JSON.stringify({ mood: m.e }) }).then(function (r) { if (!r.ok) throw 0; return r.json() }).then(function (d) { myM = d.mood; var mf = document.getElementById('myMoodFloat'); if (mf) { mf.textContent = myM; mf.classList.remove('hidden') } hb() }).catch(function () { myM = m.e; var mf = document.getElementById('myMoodFloat'); if (mf) { mf.textContent = myM; mf.classList.remove('hidden') } }).finally(function () { mS = false }); setTimeout(function () { Swal.fire({ html: '<div style="text-align:center;padding:12px 0"><div style="font-size:3.5rem;line-height:1">' + m.e + '</div><div style="font-size:.9rem;color:#111827;font-weight:700;margin-top:10px">' + m.l + '!</div><div style="font-size:.78rem;color:#9ca3af;margin-top:4px">' + m.d + '</div></div>', timer: 1600, timerProgressBar: true, showConfirmButton: false, background: 'rgba(255,255,255,.95)', backdrop: 'rgba(0,0,0,.08)', customClass: { popup: 'rounded-2xl shadow-2xl' } }) }, 200) }); ge.appendChild(b) }); var sb = document.createElement('button'); sb.type = 'button'; sb.className = 'mood-skip'; sb.textContent = 'Lewati dulu'; sb.addEventListener('click', function () { Swal.close() }); var ct = document.createElement('div'); ct.appendChild(ge); ct.appendChild(de); ct.appendChild(sb); Swal.fire({ title: 'Bagaimana harimu?', html: ct, showConfirmButton: false, showCloseButton: true, allowOutsideClick: false, background: 'rgba(255,255,255,.97)', backdrop: 'rgba(0,0,0,.15)', width: 'auto', padding: '0 0 4px 0', customClass: { popup: 'rounded-2xl shadow-2xl', closeButton: 'hover:rotate-90 transition-transform duration-300' }, didOpen: function () { ge.querySelectorAll('.mood-btn').forEach(function (b, i) { b.style.opacity = '0'; b.style.transform = 'translateY(15px) scale(.8)'; setTimeout(function () { b.style.transition = 'all .35s cubic-bezier(.68,-.55,.265,1.55)'; b.style.opacity = '1'; b.style.transform = 'translateY(0) scale(1)' }, 50 * i) }) } }) }
             function moodGreeting() {
                 var h = new Date().getHours();
@@ -255,13 +287,23 @@
                     startTimer = null;
                     if (document.hidden || tm) return;
                     hb();
-                    setTimeout(function () { if (!document.hidden) cmM() }, 700);
                     tm = setInterval(hb, IV);
                 }
                 if (immediate) launch(); else startTimer = setTimeout(launch, 2500);
             }
-            function stop() { if (startTimer) clearTimeout(startTimer); startTimer = null; clearInterval(tm); tm = null }
-            document.addEventListener('visibilitychange', function () { document.hidden ? stop() : start(false) }); if (!document.hidden) start(false);
+            function stop() { if (startTimer) clearTimeout(startTimer); startTimer = null; if (moodCheckTimer) clearTimeout(moodCheckTimer); moodCheckTimer = null; clearInterval(tm); tm = null }
+            document.addEventListener('visibilitychange', function () {
+                if (document.hidden) {
+                    stop();
+                    return;
+                }
+                scheduleMoodCheck(100);
+                start(false);
+            });
+            if (!document.hidden) {
+                scheduleMoodCheck(100);
+                start(false);
+            }
         })();
 
         /* ═══════════════════════════════════════
