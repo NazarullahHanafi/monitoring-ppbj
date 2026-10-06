@@ -207,6 +207,7 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
             Route::get('/overview', [CommandCenterController::class, 'overview'])->middleware('throttle:60,1')->name('overview');
             Route::get('/search', [CommandCenterController::class, 'search'])->middleware('throttle:60,1')->name('search');
             Route::post('/ask', [CommandCenterController::class, 'ask'])->middleware('throttle:30,1')->name('ask');
+            Route::get('/reconciliation', [CommandCenterController::class, 'reconciliation'])->middleware('throttle:30,1')->name('reconciliation');
             Route::get('/journey/{ppbj}', [CommandCenterController::class, 'journey'])->middleware('throttle:60,1')->name('journey');
             Route::get('/passport/{ppbj}/qr', [CommandCenterController::class, 'passportQr'])->middleware('throttle:60,1')->name('passport.qr');
             Route::get('/meeting/pdf', [CommandCenterController::class, 'meetingPdf'])->middleware('throttle:10,1')->name('meeting.pdf');

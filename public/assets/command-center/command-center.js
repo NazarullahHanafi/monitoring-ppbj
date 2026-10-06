@@ -9,6 +9,7 @@
         overview: root.dataset.overviewUrl,
         search: root.dataset.searchUrl,
         ask: root.dataset.askUrl,
+        reconciliation: root.dataset.reconciliationUrl,
         journey: root.dataset.journeyUrl
     };
     var overviewCacheKey = 'simonpr.command-center.overview.v2';
@@ -193,13 +194,29 @@
             }).join('') + '</dl></details>';
     }
 
+    function reconciliationHtml(data) {
+        if (!data) return '';
+        var issues = Array.isArray(data.issues) ? data.issues : [];
+        var stages = Array.isArray(data.stages) ? data.stages : [];
+        return '<section class="cc-reconciliation is-' + esc(data.severity) + '">' +
+            '<div class="cc-reconciliation-head"><strong>' + esc(data.label) + '</strong><span>Skor ' + esc(data.score) + '</span></div>' +
+            '<div class="cc-reconciliation-stages">' + stages.map(function (stage) {
+                return '<span class="is-' + esc(stage.state) + '">' + esc(stage.label) + '</span>';
+            }).join('') + '</div>' +
+            (issues.length ? '<ul>' + issues.slice(0, 4).map(function (issue) {
+                return '<li class="is-' + esc(issue.level) + '">' + esc(issue.message) + '</li>';
+            }).join('') + '</ul>' : '<p>Rangkaian data konsisten.</p>') +
+            '<div class="cc-reconciliation-foot"><span>Tindak lanjut: ' + esc(data.next_action) + '</span>' +
+            '<span>Gap PR–SP ' + esc(data.gaps && data.gaps.pr_sp || '-') + ' · SP–BPG ' + esc(data.gaps && data.gaps.sp_bpg || '-') + '</span></div></section>';
+    }
+
     function resultHtml(row) {
         return '<article class="cc-result-item"><div><div class="cc-item-title">' + esc(row.ppbj_no) + ' · ' + esc(row.uraian) + '</div>' +
             '<div class="cc-item-sub">' + esc(row.portofolio) + ' · ' + esc(row.buyer) + ' · ' + esc(row.vendor) + '</div>' +
             '<div class="cc-result-values"><span class="cc-pill">PR ' + esc(row.nilai_pr_label) + '</span>' +
             '<span class="cc-pill">SP ' + esc(row.nilai_sp_label) + '</span><span class="cc-pill">Progress ' + esc(row.progress) + '%</span>' +
             (row.matched_on ? '<span class="cc-pill cc-pill-match">Cocok di ' + esc(row.matched_on) + (row.matched_value ? ': ' + esc(row.matched_value) : '') + '</span>' : '') + '</div>' +
-            resultDetailsHtml(row.details) + '</div>' +
+            reconciliationHtml(row.reconciliation) + resultDetailsHtml(row.details) + '</div>' +
             '<button class="cc-open" data-journey="' + esc(row.id) + '">Digital Passport</button></article>';
     }
 
@@ -220,7 +237,9 @@
         setLoading(button, true);
         fetchJson(urls.search + '?q=' + encodeURIComponent(query))
             .then(function (data) {
-                var summary = data.detected_value_label
+                var summary = data.money_query && data.money_query.label
+                    ? data.money_query.label + ' · ' + data.count + ' data ditemukan'
+                    : data.detected_value_label
                     ? 'Nilai terdeteksi: ' + data.detected_value_label + ' · ' + data.count + ' data ditemukan'
                     : data.count + ' data ditemukan';
                 showResults('Hasil untuk “' + query + '”', summary, data.results);
@@ -242,6 +261,23 @@
             body: JSON.stringify({ question: query })
         }).then(function (data) {
             showResults('Jawaban SIMONPR', data.answer, data.results);
+        }).catch(function (error) {
+            showError(error.message);
+        }).finally(function () {
+            setLoading(button, false);
+        });
+    }
+
+    function doReconciliation() {
+        var button = document.getElementById('ccReconciliationButton');
+        setLoading(button, true);
+        fetchJson(urls.reconciliation).then(function (data) {
+            var summary = data.summary || {};
+            var text = (summary.critical || 0) + ' perlu koreksi · ' + (summary.warning || 0) +
+                ' perlu dilengkapi · ' + (summary.ready || 0) + ' sesuai · gap kumulatif ' +
+                (summary.financial_gap_label || 'Rp 0');
+            if (summary.limited) text += ' · menampilkan 50 prioritas terbaru';
+            showResults('Rekonsiliasi PR–SP–DO–BPG–Invoice', text, data.results || []);
         }).catch(function (error) {
             showError(error.message);
         }).finally(function () {
@@ -405,6 +441,13 @@
     document.querySelectorAll('[data-question]').forEach(function (button) {
         button.addEventListener('click', function () { doAsk(button.dataset.question); });
     });
+    document.querySelectorAll('[data-search-query]').forEach(function (button) {
+        button.addEventListener('click', function () {
+            document.getElementById('ccSearchInput').value = button.dataset.searchQuery;
+            doSearch();
+        });
+    });
+    document.getElementById('ccReconciliationButton').addEventListener('click', doReconciliation);
     document.getElementById('ccRefresh').addEventListener('click', function () {
         try { sessionStorage.removeItem(overviewCacheKey); } catch (error) { /* opsional */ }
         loadOverview(true);

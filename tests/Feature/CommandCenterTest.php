@@ -59,7 +59,7 @@ class CommandCenterTest extends TestCase
         $this->assertStringContainsString("document.addEventListener('fullscreenchange'", $script);
         $this->assertStringContainsString("document.body.classList.contains('cc-fullscreen')", $script);
         $this->assertStringContainsString('syncFullscreenUi(false)', $script);
-        $this->assertStringContainsString("margin-left: 0 !important", $styles);
+        $this->assertStringContainsString('margin-left: 0 !important', $styles);
         $this->assertStringContainsString('content-visibility: auto', $styles);
         $this->assertStringContainsString('id="ccArchivePanel"', $script);
         $this->assertStringContainsString('archiveCache', $script);
@@ -67,6 +67,9 @@ class CommandCenterTest extends TestCase
         $this->assertStringContainsString('rel="noopener noreferrer"', $script);
         $this->assertStringNotContainsString("showResults('Arsip ", $script);
         $this->assertStringContainsString('.cc-archive-panel', $styles);
+        $this->assertStringContainsString('doReconciliation', $script);
+        $this->assertStringContainsString('cc-reconciliation', $styles);
+        $this->assertStringContainsString('data-reconciliation-url', file_get_contents(resource_path('views/command-center/index.blade.php')));
     }
 
     public function test_search_finds_pr_by_pr_contract_and_linked_sp_values(): void
@@ -171,6 +174,90 @@ class CommandCenterTest extends TestCase
             ->get(route('command-center.passport.qr', $row))
             ->assertOk()
             ->assertHeader('content-type', 'image/svg+xml');
+    }
+
+    public function test_smart_money_search_supports_ranges_thresholds_around_and_rankings(): void
+    {
+        $range = $this->makePpbj('PKB/PR-26/CON/0910', 75_000_000, 70_000_000);
+        $billion = $this->makePpbj('PKB/PR-26/CON/0911', 1_375_000_000, 1_300_000_000);
+        $largest = $this->makePpbj('PKB/PR-26/CON/0912', 2_000_000_000, 1_900_000_000);
+        $this->makePpbj('PKB/PR-26/CON/0913', 25_000_000, 24_000_000);
+
+        $this->actingAs($this->user)
+            ->getJson(route('command-center.search', ['q' => 'nilai PR antara 50 sampai 100 juta']))
+            ->assertOk()
+            ->assertJsonPath('count', 1)
+            ->assertJsonPath('results.0.id', $range->id)
+            ->assertJsonPath('money_query.mode', 'range');
+
+        $this->actingAs($this->user)
+            ->getJson(route('command-center.search', ['q' => 'nilai PR di atas 1,3 miliar']))
+            ->assertOk()
+            ->assertJsonFragment(['id' => $billion->id])
+            ->assertJsonFragment(['id' => $largest->id]);
+
+        $this->actingAs($this->user)
+            ->getJson(route('command-center.search', ['q' => 'nilai PR sekitar 1,375 milyar']))
+            ->assertOk()
+            ->assertJsonPath('results.0.id', $billion->id)
+            ->assertJsonPath('money_query.mode', 'around');
+
+        $this->actingAs($this->user)
+            ->getJson(route('command-center.search', ['q' => '2 nilai PR terbesar']))
+            ->assertOk()
+            ->assertJsonPath('count', 2)
+            ->assertJsonPath('results.0.id', $largest->id)
+            ->assertJsonPath('results.1.id', $billion->id)
+            ->assertJsonPath('money_query.mode', 'rank');
+    }
+
+    public function test_reconciliation_is_explainable_cached_and_uses_a_small_query_budget(): void
+    {
+        $critical = $this->makePpbj('PKB/PR-26/CON/0920', 10_000_000, 12_000_000, [
+            'awarding_sp' => '001/PKU/SP/2026',
+        ]);
+        $warning = $this->makePpbj('PKB/PR-26/CON/0921', 20_000_000, 19_000_000, [
+            'awarding_sp' => '002/PKU/SP/2026',
+            'do_no' => 'DO-0921',
+            'do_date' => today(),
+        ]);
+        $this->makePpbj('PKB/PR-26/CON/0922', 30_000_000, 30_000_000, [
+            'awarding_sp' => '003/PKU/SP/2026',
+            'do_no' => 'DO-0922',
+            'do_date' => today(),
+            'bpg_no' => 'BPG-0922',
+            'nilai_bpg' => 30_000_000,
+            'tgl_bpg' => today(),
+            'no_invoice' => 'INV-0922',
+            'tgl_invoice' => today(),
+        ]);
+
+        CommandCenterController::clearCache();
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+
+        $response = $this->actingAs($this->user)
+            ->getJson(route('command-center.reconciliation'))
+            ->assertOk()
+            ->assertJsonPath('summary.total', 3)
+            ->assertJsonPath('summary.critical', 1)
+            ->assertJsonPath('summary.warning', 1)
+            ->assertJsonPath('summary.ready', 1)
+            ->assertJsonFragment(['id' => $critical->id])
+            ->assertJsonFragment(['id' => $warning->id])
+            ->assertJsonStructure(['results' => [['reconciliation' => ['severity', 'label', 'score', 'issues', 'next_action', 'gaps', 'stages']]]]);
+
+        $firstRequestQueries = count(DB::getQueryLog());
+        $criticalResult = collect($response->json('results'))->firstWhere('id', $critical->id);
+        $this->assertSame('critical', $criticalResult['reconciliation']['severity']);
+        $this->assertContains('sp_above_pr', collect($criticalResult['reconciliation']['issues'])->pluck('code')->all());
+
+        DB::flushQueryLog();
+        $this->actingAs($this->user)->getJson(route('command-center.reconciliation'))->assertOk();
+        $cachedRequestQueries = count(DB::getQueryLog());
+
+        $this->assertLessThanOrEqual(3, $firstRequestQueries, 'Rekonsiliasi tidak boleh memicu N+1.');
+        $this->assertSame(0, $cachedRequestQueries, 'Rekonsiliasi kedua harus dilayani dari cache.');
     }
 
     public function test_overview_is_cached_and_stays_within_a_small_query_budget(): void

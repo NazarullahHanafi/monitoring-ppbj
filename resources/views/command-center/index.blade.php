@@ -11,6 +11,7 @@
     data-overview-url="{{ route('command-center.overview') }}"
     data-search-url="{{ route('command-center.search') }}"
     data-ask-url="{{ route('command-center.ask') }}"
+    data-reconciliation-url="{{ route('command-center.reconciliation') }}"
     data-journey-url="{{ url('/command-center/journey') }}">
     <section class="cc-hero">
         <div class="cc-orb cc-orb-a"></div><div class="cc-orb cc-orb-b"></div>
@@ -44,6 +45,8 @@
             <button data-question="Tampilkan PR belum SP">Belum ada SP</button>
             <button data-question="Kontrak yang segera habis">Kontrak segera habis</button>
             <button data-question="Pengadaan yang selesai lengkap">Sudah lengkap</button>
+            <button data-search-query="10 nilai PR terbesar">10 Nilai PR Terbesar</button>
+            <button type="button" class="cc-chip-audit" id="ccReconciliationButton">Rekonsiliasi PR–Invoice</button>
         </div>
     </section>
 

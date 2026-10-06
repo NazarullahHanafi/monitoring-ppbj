@@ -28,6 +28,10 @@ class CommandCenterController extends Controller
 
     private const OVERVIEW_TTL = 300;
 
+    private const RECONCILIATION_CACHE_KEY = 'command_center:reconciliation:v1';
+
+    private const RECONCILIATION_TTL = 180;
+
     private const SEARCH_LIMIT = 24;
 
     /** Kolom bisnis PPBJ yang aman ditelusuri dari Command Center. */
@@ -118,13 +122,17 @@ class CommandCenterController extends Controller
         ]);
 
         $query = trim($validated['q']);
-        $money = $this->parseMoneyExpression($query);
-        $rows = $this->searchRows($query, $money);
+        $moneyCriteria = $this->parseMoneyCriteria($query);
+        $money = $moneyCriteria['value'] ?? null;
+        $rows = $this->searchRows($query, $moneyCriteria);
 
         return response()->json([
             'query' => $query,
             'detected_value' => $money,
             'detected_value_label' => $money !== null ? $this->rupiah($money) : null,
+            'money_query' => $moneyCriteria === null ? null : collect($moneyCriteria)
+                ->only(['mode', 'field', 'field_label', 'min', 'max', 'value', 'label', 'sort', 'limit'])
+                ->all(),
             'count' => $rows->count(),
             'results' => $rows,
         ]);
@@ -138,7 +146,7 @@ class CommandCenterController extends Controller
 
         $question = trim($validated['question']);
         $lower = mb_strtolower($question);
-        $money = $this->parseMoneyExpression($question);
+        $moneyCriteria = $this->parseMoneyCriteria($question);
         $query = $this->commandCenterQuery();
         $filters = [];
 
@@ -176,9 +184,9 @@ class CommandCenterController extends Controller
             $filters[] = 'selesai/lengkap';
         }
 
-        if ($money !== null) {
-            $this->applyMoneyFilter($query, $money);
-            $filters[] = 'nilai '.$this->rupiah($money);
+        if ($moneyCriteria !== null) {
+            $this->applyMoneyCriteria($query, $moneyCriteria);
+            $filters[] = $moneyCriteria['label'];
         }
 
         if ($filters === []) {
@@ -194,7 +202,16 @@ class CommandCenterController extends Controller
             $filters[] = 'pencarian kata kunci';
         }
 
-        $rows = $query->orderByDesc('updated_at')->limit(self::SEARCH_LIMIT)->get()->map(fn (Ppbj $row) => $this->presentResult($row));
+        if (($moneyCriteria['mode'] ?? null) === 'rank') {
+            $query->orderBy($this->moneyFieldColumns($moneyCriteria['field'])[0], $moneyCriteria['sort']);
+        } else {
+            $query->orderByDesc('updated_at');
+        }
+
+        $rows = $query
+            ->limit($moneyCriteria['limit'] ?? self::SEARCH_LIMIT)
+            ->get()
+            ->map(fn (Ppbj $row) => $this->presentResult($row, $moneyCriteria['value'] ?? null, $question, $moneyCriteria));
 
         return response()->json([
             'answer' => $rows->isEmpty()
@@ -204,6 +221,19 @@ class CommandCenterController extends Controller
             'count' => $rows->count(),
             'results' => $rows,
         ]);
+    }
+
+    public function reconciliation(Request $request): JsonResponse
+    {
+        if ($request->boolean('refresh') && strtolower((string) $request->user()?->role) === 'superadmin') {
+            Cache::forget(self::RECONCILIATION_CACHE_KEY);
+        }
+
+        return response()->json(Cache::remember(
+            self::RECONCILIATION_CACHE_KEY,
+            self::RECONCILIATION_TTL,
+            fn () => $this->buildReconciliation()
+        ));
     }
 
     public function journey(Ppbj $ppbj): JsonResponse
@@ -317,6 +347,7 @@ class CommandCenterController extends Controller
     public static function clearCache(): void
     {
         Cache::forget(self::OVERVIEW_CACHE_KEY);
+        Cache::forget(self::RECONCILIATION_CACHE_KEY);
     }
 
     private function overviewData(): array
@@ -326,6 +357,80 @@ class CommandCenterController extends Controller
             self::OVERVIEW_TTL,
             fn () => $this->buildOverview()
         );
+    }
+
+    private function buildReconciliation(): array
+    {
+        $critical = $this->reconciliationCriticalSql();
+        $warning = $this->reconciliationWarningSql();
+        $active = "(status IS NULL OR status != 'CANCELLED')";
+
+        $summary = DB::table('ppbj')
+            ->whereRaw($active)
+            ->selectRaw('COUNT(*) AS total')
+            ->selectRaw("SUM(CASE WHEN ({$critical}) THEN 1 ELSE 0 END) AS critical")
+            ->selectRaw("SUM(CASE WHEN NOT ({$critical}) AND ({$warning}) THEN 1 ELSE 0 END) AS warning")
+            ->selectRaw("SUM(CASE WHEN NOT ({$critical}) AND NOT ({$warning}) THEN 1 ELSE 0 END) AS ready")
+            ->selectRaw('COALESCE(SUM(CASE WHEN COALESCE(total_sebelum_ppn, 0) > 0 AND COALESCE(nilai_sp_spk, 0) > 0 THEN ABS(total_sebelum_ppn - nilai_sp_spk) ELSE 0 END), 0) AS financial_gap')
+            ->first();
+
+        $issues = $this->commandCenterSearchQuery()
+            ->whereRaw($active)
+            ->whereRaw("({$critical}) OR ({$warning})")
+            ->orderByRaw("CASE WHEN ({$critical}) THEN 0 ELSE 1 END")
+            ->orderByDesc('updated_at')
+            ->limit(50)
+            ->get()
+            ->map(function (Ppbj $row) {
+                return array_merge($this->presentResult($row), [
+                    'reconciliation' => $this->reconciliationFor($row),
+                ]);
+            })
+            ->values();
+
+        $financialGap = (float) ($summary->financial_gap ?? 0);
+
+        return [
+            'generated_at' => now()->timezone('Asia/Jakarta')->format('d M Y H:i:s'),
+            'cache_seconds' => self::RECONCILIATION_TTL,
+            'summary' => [
+                'total' => (int) ($summary->total ?? 0),
+                'critical' => (int) ($summary->critical ?? 0),
+                'warning' => (int) ($summary->warning ?? 0),
+                'ready' => (int) ($summary->ready ?? 0),
+                'financial_gap' => $financialGap,
+                'financial_gap_label' => $this->rupiah($financialGap),
+                'shown' => $issues->count(),
+                'limited' => ((int) ($summary->critical ?? 0) + (int) ($summary->warning ?? 0)) > $issues->count(),
+            ],
+            'results' => $issues,
+        ];
+    }
+
+    private function reconciliationCriticalSql(): string
+    {
+        return <<<'SQL'
+            COALESCE(total_sebelum_ppn, 0) <= 0
+            OR (COALESCE(nilai_sp_spk, 0) > 0 AND nilai_sp_spk > total_sebelum_ppn)
+            OR (COALESCE(nilai_bpg, 0) > 0 AND COALESCE(nilai_sp_spk, 0) > 0 AND nilai_bpg > nilai_sp_spk)
+            OR (TRIM(COALESCE(no_invoice, '')) != '' AND TRIM(COALESCE(bpg_no, '')) = '')
+            OR (TRIM(COALESCE(bpg_no, '')) != '' AND TRIM(COALESCE(do_no, '')) = '')
+            OR ((TRIM(COALESCE(do_no, '')) = '') != (do_date IS NULL))
+            OR ((TRIM(COALESCE(bpg_no, '')) = '') != (tgl_bpg IS NULL))
+            OR ((TRIM(COALESCE(no_invoice, '')) = '') != (tgl_invoice IS NULL))
+        SQL;
+    }
+
+    private function reconciliationWarningSql(): string
+    {
+        return <<<'SQL'
+            (TRIM(COALESCE(awarding_sp, '')) = '' AND COALESCE(nilai_sp_spk, 0) <= 0)
+            OR (COALESCE(total_sebelum_ppn, 0) > 0 AND COALESCE(nilai_sp_spk, 0) > 0 AND ABS(total_sebelum_ppn - nilai_sp_spk) / total_sebelum_ppn >= 0.20)
+            OR (TRIM(COALESCE(do_no, '')) != '' AND TRIM(COALESCE(bpg_no, '')) = '')
+            OR (TRIM(COALESCE(bpg_no, '')) != '' AND TRIM(COALESCE(no_invoice, '')) = '')
+            OR (COALESCE(nilai_bpg, 0) > 0 AND COALESCE(nilai_sp_spk, 0) > 0 AND ABS(nilai_bpg - nilai_sp_spk) > 1000)
+            OR (do_date IS NOT NULL AND promised_date IS NOT NULL AND do_date > promised_date)
+        SQL;
     }
 
     private function buildOverview(): array
@@ -427,28 +532,36 @@ class CommandCenterController extends Controller
             'id', 'ppbj_no', 'uraian', 'portofolio', 'buyer', 'penyedia_eksternal',
             'general_registration_number', 'general_registered_at', 'total_sebelum_ppn', 'nilai_sp_spk',
             'spph_rfq_1', 'tgl_spph', 'awarding_sp', 'tgl_awarding_sp', 'tgl_spk',
-            'promised_date', 'closed_date', 'do_no', 'do_date', 'bpg_no', 'bpb_no',
-            'no_invoice', 'progres', 'status', 'status_sla', 'sisa_target_sla',
+            'promised_date', 'closed_date', 'do_no', 'do_date', 'bpg_no', 'nilai_bpg', 'tgl_bpg', 'bpb_no',
+            'no_invoice', 'tgl_invoice', 'progres', 'status', 'status_sla', 'sisa_target_sla',
             'target_sla_hari', 'tgl_diserahkan', 'tgl_terima_pr', 'tgl_ppbj',
             'created_at', 'updated_at',
         ]);
     }
 
-    private function searchRows(string $query, ?float $money)
+    private function searchRows(string $query, ?array $moneyCriteria)
     {
         $builder = $this->commandCenterSearchQuery();
-        $this->applyUniversalSearchFilter($builder, $query, $money);
+        if ($moneyCriteria !== null) {
+            $this->applyMoneyCriteria($builder, $moneyCriteria);
+        } else {
+            $this->applyUniversalSearchFilter($builder, $query);
+        }
         $like = '%'.$this->escapeLike($query).'%';
 
-        return $builder
-            ->orderByRaw(
+        if (($moneyCriteria['mode'] ?? null) === 'rank') {
+            $builder->orderBy($this->moneyFieldColumns($moneyCriteria['field'])[0], $moneyCriteria['sort']);
+        } else {
+            $builder->orderByRaw(
                 'CASE WHEN ppbj_no = ? THEN 0 WHEN ppbj_no LIKE ? THEN 1 WHEN general_registration_number LIKE ? THEN 2 ELSE 3 END',
                 [$query, $like, $like]
-            )
-            ->orderByDesc('updated_at')
-            ->limit(self::SEARCH_LIMIT)
+            )->orderByDesc('updated_at');
+        }
+
+        return $builder
+            ->limit($moneyCriteria['limit'] ?? self::SEARCH_LIMIT)
             ->get()
-            ->map(fn (Ppbj $row) => $this->presentResult($row, $money, $query));
+            ->map(fn (Ppbj $row) => $this->presentResult($row, $moneyCriteria['value'] ?? null, $query, $moneyCriteria));
     }
 
     private function commandCenterSearchQuery(): Builder
@@ -463,14 +576,13 @@ class CommandCenterController extends Controller
         return Ppbj::query()->select($columns);
     }
 
-    private function applyUniversalSearchFilter(Builder $builder, string $query, ?float $money): void
+    private function applyUniversalSearchFilter(Builder $builder, string $query): void
     {
         $like = '%'.$this->escapeLike($query).'%';
         $normalizedDate = $this->normalizeSearchDate($query);
         $plainNumber = $this->parsePlainNumber($query);
-        $moneyContext = $money !== null ? $this->moneyMatchContext($money) : null;
 
-        $builder->where(function (Builder $match) use ($like, $normalizedDate, $plainNumber, $moneyContext) {
+        $builder->where(function (Builder $match) use ($like, $normalizedDate, $plainNumber) {
             $first = true;
             foreach (array_keys(self::SEARCH_TEXT_FIELDS + self::SEARCH_DATE_FIELDS) as $column) {
                 $method = $first ? 'where' : 'orWhere';
@@ -490,28 +602,19 @@ class CommandCenterController extends Controller
                 }
             }
 
-            if ($moneyContext !== null) {
-                $match->orWhereBetween('total_sebelum_ppn', [$moneyContext['min'], $moneyContext['max']])
-                    ->orWhereBetween('nilai_sp_spk', [$moneyContext['min'], $moneyContext['max']])
-                    ->orWhereBetween('nilai_bpg', [$moneyContext['min'], $moneyContext['max']]);
-                if ($moneyContext['ppbj_ids'] !== []) {
-                    $match->orWhereIn('id', $moneyContext['ppbj_ids']);
-                }
-                if ($moneyContext['legacy_numbers'] !== []) {
-                    $match->orWhereIn('ppbj_no', $moneyContext['legacy_numbers']);
-                }
-            }
         });
     }
 
-    private function applyMoneyFilter(Builder $query, float $money): void
+    private function applyMoneyCriteria(Builder $query, array $criteria): void
     {
-        $context = $this->moneyMatchContext($money);
+        $columns = $this->moneyFieldColumns($criteria['field']);
+        $context = $this->moneyMatchContext($criteria);
 
-        $query->where(function (Builder $q) use ($context) {
-            $q->whereBetween('total_sebelum_ppn', [$context['min'], $context['max']])
-                ->orWhereBetween('nilai_sp_spk', [$context['min'], $context['max']])
-                ->orWhereBetween('nilai_bpg', [$context['min'], $context['max']]);
+        $query->where(function (Builder $q) use ($columns, $criteria, $context) {
+            foreach ($columns as $index => $column) {
+                $method = $index === 0 ? 'where' : 'orWhere';
+                $q->{$method}(fn ($part) => $this->applyMoneyCriterionToColumn($part, $column, $criteria));
+            }
             if ($context['ppbj_ids'] !== []) {
                 $q->orWhereIn('id', $context['ppbj_ids']);
             }
@@ -521,30 +624,37 @@ class CommandCenterController extends Controller
         });
     }
 
-    private function moneyMatchContext(float $money): array
+    private function moneyMatchContext(array $criteria): array
     {
-        $tolerance = max(0.5, abs($money) * 0.000001);
-        $min = $money - $tolerance;
-        $max = $money + $tolerance;
         $spPpbjIds = [];
         $legacyNumbers = [];
 
-        if (Schema::hasTable('sps')) {
+        if ($criteria['field'] !== 'bpg' && $criteria['mode'] !== 'rank' && Schema::hasTable('sps')) {
+            $spColumns = $criteria['field'] === 'pr'
+                ? ['nilai_pr']
+                : ($criteria['field'] === 'sp' ? ['nilai_sp'] : ['nilai_sp', 'nilai_pr']);
+
             if (Schema::hasTable('sp_ppbj')) {
                 $spPpbjIds = DB::table('sp_ppbj')
                     ->join('sps', 'sps.id', '=', 'sp_ppbj.sp_id')
-                    ->where(fn ($builder) => $builder
-                        ->whereBetween('sps.nilai_sp', [$min, $max])
-                        ->orWhereBetween('sps.nilai_pr', [$min, $max]))
+                    ->where(function ($builder) use ($spColumns, $criteria) {
+                        foreach ($spColumns as $index => $column) {
+                            $method = $index === 0 ? 'where' : 'orWhere';
+                            $builder->{$method}(fn ($part) => $this->applyMoneyCriterionToColumn($part, 'sps.'.$column, $criteria));
+                        }
+                    })
                     ->limit(100)
                     ->pluck('sp_ppbj.ppbj_id')
                     ->all();
             }
 
             $legacyNumbers = DB::table('sps')
-                ->where(fn ($builder) => $builder
-                    ->whereBetween('nilai_sp', [$min, $max])
-                    ->orWhereBetween('nilai_pr', [$min, $max]))
+                ->where(function ($builder) use ($spColumns, $criteria) {
+                    foreach ($spColumns as $index => $column) {
+                        $method = $index === 0 ? 'where' : 'orWhere';
+                        $builder->{$method}(fn ($part) => $this->applyMoneyCriterionToColumn($part, $column, $criteria));
+                    }
+                })
                 ->whereNotNull('nomor_pr')
                 ->limit(100)
                 ->pluck('nomor_pr')
@@ -552,14 +662,43 @@ class CommandCenterController extends Controller
         }
 
         return [
-            'min' => $min,
-            'max' => $max,
             'ppbj_ids' => $spPpbjIds,
             'legacy_numbers' => $legacyNumbers,
         ];
     }
 
-    private function presentResult(Ppbj $row, ?float $searchedValue = null, ?string $searchedText = null): array
+    private function applyMoneyCriterionToColumn($query, string $column, array $criteria): void
+    {
+        if ($criteria['mode'] === 'rank') {
+            $query->where($column, '>', 0);
+
+            return;
+        }
+        if ($criteria['mode'] === 'min') {
+            $query->where($column, '>', $criteria['min']);
+
+            return;
+        }
+        if ($criteria['mode'] === 'max') {
+            $query->where($column, '>', 0)->where($column, '<', $criteria['max']);
+
+            return;
+        }
+
+        $query->whereBetween($column, [$criteria['min'], $criteria['max']]);
+    }
+
+    private function moneyFieldColumns(string $field): array
+    {
+        return match ($field) {
+            'pr' => ['total_sebelum_ppn'],
+            'sp' => ['nilai_sp_spk'],
+            'bpg' => ['nilai_bpg'],
+            default => ['total_sebelum_ppn', 'nilai_sp_spk', 'nilai_bpg'],
+        };
+    }
+
+    private function presentResult(Ppbj $row, ?float $searchedValue = null, ?string $searchedText = null, ?array $moneyCriteria = null): array
     {
         $pr = (float) ($row->total_sebelum_ppn ?? 0);
         $sp = (float) ($row->nilai_sp_spk ?? 0);
@@ -568,7 +707,9 @@ class CommandCenterController extends Controller
         if ($searchedText !== null) {
             [$matched, $matchedValue] = $this->findMatchedField($row, $searchedText);
         }
-        if ($matched === null && $searchedValue !== null) {
+        if ($matched === null && $moneyCriteria !== null) {
+            [$matched, $matchedValue] = $this->findMatchedMoneyField($row, $moneyCriteria);
+        } elseif ($matched === null && $searchedValue !== null) {
             $matched = abs($pr - $searchedValue) <= max(0.5, $searchedValue * 0.000001)
                 ? 'Nilai PR'
                 : (abs($sp - $searchedValue) <= max(0.5, $searchedValue * 0.000001) ? 'Nilai SP/Kontrak' : 'Nilai SP terhubung');
@@ -597,6 +738,86 @@ class CommandCenterController extends Controller
             'matched_value' => $matchedValue,
             'details' => $this->resultDetails($row),
         ];
+    }
+
+    private function reconciliationFor(Ppbj $row): array
+    {
+        $critical = [];
+        $warning = [];
+        $pr = (float) ($row->total_sebelum_ppn ?? 0);
+        $sp = (float) ($row->nilai_sp_spk ?? 0);
+        $bpg = (float) ($row->nilai_bpg ?? 0);
+
+        if ($pr <= 0) {
+            $critical[] = ['code' => 'missing_pr_value', 'message' => 'Nilai PR kosong atau nol.'];
+        }
+        if ($sp > 0 && $pr > 0 && $sp > $pr) {
+            $critical[] = ['code' => 'sp_above_pr', 'message' => 'Nilai SP melebihi PR sebesar '.$this->rupiah($sp - $pr).'.'];
+        }
+        if ($bpg > 0 && $sp > 0 && $bpg > $sp) {
+            $critical[] = ['code' => 'bpg_above_sp', 'message' => 'Nilai BPG melebihi SP sebesar '.$this->rupiah($bpg - $sp).'.'];
+        }
+        if (filled($row->no_invoice) && blank($row->bpg_no)) {
+            $critical[] = ['code' => 'invoice_without_bpg', 'message' => 'Invoice sudah tercatat tetapi nomor BPG belum ada.'];
+        }
+        if (filled($row->bpg_no) && blank($row->do_no)) {
+            $critical[] = ['code' => 'bpg_without_delivery', 'message' => 'BPG sudah tercatat tetapi DO/Surat Jalan/BAST belum ada.'];
+        }
+        $this->appendIncompletePair($critical, $row->do_no, $row->do_date, 'delivery_pair', 'Nomor dan tanggal DO/Surat Jalan/BAST harus diisi berpasangan.');
+        $this->appendIncompletePair($critical, $row->bpg_no, $row->tgl_bpg, 'bpg_pair', 'Nomor dan tanggal BPG harus diisi berpasangan.');
+        $this->appendIncompletePair($critical, $row->no_invoice, $row->tgl_invoice, 'invoice_pair', 'Nomor dan tanggal invoice harus diisi berpasangan.');
+
+        if (blank($row->awarding_sp) && $sp <= 0) {
+            $warning[] = ['code' => 'missing_sp', 'message' => 'SP/Kontrak belum tercatat.'];
+        }
+        if ($pr > 0 && $sp > 0 && abs($pr - $sp) / $pr >= 0.20) {
+            $warning[] = ['code' => 'large_pr_sp_gap', 'message' => 'Selisih PR dan SP mencapai '.number_format(abs($pr - $sp) / $pr * 100, 1, ',', '.').'%.'];
+        }
+        if (filled($row->do_no) && blank($row->bpg_no)) {
+            $warning[] = ['code' => 'waiting_bpg', 'message' => 'Dokumen serah terima tersedia; BPG belum tercatat.'];
+        }
+        if (filled($row->bpg_no) && blank($row->no_invoice)) {
+            $warning[] = ['code' => 'waiting_invoice', 'message' => 'BPG tersedia; invoice belum tercatat.'];
+        }
+        if ($bpg > 0 && $sp > 0 && abs($bpg - $sp) > 1000) {
+            $warning[] = ['code' => 'bpg_sp_gap', 'message' => 'Selisih nilai SP dan BPG '.$this->rupiah(abs($sp - $bpg)).'.'];
+        }
+        if ($row->do_date && $row->promised_date && Carbon::parse($row->do_date)->gt(Carbon::parse($row->promised_date))) {
+            $days = Carbon::parse($row->promised_date)->diffInDays(Carbon::parse($row->do_date));
+            $warning[] = ['code' => 'late_delivery', 'message' => 'Serah terima melewati tanggal pemenuhan '.$days.' hari.'];
+        }
+
+        $severity = $critical !== [] ? 'critical' : ($warning !== [] ? 'warning' : 'ready');
+        $issues = collect($critical)->map(fn (array $item) => $item + ['level' => 'critical'])
+            ->merge(collect($warning)->map(fn (array $item) => $item + ['level' => 'warning']))
+            ->values()
+            ->all();
+
+        return [
+            'severity' => $severity,
+            'label' => ['critical' => 'Perlu koreksi', 'warning' => 'Perlu dilengkapi', 'ready' => 'Sesuai'][$severity],
+            'score' => min(100, count($critical) * 30 + count($warning) * 10),
+            'issues' => $issues,
+            'next_action' => $issues[0]['message'] ?? 'Rangkaian PR sampai invoice konsisten.',
+            'gaps' => [
+                'pr_sp' => $pr > 0 && $sp > 0 ? $this->rupiah($pr - $sp) : '-',
+                'sp_bpg' => $sp > 0 && $bpg > 0 ? $this->rupiah($sp - $bpg) : '-',
+            ],
+            'stages' => [
+                ['key' => 'pr', 'label' => 'PR', 'state' => $pr > 0 ? 'done' : 'problem'],
+                ['key' => 'sp', 'label' => 'SP', 'state' => filled($row->awarding_sp) || $sp > 0 ? 'done' : 'empty'],
+                ['key' => 'do', 'label' => 'DO/BAST', 'state' => filled($row->do_no) && filled($row->do_date) ? 'done' : (filled($row->do_no) || filled($row->do_date) ? 'problem' : 'empty')],
+                ['key' => 'bpg', 'label' => 'BPG', 'state' => filled($row->bpg_no) && filled($row->tgl_bpg) ? 'done' : (filled($row->bpg_no) || filled($row->tgl_bpg) ? 'problem' : 'empty')],
+                ['key' => 'invoice', 'label' => 'Invoice', 'state' => filled($row->no_invoice) && filled($row->tgl_invoice) ? 'done' : (filled($row->no_invoice) || filled($row->tgl_invoice) ? 'problem' : 'empty')],
+            ],
+        ];
+    }
+
+    private function appendIncompletePair(array &$issues, mixed $number, mixed $date, string $code, string $message): void
+    {
+        if (filled($number) !== filled($date)) {
+            $issues[] = ['code' => $code, 'message' => $message];
+        }
     }
 
     private function riskFor(Ppbj $row): array
@@ -702,6 +923,38 @@ class CommandCenterController extends Controller
         }
 
         return [null, null];
+    }
+
+    private function findMatchedMoneyField(Ppbj $row, array $criteria): array
+    {
+        $labels = [
+            'total_sebelum_ppn' => 'Nilai PR',
+            'nilai_sp_spk' => 'Nilai SP/Kontrak',
+            'nilai_bpg' => 'Nilai BPG',
+        ];
+
+        foreach ($this->moneyFieldColumns($criteria['field']) as $column) {
+            $value = (float) ($row->getAttribute($column) ?? 0);
+            if ($this->moneyValueMatches($value, $criteria)) {
+                return [$labels[$column], $this->rupiah($value)];
+            }
+        }
+
+        return ['Nilai SP terhubung', $criteria['label']];
+    }
+
+    private function moneyValueMatches(float $value, array $criteria): bool
+    {
+        if ($value <= 0) {
+            return false;
+        }
+
+        return match ($criteria['mode']) {
+            'rank' => true,
+            'min' => $value > $criteria['min'],
+            'max' => $value < $criteria['max'],
+            default => $value >= $criteria['min'] && $value <= $criteria['max'],
+        };
     }
 
     private function resultDetails(Ppbj $row): array
@@ -839,6 +1092,131 @@ class CommandCenterController extends Controller
         }
 
         return $digits === '' ? null : (float) $digits;
+    }
+
+    private function parseMoneyCriteria(string $value): ?array
+    {
+        $text = mb_strtolower(trim($value));
+        $field = $this->detectMoneyField($text);
+        $fieldLabel = match ($field) {
+            'pr' => 'Nilai PR',
+            'sp' => 'Nilai SP/Kontrak',
+            'bpg' => 'Nilai BPG',
+            default => 'Semua nilai',
+        };
+
+        if (preg_match('/\b(terbesar|tertinggi|paling\s+besar|terkecil|terendah|paling\s+kecil)\b/u', $text, $rank)) {
+            $descending = preg_match('/terbesar|tertinggi|paling\s+besar/u', $rank[1]) === 1;
+            preg_match('/\b(\d{1,2})\s*(?:data|pengadaan|pr|sp|kontrak|bpg)?\b/u', $text, $limitMatch);
+            $limit = isset($limitMatch[1]) ? max(1, min(50, (int) $limitMatch[1])) : 10;
+
+            return [
+                'mode' => 'rank', 'field' => $field, 'field_label' => $fieldLabel,
+                'value' => null, 'min' => null, 'max' => null,
+                'sort' => $descending ? 'desc' : 'asc', 'limit' => $limit,
+                'label' => $limit.' '.$fieldLabel.' '.($descending ? 'terbesar' : 'terkecil'),
+            ];
+        }
+
+        $amountPattern = '([\d][\d.,]*)\s*(miliar|milyar|juta|jt|ribu|rb)?';
+        if (preg_match('/(?:\bantara\b|\bdari\b)?\s*'.$amountPattern.'\s*(?:sampai|hingga|s\/d|sd|–|-)\s*'.$amountPattern.'/u', $text, $range)) {
+            $leftUnit = $range[2] ?: ($range[4] ?? '');
+            $rightUnit = $range[4] ?: $leftUnit;
+            $first = $this->parseMoneyAmount($range[1], $leftUnit);
+            $second = $this->parseMoneyAmount($range[3], $rightUnit);
+            if ($first !== null && $second !== null) {
+                $min = min($first, $second);
+                $max = max($first, $second);
+
+                return [
+                    'mode' => 'range', 'field' => $field, 'field_label' => $fieldLabel,
+                    'value' => null, 'min' => $min, 'max' => $max, 'sort' => null,
+                    'limit' => self::SEARCH_LIMIT,
+                    'label' => $fieldLabel.' antara '.$this->rupiah($min).' dan '.$this->rupiah($max),
+                ];
+            }
+        }
+
+        $money = $this->parseMoneyExpression($value);
+        if ($money === null) {
+            return null;
+        }
+
+        if (preg_match('/(?:di\s+atas|lebih\s+dari|lebih\s+besar\s+dari|minimal|setidaknya|>=)/u', $text)) {
+            return [
+                'mode' => 'min', 'field' => $field, 'field_label' => $fieldLabel,
+                'value' => $money, 'min' => $money, 'max' => null, 'sort' => null,
+                'limit' => self::SEARCH_LIMIT, 'label' => $fieldLabel.' di atas '.$this->rupiah($money),
+            ];
+        }
+        if (preg_match('/(?:di\s+bawah|kurang\s+dari|lebih\s+kecil\s+dari|maksimal|<=)/u', $text)) {
+            return [
+                'mode' => 'max', 'field' => $field, 'field_label' => $fieldLabel,
+                'value' => $money, 'min' => 0.0, 'max' => $money, 'sort' => null,
+                'limit' => self::SEARCH_LIMIT, 'label' => $fieldLabel.' di bawah '.$this->rupiah($money),
+            ];
+        }
+        if (preg_match('/(?:sekitar|kisaran|kurang\s+lebih)/u', $text)) {
+            $tolerance = max(1000.0, abs($money) * 0.05);
+
+            return [
+                'mode' => 'around', 'field' => $field, 'field_label' => $fieldLabel,
+                'value' => $money, 'min' => max(0, $money - $tolerance), 'max' => $money + $tolerance,
+                'sort' => null, 'limit' => self::SEARCH_LIMIT,
+                'label' => $fieldLabel.' sekitar '.$this->rupiah($money).' (±5%)',
+            ];
+        }
+
+        $tolerance = max(0.5, abs($money) * 0.000001);
+
+        return [
+            'mode' => 'exact', 'field' => $field, 'field_label' => $fieldLabel,
+            'value' => $money, 'min' => $money - $tolerance, 'max' => $money + $tolerance,
+            'sort' => null, 'limit' => self::SEARCH_LIMIT,
+            'label' => $fieldLabel.' tepat '.$this->rupiah($money),
+        ];
+    }
+
+    private function detectMoneyField(string $text): string
+    {
+        $fields = [];
+        if (preg_match('/\bbpg\b/u', $text)) {
+            $fields[] = 'bpg';
+        }
+        if (preg_match('/\b(?:sp|kontrak)\b/u', $text)) {
+            $fields[] = 'sp';
+        }
+        if (preg_match('/\bpr\b/u', $text)) {
+            $fields[] = 'pr';
+        }
+
+        return count(array_unique($fields)) === 1 ? $fields[0] : 'all';
+    }
+
+    private function parseMoneyAmount(string $raw, string $unit): ?float
+    {
+        $raw = trim($raw);
+        if ($raw === '') {
+            return null;
+        }
+        if ($unit === '') {
+            $digits = preg_replace('/\D/', '', $raw);
+
+            return $digits === '' ? null : (float) $digits;
+        }
+
+        if (str_contains($raw, ',')) {
+            $number = (float) str_replace(',', '.', str_replace('.', '', $raw));
+        } elseif (substr_count($raw, '.') === 1 && strlen((string) strrchr($raw, '.')) <= 3) {
+            $number = (float) $raw;
+        } else {
+            $number = (float) str_replace('.', '', $raw);
+        }
+        $multiplier = in_array($unit, ['miliar', 'milyar'], true)
+            ? 1_000_000_000
+            : (in_array($unit, ['juta', 'jt'], true) ? 1_000_000 : 1_000);
+
+        return $number * $multiplier;
     }
 
     private function trackingToken(string $number): string
