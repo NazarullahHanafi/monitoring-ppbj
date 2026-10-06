@@ -784,6 +784,11 @@ class CommandCenterController extends Controller
             'promised_date' => $row->promised_date ? Carbon::parse($row->promised_date)->format('d M Y') : '-',
             'matched_on' => $matched,
             'matched_value' => $matchedValue,
+            'action_urls' => [
+                'ppbj' => route('ppbj.index', ['search' => $row->ppbj_no]),
+                'spph' => route('spph.index', ['search' => $row->ppbj_no]),
+                'sp' => route('sp.index', ['search' => $row->ppbj_no]),
+            ],
             'details' => $this->resultDetails($row),
         ];
     }

@@ -210,6 +210,22 @@
             '<span>Gap PR–SP ' + esc(data.gaps && data.gaps.pr_sp || '-') + ' · SP–BPG ' + esc(data.gaps && data.gaps.sp_bpg || '-') + '</span></div></section>';
     }
 
+    function resultActionsHtml(row) {
+        var urls = row.action_urls || {};
+        var links = [
+            { key: 'ppbj', label: 'PPBJ', title: 'Buka data ini di Management PPBJ' },
+            { key: 'spph', label: 'SPPH', title: 'Buka data ini di Penomoran SPPH' },
+            { key: 'sp', label: 'SP', title: 'Buka data ini di Penomoran SP' }
+        ].filter(function (action) { return urls[action.key]; }).map(function (action) {
+            return '<a class="cc-direct-action is-' + action.key + '" href="' + esc(urls[action.key]) +
+                '" title="' + esc(action.title) + '">' + esc(action.label) + '</a>';
+        }).join('');
+
+        return '<div class="cc-result-actions">' +
+            (links ? '<nav class="cc-direct-actions" aria-label="Buka data pada menu terkait">' + links + '</nav>' : '') +
+            '<button class="cc-open" data-journey="' + esc(row.id) + '">Digital Passport</button></div>';
+    }
+
     function resultHtml(row) {
         return '<article class="cc-result-item"><div><div class="cc-item-title">' + esc(row.ppbj_no) + ' · ' + esc(row.uraian) + '</div>' +
             '<div class="cc-item-sub">' + esc(row.portofolio) + ' · ' + esc(row.buyer) + ' · ' + esc(row.vendor) + '</div>' +
@@ -217,7 +233,7 @@
             '<span class="cc-pill">SP ' + esc(row.nilai_sp_label) + '</span><span class="cc-pill">Progress ' + esc(row.progress) + '%</span>' +
             (row.matched_on ? '<span class="cc-pill cc-pill-match">Cocok di ' + esc(row.matched_on) + (row.matched_value ? ': ' + esc(row.matched_value) : '') + '</span>' : '') + '</div>' +
             reconciliationHtml(row.reconciliation) + resultDetailsHtml(row.details) + '</div>' +
-            '<button class="cc-open" data-journey="' + esc(row.id) + '">Digital Passport</button></article>';
+            resultActionsHtml(row) + '</article>';
     }
 
     function showResults(title, summary, rows) {

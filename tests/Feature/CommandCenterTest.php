@@ -245,12 +245,18 @@ class CommandCenterTest extends TestCase
             ->assertJsonPath('summary.ready', 1)
             ->assertJsonFragment(['id' => $critical->id])
             ->assertJsonFragment(['id' => $warning->id])
-            ->assertJsonStructure(['results' => [['reconciliation' => ['severity', 'label', 'score', 'issues', 'next_action', 'gaps', 'stages']]]]);
+            ->assertJsonStructure(['results' => [[
+                'action_urls' => ['ppbj', 'spph', 'sp'],
+                'reconciliation' => ['severity', 'label', 'score', 'issues', 'next_action', 'gaps', 'stages'],
+            ]]]);
 
         $firstRequestQueries = count(DB::getQueryLog());
         $criticalResult = collect($response->json('results'))->firstWhere('id', $critical->id);
         $this->assertSame('critical', $criticalResult['reconciliation']['severity']);
         $this->assertContains('sp_above_pr', collect($criticalResult['reconciliation']['issues'])->pluck('code')->all());
+        $this->assertStringContainsString('search=PKB%2FPR-26%2FCON%2F0920', $criticalResult['action_urls']['ppbj']);
+        $this->assertStringContainsString('/spph?', $criticalResult['action_urls']['spph']);
+        $this->assertStringContainsString('/sp?', $criticalResult['action_urls']['sp']);
 
         DB::flushQueryLog();
         $this->actingAs($this->user)->getJson(route('command-center.reconciliation'))->assertOk();
