@@ -276,7 +276,7 @@
             var text = (summary.critical || 0) + ' perlu koreksi · ' + (summary.warning || 0) +
                 ' perlu dilengkapi · ' + (summary.ready || 0) + ' sesuai · gap kumulatif ' +
                 (summary.financial_gap_label || 'Rp 0');
-            if (summary.limited) text += ' · menampilkan 50 prioritas terbaru';
+            if (summary.limited) text += ' · menampilkan ' + (summary.shown || 0) + ' prioritas teratas';
             showResults('Rekonsiliasi PR–SP–DO–BPG–Invoice', text, data.results || []);
         }).catch(function (error) {
             showError(error.message);

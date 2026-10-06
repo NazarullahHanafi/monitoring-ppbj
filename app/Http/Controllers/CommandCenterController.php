@@ -32,6 +32,8 @@ class CommandCenterController extends Controller
 
     private const RECONCILIATION_TTL = 180;
 
+    private const RECONCILIATION_RESULT_LIMIT = 20;
+
     private const SEARCH_LIMIT = 24;
 
     /** Kolom bisnis PPBJ yang aman ditelusuri dari Command Center. */
@@ -383,10 +385,13 @@ class CommandCenterController extends Controller
             ->whereRaw("({$critical}) OR ({$warning})")
             ->orderByRaw("CASE WHEN ({$critical}) THEN 0 ELSE 1 END")
             ->orderByDesc('updated_at')
-            ->limit(50)
+            ->limit(self::RECONCILIATION_RESULT_LIMIT)
             ->get()
             ->map(function (Ppbj $row) {
-                return array_merge($this->presentResult($row), [
+                $record = $this->presentResult($row);
+                unset($record['details']);
+
+                return array_merge($record, [
                     'reconciliation' => $this->reconciliationFor($row),
                 ]);
             })
