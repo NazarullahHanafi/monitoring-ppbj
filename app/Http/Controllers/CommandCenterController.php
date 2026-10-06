@@ -708,6 +708,7 @@ class CommandCenterController extends Controller
     {
         $details = [
             'No. Registrasi Umum' => $row->general_registration_number,
+            'Tanggal Registrasi Umum' => $this->formatSearchDate($row->general_registered_at),
             'Tanggal PPBJ' => $this->formatSearchDate($row->tgl_ppbj),
             'Tanggal Terima PR' => $this->formatSearchDate($row->tgl_terima_pr),
             'Tanggal Diserahkan' => $this->formatSearchDate($row->tgl_diserahkan),
@@ -721,6 +722,7 @@ class CommandCenterController extends Controller
             'RFQ 2' => $row->rfq_2,
             'RFQ 3' => $row->rfq_3,
             'Tanggal SPPH' => $this->formatSearchDate($row->tgl_spph),
+            'Sisa QT' => $row->qt_left !== null ? $row->qt_left.' hari' : null,
             'SPH' => $row->sph,
             'Tanggal SPH' => $this->formatSearchDate($row->tgl_sph),
             'Awarding/SP/Kontrak' => $row->awarding_sp,
@@ -729,10 +731,17 @@ class CommandCenterController extends Controller
             'Tanggal Pemenang' => $this->formatSearchDate($row->tgl_pemenang),
             'Tanggal SPK' => $this->formatSearchDate($row->tgl_spk),
             'Nilai SP/Kontrak' => $row->nilai_sp_spk !== null ? $this->rupiah((float) $row->nilai_sp_spk) : null,
+            'Persentase Realisasi' => $row->persentase_realisasi !== null ? ((float) $row->persentase_realisasi).'%' : null,
             'Tanggal Pemenuhan' => $this->formatSearchDate($row->promised_date),
             'Closed Date' => $this->formatSearchDate($row->closed_date),
+            'Sisa Waktu' => $row->time_left !== null ? $row->time_left.' hari' : null,
+            'Tanggal Barang Datang' => $this->formatSearchDate($row->goods_arrived_at),
+            'Catatan Barang Datang' => $row->goods_arrived_note,
+            'Tanggal Konfirmasi Barang' => $this->formatSearchDate($row->goods_confirmed_at),
+            'Catatan Konfirmasi Barang' => $row->goods_confirmed_note,
             'DO/Surat Jalan/BAST' => $row->do_no,
             'Tanggal DO/BAST' => $this->formatSearchDate($row->do_date),
+            'Tanggal Perubahan DO' => $this->formatSearchDate($row->do_updated_at),
             'No. BPG' => $row->bpg_no,
             'Nilai BPG' => $row->nilai_bpg !== null ? $this->rupiah((float) $row->nilai_bpg) : null,
             'Tanggal BPG' => $this->formatSearchDate($row->tgl_bpg),
@@ -748,6 +757,10 @@ class CommandCenterController extends Controller
             'Realisasi SLA' => $row->realisasi_sla !== null ? $row->realisasi_sla.' hari' : null,
             'Status' => $row->status,
             'Keterangan' => $row->keterangan,
+            'Alasan Pembatalan' => $row->cancel_reason,
+            'Tanggal Pembatalan' => $this->formatSearchDate($row->cancelled_at),
+            'Dibuat' => $this->formatSearchDate($row->created_at, true),
+            'Diperbarui' => $this->formatSearchDate($row->updated_at, true),
         ];
 
         return collect($details)
@@ -774,14 +787,14 @@ class CommandCenterController extends Controller
         return null;
     }
 
-    private function formatSearchDate(mixed $value): ?string
+    private function formatSearchDate(mixed $value, bool $withTime = false): ?string
     {
         if (blank($value)) {
             return null;
         }
 
         try {
-            return Carbon::parse($value)->format('d M Y H:i');
+            return Carbon::parse($value)->format($withTime ? 'd M Y H:i' : 'd M Y');
         } catch (\Throwable) {
             return (string) $value;
         }
