@@ -61,6 +61,12 @@ class CommandCenterTest extends TestCase
         $this->assertStringContainsString('syncFullscreenUi(false)', $script);
         $this->assertStringContainsString("margin-left: 0 !important", $styles);
         $this->assertStringContainsString('content-visibility: auto', $styles);
+        $this->assertStringContainsString('id="ccArchivePanel"', $script);
+        $this->assertStringContainsString('archiveCache', $script);
+        $this->assertStringContainsString('Belum ada arsip atau lampiran untuk PR ini.', $script);
+        $this->assertStringContainsString('rel="noopener noreferrer"', $script);
+        $this->assertStringNotContainsString("showResults('Arsip ", $script);
+        $this->assertStringContainsString('.cc-archive-panel', $styles);
     }
 
     public function test_search_finds_pr_by_pr_contract_and_linked_sp_values(): void

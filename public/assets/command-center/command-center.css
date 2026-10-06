@@ -172,6 +172,36 @@
 .cc-stage.done { color: #065f46; background: #d1fae5; }
 .cc-stage.current { color: #3730a3; background: #e0e7ff; outline: 2px solid rgba(99, 102, 241, .16); }
 .cc-stage-date { display: block; margin-top: 3px; font-size: 8px; opacity: .75; }
+.cc-archive-panel { margin: 0 0 14px; padding: 14px; background: var(--cc-bg); border: 1px solid var(--cc-line); border-radius: 13px; }
+.cc-archive-panel[hidden] { display: none; }
+.cc-archive-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.cc-archive-head h3 { margin: 3px 0 2px; color: var(--cc-ink); font-size: 14px; font-weight: 850; }
+.cc-archive-head p { margin: 0; color: var(--cc-muted); font-size: 10px; }
+.cc-archive-count { flex: 0 0 auto; padding: 5px 8px; color: #1d4ed8; font-size: 9px; font-weight: 850; background: #dbeafe; border-radius: 999px; }
+.dark .cc-archive-count { color: #bfdbfe; background: #1e3a8a; }
+.cc-archive-list { display: grid; gap: 7px; margin-top: 11px; }
+.cc-archive-item { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 9px; background: var(--cc-card); border: 1px solid var(--cc-line); border-radius: 10px; }
+.cc-archive-icon { display: grid; width: 28px; height: 28px; color: #fff; font-size: 9px; font-weight: 850; background: linear-gradient(135deg, #2563eb, #4f46e5); border-radius: 8px; place-items: center; }
+.cc-archive-copy { min-width: 0; }
+.cc-archive-copy strong, .cc-archive-copy span { display: block; overflow-wrap: anywhere; }
+.cc-archive-copy strong { color: var(--cc-ink); font-size: 10px; }
+.cc-archive-copy span { margin-top: 2px; color: var(--cc-muted); font-size: 9px; }
+.cc-archive-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 5px; }
+.cc-archive-action { padding: 6px 9px; color: #fff; font-size: 9px; font-weight: 850; text-decoration: none; background: #2563eb; border-radius: 8px; }
+.cc-archive-action:hover { color: #fff; background: #1d4ed8; }
+.cc-archive-action-secondary { color: #1e40af; background: #dbeafe; }
+.cc-archive-action-secondary:hover { color: #1e3a8a; background: #bfdbfe; }
+.cc-archive-no-link { color: var(--cc-muted); font-size: 9px; }
+.cc-archive-notice, .cc-archive-loading { display: flex; align-items: center; gap: 10px; margin-top: 11px; padding: 11px; color: #065f46; background: #d1fae5; border: 1px solid #a7f3d0; border-radius: 10px; }
+.cc-archive-notice.is-warning { color: #92400e; background: #fef3c7; border-color: #fde68a; }
+.dark .cc-archive-notice { color: #a7f3d0; background: #052e2b; border-color: #115e59; }
+.dark .cc-archive-notice.is-warning { color: #fde68a; background: #422006; border-color: #78350f; }
+.cc-archive-notice strong, .cc-archive-notice span, .cc-archive-loading strong, .cc-archive-loading span { display: block; }
+.cc-archive-notice strong, .cc-archive-loading strong { font-size: 10px; }
+.cc-archive-notice span, .cc-archive-loading span { margin-top: 2px; font-size: 9px; opacity: .85; }
+.cc-archive-loading { color: var(--cc-ink); background: var(--cc-card); border-color: var(--cc-line); }
+.cc-archive-spinner { width: 19px; height: 19px; border: 2px solid var(--cc-line); border-top-color: #2563eb; border-radius: 50%; animation: cc-archive-spin .7s linear infinite; }
+@keyframes cc-archive-spin { to { transform: rotate(360deg); } }
 .cc-journey-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 13px; }
 .cc-timeline { display: grid; gap: 7px; }
 .cc-timeline-item { padding: 9px 10px; background: var(--cc-bg); border-left: 3px solid #315bc7; border-radius: 0 9px 9px 0; }
@@ -198,5 +228,9 @@ body.cc-fullscreen #mainContent { width: 100%; max-width: 100vw; margin-left: 0 
     .cc-result-item, .cc-risk-item { grid-template-columns: auto minmax(0, 1fr); }
     .cc-result-item .cc-open, .cc-risk-item .cc-open { grid-column: 1 / -1; }
     .cc-result-details dl { grid-template-columns: 1fr; }
+    .cc-archive-head { align-items: stretch; flex-direction: column; }
+    .cc-archive-count { width: fit-content; }
+    .cc-archive-item { grid-template-columns: auto minmax(0, 1fr); }
+    .cc-archive-actions { grid-column: 1 / -1; justify-content: flex-start; }
     .cc-trend { justify-content: flex-start; overflow-x: auto; }
 }

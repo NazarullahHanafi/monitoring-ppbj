@@ -13,6 +13,7 @@
     };
     var overviewCacheKey = 'simonpr.command-center.overview.v2';
     var overviewCacheLifetime = 120000;
+    var archiveCache = Object.create(null);
     var compactMoney = new Intl.NumberFormat('id-ID', {
         style: 'currency', currency: 'IDR', notation: 'compact', maximumFractionDigits: 1
     });
@@ -261,6 +262,75 @@
         }).join('') : '<div class="cc-empty">' + esc(emptyMessage) + '</div>';
     }
 
+    function safeUrl(value) {
+        if (!value) return '';
+
+        try {
+            var url = new URL(String(value), window.location.origin);
+            return url.protocol === 'http:' || url.protocol === 'https:' ? url.href : '';
+        } catch (error) {
+            return '';
+        }
+    }
+
+    function archiveDocumentHtml(document, index) {
+        var previewUrl = safeUrl(document.preview_url || document.download_url);
+        var downloadUrl = safeUrl(document.download_url);
+        var location = document.location && document.location.label ? document.location.label : '';
+        var metadata = [document.type, document.date || document.uploaded_at, location].filter(Boolean);
+        var actions = '';
+
+        if (previewUrl) {
+            actions += '<a class="cc-archive-action" href="' + esc(previewUrl) + '" target="_blank" rel="noopener noreferrer">Buka</a>';
+        }
+        if (downloadUrl && downloadUrl !== previewUrl) {
+            actions += '<a class="cc-archive-action cc-archive-action-secondary" href="' + esc(downloadUrl) + '" target="_blank" rel="noopener noreferrer">Unduh</a>';
+        }
+
+        return '<article class="cc-archive-item"><div class="cc-archive-icon" aria-hidden="true">' + (index + 1) + '</div>' +
+            '<div class="cc-archive-copy"><strong>' + esc(document.name || ('Dokumen ' + (index + 1))) + '</strong>' +
+            (metadata.length ? '<span>' + esc(metadata.join(' · ')) + '</span>' : '<span>Lampiran digital</span>') + '</div>' +
+            '<div class="cc-archive-actions">' + (actions || '<span class="cc-archive-no-link">Tautan belum tersedia</span>') + '</div></article>';
+    }
+
+    function renderArchivePanel(panel, archive, record) {
+        var documents = Array.isArray(archive.documents) ? archive.documents : [];
+        var state = archive.state || (documents.length ? 'available' : 'empty');
+        var count = Number(archive.document_count);
+        if (!Number.isFinite(count)) count = documents.length;
+        count = Math.max(count, documents.length);
+
+        var title = count > 0 ? count + ' dokumen arsip ditemukan' : 'Belum ada arsip atau lampiran';
+        var message = archive.message || (count > 0
+            ? 'Dokumen untuk ' + record.ppbj_no + ' siap dibuka.'
+            : 'Belum ada dokumen yang terhubung dengan ' + record.ppbj_no + '.');
+        var body = '';
+
+        if (state === 'available' && documents.length) {
+            body = '<div class="cc-archive-list">' + documents.map(archiveDocumentHtml).join('') + '</div>';
+        } else if (state === 'unavailable' || state === 'failed' || state === 'unconfigured') {
+            title = state === 'unconfigured' ? 'Koneksi arsip belum dikonfigurasi' : 'Sistem arsip belum dapat dihubungi';
+            body = '<div class="cc-archive-notice is-warning"><div><strong>Data pengadaan tetap aman.</strong>' +
+                '<span>Silakan coba kembali. Pemeriksaan arsip dijalankan terpisah agar Command Center tetap cepat.</span></div></div>';
+        } else {
+            body = '<div class="cc-archive-notice"><div><strong>Belum ada arsip atau lampiran untuk PR ini.</strong>' +
+                '<span>Lampiran dapat ditambahkan dari Management PPBJ, Penomoran SP, atau Penomoran SPPH.</span></div></div>';
+        }
+
+        panel.hidden = false;
+        panel.dataset.state = state;
+        panel.innerHTML = '<div class="cc-archive-head"><div><span class="cc-eyebrow">ARSIP &amp; LAMPIRAN</span>' +
+            '<h3>' + esc(title) + '</h3><p>' + esc(message) + '</p></div>' +
+            '<span class="cc-archive-count">' + esc(count) + ' dokumen</span></div>' + body;
+    }
+
+    function renderArchiveLoading(panel) {
+        panel.hidden = false;
+        panel.dataset.state = 'loading';
+        panel.innerHTML = '<div class="cc-archive-loading"><span class="cc-archive-spinner" aria-hidden="true"></span>' +
+            '<div><strong>Memeriksa Sistem Arsip…</strong><span>Hanya data lampiran PR ini yang dimuat.</span></div></div>';
+    }
+
     function openJourney(id) {
         closeModals();
         openModal('ccJourneyModal');
@@ -274,30 +344,39 @@
                 '<span class="cc-pill">' + esc(record.registration) + '</span><span class="cc-pill">' + esc(record.vendor) + '</span>' +
                 '<span class="cc-pill">' + esc(record.nilai_sp_label) + '</span></div><div style="margin-top:10px;display:flex;gap:7px;flex-wrap:wrap">' +
                 '<a class="cc-button cc-button-light" href="' + esc(data.tracking_url) + '" target="_blank">Tracking Publik</a>' +
-                '<button class="cc-button cc-button-ghost" id="ccArchiveButton">Cek Arsip</button></div></div>' +
+                '<button class="cc-button cc-button-ghost" id="ccArchiveButton" aria-controls="ccArchivePanel">Cek Arsip</button></div></div>' +
                 '<img class="cc-qr" src="' + esc(data.qr_url) + '" alt="QR Digital Passport"></div>' +
                 '<div class="cc-stage-track">' + (data.stages || []).map(stageHtml).join('') + '</div>' +
+                '<section class="cc-archive-panel" id="ccArchivePanel" aria-live="polite" hidden></section>' +
                 '<div class="cc-journey-grid"><section><span class="cc-eyebrow">TRACKING REAL</span><div class="cc-timeline">' +
                 timelineHtml(data.real_tracking, 'Belum ada tracking real.') + '</div></section><section><span class="cc-eyebrow">AUDIT REPLAY</span>' +
                 '<div class="cc-timeline">' + timelineHtml(data.audit, 'Belum ada catatan audit.') + '</div></section></div>';
 
             var archiveButton = document.getElementById('ccArchiveButton');
             if (archiveButton) archiveButton.addEventListener('click', function () {
+                var archivePanel = document.getElementById('ccArchivePanel');
+                if (!archivePanel) return;
+
+                if (archiveCache[data.archive_url]) {
+                    renderArchivePanel(archivePanel, archiveCache[data.archive_url], record);
+                    return;
+                }
+
+                renderArchiveLoading(archivePanel);
                 setLoading(archiveButton, true);
                 fetchJson(data.archive_url).then(function (archive) {
-                    var documents = archive.documents || [];
-                    showResults('Arsip ' + record.ppbj_no,
-                        (archive.has_archive ? 'Arsip ditemukan' : 'Belum ada arsip') + ' · ' + documents.length + ' dokumen',
-                        documents.map(function (document, index) {
-                            return {
-                                id: record.id,
-                                ppbj_no: document.title || document.name || ('Dokumen ' + (index + 1)),
-                                uraian: document.description || document.filename || '-',
-                                portofolio: 'Arsip Digital', buyer: '-', vendor: '-', nilai_pr_label: '-', nilai_sp_label: '-', progress: 100
-                            };
-                        }));
+                    if (archive.state === 'available' || archive.state === 'empty' || archive.state === 'unconfigured') {
+                        archiveCache[data.archive_url] = archive;
+                    }
+                    renderArchivePanel(archivePanel, archive, record);
+                    var count = Number(archive.document_count) || (archive.documents || []).length;
+                    archiveButton.dataset.label = count > 0 ? 'Arsip (' + count + ')' : 'Cek Arsip';
                 }).catch(function (error) {
-                    showError(error.message);
+                    renderArchivePanel(archivePanel, {
+                        state: 'unavailable',
+                        document_count: 0,
+                        message: error.message
+                    }, record);
                 }).finally(function () {
                     setLoading(archiveButton, false);
                 });
