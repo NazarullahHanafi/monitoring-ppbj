@@ -3,6 +3,20 @@
 @tailwind utilities;
 
 /* Layout application styles (browser-cacheable) */
+        .dashboard-command-button {
+            color: #fff !important;
+            background-color: #4f46e5 !important;
+            background-image: linear-gradient(135deg, #2563eb 0%, #4f46e5 48%, #7c3aed 100%) !important;
+            border: 1px solid rgba(255, 255, 255, .2);
+            box-shadow: 0 10px 24px -10px rgba(79, 70, 229, .65)
+        }
+
+        .dashboard-command-button:hover {
+            color: #fff !important;
+            background-color: #4338ca !important;
+            background-image: linear-gradient(135deg, #3b82f6 0%, #6366f1 48%, #8b5cf6 100%) !important
+        }
+
         .nav-item {
             position: relative;
             overflow: hidden;
@@ -50,6 +64,12 @@
         }
 
         .nav-item .icon-box {
+            display: inline-flex;
+            width: 1.75rem;
+            min-width: 1.75rem;
+            align-items: center;
+            justify-content: center;
+            line-height: 1;
             transition: all .3s cubic-bezier(.68, -.55, .265, 1.55)
         }
 

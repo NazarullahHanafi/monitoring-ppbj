@@ -45,6 +45,10 @@ class PollingPerformanceTest extends TestCase
         $this->assertStringNotContainsString('sweetalert2@11', $torpr);
         $this->assertStringNotContainsString('select2.min.js', $torpr);
         $this->assertStringContainsString('Layout application styles (browser-cacheable)', $appCss);
+        $this->assertStringContainsString('.dashboard-command-button', $appCss);
+        $this->assertStringContainsString('background-image: linear-gradient(135deg, #2563eb', $appCss);
+        $this->assertStringContainsString('width: 1.75rem', $appCss);
+        $this->assertStringContainsString('dashboard-command-button hidden sm:inline-flex', file_get_contents(resource_path('views/dashboard/indexumum.blade.php')));
 
         foreach ([
             'jquery-3.7.1.min.js',
