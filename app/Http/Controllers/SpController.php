@@ -2146,7 +2146,7 @@ class SpController extends Controller
         $payTbl->addCell(100, ['borders' => $noBdr])->addText(':', $fs, $p0);
         $payVal = $payTbl->addCell(6544, ['borders' => $noBdr]);
         $payVal->addText(
-            'Secara sekaligus 100% (Seratus Persen) dibayarkan setelah barang diterima, dibayarkan paling lambat selama 45 (Empat Puluh Lima) hari kalender setelah dokumen tagihan lengkap diterima oleh Keuangan dan Akuntansi dengan melampirkan:',
+            'Secara sekaligus 100% (Seratus Persen) dibayarkan setelah barang diterima, dibayarkan paling lambat selama 60 (Enam Puluh) hari kalender setelah dokumen tagihan lengkap diterima oleh Keuangan dan Akuntansi dengan melampirkan:',
             $fs,
             $p0
         );
@@ -2580,7 +2580,7 @@ class SpController extends Controller
             'Pembayaran dilakukan dengan cara sekaligus keseluruhan setelah seluruh pekerjaan selesai dan diterima oleh PIHAK KESATU dan Pemberi Kerja dengan benar dan dapat dipergunakan serta dipenuhinya ayat (8).',
             'PIHAK KESATU (c/q. Divisi Keuangan dan Akuntansi (KAK)) menerima dokumen tagihan dari PIHAK KEDUA setiap hari Senin dan Rabu dengan batas akhir pada tanggal 20 (dua puluh) setiap bulannya, apabila pada tanggal 20 (dua puluh) bukan jatuh pada hari Senin dan Rabu, maka tagihan tersebut dimasukan ke awal bulan berikutnya.',
             'PARA PIHAK sepakat bahwa pembayaran kepada PIHAK KEDUA akan dilakukan setelah PIHAK KESATU menerima pembayaran dari Pemberi Kerja.',
-            'Dengan tetap tunduk kepada ketentuan ayat (11) Pasal ini, PIHAK KESATU akan melakukan pembayaran sebagaimana dimaksud pada ayat (6) melalui transfer ke Rekening Bank PIHAK KEDUA selambat-lambatnya 45 (empat puluh lima) hari kalender sejak dokumen tagihan lengkap diterima oleh PIHAK KESATU.',
+            'Dengan tetap tunduk kepada ketentuan ayat (11) Pasal ini, PIHAK KESATU akan melakukan pembayaran sebagaimana dimaksud pada ayat (6) melalui transfer ke Rekening Bank PIHAK KEDUA selambat-lambatnya 60 (enam puluh) hari kalender sejak dokumen tagihan lengkap diterima oleh PIHAK KESATU.',
         ];
         foreach ($pasal3lanjutan as $i => $text) {
             $addNo('(' . ($i + 9) . ')', $text);
@@ -3310,7 +3310,7 @@ class SpController extends Controller
             'Pembayaran dilakukan dengan cara sekaligus keseluruhan setelah seluruh pekerjaan selesai dan diterima oleh PIHAK KESATU dan Pemberi Kerja dengan benar dan dapat dipergunakan serta dipenuhinya ayat (8).',
             'PIHAK KESATU (c/q. Divisi Keuangan dan Akuntansi (KAK)) menerima dokumen tagihan dari PIHAK KEDUA setiap hari Senin dan Rabu dengan batas akhir pada tanggal 20 (dua puluh) setiap bulannya, apabila pada tanggal 20 (dua puluh) bukan jatuh pada hari Senin dan Rabu, maka tagihan tersebut dimasukan ke awal bulan berikutnya.',
             'PARA PIHAK sepakat bahwa pembayaran kepada PIHAK KEDUA akan dilakukan setelah PIHAK KESATU menerima pembayaran dari Pemberi Kerja.',
-            'Dengan tetap tunduk kepada ketentuan ayat (11) Pasal ini, PIHAK KESATU akan melakukan pembayaran sebagaimana dimaksud pada ayat (6) melalui transfer ke Rekening Bank PIHAK KEDUA selambat-lambatnya 45 (empat puluh lima) hari kalender sejak dokumen tagihan lengkap diterima oleh PIHAK KESATU.',
+            'Dengan tetap tunduk kepada ketentuan ayat (11) Pasal ini, PIHAK KESATU akan melakukan pembayaran sebagaimana dimaksud pada ayat (6) melalui transfer ke Rekening Bank PIHAK KEDUA selambat-lambatnya 60 (enam puluh) hari kalender sejak dokumen tagihan lengkap diterima oleh PIHAK KESATU.',
         ];
         foreach ($pasal3lanjutan as $i => $text) {
             $addNo('(' . ($i + 9) . ')', $text);
@@ -4101,7 +4101,7 @@ class SpController extends Controller
             11 => 'Pajak Pertambahan Nilai (PPN) dan Pajak Penghasilan (PPh) yang timbul atas transaksi mengikuti ketentuan Perundang-undangan Perpajakan yang berlaku di Negara Republik Indonesia.',
             12 => 'PIHAK KEDUA wajib memberikan bukti penyetoran (jika ada) dan Bukti Pelaporan Surat Pemberitahuan (SPT) beserta lampiran A2 masa PPN sesuai transaksi yang ditagihkan kepada PIHAK KESATU selambat-lambatnya 60 (enam puluh) hari kalender sejak tanggal terbitnya faktur pajak.',
             13 => 'PIHAK KESATU (c/q. Divisi Keuangan & Akuntansi (KAK)) menerima dokumen tagihan dari PIHAK KEDUA setiap hari Senin dan Rabu dengan batas akhir pada tanggal 20 (dua puluh) setiap bulannya, apabila pada tanggal 20 (dua puluh) bukan jatuh pada hari Senin dan Rabu, maka tagihan tersebut dimasukan ke awal bulan berikutnya.',
-            14 => 'PIHAK KESATU akan melakukan pembayaran sebagaimana dimaksud pada ayat (6) melalui transfer ke Rekening Bank PIHAK KEDUA selambat-lambatnya 45 (empat puluh lima) hari kalender sejak dokumen tagihan lengkap diterima oleh PIHAK KESATU.',
+            14 => 'PIHAK KESATU akan melakukan pembayaran sebagaimana dimaksud pada ayat (6) melalui transfer ke Rekening Bank PIHAK KEDUA selambat-lambatnya 60 (enam puluh) hari kalender sejak dokumen tagihan lengkap diterima oleh PIHAK KESATU.',
         ] as $no => $text) {
             $addNo('(' . $no . ')', $text);
         }
