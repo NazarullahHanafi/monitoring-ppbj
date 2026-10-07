@@ -967,6 +967,9 @@
             'satuanStoreUrl' => route('satuan.store'),
             'vendorUsageStatsUrl' => route('spph.vendor-usage-stats'),
             'vendorStoreUrl' => route('vendor.store'),
+            'printSigners' => $spphSigners,
+            'printSignerTitles' => $spphSignerTitles,
+            'printMasterUrl' => route('sp-master-options.index', ['type' => 'penandatangan_sci']),
             'lastId' => $spphs->count() > 0 ? $spphs->max('id') : 0,
             'firstPage' => $spphs->onFirstPage(),
             'hasFilter' => (bool) (($search ?? '') || ($pic ?? '') || ($vendorFilter ?? '') || ($dari ?? '') || ($sampai ?? '')),
@@ -976,7 +979,7 @@
     <script>
         window.SPPH_PAGE_CONFIG = @json($spphPageConfig);
     </script>
-    <script src="{{ asset('assets/spph/spph.js') }}?v=20261005a" defer></script>
+    <script src="{{ asset('assets/spph/spph.js') }}?v=20261007a" defer></script>
 @endpush
 
 @include('components.archive-upload-popup')

@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Http\Controllers\SpphController;
 use App\Models\Spph;
+use App\Models\SpMasterOption;
 use App\Models\Vendor;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
@@ -93,5 +94,46 @@ class SpphKopSuratLayoutTest extends TestCase
         $this->assertStringContainsString('Kepala Cabang', $documentXml);
         $this->assertStringNotContainsString('Jumelda', $documentXml);
         $this->assertStringNotContainsString('Pj. Kepala Bidang Dukungan Bisnis', $documentXml);
+    }
+
+    public function test_spph_print_uses_active_signer_and_title_from_master_data(): void
+    {
+        SpMasterOption::updateOrCreate(
+            ['type' => 'penandatangan_sci', 'nama' => 'Siti Penguji'],
+            ['is_active' => true]
+        );
+        SpMasterOption::updateOrCreate(
+            ['type' => 'jabatan_sci', 'nama' => 'Manajer Pengadaan'],
+            ['is_active' => true]
+        );
+        Vendor::create([
+            'nama_vendor' => 'Vendor Master Signer',
+            'alamat' => 'Jl. Master Data No. 1',
+        ]);
+        $spph = Spph::create([
+            'nomor_spph' => '779/PKU-VII/SPPH/2026',
+            'sequence_number' => 779,
+            'tanggal' => '2026-07-02',
+            'nama_vendor' => 'Vendor Master Signer',
+            'deskripsi_pengadaan' => 'Pengadaan penandatangan dari master',
+            'pic' => 'Tester',
+        ]);
+
+        $request = Request::create('/spph-preview', 'GET', [
+            'penandatangan' => 'Siti Penguji',
+            'jabatan' => 'Manajer Pengadaan',
+        ]);
+        $response = (new SpphController())->cetakSpph($request, $spph);
+        $docxPath = $response->getFile()->getPathname();
+
+        $zip = new ZipArchive();
+        $this->assertTrue($zip->open($docxPath));
+        $documentXml = $zip->getFromName('word/document.xml');
+        $zip->close();
+        @unlink($docxPath);
+
+        $this->assertIsString($documentXml);
+        $this->assertStringContainsString('Siti Penguji', $documentXml);
+        $this->assertStringContainsString('Manajer Pengadaan', $documentXml);
     }
 }

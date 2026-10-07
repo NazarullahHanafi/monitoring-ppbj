@@ -1044,36 +1044,87 @@
         // ════════════════════════════════════════════════════════════
         // INIT
         // ════════════════════════════════════════════════════════════
-        function buildSpphPrintUrl(url, signer) {
+        function buildSpphPrintUrl(url, signer, title) {
             const printUrl = new URL(url, window.location.origin);
-            printUrl.searchParams.set('penandatangan', signer || 'jumelda');
+            printUrl.searchParams.set('penandatangan', signer);
+            printUrl.searchParams.set('jabatan', title);
             return printUrl.toString();
         }
 
+        function escapeSpphPrintHtml(value) {
+            return String(value ?? '').replace(/[&<>'"]/g, character => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#039;', '"': '&quot;'
+            })[character]);
+        }
+
+        function spphPrintOptions(values) {
+            return values.map(value => `<option value="${escapeSpphPrintHtml(value)}">${escapeSpphPrintHtml(value)}</option>`).join('');
+        }
+
         function openSpphPrint(url) {
-            const openWithSigner = signer => window.open(buildSpphPrintUrl(url, signer), '_blank', 'noopener');
+            const signers = Array.isArray(SPPH_PAGE_CONFIG.printSigners) ? SPPH_PAGE_CONFIG.printSigners : [];
+            const titles = Array.isArray(SPPH_PAGE_CONFIG.printSignerTitles) ? SPPH_PAGE_CONFIG.printSignerTitles : [];
+            const openWithSigner = (signer, title) => window.open(buildSpphPrintUrl(url, signer, title), '_blank', 'noopener');
+
+            if (!signers.length || !titles.length) {
+                const message = 'Master Penandatangan SCI atau Jabatan SCI masih kosong. Silakan lengkapi Master Kontrak SP terlebih dahulu.';
+                if (typeof Swal === 'undefined') {
+                    window.alert(message);
+                    return;
+                }
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Master penandatangan belum lengkap',
+                    text: message,
+                    confirmButtonText: 'Kelola Master',
+                    showCancelButton: true,
+                    cancelButtonText: 'Batal',
+                }).then(result => {
+                    if (result.isConfirmed) window.location.href = SPPH_PAGE_CONFIG.printMasterUrl;
+                });
+                return;
+            }
 
             if (typeof Swal === 'undefined') {
-                openWithSigner(window.confirm('Gunakan tanda tangan Bambang Harwanta?') ? 'bambang' : 'jumelda');
+                openWithSigner(signers[0], titles[0]);
                 return;
             }
 
             Swal.fire({
                 title: 'Pilih penandatangan SPPH',
-                text: 'Dokumen akan dicetak sesuai penandatangan yang dipilih.',
+                html: `
+                    <div style="text-align:left;margin-top:8px">
+                        <label for="spphPrintSigner" style="display:block;font-size:12px;font-weight:700;margin:0 0 6px">Penandatangan SCI</label>
+                        <select id="spphPrintSigner" class="swal2-select" style="display:block;width:100%;margin:0 0 16px;padding:10px 12px;font-size:14px">
+                            ${spphPrintOptions(signers)}
+                        </select>
+                        <label for="spphPrintTitle" style="display:block;font-size:12px;font-weight:700;margin:0 0 6px">Jabatan SCI</label>
+                        <select id="spphPrintTitle" class="swal2-select" style="display:block;width:100%;margin:0;padding:10px 12px;font-size:14px">
+                            ${spphPrintOptions(titles)}
+                        </select>
+                        <p style="font-size:11px;line-height:1.5;margin:14px 0 0;opacity:.72">Nama dan jabatan diambil dari Master Kontrak SP. Pilihan ini akan digunakan pada dokumen preview dan unduhan.</p>
+                    </div>`,
                 icon: 'question',
-                showDenyButton: true,
                 showCancelButton: true,
-                confirmButtonText: 'Jumelda - Kabid',
-                denyButtonText: 'Bambang - Kacab',
+                confirmButtonText: 'Lanjut Preview',
                 cancelButtonText: 'Batal',
                 confirmButtonColor: '#0ea5e9',
-                denyButtonColor: '#059669',
                 background: document.documentElement.classList.contains('dark') ? '#1f2937' : '#fff',
                 color: document.documentElement.classList.contains('dark') ? '#f3f4f6' : '#111827',
+                focusConfirm: false,
+                preConfirm: () => {
+                    const signer = document.getElementById('spphPrintSigner')?.value;
+                    const title = document.getElementById('spphPrintTitle')?.value;
+                    if (!signer || !title) {
+                        Swal.showValidationMessage('Penandatangan dan jabatan wajib dipilih.');
+                        return false;
+                    }
+                    return { signer, title };
+                },
             }).then(result => {
-                if (result.isConfirmed) openWithSigner('jumelda');
-                if (result.isDenied) openWithSigner('bambang');
+                if (result.isConfirmed && result.value) {
+                    openWithSigner(result.value.signer, result.value.title);
+                }
             });
         }
 
