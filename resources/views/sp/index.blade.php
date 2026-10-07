@@ -20,7 +20,7 @@
         }
         .sp-print-choice-overlay.is-open { display: flex; }
         .sp-print-choice-card {
-            width: min(100%, 520px); max-height: calc(100vh - 40px); overflow: hidden auto;
+            width: min(100%, 640px); max-height: calc(100vh - 40px); overflow: hidden auto;
             border: 1px solid #dbeafe; border-radius: 22px; background: #fff; color: #172033;
             box-shadow: 0 28px 80px rgba(15, 23, 42, .32);
         }
@@ -57,6 +57,8 @@
         .sp-print-choice-label {
             display: block; margin-bottom: 8px; color: #1e293b; font-size: 13px; font-weight: 800;
         }
+        .sp-print-choice-fields { display: grid; gap: 14px; }
+        .sp-print-choice-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
         .sp-print-choice-required { color: #ef4444; }
         .sp-print-choice-select {
             display: block; width: 100%; min-height: 49px; padding: 0 42px 0 14px;
@@ -65,6 +67,7 @@
             transition: border-color .18s ease, box-shadow .18s ease;
         }
         .sp-print-choice-select:focus { border-color: #3b82f6; box-shadow: 0 0 0 4px rgba(59,130,246,.13); }
+        .sp-print-choice-select, .sp-print-choice-select option { color-scheme: light; }
         .sp-print-choice-preview {
             display: flex; align-items: flex-start; gap: 11px; margin-top: 16px; padding: 14px 15px;
             border: 1px solid #bfdbfe; border-radius: 13px;
@@ -79,6 +82,8 @@
             letter-spacing: .12em; text-transform: uppercase;
         }
         .sp-print-choice-preview-text { margin: 0; font-size: 12px; line-height: 1.55; }
+        .sp-print-choice-preview-text + .sp-print-choice-preview-text { margin-top: 4px; }
+        .sp-print-choice-vendor-note { color: #64748b; font-size: 11px; line-height: 1.5; }
         .sp-print-choice-footer {
             display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-top: 20px;
         }
@@ -103,12 +108,16 @@
         .dark .sp-print-choice-card { border-color: #334155; background: #111827; color: #e5e7eb; }
         .dark .sp-print-choice-label { color: #f1f5f9; }
         .dark .sp-print-choice-select { border-color: #475569; background-color: #172033; color: #f8fafc; }
+        .dark .sp-print-choice-select, .dark .sp-print-choice-select option {
+            color-scheme: dark; background-color: #172033; color: #f8fafc;
+        }
         .dark .sp-print-choice-preview {
             border-color: #1e40af;
             background: linear-gradient(135deg, rgba(30,58,138,.35), rgba(76,29,149,.25)); color: #dbeafe;
         }
         .dark .sp-print-choice-preview-icon { background: rgba(37,99,235,.28); }
         .dark .sp-print-choice-preview-label, .dark .sp-print-choice-manage { color: #93c5fd; }
+        .dark .sp-print-choice-vendor-note { color: #94a3b8; }
         .dark .sp-print-choice-button-secondary {
             border-color: #475569; background: #172033; color: #e2e8f0;
         }
@@ -117,6 +126,7 @@
             .sp-print-choice-overlay { padding: 12px; }
             .sp-print-choice-card { max-height: calc(100vh - 24px); border-radius: 18px; }
             .sp-print-choice-header, .sp-print-choice-body { padding: 18px; }
+            .sp-print-choice-grid { grid-template-columns: 1fr; }
             .sp-print-choice-footer { align-items: stretch; flex-direction: column-reverse; }
             .sp-print-choice-manage { text-align: center; }
             .sp-print-choice-actions, .sp-print-choice-button { flex: 1; }
@@ -518,7 +528,7 @@
                                             </svg>
                                         </button>
                                         <button type="button"
-                                            onclick="openSpPrintPreview(@js(route('sp.cetak.preview', $s)), @js($s->nomor_sp ?? ('SP-' . $s->id)))"
+                                            onclick="openSpPrintPreview(@js(route('sp.cetak.preview', $s)), @js($s->nomor_sp ?? ('SP-' . $s->id)), @js($s->penandatangan_sci ?? ''), @js($s->jabatan_sci ?? ''))"
                                             class="p-1.5 rounded-lg text-sky-600 hover:bg-sky-50 dark:hover:bg-sky-900/30 transition-colors"
                                             title="Preview & simpan SP"><svg class="w-4 h-4" fill="none" stroke="currentColor"
                                                 viewBox="0 0 24 24">
@@ -1506,12 +1516,12 @@
                     </span>
                     <div style="min-width: 0">
                         <p class="sp-print-choice-eyebrow">Cetak SP / Kontrak</p>
-                        <h2 id="spBidangPrintTitle" class="sp-print-choice-title">Pilih Bidang PR</h2>
+                        <h2 id="spBidangPrintTitle" class="sp-print-choice-title">Atur Cetak SP / Kontrak</h2>
                         <p id="spBidangPrintNumber" class="sp-print-choice-number"></p>
                     </div>
                 </div>
                 <button type="button" onclick="closeSpPrintPreview()" class="sp-print-choice-close"
-                    aria-label="Tutup pilihan Bidang PR">
+                    aria-label="Tutup pengaturan cetak SP">
                     <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                     </svg>
@@ -1519,21 +1529,54 @@
             </div>
 
             <div class="sp-print-choice-body">
-                <div>
-                    <label for="spBidangPrintSelect" class="sp-print-choice-label">
-                        Bidang pemilik PR <span class="sp-print-choice-required">*</span>
-                    </label>
-                    <select id="spBidangPrintSelect" onchange="updateSpPrintPreviewUrl()"
-                        class="sp-print-choice-select"
-                        @disabled(collect($bidangPrs ?? [])->isEmpty())>
-                        @forelse(collect($bidangPrs ?? []) as $bidangPr)
-                            <option value="{{ $bidangPr }}" @selected(strcasecmp((string) $bidangPr, 'DUKUNGAN BISNIS') === 0)>
-                                {{ $bidangPr }}
-                            </option>
-                        @empty
-                            <option value="">Master Bidang PR belum tersedia</option>
-                        @endforelse
-                    </select>
+                <div class="sp-print-choice-fields">
+                    <div>
+                        <label for="spBidangPrintSelect" class="sp-print-choice-label">
+                            Bidang pemilik PR <span class="sp-print-choice-required">*</span>
+                        </label>
+                        <select id="spBidangPrintSelect" onchange="updateSpPrintPreviewUrl()"
+                            class="sp-print-choice-select"
+                            @disabled(collect($bidangPrs ?? [])->isEmpty())>
+                            @forelse(collect($bidangPrs ?? []) as $bidangPr)
+                                <option value="{{ $bidangPr }}" @selected(strcasecmp((string) $bidangPr, 'DUKUNGAN BISNIS') === 0)>
+                                    {{ $bidangPr }}
+                                </option>
+                            @empty
+                                <option value="">Master Bidang PR belum tersedia</option>
+                            @endforelse
+                        </select>
+                    </div>
+
+                    <div class="sp-print-choice-grid">
+                        <div>
+                            <label for="spSignerPrintSelect" class="sp-print-choice-label">
+                                Penandatangan SCI <span class="sp-print-choice-required">*</span>
+                            </label>
+                            <select id="spSignerPrintSelect" onchange="updateSpPrintPreviewUrl()"
+                                class="sp-print-choice-select"
+                                @disabled(collect($penandatanganScis ?? [])->isEmpty())>
+                                @forelse(collect($penandatanganScis ?? []) as $signer)
+                                    <option value="{{ $signer }}">{{ $signer }}</option>
+                                @empty
+                                    <option value="">Master penandatangan belum tersedia</option>
+                                @endforelse
+                            </select>
+                        </div>
+                        <div>
+                            <label for="spSignerTitlePrintSelect" class="sp-print-choice-label">
+                                Jabatan SCI <span class="sp-print-choice-required">*</span>
+                            </label>
+                            <select id="spSignerTitlePrintSelect" onchange="updateSpPrintPreviewUrl()"
+                                class="sp-print-choice-select"
+                                @disabled(collect($jabatanScis ?? [])->isEmpty())>
+                                @forelse(collect($jabatanScis ?? []) as $title)
+                                    <option value="{{ $title }}">{{ $title }}</option>
+                                @empty
+                                    <option value="">Master jabatan belum tersedia</option>
+                                @endforelse
+                            </select>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="sp-print-choice-preview">
@@ -1541,14 +1584,19 @@
                     <div>
                         <p class="sp-print-choice-preview-label">Pratinjau catatan</p>
                         <p class="sp-print-choice-preview-text">Memenuhi PR Bidang <strong id="spBidangPrintExample">DUKUNGAN BISNIS</strong> PT Sucofindo Cabang Pekanbaru.</p>
+                        <p class="sp-print-choice-preview-text">SCI: <strong id="spSignerPrintExample">-</strong> — <span id="spSignerTitlePrintExample">-</span></p>
+                        <p class="sp-print-choice-preview-text sp-print-choice-vendor-note">Pihak vendor tetap diisi otomatis dari nama direktur dan jabatan pada Master Vendor.</p>
                     </div>
                 </div>
 
                 <div class="sp-print-choice-footer">
-                    <a href="{{ route('sp-master-options.index', ['type' => 'bidang_pr']) }}"
-                        class="sp-print-choice-manage">
-                        Kelola Master Bidang PR
-                    </a>
+                    <div>
+                        <a href="{{ route('sp-master-options.index', ['type' => 'bidang_pr']) }}"
+                            class="sp-print-choice-manage">Kelola Bidang PR</a>
+                        <span aria-hidden="true"> · </span>
+                        <a href="{{ route('sp-master-options.index', ['type' => 'penandatangan_sci']) }}"
+                            class="sp-print-choice-manage">Kelola SCI</a>
+                    </div>
                     <div class="sp-print-choice-actions">
                         <button type="button" onclick="closeSpPrintPreview()"
                             class="sp-print-choice-button sp-print-choice-button-secondary">
@@ -1594,15 +1642,23 @@
 
         window.updateSpPrintPreviewUrl = function () {
             const modal = document.getElementById('spBidangPrintModal');
-            const select = document.getElementById('spBidangPrintSelect');
+            const bidangSelect = document.getElementById('spBidangPrintSelect');
+            const signerSelect = document.getElementById('spSignerPrintSelect');
+            const titleSelect = document.getElementById('spSignerTitlePrintSelect');
             const link = document.getElementById('spBidangPrintContinue');
-            const example = document.getElementById('spBidangPrintExample');
-            const value = String(select?.value || '').trim();
+            const bidang = String(bidangSelect?.value || '').trim();
+            const signer = String(signerSelect?.value || '').trim();
+            const title = String(titleSelect?.value || '').trim();
 
-            if (example) example.textContent = value || '(belum dipilih)';
+            const bidangExample = document.getElementById('spBidangPrintExample');
+            const signerExample = document.getElementById('spSignerPrintExample');
+            const titleExample = document.getElementById('spSignerTitlePrintExample');
+            if (bidangExample) bidangExample.textContent = bidang || '(belum dipilih)';
+            if (signerExample) signerExample.textContent = signer || '(belum dipilih)';
+            if (titleExample) titleExample.textContent = title || '(belum dipilih)';
             if (!link || !modal) return;
 
-            if (!value || !modal.dataset.previewUrl) {
+            if (!bidang || !signer || !title || !modal.dataset.previewUrl) {
                 link.href = '#';
                 link.classList.add('is-disabled');
                 link.setAttribute('aria-disabled', 'true');
@@ -1610,13 +1666,15 @@
             }
 
             const url = new URL(modal.dataset.previewUrl, window.location.origin);
-            url.searchParams.set('bidang_pr', value);
+            url.searchParams.set('bidang_pr', bidang);
+            url.searchParams.set('penandatangan_sci', signer);
+            url.searchParams.set('jabatan_sci', title);
             link.href = url.toString();
             link.classList.remove('is-disabled');
             link.removeAttribute('aria-disabled');
         };
 
-        window.openSpPrintPreview = function (previewUrl, nomorSp) {
+        window.openSpPrintPreview = function (previewUrl, nomorSp, savedSigner = '', savedTitle = '') {
             const modal = document.getElementById('spBidangPrintModal');
             if (!modal) {
                 window.location.href = previewUrl;
@@ -1626,6 +1684,19 @@
             modal.dataset.previewUrl = previewUrl;
             const number = document.getElementById('spBidangPrintNumber');
             if (number) number.textContent = nomorSp || 'Dokumen SP';
+
+            const selectSavedOption = (id, value) => {
+                const select = document.getElementById(id);
+                const normalized = String(value || '').trim().toLocaleLowerCase('id-ID');
+                if (!select || !normalized) return;
+                const match = Array.from(select.options).find(
+                    option => String(option.value || '').trim().toLocaleLowerCase('id-ID') === normalized
+                );
+                if (match) select.value = match.value;
+            };
+            selectSavedOption('spSignerPrintSelect', savedSigner);
+            selectSavedOption('spSignerTitlePrintSelect', savedTitle);
+
             modal.classList.add('is-open');
             document.body.classList.add('sp-print-modal-open');
             window.updateSpPrintPreviewUrl();

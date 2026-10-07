@@ -28,6 +28,8 @@ class SpPrintBidangPrTest extends TestCase
 
         $response->assertOk();
         $response->assertSee('id="spBidangPrintModal"', false);
+        $response->assertSee('id="spSignerPrintSelect"', false);
+        $response->assertSee('id="spSignerTitlePrintSelect"', false);
         $response->assertSee('class="sp-print-choice-overlay"', false);
         $response->assertSee('.sp-print-choice-card', false);
         $response->assertSee("modal.classList.add('is-open')", false);
@@ -42,6 +44,14 @@ class SpPrintBidangPrTest extends TestCase
 
         SpMasterOption::query()->updateOrCreate(
             ['type' => 'bidang_pr', 'nama' => 'INSPEKSI TEKNIK'],
+            ['is_active' => true]
+        );
+        SpMasterOption::query()->updateOrCreate(
+            ['type' => 'penandatangan_sci', 'nama' => 'Siti Penandatangan'],
+            ['is_active' => true]
+        );
+        SpMasterOption::query()->updateOrCreate(
+            ['type' => 'jabatan_sci', 'nama' => 'Manajer Pengadaan SCI'],
             ['is_active' => true]
         );
 
@@ -64,7 +74,12 @@ class SpPrintBidangPrTest extends TestCase
             'pic' => 'Tester',
         ]);
 
-        $response = (new SpController)->cetakSp($sp, 'INSPEKSI TEKNIK');
+        $response = (new SpController)->cetakSp(
+            $sp,
+            'INSPEKSI TEKNIK',
+            'Siti Penandatangan',
+            'Manajer Pengadaan SCI'
+        );
         $path = $response->getFile()->getPathname();
 
         $zip = new ZipArchive;
@@ -77,6 +92,8 @@ class SpPrintBidangPrTest extends TestCase
         $this->assertIsString($documentXml);
         $this->assertStringContainsString('Memenuhi PR Bidang', $documentXml);
         $this->assertStringContainsString('INSPEKSI TEKNIK', $documentXml);
+        $this->assertStringContainsString('Siti Penandatangan', $documentXml);
+        $this->assertStringContainsString('Manajer Pengadaan SCI', $documentXml);
         $this->assertStringNotContainsString('(.....................)', $documentXml);
     }
 
@@ -101,6 +118,14 @@ class SpPrintBidangPrTest extends TestCase
 
         SpMasterOption::query()->updateOrCreate(
             ['type' => 'bidang_pr', 'nama' => 'PENGUJIAN DAN KONSULTANSI'],
+            ['is_active' => true]
+        );
+        SpMasterOption::query()->updateOrCreate(
+            ['type' => 'penandatangan_sci', 'nama' => 'Siti Kontrak'],
+            ['is_active' => true]
+        );
+        SpMasterOption::query()->updateOrCreate(
+            ['type' => 'jabatan_sci', 'nama' => 'Kepala Pengadaan SCI'],
             ['is_active' => true]
         );
 
@@ -129,7 +154,12 @@ class SpPrintBidangPrTest extends TestCase
                 'akhir_kontrak' => '2026-10-07',
             ]);
 
-            $response = (new SpController)->cetakSp($sp, 'PENGUJIAN DAN KONSULTANSI');
+            $response = (new SpController)->cetakSp(
+                $sp,
+                'PENGUJIAN DAN KONSULTANSI',
+                'Siti Kontrak',
+                'Kepala Pengadaan SCI'
+            );
             $path = $response->getFile()->getPathname();
             $zip = new ZipArchive;
 
@@ -140,6 +170,28 @@ class SpPrintBidangPrTest extends TestCase
 
             $this->assertIsString($documentXml);
             $this->assertStringContainsString('PENGUJIAN DAN KONSULTANSI', $documentXml);
+            $this->assertStringContainsString('Siti Kontrak', $documentXml);
+            $this->assertStringContainsString('Kepala Pengadaan SCI', $documentXml);
         }
+    }
+
+    public function test_inactive_sci_signer_is_rejected_for_printing(): void
+    {
+        Cache::flush();
+
+        SpMasterOption::create([
+            'type' => 'penandatangan_sci',
+            'nama' => 'Penandatangan Nonaktif',
+            'is_active' => false,
+        ]);
+
+        $this->expectException(ValidationException::class);
+
+        (new SpController)->cetakSp(
+            new Sp(['nilai_sp' => 10_000_000]),
+            'DUKUNGAN BISNIS',
+            'Penandatangan Nonaktif',
+            null
+        );
     }
 }

@@ -4,6 +4,21 @@
 
 @push('styles')
     <link rel="stylesheet" href="{{ asset('assets/spph/spph.css') }}?v=20260814a">
+    <style>
+        #spphPrintSigner, #spphPrintTitle,
+        #spphPrintSigner option, #spphPrintTitle option {
+            color-scheme: light;
+            background-color: #fff;
+            color: #0f172a;
+        }
+        .dark #spphPrintSigner, .dark #spphPrintTitle,
+        .dark #spphPrintSigner option, .dark #spphPrintTitle option {
+            color-scheme: dark;
+            border-color: #475569 !important;
+            background-color: #172033 !important;
+            color: #f8fafc !important;
+        }
+    </style>
 @endpush
 
 @section('content')

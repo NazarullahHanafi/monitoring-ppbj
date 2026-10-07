@@ -411,6 +411,104 @@ class SpController extends Controller
         return (string) $matched;
     }
 
+    /**
+     * Nama dan jabatan SCI pada hasil cetak harus berasal dari master aktif.
+     * Nilai yang tersimpan pada SP dipakai sebagai preferensi untuk link cetak lama,
+     * sedangkan pilihan eksplisit dari dialog selalu divalidasi ulang di server.
+     */
+    private function resolvePrintSciSigner(
+        Sp $sp,
+        ?string $requestedName,
+        ?string $requestedTitle,
+        ?float $nilaiAcuan = null
+    ): array {
+        $legacyNames = ['Jumelda', 'Bambang Harwanta'];
+        $legacyTitles = ['Pgs. Kepala Bidang Dukungan Bisnis', 'Pj. Kepala Cabang'];
+
+        $names = collect(Cache::remember(
+            'sp_master_options:penandatangan_sci:active_names',
+            3600,
+            fn() => $this->queryActiveSpMasterOptionNames('penandatangan_sci')
+        ))
+            ->map(fn($name) => trim((string) $name))
+            ->filter()
+            ->values();
+        $titles = collect(Cache::remember(
+            'sp_master_options:jabatan_sci:active_names',
+            3600,
+            fn() => $this->queryActiveSpMasterOptionNames('jabatan_sci')
+        ))
+            ->map(fn($title) => trim((string) $title))
+            ->filter()
+            ->values();
+
+        if ($names->isEmpty()) {
+            $names = collect($legacyNames);
+        }
+        if ($titles->isEmpty()) {
+            $titles = collect($legacyTitles);
+        }
+
+        $explicitName = trim((string) $requestedName);
+        $explicitTitle = trim((string) $requestedTitle);
+        $storedName = trim((string) ($sp->penandatangan_sci ?? ''));
+        $storedTitle = trim((string) ($sp->jabatan_sci ?? ''));
+        $nilaiAcuan ??= $this->hitungNilaiAcuan($sp);
+
+        $preferredName = $nilaiAcuan >= 300_000_000 ? 'Bambang Harwanta' : 'Jumelda';
+        $nameCandidate = $explicitName !== '' ? $explicitName : $storedName;
+        $name = $this->matchActiveSpMasterOption($names, $nameCandidate);
+
+        if ($explicitName !== '' && $name === null) {
+            throw ValidationException::withMessages([
+                'penandatangan_sci' => 'Penandatangan SCI tidak valid atau sedang dinonaktifkan. Silakan pilih ulang dari master aktif.',
+            ]);
+        }
+
+        $name ??= $this->matchActiveSpMasterOption($names, $preferredName)
+            ?? (string) $names->first();
+
+        $preferredTitle = strcasecmp($name, 'Bambang Harwanta') === 0
+            ? 'Pj. Kepala Cabang'
+            : 'Pgs. Kepala Bidang Dukungan Bisnis';
+        $titleCandidate = $explicitTitle !== '' ? $explicitTitle : $storedTitle;
+        $title = $this->matchActiveSpMasterOption($titles, $titleCandidate);
+
+        if ($explicitTitle !== '' && $title === null) {
+            throw ValidationException::withMessages([
+                'jabatan_sci' => 'Jabatan SCI tidak valid atau sedang dinonaktifkan. Silakan pilih ulang dari master aktif.',
+            ]);
+        }
+
+        $title ??= $this->matchActiveSpMasterOption($titles, $preferredTitle);
+        if ($title === null && str_contains(strtolower($preferredTitle), 'kepala bidang')) {
+            $title = $titles->first(
+                fn(string $option) => str_contains(strtolower($option), 'kepala bidang dukungan bisnis')
+            );
+        }
+        if ($title === null && str_contains(strtolower($preferredTitle), 'kepala cabang')) {
+            $title = $titles->first(
+                fn(string $option) => str_contains(strtolower($option), 'kepala cabang')
+            );
+        }
+        $title ??= (string) $titles->first();
+
+        return ['name' => $name, 'title' => $title];
+    }
+
+    private function matchActiveSpMasterOption($options, string $requested): ?string
+    {
+        if ($requested === '') {
+            return null;
+        }
+
+        $matched = collect($options)->first(
+            fn($option) => strcasecmp(trim((string) $option), trim($requested)) === 0
+        );
+
+        return $matched === null ? null : (string) $matched;
+    }
+
     private function spphVendorMetaForPpbj(object $ppbj): array
     {
         $spphNo = trim((string) ($ppbj->spph_rfq_1 ?? ''));
@@ -1501,10 +1599,18 @@ class SpController extends Controller
     public function previewCetak(Request $request, Sp $sp)
     {
         $bidangPr = $this->resolvePrintBidangPr($request->query('bidang_pr'));
+        $signer = $this->resolvePrintSciSigner(
+            $sp,
+            $request->query('penandatangan_sci'),
+            $request->query('jabatan_sci')
+        );
         $nomor = trim((string) ($sp->nomor_sp ?: 'SP-' . $sp->id));
         $filename = $this->previewDownloadName('SP ' . $nomor . '.docx');
         $mode = strtolower((string) ($sp->numbering_mode ?? 'auto')) === 'oracle' ? 'oracle' : 'auto';
-        $preview = PrintPreviewFile::store($this->cetakSp($sp, $bidangPr), $filename);
+        $preview = PrintPreviewFile::store(
+            $this->cetakSp($sp, $bidangPr, $signer['name'], $signer['title']),
+            $filename
+        );
 
         return view('documents.print-preview', [
             'title' => 'Preview Cetak SP',
@@ -1523,31 +1629,45 @@ class SpController extends Controller
                 'Nilai SP' => $sp->nilai_sp ? 'Rp ' . number_format((float) $sp->nilai_sp, 0, ',', '.') : '-',
                 'PIC' => $sp->pic ?: '-',
                 'Bidang PR' => $bidangPr,
+                'Penandatangan SCI' => $signer['name'].' - '.$signer['title'],
                 'Link berlaku sampai' => $preview['expiresText'],
             ],
         ]);
     }
 
-    public function cetakSp(Sp $sp, ?string $bidangPr = null)
+    public function cetakSp(
+        Sp $sp,
+        ?string $bidangPr = null,
+        ?string $penandatanganSci = null,
+        ?string $jabatanSci = null
+    )
     {
         $sp->load('items');
         $bidangPr = $this->resolvePrintBidangPr($bidangPr ?? request()->query('bidang_pr'));
         $nilaiAcuan = $this->hitungNilaiAcuan($sp);
+        $signer = $this->resolvePrintSciSigner(
+            $sp,
+            $penandatanganSci ?? request()->query('penandatangan_sci'),
+            $jabatanSci ?? request()->query('jabatan_sci'),
+            $nilaiAcuan
+        );
+        $penandatanganSci = $signer['name'];
+        $jabatanSci = $signer['title'];
 
         // 500 juta ke atas memakai template Kontrak Ringkas Jasa Subkon > 500 jt.
         // Jangan arahkan ke kontrak lama, karena formatnya berbeda dari template yang diupload.
         if ($nilaiAcuan >= 500_000_000) {
-            return $this->cetakKontrakRingkas500($sp, $nilaiAcuan, $bidangPr);
+            return $this->cetakKontrakRingkas500($sp, $nilaiAcuan, $bidangPr, $penandatanganSci, $jabatanSci);
         }
 
         // 300 juta s.d. sebelum 500 juta memakai template Kontrak Ringkas Jasa Subkon > 300 jt.
         if ($nilaiAcuan >= 300_000_000 && $nilaiAcuan < 500_000_000) {
-            return $this->cetakKontrakRingkas300($sp, $nilaiAcuan, $bidangPr);
+            return $this->cetakKontrakRingkas300($sp, $nilaiAcuan, $bidangPr, $penandatanganSci, $jabatanSci);
         }
 
         // 50 juta s.d. sebelum 300 juta tetap memakai template kontrak lama.
         if ($nilaiAcuan >= 50_000_000) {
-            return $this->cetakKontrak($sp, $nilaiAcuan, $bidangPr);
+            return $this->cetakKontrak($sp, $nilaiAcuan, $bidangPr, $penandatanganSci, $jabatanSci);
         }
 
         $phpWord = new PhpWord;
@@ -2090,12 +2210,12 @@ class SpController extends Controller
 
         // Row 3: Nama
         $sigTbl->addRow();
-        $sigTbl->addCell(4500)->addText('Jumelda', $sigUnd, $sigPC);
+        $sigTbl->addCell(4500)->addText($penandatanganSci, $sigUnd, $sigPC);
         $sigTbl->addCell(4500)->addText($direkturVendor, $sigUnd, $sigPC);
 
         // Row 4: Jabatan
         $sigTbl->addRow();
-        $sigTbl->addCell(4500)->addText('Pgs. Kepala Bidang Dukungan Bisnis', $sigNrm, $sigPC);
+        $sigTbl->addCell(4500)->addText($jabatanSci, $sigNrm, $sigPC);
         $sigTbl->addCell(4500)->addText($jabatanVendor, $sigNrm, $sigPC);
 
         // === GENERATE FILE ===
@@ -2128,9 +2248,18 @@ class SpController extends Controller
         return response()->download($tempPath, $filename)->deleteFileAfterSend(true);
     }
 
-    public function cetakKontrakRingkas300(Sp $sp, ?float $nilaiAcuan = null, ?string $bidangPr = null)
+    public function cetakKontrakRingkas300(
+        Sp $sp,
+        ?float $nilaiAcuan = null,
+        ?string $bidangPr = null,
+        ?string $penandatanganSci = null,
+        ?string $jabatanSci = null
+    )
     {
         $bidangPr = $this->resolvePrintBidangPr($bidangPr ?? request()->query('bidang_pr'));
+        $signer = $this->resolvePrintSciSigner($sp, $penandatanganSci, $jabatanSci, $nilaiAcuan);
+        $penandatanganSci = $signer['name'];
+        $jabatanSci = $signer['title'];
         $sp->load('items');
 
         $phpWord = new PhpWord;
@@ -2181,12 +2310,6 @@ class SpController extends Controller
 
         $bidangIpItu = trim((string) ($sp->bidang_ip_itu ?? ''));
         $bidangIpItu = $bidangIpItu !== '' ? $bidangIpItu : 'KEPALA BIDANG DUKUNGAN BISNIS';
-
-        $penandatanganSci = trim((string) ($sp->penandatangan_sci ?? ''));
-        $penandatanganSci = $penandatanganSci !== '' ? $penandatanganSci : 'Bambang Harwanta';
-
-        $jabatanSci = trim((string) ($sp->jabatan_sci ?? ''));
-        $jabatanSci = $jabatanSci !== '' ? $jabatanSci : 'Pj. Kepala Cabang';
 
         $rfqText = trim((string) ($sp->rfq ?? ''));
         $rfqText = $rfqText !== '' ? $rfqText : '.......';
@@ -2852,9 +2975,18 @@ class SpController extends Controller
         return response()->download($tempPath, $filename)->deleteFileAfterSend(true);
     }
 
-    public function cetakKontrakRingkas500(Sp $sp, ?float $nilaiAcuan = null, ?string $bidangPr = null)
+    public function cetakKontrakRingkas500(
+        Sp $sp,
+        ?float $nilaiAcuan = null,
+        ?string $bidangPr = null,
+        ?string $penandatanganSci = null,
+        ?string $jabatanSci = null
+    )
     {
         $bidangPr = $this->resolvePrintBidangPr($bidangPr ?? request()->query('bidang_pr'));
+        $signer = $this->resolvePrintSciSigner($sp, $penandatanganSci, $jabatanSci, $nilaiAcuan);
+        $penandatanganSci = $signer['name'];
+        $jabatanSci = $signer['title'];
         // Template Kontrak Ringkas Jasa Subkon Diatas 500 jt.
         // Isi mengikuti dokumen template >500: Pasal 1 s.d. Pasal 13, Jaminan Pelaksanaan,
         // tanda tangan, Pakta Integritas, dan Formulir Uji Kelayakan Penyedia Eksternal.
@@ -2908,12 +3040,6 @@ class SpController extends Controller
 
         $bidangIpItu = trim((string) ($sp->bidang_ip_itu ?? ''));
         $bidangIpItu = $bidangIpItu !== '' ? $bidangIpItu : 'KEPALA BIDANG DUKUNGAN BISNIS';
-
-        $penandatanganSci = trim((string) ($sp->penandatangan_sci ?? ''));
-        $penandatanganSci = $penandatanganSci !== '' ? $penandatanganSci : 'Bambang Harwanta';
-
-        $jabatanSci = trim((string) ($sp->jabatan_sci ?? ''));
-        $jabatanSci = $jabatanSci !== '' ? $jabatanSci : 'Pj. Kepala Cabang';
 
         $rfqText = trim((string) ($sp->rfq ?? ''));
         $rfqText = $rfqText !== '' ? $rfqText : '.......';
@@ -3579,9 +3705,18 @@ class SpController extends Controller
         return response()->download($tempPath, $filename)->deleteFileAfterSend(true);
     }
 
-    public function cetakKontrak(Sp $sp, ?float $nilaiAcuan = null, ?string $bidangPr = null)
+    public function cetakKontrak(
+        Sp $sp,
+        ?float $nilaiAcuan = null,
+        ?string $bidangPr = null,
+        ?string $penandatanganSci = null,
+        ?string $jabatanSci = null
+    )
     {
         $bidangPr = $this->resolvePrintBidangPr($bidangPr ?? request()->query('bidang_pr'));
+        $signer = $this->resolvePrintSciSigner($sp, $penandatanganSci, $jabatanSci, $nilaiAcuan);
+        $penandatanganSci = $signer['name'];
+        $jabatanSci = $signer['title'];
         $sp->load('items');
 
         $phpWord = new PhpWord;
@@ -3644,12 +3779,6 @@ class SpController extends Controller
 
         $bidangIpItu = trim((string) ($sp->bidang_ip_itu ?? ''));
         $bidangIpItu = $bidangIpItu !== '' ? $bidangIpItu : 'Pgs. Kepala Bidang Dukungan Bisnis';
-
-        $penandatanganSci = trim((string) ($sp->penandatangan_sci ?? ''));
-        $penandatanganSci = $penandatanganSci !== '' ? $penandatanganSci : 'Jumelda';
-
-        $jabatanSci = trim((string) ($sp->jabatan_sci ?? ''));
-        $jabatanSci = $jabatanSci !== '' ? $jabatanSci : 'Pgs. Kepala Bidang Dukungan Bisnis';
 
         $vendorUp = strtoupper(trim((string) $sp->nama_vendor));
         $alamatV = ($vendor && trim((string) ($vendor->alamat ?? '')) !== '') ? trim((string) $vendor->alamat) : '(.....................................)';
