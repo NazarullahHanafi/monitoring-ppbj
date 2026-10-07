@@ -637,18 +637,26 @@ class SpController extends Controller
         }
 
         $ppbjByNo = DB::table('ppbj')
-            ->leftJoin('spphs', 'spphs.nomor_spph', '=', 'ppbj.spph_rfq_1')
-            ->select([
-                'ppbj.ppbj_no',
-                'ppbj.spph_rfq_1',
-                'spphs.nama_vendor as spph_nama_vendor',
-                'spphs.vendor_names as spph_vendor_names',
-            ])
-            ->whereIn('ppbj.ppbj_no', $nomorPrs)
+            ->select(['ppbj_no', 'spph_rfq_1'])
+            ->whereIn('ppbj_no', $nomorPrs)
             ->get()
             ->keyBy('ppbj_no');
 
-        return collect($sps)->mapWithKeys(function ($sp) use ($ppbjByNo) {
+        $spphNos = $ppbjByNo
+            ->pluck('spph_rfq_1')
+            ->map(fn ($nomor) => trim((string) $nomor))
+            ->filter()
+            ->unique()
+            ->values();
+
+        $spphByNo = $spphNos->isEmpty()
+            ? collect()
+            : Spph::select(['nomor_spph', 'nama_vendor', 'vendor_names'])
+                ->whereIn('nomor_spph', $spphNos)
+                ->get()
+                ->keyBy('nomor_spph');
+
+        return collect($sps)->mapWithKeys(function ($sp) use ($ppbjByNo, $spphByNo) {
             $nomorPr = trim((string) $sp->nomor_pr);
             $ppbj = $nomorPr !== '' ? $ppbjByNo->get($nomorPr) : null;
 
@@ -661,16 +669,7 @@ class SpController extends Controller
                 return [$sp->id => ['status' => 'no_spph', 'label' => 'Belum ada SPPH', 'vendors' => []]];
             }
 
-            $vendorNames = json_decode((string) ($ppbj->spph_vendor_names ?? ''), true);
-            $vendors = collect(array_merge(
-                [(string) ($ppbj->spph_nama_vendor ?? '')],
-                is_array($vendorNames) ? $vendorNames : []
-            ))
-                ->map(fn ($vendor) => trim((string) $vendor))
-                ->filter()
-                ->unique(fn ($vendor) => mb_strtolower($vendor))
-                ->values()
-                ->all();
+            $vendors = $spphByNo->get($spphNo)?->print_vendor_names ?? [];
             if (empty($vendors)) {
                 return [$sp->id => ['status' => 'no_vendor', 'label' => 'SPPH tanpa vendor', 'vendors' => []]];
             }
