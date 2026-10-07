@@ -1730,13 +1730,16 @@
                 if (document.hidden) return;
 
                 if (IS_FIRST && !HAS_FILTER && !pollTimer) {
-                    setTimeout(() => { if (!document.hidden) pollNow(); }, 2500);
                     pollTimer = setInterval(pollNow, BACKGROUND_POLL_INTERVAL);
                 }
 
                 if (!presTimer) {
-                    setTimeout(() => { if (!document.hidden) pollPres(); }, 3000);
-                    presTimer = setInterval(pollPres, BACKGROUND_POLL_INTERVAL);
+                    setTimeout(() => {
+                        if (!document.hidden && !presTimer) {
+                            pollPres();
+                            presTimer = setInterval(pollPres, 60000);
+                        }
+                    }, 12000);
                 }
             }
 
@@ -1745,7 +1748,7 @@
                 if (document.hidden) stopBackgroundPolling();
                 else startBackgroundPolling();
             });
-            window.addEventListener('beforeunload', () => {
+            window.addEventListener('pagehide', () => {
                 if (modalOpen) {
                     const fd = new FormData();
                     fd.append('_token', document.querySelector('meta[name="csrf-token"]').content);
@@ -1753,5 +1756,9 @@
                 }
             });
 
-            checkOnboardingStatus();
+            if ('requestIdleCallback' in window) {
+                requestIdleCallback(checkOnboardingStatus, { timeout: 6000 });
+            } else {
+                setTimeout(checkOnboardingStatus, 5000);
+            }
         });

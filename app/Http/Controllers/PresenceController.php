@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\User;
 use App\Services\TelegramBotService;
+use App\Support\CacheBatch;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
@@ -13,11 +14,17 @@ use Illuminate\Support\Facades\Schema;
 class PresenceController extends Controller
 {
     private const PRESENCE_TTL = 300;
+
     private const REGISTRY_TTL = 3600;
+
     private const ONLINE_RETURN_AFTER_SECONDS = 600;
+
     private const APP_ENTRY_NOTIFY_COOLDOWN_MINUTES = 15;
+
     private const CACHE_PREFIX = 'presence:user:';
+
     private const REGISTRY_KEY = 'presence:registry';
+
     private const MOOD_PREFIX = 'presence:mood:';
 
     public function heartbeat(Request $request)
@@ -27,7 +34,7 @@ class PresenceController extends Controller
 
         // Akun khusus yang mood-nya dinonaktifkan tidak boleh meninggalkan
         // emoji lama di daftar presence pengguna lain.
-        $moodKey = self::MOOD_PREFIX . $user->id;
+        $moodKey = self::MOOD_PREFIX.$user->id;
         if ($user->shouldDisplayMoodFeature()) {
             $mood = Cache::get($moodKey);
         } else {
@@ -38,7 +45,7 @@ class PresenceController extends Controller
         $displayInPresence = $user->shouldDisplayInPresence();
         if ($displayInPresence) {
             Cache::put(
-                self::CACHE_PREFIX . $user->id,
+                self::CACHE_PREFIX.$user->id,
                 [
                     'id' => $user->id,
                     'name' => $user->name,
@@ -50,14 +57,20 @@ class PresenceController extends Controller
                 self::PRESENCE_TTL
             );
         } else {
-            Cache::forget(self::CACHE_PREFIX . $user->id);
+            Cache::forget(self::CACHE_PREFIX.$user->id);
         }
 
         $registry = $this->registerOnlineUser((int) $user->id, $displayInPresence);
 
+        $presenceKeys = array_map(
+            fn (int $uid) => self::CACHE_PREFIX.$uid,
+            $registry
+        );
+        $presenceByKey = $presenceKeys === [] ? [] : Cache::many($presenceKeys);
+
         $online = [];
         foreach ($registry as $uid) {
-            $data = Cache::get(self::CACHE_PREFIX . $uid);
+            $data = $presenceByKey[self::CACHE_PREFIX.$uid] ?? null;
             if ($data) {
                 $data['is_me'] = ($uid === $user->id);
                 $online[] = $data;
@@ -66,8 +79,7 @@ class PresenceController extends Controller
 
         usort(
             $online,
-            fn($a, $b) =>
-            ($b['is_me'] ?? false) <=> ($a['is_me'] ?? false)
+            fn ($a, $b) => ($b['is_me'] ?? false) <=> ($a['is_me'] ?? false)
             ?: strcmp($a['name'], $b['name'])
         );
 
@@ -101,9 +113,9 @@ class PresenceController extends Controller
         $midnight = now()->copy()->endOfDay();
         $ttl = now()->diffInSeconds($midnight);
 
-        Cache::put(self::MOOD_PREFIX . $user->id, $request->mood, $ttl);
+        Cache::put(self::MOOD_PREFIX.$user->id, $request->mood, $ttl);
 
-        $key = self::CACHE_PREFIX . $user->id;
+        $key = self::CACHE_PREFIX.$user->id;
         $data = Cache::get($key, []);
         $data['mood'] = $request->mood;
         Cache::put($key, $data, self::PRESENCE_TTL);
@@ -129,7 +141,8 @@ class PresenceController extends Controller
             return response()->noContent();
         }
 
-        $mood = Cache::get(self::MOOD_PREFIX . $user->id);
+        $mood = Cache::get(self::MOOD_PREFIX.$user->id);
+
         return response()->json(['mood' => $mood]);
     }
 
@@ -139,8 +152,9 @@ class PresenceController extends Controller
     {
         $parts = explode(' ', trim($name));
         if (count($parts) >= 2) {
-            return strtoupper(mb_substr($parts[0], 0, 1) . mb_substr($parts[1], 0, 1));
+            return strtoupper(mb_substr($parts[0], 0, 1).mb_substr($parts[1], 0, 1));
         }
+
         return strtoupper(mb_substr($name, 0, 2));
     }
 
@@ -160,14 +174,15 @@ class PresenceController extends Controller
             '#06b6d4',
             '#a855f7',
         ];
+
         return $colors[$id % count($colors)];
     }
 
     private function clearMoodFor(User $user): void
     {
-        Cache::forget(self::MOOD_PREFIX . $user->id);
+        Cache::forget(self::MOOD_PREFIX.$user->id);
 
-        $presenceKey = self::CACHE_PREFIX . $user->id;
+        $presenceKey = self::CACHE_PREFIX.$user->id;
         $presence = Cache::get($presenceKey);
         if (is_array($presence)) {
             $presence['mood'] = null;
@@ -193,10 +208,7 @@ class PresenceController extends Controller
                     $registry = array_filter($registry, fn (int $id) => $id !== $userId);
                 }
 
-                $registry = array_values(array_filter(
-                    array_unique($registry),
-                    fn (int $id) => ($shouldRegister && $id === $userId) || Cache::has(self::CACHE_PREFIX.$id)
-                ));
+                $registry = $this->onlyActivePresenceIds(array_values(array_unique($registry)));
 
                 Cache::put(self::REGISTRY_KEY, $registry, self::REGISTRY_TTL);
 
@@ -211,8 +223,30 @@ class PresenceController extends Controller
                 $registry = array_filter($registry, fn (int $id) => $id !== $userId);
             }
 
-            return array_values(array_unique($registry));
+            return $this->onlyActivePresenceIds(array_values(array_unique($registry)));
         }
+    }
+
+    /**
+     * Bersihkan registry dengan satu operasi cache massal. Cara ini menjaga
+     * heartbeat tetap ringan ketika banyak pengguna aktif bersamaan.
+     *
+     * @param  array<int, int>  $registry
+     * @return array<int, int>
+     */
+    private function onlyActivePresenceIds(array $registry): array
+    {
+        if ($registry === []) {
+            return [];
+        }
+
+        $keys = array_map(fn (int $id) => self::CACHE_PREFIX.$id, $registry);
+        $presence = Cache::many($keys);
+
+        return array_values(array_filter(
+            $registry,
+            fn (int $id) => ! empty($presence[self::CACHE_PREFIX.$id])
+        ));
     }
 
     private function markLastSeen($user): void
@@ -221,13 +255,19 @@ class PresenceController extends Controller
             return;
         }
 
-        $throttleKey = 'presence:last_seen_update:' . $user->id;
+        $throttleKey = 'presence:last_seen_update:'.$user->id;
 
         if (! Cache::add($throttleKey, true, 60)) {
             return;
         }
 
-        if (! Schema::hasTable('users')) {
+        $schema = CacheBatch::remember([
+            'schema:users:table' => fn () => Schema::hasTable('users'),
+            'schema:users:last_seen_at' => fn () => Schema::hasTable('users') && Schema::hasColumn('users', 'last_seen_at'),
+            'schema:users:last_seen_ip' => fn () => Schema::hasTable('users') && Schema::hasColumn('users', 'last_seen_ip'),
+        ], 3600);
+
+        if (! $schema['schema:users:table']) {
             return;
         }
 
@@ -235,7 +275,7 @@ class PresenceController extends Controller
         $shouldNotifyOnlineReturn = false;
         $shouldNotifyAppEntry = false;
 
-        if (Schema::hasColumn('users', 'last_seen_at')) {
+        if ($schema['schema:users:last_seen_at']) {
             $previousLastSeen = DB::table('users')
                 ->where('id', $user->id)
                 ->value('last_seen_at');
@@ -249,11 +289,11 @@ class PresenceController extends Controller
 
         $updates = [];
 
-        if (Schema::hasColumn('users', 'last_seen_at')) {
+        if ($schema['schema:users:last_seen_at']) {
             $updates['last_seen_at'] = now();
         }
 
-        if (Schema::hasColumn('users', 'last_seen_ip')) {
+        if ($schema['schema:users:last_seen_ip']) {
             $updates['last_seen_ip'] = request()->ip();
         }
 
@@ -297,7 +337,7 @@ class PresenceController extends Controller
             return false;
         }
 
-        $cacheKey = 'telegram:online_return:' . $user->id;
+        $cacheKey = 'telegram:online_return:'.$user->id;
 
         if (Cache::has($cacheKey)) {
             return false;

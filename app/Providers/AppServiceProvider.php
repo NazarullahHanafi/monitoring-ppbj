@@ -2,16 +2,17 @@
 
 namespace App\Providers;
 
-use Illuminate\Support\Facades\Cache;
 use App\Models\ContactMessage;
 use App\Models\PrReceiptApproval;
-use App\Models\User;
-use App\Policies\UserPolicy;
-use Illuminate\Support\ServiceProvider;
-use Illuminate\Support\Facades\View;
-use Illuminate\Auth\Events\Logout;
 use App\Models\Satuan;
+use App\Models\User;
 use App\Observers\SatuanObserver;
+use App\Policies\UserPolicy;
+use App\Support\CacheBatch;
+use Illuminate\Auth\Events\Logout;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\View;
+use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -35,7 +36,7 @@ class AppServiceProvider extends ServiceProvider
         // ✅ Hapus presence saat user logout
         \Event::listen(Logout::class, function (Logout $event) {
             if ($event->user && isset($event->user->id)) {
-                Cache::forget('presence:user:' . $event->user->id);
+                Cache::forget('presence:user:'.$event->user->id);
             }
         });
 
@@ -46,19 +47,17 @@ class AppServiceProvider extends ServiceProvider
             $unreadContactMessageCount = 0;
 
             if ($user && $user->department === 'umum') {
-                $pendingCount = Cache::remember(
-                    'pr_receipt_pending_count',
-                    now()->addSeconds(30),
-                    fn() => PrReceiptApproval::where('status', 'PENDING')->count()
-                );
+                $loaders = [
+                    'pr_receipt_pending_count' => fn () => PrReceiptApproval::where('status', 'PENDING')->count(),
+                ];
 
                 if ($user->role === 'superadmin') {
-                    $unreadContactMessageCount = Cache::remember(
-                        'contact_messages_unread_count',
-                        now()->addSeconds(30),
-                        fn() => ContactMessage::whereNull('read_at')->count()
-                    );
+                    $loaders['contact_messages_unread_count'] = fn () => ContactMessage::whereNull('read_at')->count();
                 }
+
+                $counts = CacheBatch::remember($loaders, 30);
+                $pendingCount = (int) ($counts['pr_receipt_pending_count'] ?? 0);
+                $unreadContactMessageCount = (int) ($counts['contact_messages_unread_count'] ?? 0);
             }
 
             $view->with('pendingApprovalCount', $pendingCount);
@@ -70,12 +69,13 @@ class AppServiceProvider extends ServiceProvider
 
     public static function homeFor(?\App\Models\User $user): string
     {
-        if (!$user)
+        if (! $user) {
             return '/login';
+        }
 
         return match (strtolower($user->department ?? 'umum')) {
             'operasional' => '/ops/dashboard',
-            default        => '/dashboard',
+            default => '/dashboard',
         };
     }
 }

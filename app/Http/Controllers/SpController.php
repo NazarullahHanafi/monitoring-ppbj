@@ -51,13 +51,13 @@ class SpController extends Controller
 
     private function ppbjRegistrationNote(?Ppbj $ppbj): string
     {
-        if (!$ppbj || blank($ppbj->general_registration_number ?? null)) {
+        if (! $ppbj || blank($ppbj->general_registration_number ?? null)) {
             return '';
         }
 
         $registeredAt = '';
 
-        if (!empty($ppbj->general_registered_at)) {
+        if (! empty($ppbj->general_registered_at)) {
             try {
                 $registeredAt = Carbon::parse($ppbj->general_registered_at)
                     ->locale('id')
@@ -67,24 +67,24 @@ class SpController extends Controller
             }
         }
 
-        $note = ' Registrasi Umum Nomor ' . $ppbj->general_registration_number;
+        $note = ' Registrasi Umum Nomor '.$ppbj->general_registration_number;
 
         if ($registeredAt !== '') {
-            $note .= ' tanggal ' . $registeredAt;
+            $note .= ' tanggal '.$registeredAt;
         }
 
-        return $note . '.';
+        return $note.'.';
     }
 
     private function ppbjRegistrationNoteSegments(?Ppbj $ppbj): array
     {
-        if (!$ppbj || blank($ppbj->general_registration_number ?? null)) {
+        if (! $ppbj || blank($ppbj->general_registration_number ?? null)) {
             return [];
         }
 
         $registeredAt = '';
 
-        if (!empty($ppbj->general_registered_at)) {
+        if (! empty($ppbj->general_registered_at)) {
             try {
                 $registeredAt = Carbon::parse($ppbj->general_registered_at)
                     ->locale('id')
@@ -153,17 +153,17 @@ class SpController extends Controller
         $sampai = $request->get('sampai', '');
         $oracleMode = $this->isOracleMode($request);
 
-        $lastNumberCacheKey = 'sp:last_nomor:' . ($oracleMode ? 'oracle' : 'auto');
+        $lastNumberCacheKey = 'sp:last_nomor:'.($oracleMode ? 'oracle' : 'auto');
         $referenceData = CacheBatch::remember([
-            'pics:umum' => fn() => User::where('department', 'umum')->orderBy('name')->pluck('name'),
-            'satuans:all' => fn() => Satuan::orderBy('nama_satuan')->pluck('nama_satuan')->toArray(),
-            $lastNumberCacheKey => fn() => $this->spModeQuery($oracleMode)
+            'pics:umum' => fn () => User::where('department', 'umum')->orderBy('name')->pluck('name'),
+            'satuans:all' => fn () => Satuan::orderBy('nama_satuan')->pluck('nama_satuan')->toArray(),
+            $lastNumberCacheKey => fn () => $this->spModeQuery($oracleMode)
                 ->orderBy('sequence_number', 'desc')
                 ->value('nomor_sp'),
-            'sp_master_options:bidang_ip_itu:active_names' => fn() => $this->queryActiveSpMasterOptionNames('bidang_ip_itu'),
-            'sp_master_options:bidang_pr:active_names' => fn() => $this->queryActiveSpMasterOptionNames('bidang_pr'),
-            'sp_master_options:penandatangan_sci:active_names' => fn() => $this->queryActiveSpMasterOptionNames('penandatangan_sci'),
-            'sp_master_options:jabatan_sci:active_names' => fn() => $this->queryActiveSpMasterOptionNames('jabatan_sci'),
+            'sp_master_options:bidang_ip_itu:active_names' => fn () => $this->queryActiveSpMasterOptionNames('bidang_ip_itu'),
+            'sp_master_options:bidang_pr:active_names' => fn () => $this->queryActiveSpMasterOptionNames('bidang_pr'),
+            'sp_master_options:penandatangan_sci:active_names' => fn () => $this->queryActiveSpMasterOptionNames('penandatangan_sci'),
+            'sp_master_options:jabatan_sci:active_names' => fn () => $this->queryActiveSpMasterOptionNames('jabatan_sci'),
         ], 3600);
 
         $pics = $referenceData['pics:umum'];
@@ -174,21 +174,21 @@ class SpController extends Controller
         $penandatanganScis = $referenceData['sp_master_options:penandatangan_sci:active_names'];
         $jabatanScis = $referenceData['sp_master_options:jabatan_sci:active_names'];
 
-        $baseQuery = $this->spModeQuery($oracleMode)->with(['ppbjs:id,ppbj_no'])->when($search, fn($q) => $q->where(function ($q2) use ($search) {
+        $baseQuery = $this->spModeQuery($oracleMode)->with(['ppbjs:id,ppbj_no'])->when($search, fn ($q) => $q->where(function ($q2) use ($search) {
             $q2->where('nomor_sp', 'like', "%{$search}%")
                 ->orWhere('nomor_pr', 'like', "%{$search}%")
-                ->orWhereHas('ppbjs', fn($ppbjQuery) => $ppbjQuery->where('ppbj_no', 'like', "%{$search}%"))
+                ->orWhereHas('ppbjs', fn ($ppbjQuery) => $ppbjQuery->where('ppbj_no', 'like', "%{$search}%"))
                 ->orWhere('nama_vendor', 'like', "%{$search}%")
                 ->orWhere('deskripsi_pengadaan', 'like', "%{$search}%");
         }))
-            ->when($pic, fn($q) => $q->where('pic', $pic))
-            ->when($dari, fn($q) => $q->where('tanggal_sp', '>=', $dari))
-            ->when($sampai, fn($q) => $q->where('tanggal_sp', '<=', $sampai));
+            ->when($pic, fn ($q) => $q->where('pic', $pic))
+            ->when($dari, fn ($q) => $q->where('tanggal_sp', '>=', $dari))
+            ->when($sampai, fn ($q) => $q->where('tanggal_sp', '<=', $sampai));
 
         // Nilai ringkasan tidak perlu dihitung ulang pada setiap refresh halaman.
         // Versi cache diputar sesudah create/update/delete sehingga angka tetap akurat.
         $statsVersion = Cache::get('sp:index-stats:version', '1');
-        $statsCacheKey = 'sp:index-stats:' . sha1(json_encode([
+        $statsCacheKey = 'sp:index-stats:'.sha1(json_encode([
             'version' => $statsVersion,
             'mode' => $oracleMode ? 'oracle' : 'auto',
             'search' => mb_strtolower(trim((string) $search)),
@@ -197,7 +197,7 @@ class SpController extends Controller
             'sampai' => trim((string) $sampai),
         ], JSON_UNESCAPED_UNICODE));
 
-        $stats = Cache::remember($statsCacheKey, now()->addSeconds(90), fn() => (clone $baseQuery)
+        $stats = Cache::remember($statsCacheKey, now()->addSeconds(90), fn () => (clone $baseQuery)
             ->selectRaw('
                 COUNT(*) as total_count,
                 COALESCE(SUM(nilai_sp), 0) as total_nilai_sp,
@@ -205,7 +205,16 @@ class SpController extends Controller
             ')
             ->first());
 
-        $sps = (clone $baseQuery)->orderBy('sequence_number', 'desc')
+        $sps = (clone $baseQuery)
+            ->select([
+                'id', 'nomor_sp', 'sequence_number', 'numbering_mode',
+                'created_by_user_id', 'tanggal_sp', 'nilai_sp', 'nomor_pr',
+                'nilai_pr', 'nama_vendor', 'deskripsi_pengadaan', 'pic',
+                'sph', 'tgl_sph', 'promised_date', 'rfq', 'nomor_pemenang',
+                'tanggal_pemenang', 'awal_kontrak', 'akhir_kontrak',
+                'bidang_ip_itu', 'penandatangan_sci', 'jabatan_sci',
+            ])
+            ->orderBy('sequence_number', 'desc')
             ->paginate(10)
             ->withQueryString();
 
@@ -246,11 +255,11 @@ class SpController extends Controller
 
             return [
                 'id' => $r->ppbj_no,
-                'text' => $r->ppbj_no . ($r->uraian ? ' - ' . Str::limit($r->uraian, 40) : ''),
+                'text' => $r->ppbj_no.($r->uraian ? ' - '.Str::limit($r->uraian, 40) : ''),
                 'uraian' => $r->uraian,
                 'portofolio' => $r->portofolio,
                 'buyer' => $r->buyer,
-                'has_spph' => !empty($r->spph_rfq_1),
+                'has_spph' => ! empty($r->spph_rfq_1),
                 'spph_nomor' => $spphNo !== '' ? $spphNo : null,
                 'spph_vendors' => $spph?->print_vendor_names ?? [],
                 'total_sebelum_ppn' => $r->total_sebelum_ppn,
@@ -266,7 +275,7 @@ class SpController extends Controller
     public function checkPpbjStatus(Request $request)
     {
         $ppbjNumbers = collect($request->input('ppbj_nos', []))
-            ->map(fn($number) => trim((string) $number))
+            ->map(fn ($number) => trim((string) $number))
             ->filter()
             ->unique()
             ->take(20)
@@ -285,22 +294,22 @@ class SpController extends Controller
             ->select(['ppbj_no', 'status', 'awarding_sp', 'spph_rfq_1', 'uraian', 'portofolio', 'buyer', 'total_sebelum_ppn'])
             ->whereIn('ppbj_no', $ppbjNumbers)
             ->get()
-            ->sortBy(fn($ppbj) => $positions[$ppbj->ppbj_no] ?? PHP_INT_MAX)
+            ->sortBy(fn ($ppbj) => $positions[$ppbj->ppbj_no] ?? PHP_INT_MAX)
             ->values();
 
         if ($ppbjs->count() !== $ppbjNumbers->count()) {
             return response()->json(['status' => 'manual', 'message' => 'Salah satu nomor PPBJ tidak ditemukan.']);
         }
 
-        if ($cancelled = $ppbjs->first(fn($ppbj) => $ppbj->status === 'CANCELLED')) {
+        if ($cancelled = $ppbjs->first(fn ($ppbj) => $ppbj->status === 'CANCELLED')) {
             return response()->json(['status' => 'cancelled', 'message' => "PPBJ {$cancelled->ppbj_no} sudah di-CANCELLED!"]);
         }
 
         $primary = $ppbjs->first();
-        $linked = $ppbjs->first(fn($ppbj) => filled($ppbj->awarding_sp));
+        $linked = $ppbjs->first(fn ($ppbj) => filled($ppbj->awarding_sp));
 
         $warnings = [];
-        $withoutSpph = $ppbjs->filter(fn($ppbj) => blank($ppbj->spph_rfq_1));
+        $withoutSpph = $ppbjs->filter(fn ($ppbj) => blank($ppbj->spph_rfq_1));
         if ($withoutSpph->isNotEmpty()) {
             $warnings[] = $withoutSpph->count() === 1
                 ? "PPBJ {$withoutSpph->first()->ppbj_no} belum memiliki SPPH"
@@ -319,7 +328,7 @@ class SpController extends Controller
             'uraian' => $primary->uraian,
             'portofolio' => $primary->portofolio,
             'buyer' => $primary->buyer,
-            'has_spph' => !empty($primary->spph_rfq_1),
+            'has_spph' => ! empty($primary->spph_rfq_1),
             'spph_nomor' => $spphMeta['spph_nomor'],
             'spph_vendors' => $spphMeta['spph_vendors'],
             'spph_pic' => $spphMeta['spph_pic'],
@@ -336,7 +345,7 @@ class SpController extends Controller
 
     private function ppbjPackageSummary($ppbjs): array
     {
-        $items = $ppbjs->map(fn($ppbj) => [
+        $items = $ppbjs->map(fn ($ppbj) => [
             'ppbj_no' => $ppbj->ppbj_no,
             'uraian' => trim((string) ($ppbj->uraian ?? '')),
             'portofolio' => $ppbj->portofolio,
@@ -346,7 +355,7 @@ class SpController extends Controller
 
         $mergedDescription = $items->count() === 1
             ? (string) ($items->first()['uraian'] ?? '')
-            : $items->map(fn($item, $index) => ($index + 1) . '. ' . $item['ppbj_no'] . ' - ' . ($item['uraian'] ?: 'Tanpa uraian'))
+            : $items->map(fn ($item, $index) => ($index + 1).'. '.$item['ppbj_no'].' - '.($item['uraian'] ?: 'Tanpa uraian'))
                 ->implode("\n");
 
         return [
@@ -381,9 +390,9 @@ class SpController extends Controller
         $available = collect(Cache::remember(
             'sp_master_options:bidang_pr:active_names',
             3600,
-            fn() => $this->queryActiveSpMasterOptionNames('bidang_pr')
+            fn () => $this->queryActiveSpMasterOptionNames('bidang_pr')
         ))
-            ->map(fn($name) => trim((string) $name))
+            ->map(fn ($name) => trim((string) $name))
             ->filter()
             ->values();
 
@@ -394,12 +403,12 @@ class SpController extends Controller
         $requested = trim((string) $requested);
         if ($requested === '') {
             return (string) ($available->first(
-                fn(string $name) => strcasecmp($name, 'DUKUNGAN BISNIS') === 0
+                fn (string $name) => strcasecmp($name, 'DUKUNGAN BISNIS') === 0
             ) ?? $available->first());
         }
 
         $matched = $available->first(
-            fn(string $name) => strcasecmp($name, $requested) === 0
+            fn (string $name) => strcasecmp($name, $requested) === 0
         );
 
         if ($matched === null) {
@@ -428,17 +437,17 @@ class SpController extends Controller
         $names = collect(Cache::remember(
             'sp_master_options:penandatangan_sci:active_names',
             3600,
-            fn() => $this->queryActiveSpMasterOptionNames('penandatangan_sci')
+            fn () => $this->queryActiveSpMasterOptionNames('penandatangan_sci')
         ))
-            ->map(fn($name) => trim((string) $name))
+            ->map(fn ($name) => trim((string) $name))
             ->filter()
             ->values();
         $titles = collect(Cache::remember(
             'sp_master_options:jabatan_sci:active_names',
             3600,
-            fn() => $this->queryActiveSpMasterOptionNames('jabatan_sci')
+            fn () => $this->queryActiveSpMasterOptionNames('jabatan_sci')
         ))
-            ->map(fn($title) => trim((string) $title))
+            ->map(fn ($title) => trim((string) $title))
             ->filter()
             ->values();
 
@@ -483,12 +492,12 @@ class SpController extends Controller
         $title ??= $this->matchActiveSpMasterOption($titles, $preferredTitle);
         if ($title === null && str_contains(strtolower($preferredTitle), 'kepala bidang')) {
             $title = $titles->first(
-                fn(string $option) => str_contains(strtolower($option), 'kepala bidang dukungan bisnis')
+                fn (string $option) => str_contains(strtolower($option), 'kepala bidang dukungan bisnis')
             );
         }
         if ($title === null && str_contains(strtolower($preferredTitle), 'kepala cabang')) {
             $title = $titles->first(
-                fn(string $option) => str_contains(strtolower($option), 'kepala cabang')
+                fn (string $option) => str_contains(strtolower($option), 'kepala cabang')
             );
         }
         $title ??= (string) $titles->first();
@@ -503,7 +512,7 @@ class SpController extends Controller
         }
 
         $matched = collect($options)->first(
-            fn($option) => strcasecmp(trim((string) $option), trim($requested)) === 0
+            fn ($option) => strcasecmp(trim((string) $option), trim($requested)) === 0
         );
 
         return $matched === null ? null : (string) $matched;
@@ -544,7 +553,7 @@ class SpController extends Controller
 
     private function formatSpphItemsForSp(?Spph $spph): array
     {
-        if (!$spph) {
+        if (! $spph) {
             return [];
         }
 
@@ -573,7 +582,7 @@ class SpController extends Controller
                     'tgl_pemenuhan' => optional($item->tgl_pemenuhan)->format('Y-m-d'),
                 ];
             })
-            ->filter(fn($item) => filled($item['nama_barang']) || filled($item['satuan']) || filled($item['jumlah']))
+            ->filter(fn ($item) => filled($item['nama_barang']) || filled($item['satuan']) || filled($item['jumlah']))
             ->values()
             ->all();
 
@@ -599,7 +608,7 @@ class SpController extends Controller
     {
         $spphNos = collect($rows)
             ->pluck('spph_rfq_1')
-            ->map(fn($nomor) => trim((string) $nomor))
+            ->map(fn ($nomor) => trim((string) $nomor))
             ->filter()
             ->unique()
             ->values();
@@ -618,7 +627,7 @@ class SpController extends Controller
     {
         $nomorPrs = collect($sps)
             ->pluck('nomor_pr')
-            ->map(fn($nomor) => trim((string) $nomor))
+            ->map(fn ($nomor) => trim((string) $nomor))
             ->filter()
             ->unique()
             ->values();
@@ -628,30 +637,22 @@ class SpController extends Controller
         }
 
         $ppbjByNo = DB::table('ppbj')
-            ->select(['ppbj_no', 'spph_rfq_1'])
-            ->whereIn('ppbj_no', $nomorPrs)
+            ->leftJoin('spphs', 'spphs.nomor_spph', '=', 'ppbj.spph_rfq_1')
+            ->select([
+                'ppbj.ppbj_no',
+                'ppbj.spph_rfq_1',
+                'spphs.nama_vendor as spph_nama_vendor',
+                'spphs.vendor_names as spph_vendor_names',
+            ])
+            ->whereIn('ppbj.ppbj_no', $nomorPrs)
             ->get()
             ->keyBy('ppbj_no');
 
-        $spphNos = $ppbjByNo
-            ->pluck('spph_rfq_1')
-            ->map(fn($nomor) => trim((string) $nomor))
-            ->filter()
-            ->unique()
-            ->values();
-
-        $spphByNo = $spphNos->isEmpty()
-            ? collect()
-            : Spph::select(['nomor_spph', 'nama_vendor', 'vendor_names'])
-                ->whereIn('nomor_spph', $spphNos)
-                ->get()
-                ->keyBy('nomor_spph');
-
-        return collect($sps)->mapWithKeys(function ($sp) use ($ppbjByNo, $spphByNo) {
+        return collect($sps)->mapWithKeys(function ($sp) use ($ppbjByNo) {
             $nomorPr = trim((string) $sp->nomor_pr);
             $ppbj = $nomorPr !== '' ? $ppbjByNo->get($nomorPr) : null;
 
-            if (!$ppbj) {
+            if (! $ppbj) {
                 return [$sp->id => ['status' => 'manual', 'label' => 'PR manual', 'vendors' => []]];
             }
 
@@ -660,13 +661,22 @@ class SpController extends Controller
                 return [$sp->id => ['status' => 'no_spph', 'label' => 'Belum ada SPPH', 'vendors' => []]];
             }
 
-            $vendors = $spphByNo->get($spphNo)?->print_vendor_names ?? [];
+            $vendorNames = json_decode((string) ($ppbj->spph_vendor_names ?? ''), true);
+            $vendors = collect(array_merge(
+                [(string) ($ppbj->spph_nama_vendor ?? '')],
+                is_array($vendorNames) ? $vendorNames : []
+            ))
+                ->map(fn ($vendor) => trim((string) $vendor))
+                ->filter()
+                ->unique(fn ($vendor) => mb_strtolower($vendor))
+                ->values()
+                ->all();
             if (empty($vendors)) {
                 return [$sp->id => ['status' => 'no_vendor', 'label' => 'SPPH tanpa vendor', 'vendors' => []]];
             }
 
             $selected = $this->normalizeVendorText((string) $sp->nama_vendor);
-            $match = collect($vendors)->contains(fn($vendor) => $this->normalizeVendorText((string) $vendor) === $selected);
+            $match = collect($vendors)->contains(fn ($vendor) => $this->normalizeVendorText((string) $vendor) === $selected);
 
             return [
                 $sp->id => [
@@ -696,7 +706,7 @@ class SpController extends Controller
         }
 
         $ppbj = Ppbj::select(['ppbj_no', 'spph_rfq_1'])->where('ppbj_no', $nomorPr)->first();
-        if (!$ppbj) {
+        if (! $ppbj) {
             return null;
         }
 
@@ -707,7 +717,7 @@ class SpController extends Controller
         }
 
         $selected = $this->normalizeVendorText($vendorName);
-        $matches = collect($vendors)->contains(fn($vendor) => $this->normalizeVendorText((string) $vendor) === $selected);
+        $matches = collect($vendors)->contains(fn ($vendor) => $this->normalizeVendorText((string) $vendor) === $selected);
 
         if ($matches || $request->boolean('vendor_mismatch_confirmed')) {
             return null;
@@ -716,7 +726,7 @@ class SpController extends Controller
         return $this->formError(
             $request,
             'nama_vendor',
-            'Vendor SP berbeda dari vendor pada SPPH ' . ($meta['spph_nomor'] ?? '-') . '. Pilih vendor rekomendasi atau konfirmasi jika memang berbeda.'
+            'Vendor SP berbeda dari vendor pada SPPH '.($meta['spph_nomor'] ?? '-').'. Pilih vendor rekomendasi atau konfirmasi jika memang berbeda.'
         );
     }
 
@@ -731,26 +741,26 @@ class SpController extends Controller
         $sampai = $request->get('sampai', '');
         $oracleMode = $this->isOracleMode($request);
 
-        $data = $this->spModeQuery($oracleMode)->when($search, fn($q) => $q->where(function ($q2) use ($search) {
+        $data = $this->spModeQuery($oracleMode)->when($search, fn ($q) => $q->where(function ($q2) use ($search) {
             $q2->where('nomor_sp', 'like', "%{$search}%")
                 ->orWhere('nomor_pr', 'like', "%{$search}%")
                 ->orWhere('nama_vendor', 'like', "%{$search}%")
                 ->orWhere('deskripsi_pengadaan', 'like', "%{$search}%");
         }))
-            ->when($pic, fn($q) => $q->where('pic', $pic))
-            ->when($dari, fn($q) => $q->where('tanggal_sp', '>=', $dari))
-            ->when($sampai, fn($q) => $q->where('tanggal_sp', '<=', $sampai))
+            ->when($pic, fn ($q) => $q->where('pic', $pic))
+            ->when($dari, fn ($q) => $q->where('tanggal_sp', '>=', $dari))
+            ->when($sampai, fn ($q) => $q->where('tanggal_sp', '<=', $sampai))
             ->orderBy('sequence_number', 'desc')
             ->get();
 
-        $filename = 'SP_' . now()->format('Ymd_His') . '.csv';
+        $filename = 'SP_'.now()->format('Ymd_His').'.csv';
 
         $callback = function () use ($data) {
             $file = fopen('php://output', 'w');
-            fprintf($file, chr(0xEF) . chr(0xBB) . chr(0xBF));
+            fprintf($file, chr(0xEF).chr(0xBB).chr(0xBF));
 
             // Cek apakah ada data dengan items
-            $hasItems = $data->contains(fn($row) => $row->items && $row->items->isNotEmpty());
+            $hasItems = $data->contains(fn ($row) => $row->items && $row->items->isNotEmpty());
 
             if ($hasItems) {
                 // Header dengan detail items
@@ -878,15 +888,15 @@ class SpController extends Controller
         $excludeId = (int) $request->get('exclude_id', 0);
         $tanggal = $request->get('tanggal');
 
-        if (!$nomor) {
+        if (! $nomor) {
             return response()->json(['status' => 'empty']);
         }
 
-        $cacheKey = 'sp:check:' . md5($originalNomor . ':' . $nomor . ':' . $excludeId . ':' . $tanggal . ':' . (int) $oracleMode);
+        $cacheKey = 'sp:check:'.md5($originalNomor.':'.$nomor.':'.$excludeId.':'.$tanggal.':'.(int) $oracleMode);
 
         return Cache::remember($cacheKey, 30, function () use ($nomor, $originalNomor, $excludeId, $oracleMode, $tanggal) {
             $exists = Sp::where('nomor_sp', $nomor)
-                ->when($excludeId, fn($q) => $q->where('id', '!=', $excludeId))
+                ->when($excludeId, fn ($q) => $q->where('id', '!=', $excludeId))
                 ->exists();
 
             if ($exists) {
@@ -902,7 +912,7 @@ class SpController extends Controller
 
             if ($seqInput !== null) {
                 $lastNomor = $this->spModeQuery(false)
-                    ->when($excludeId, fn($q) => $q->where('id', '!=', $excludeId))
+                    ->when($excludeId, fn ($q) => $q->where('id', '!=', $excludeId))
                     ->orderBy('sequence_number', 'desc')->value('nomor_sp');
 
                 if ($lastNomor) {
@@ -913,13 +923,13 @@ class SpController extends Controller
                         if ($seqInput < $expectedSeq) {
                             $warning = "Nomor ini ({$seqInput}) lebih kecil dari urutan berikutnya ({$expectedSeq}).";
                         } elseif ($seqInput > $expectedSeq) {
-                            $warning = 'Nomor boleh lompat, tetapi sistem otomatis berikutnya tetap akan menyarankan ' . $this->replaceSequenceInNumber($nomor, $expectedSeq) . ' agar celah nomor tidak hilang.';
+                            $warning = 'Nomor boleh lompat, tetapi sistem otomatis berikutnya tetap akan menyarankan '.$this->replaceSequenceInNumber($nomor, $expectedSeq).' agar celah nomor tidak hilang.';
                         }
                     }
                 }
             }
 
-            if (!$oracleMode && $nomor !== $originalNomor) {
+            if (! $oracleMode && $nomor !== $originalNomor) {
                 $warning = "Nomor otomatis disesuaikan dengan tanggal dokumen menjadi {$nomor}.";
             } elseif ($oracleMode) {
                 $warning = 'Mode Oracle ERP: nomor SP diketik manual dan hanya dicek duplikasi.';
@@ -986,13 +996,13 @@ class SpController extends Controller
             ->orderBy('id')
             ->limit(50)
             ->get()
-            ->map(fn($r) => [
+            ->map(fn ($r) => [
                 'id' => $r->id,
                 'nomor_sp' => $r->nomor_sp,
                 'tanggal_sp' => $r->tanggal_sp?->format('d/m/Y') ?? '-',
-                'nilai_sp' => $r->nilai_sp ? 'Rp ' . number_format($r->nilai_sp, 0, ',', '.') : '-',
+                'nilai_sp' => $r->nilai_sp ? 'Rp '.number_format($r->nilai_sp, 0, ',', '.') : '-',
                 'nomor_pr' => $r->nomor_pr ?? '-',
-                'nilai_pr' => $r->nilai_pr ? 'Rp ' . number_format($r->nilai_pr, 0, ',', '.') : '-',
+                'nilai_pr' => $r->nilai_pr ? 'Rp '.number_format($r->nilai_pr, 0, ',', '.') : '-',
                 'nama_vendor' => $r->nama_vendor,
                 'deskripsi_pengadaan' => $r->deskripsi_pengadaan,
                 'pic' => $r->pic,
@@ -1011,7 +1021,7 @@ class SpController extends Controller
                 ->select(['id', 'urutan', 'nama_barang', 'satuan', 'jumlah', 'harga_satuan', 'subtotal', 'tgl_pemenuhan'])
                 ->orderBy('urutan')
                 ->get()
-                ->map(fn(SpItem $item) => [
+                ->map(fn (SpItem $item) => [
                     'id' => $item->id,
                     'urutan' => $item->urutan,
                     'nama_barang' => $item->nama_barang,
@@ -1077,7 +1087,7 @@ class SpController extends Controller
 
         $this->validateSpModeValue($request, $oracleMode);
 
-        if (!$oracleMode) {
+        if (! $oracleMode) {
             $this->validateNumberPeriod($request->nomor_sp, $request->tanggal_sp, 'SP', 'nomor_sp');
         }
 
@@ -1092,7 +1102,7 @@ class SpController extends Controller
                 }
                 $ppbjRecord = $ppbjRecords->first();
                 $packageEstimatedValue = (float) $ppbjRecords->sum(
-                    fn(Ppbj $ppbj) => (float) ($ppbj->total_sebelum_ppn ?? 0)
+                    fn (Ppbj $ppbj) => (float) ($ppbj->total_sebelum_ppn ?? 0)
                 );
 
                 $vendorName = $request->filled('vendor_baru')
@@ -1218,7 +1228,7 @@ class SpController extends Controller
         $currentUser = $request->user();
         $currentUserId = $currentUser?->id;
 
-        if ((int) $sp->created_by_user_id !== (int) $currentUserId && !$currentUser?->matchesOwnerLabel($sp->pic)) {
+        if ((int) $sp->created_by_user_id !== (int) $currentUserId && ! $currentUser?->matchesOwnerLabel($sp->pic)) {
             $message = 'Data SP hanya bisa diedit oleh user pembuatnya.';
 
             if ($request->expectsJson()) {
@@ -1269,7 +1279,7 @@ class SpController extends Controller
 
         $this->validateSpModeValue($request, $oracleMode);
 
-        if (!$oracleMode) {
+        if (! $oracleMode) {
             $this->validateNumberPeriod($request->nomor_sp, $request->tanggal_sp, 'SP', 'nomor_sp');
         }
 
@@ -1285,7 +1295,7 @@ class SpController extends Controller
                 }
                 $newPpbj = $newPpbjs->first();
                 $packageEstimatedValue = (float) $newPpbjs->sum(
-                    fn(Ppbj $ppbj) => (float) ($ppbj->total_sebelum_ppn ?? 0)
+                    fn (Ppbj $ppbj) => (float) ($ppbj->total_sebelum_ppn ?? 0)
                 );
 
                 $seq = $oracleMode
@@ -1413,7 +1423,7 @@ class SpController extends Controller
         $sp->loadMissing('createdBy');
         $verifier = $sp->createdBy ?: $user;
 
-        if (!$verifier) {
+        if (! $verifier) {
             return response()->json([
                 'message' => 'User verifikasi tidak ditemukan, sehingga password tidak bisa dicek.',
             ], 422);
@@ -1429,14 +1439,14 @@ class SpController extends Controller
             $retryAfter = (int) ceil(max(1, now()->diffInSeconds($lockedUntilAt, false)));
 
             return response()->json([
-                'message' => 'Terlalu banyak percobaan password salah. Silakan coba lagi sekitar ' . ceil($retryAfter / 60) . ' menit lagi.',
+                'message' => 'Terlalu banyak percobaan password salah. Silakan coba lagi sekitar '.ceil($retryAfter / 60).' menit lagi.',
                 'locked' => true,
                 'retry_after' => $retryAfter,
                 'locked_until' => $lockedUntilAt->toIso8601String(),
             ], 429);
         }
 
-        if (!Hash::check((string) $request->creator_password, (string) $verifier->password)) {
+        if (! Hash::check((string) $request->creator_password, (string) $verifier->password)) {
             $attempts = ((int) Cache::get($attemptKey, 0)) + 1;
             $remainingAttempts = max(0, 3 - $attempts);
             Cache::put($attemptKey, $attempts, now()->addMinutes(15));
@@ -1455,7 +1465,7 @@ class SpController extends Controller
             }
 
             return response()->json([
-                'message' => 'Password pembuat SP tidak sesuai. Sisa percobaan: ' . $remainingAttempts . '.',
+                'message' => 'Password pembuat SP tidak sesuai. Sisa percobaan: '.$remainingAttempts.'.',
                 'attempts_remaining' => $remainingAttempts,
             ], 422);
         }
@@ -1469,7 +1479,7 @@ class SpController extends Controller
                 'model_type' => Sp::class,
                 'model_id' => $sp->id,
                 'action' => 'deleted',
-                'description' => 'SP dihapus: ' . ($sp->nomor_sp ?: 'SP-' . $sp->id),
+                'description' => 'SP dihapus: '.($sp->nomor_sp ?: 'SP-'.$sp->id),
                 'changes' => [
                     'nomor_sp' => $sp->nomor_sp,
                     'nomor_pr' => $sp->nomor_pr,
@@ -1497,7 +1507,7 @@ class SpController extends Controller
     private function normalizePpbjSelection(Request $request): void
     {
         $numbers = collect($request->input('nomor_prs', []))
-            ->map(fn($number) => trim((string) $number))->filter()->unique()->values();
+            ->map(fn ($number) => trim((string) $number))->filter()->unique()->values();
 
         if ($numbers->isEmpty() && $request->input('nomor_pr_type', 'ppbj') === 'ppbj' && $request->filled('nomor_pr')) {
             $numbers->push(trim((string) $request->input('nomor_pr')));
@@ -1515,7 +1525,7 @@ class SpController extends Controller
         }
 
         return collect($request->input('nomor_prs', []))
-            ->map(fn($number) => trim((string) $number))->filter()->unique()->values()->all();
+            ->map(fn ($number) => trim((string) $number))->filter()->unique()->values()->all();
     }
 
     private function lockSpPpbjs(array $numbers)
@@ -1527,7 +1537,7 @@ class SpController extends Controller
         $positions = array_flip($numbers);
 
         return Ppbj::whereIn('ppbj_no', $numbers)->lockForUpdate()->get()
-            ->sortBy(fn(Ppbj $ppbj) => $positions[$ppbj->ppbj_no] ?? PHP_INT_MAX)->values();
+            ->sortBy(fn (Ppbj $ppbj) => $positions[$ppbj->ppbj_no] ?? PHP_INT_MAX)->values();
     }
 
     private function spPpbjConflict(Request $request, array $numbers, $records, ?string $currentDocumentNumber = null)
@@ -1536,11 +1546,11 @@ class SpController extends Controller
             return $this->formError($request, 'nomor_prs', 'Salah satu nomor PPBJ tidak ditemukan. Muat ulang daftar lalu coba kembali.');
         }
 
-        if ($cancelled = $records->first(fn(Ppbj $ppbj) => $ppbj->status === 'CANCELLED')) {
+        if ($cancelled = $records->first(fn (Ppbj $ppbj) => $ppbj->status === 'CANCELLED')) {
             return $this->formError($request, 'nomor_prs', "PPBJ {$cancelled->ppbj_no} sudah dibatalkan.");
         }
 
-        $conflict = $records->first(fn(Ppbj $ppbj) => filled($ppbj->awarding_sp)
+        $conflict = $records->first(fn (Ppbj $ppbj) => filled($ppbj->awarding_sp)
             && $ppbj->awarding_sp !== $currentDocumentNumber);
 
         if ($conflict) {
@@ -1604,8 +1614,8 @@ class SpController extends Controller
             $request->query('penandatangan_sci'),
             $request->query('jabatan_sci')
         );
-        $nomor = trim((string) ($sp->nomor_sp ?: 'SP-' . $sp->id));
-        $filename = $this->previewDownloadName('SP ' . $nomor . '.docx');
+        $nomor = trim((string) ($sp->nomor_sp ?: 'SP-'.$sp->id));
+        $filename = $this->previewDownloadName('SP '.$nomor.'.docx');
         $mode = strtolower((string) ($sp->numbering_mode ?? 'auto')) === 'oracle' ? 'oracle' : 'auto';
         $preview = PrintPreviewFile::store(
             $this->cetakSp($sp, $bidangPr, $signer['name'], $signer['title']),
@@ -1626,7 +1636,7 @@ class SpController extends Controller
                 'Nomor SP' => $nomor,
                 'Nomor PR/PPBJ' => $sp->linkedPpbjLabel(),
                 'Vendor' => $sp->nama_vendor ?: '-',
-                'Nilai SP' => $sp->nilai_sp ? 'Rp ' . number_format((float) $sp->nilai_sp, 0, ',', '.') : '-',
+                'Nilai SP' => $sp->nilai_sp ? 'Rp '.number_format((float) $sp->nilai_sp, 0, ',', '.') : '-',
                 'PIC' => $sp->pic ?: '-',
                 'Bidang PR' => $bidangPr,
                 'Penandatangan SCI' => $signer['name'].' - '.$signer['title'],
@@ -1640,8 +1650,7 @@ class SpController extends Controller
         ?string $bidangPr = null,
         ?string $penandatanganSci = null,
         ?string $jabatanSci = null
-    )
-    {
+    ) {
         $sp->load('items');
         $bidangPr = $this->resolvePrintBidangPr($bidangPr ?? request()->query('bidang_pr'));
         $nilaiAcuan = $this->hitungNilaiAcuan($sp);
@@ -1760,7 +1769,7 @@ class SpController extends Controller
         // === PERIHAL ===
         $prRun = $section->addTextRun($p0);
         $prRun->addText('Perihal', $fs);
-        $prRun->addText("\t: " . strtoupper($sp->deskripsi_pengadaan), $fb);
+        $prRun->addText("\t: ".strtoupper($sp->deskripsi_pengadaan), $fb);
 
         $section->addTextBreak(1, $p0);
 
@@ -1841,7 +1850,7 @@ class SpController extends Controller
 
         // Fungsi format angka
         $fmtNum = function ($num) {
-            if (!$num && $num !== 0) {
+            if (! $num && $num !== 0) {
                 return '-';
             }
 
@@ -1871,7 +1880,7 @@ class SpController extends Controller
             // Cek apakah diawali dengan angka+titik (1. , 2. , dll) atau bullet (- , • , dll)
             if (preg_match('/^(\d+)[\.\)]\s*/', $namaHtml, $m)) {
                 $isSubItem = true;
-                $subPrefix = $m[1] . '. ';
+                $subPrefix = $m[1].'. ';
             } elseif (preg_match('/^[\-\•]\s*/', $namaHtml, $m)) {
                 $isSubItem = true;
                 $subPrefix = '• ';
@@ -1887,7 +1896,7 @@ class SpController extends Controller
             $cleanNama = preg_replace('/^\s*[\d\.\-\•]+\s*/', '', $cleanNama);
             $cleanNama = trim($cleanNama);
 
-            if (!$isSubItem) {
+            if (! $isSubItem) {
                 $parentIdx++;
                 $parsedItems[] = [
                     'type' => 'parent',
@@ -1916,7 +1925,7 @@ class SpController extends Controller
                 }
 
                 $lastParentIdx = count($parsedItems) - 1;
-                if (!isset($parsedItems[$lastParentIdx]['children'])) {
+                if (! isset($parsedItems[$lastParentIdx]['children'])) {
                     $parsedItems[$lastParentIdx]['children'] = [];
                 }
                 $parsedItems[$lastParentIdx]['children'][] = [
@@ -1963,7 +1972,7 @@ class SpController extends Controller
             $tbl->addCell(1600, $vC)->addText($fmtNum($subtotal), $c, $pr);
 
             // Rows Children (sub-items) - dengan vMerge untuk kolom lain
-            if (!empty($item['children'])) {
+            if (! empty($item['children'])) {
                 $childCount = count($item['children']);
 
                 foreach ($item['children'] as $childIdx => $child) {
@@ -1975,7 +1984,7 @@ class SpController extends Controller
                     // Kolom Nama Barang - dengan indentasi
                     $childCell = $tbl->addCell(4800, $vT);
                     $childRun = $childCell->addTextRun($pl);
-                    $childRun->addText('     ' . $child['prefix'], $c);
+                    $childRun->addText('     '.$child['prefix'], $c);
                     $this->renderHtmlInline($childRun, $child['nama_raw']);
 
                     // Kolom lainnya - merge dari row parent
@@ -1998,7 +2007,7 @@ class SpController extends Controller
         $ppnFmt = $fmtNum($ppnAmount);
         $totalFmt = $fmtNum($totalWithPpn);
 
-                // Segmen teks PPBJ untuk catatan (dipecah supaya bagian tertentu bisa di-bold)
+        // Segmen teks PPBJ untuk catatan (dipecah supaya bagian tertentu bisa di-bold)
         $catatanSegments = [];
 
         if ($sp->nomor_pr) {
@@ -2051,7 +2060,7 @@ class SpController extends Controller
             $terbRun->addText('Terbilang', $cb);
             $terbRun->addText(' : ', $c);
             $terbRun->addText(
-                '"' . ucfirst($this->terbilang($totalWithPpn)) . ' Rupiah"',
+                '"'.ucfirst($this->terbilang($totalWithPpn)).' Rupiah"',
                 $cb
             );
         }
@@ -2064,7 +2073,7 @@ class SpController extends Controller
         $noBdrTbl = ['borderSize' => 0, 'borderColor' => 'FFFFFF', 'cellMargin' => [0, 60, 0, 60]];
 
         $penyerahanText = $sp->promised_date
-            ? 'Selambat-lambatnya ' . \Carbon\Carbon::parse($sp->promised_date)->locale('id')->translatedFormat('d F Y') . ' sesuai dengan perjanjian'
+            ? 'Selambat-lambatnya '.\Carbon\Carbon::parse($sp->promised_date)->locale('id')->translatedFormat('d F Y').' sesuai dengan perjanjian'
             : 'Selambat-lambatnya (......................) sesuai dengan perjanjian';
 
         foreach ([
@@ -2224,8 +2233,8 @@ class SpController extends Controller
         $cleanDesc = trim(preg_replace('/\s+/', ' ', $cleanDesc));
         $shortDesc = strlen($cleanDesc) > 40 ? substr($cleanDesc, 0, 40) : $cleanDesc;
 
-        $filename = 'Surat Pesanan ' . $shortDesc . '.docx';
-        $tempPath = storage_path('app/sp_' . $sp->id . '_' . Str::random(8) . '.docx');
+        $filename = 'Surat Pesanan '.$shortDesc.'.docx';
+        $tempPath = storage_path('app/sp_'.$sp->id.'_'.Str::random(8).'.docx');
 
         IOFactory::createWriter($phpWord, 'Word2007')->save($tempPath);
 
@@ -2237,8 +2246,8 @@ class SpController extends Controller
         }
         $this->repairDocxXmlForMicrosoftWord($tempPath);
 
-        if (!file_exists($tempPath) || filesize($tempPath) === 0) {
-            $fallbackPath = storage_path('app/fallback_' . $filename);
+        if (! file_exists($tempPath) || filesize($tempPath) === 0) {
+            $fallbackPath = storage_path('app/fallback_'.$filename);
             IOFactory::createWriter($phpWord, 'Word2007')->save($fallbackPath);
             $this->repairDocxXmlForMicrosoftWord($fallbackPath);
 
@@ -2254,8 +2263,7 @@ class SpController extends Controller
         ?string $bidangPr = null,
         ?string $penandatanganSci = null,
         ?string $jabatanSci = null
-    )
-    {
+    ) {
         $bidangPr = $this->resolvePrintBidangPr($bidangPr ?? request()->query('bidang_pr'));
         $signer = $this->resolvePrintSciSigner($sp, $penandatanganSci, $jabatanSci, $nilaiAcuan);
         $penandatanganSci = $signer['name'];
@@ -2319,29 +2327,29 @@ class SpController extends Controller
             : now()->locale('id')->translatedFormat('d F Y');
         $tglPakta = now()->locale('id')->translatedFormat('d F Y');
 
-        $tglPph = (!empty($ppbj?->tgl_spph))
+        $tglPph = (! empty($ppbj?->tgl_spph))
             ? \Carbon\Carbon::parse($ppbj->tgl_spph)->locale('id')->translatedFormat('d F Y')
             : '(.................)';
-        $noPph = !empty($ppbj?->spph_rfq_1) ? $ppbj->spph_rfq_1 : '(.................)';
+        $noPph = ! empty($ppbj?->spph_rfq_1) ? $ppbj->spph_rfq_1 : '(.................)';
 
-        $noPemenang = !empty($sp->nomor_pemenang)
+        $noPemenang = ! empty($sp->nomor_pemenang)
             ? $sp->nomor_pemenang
-            : (!empty($ppbj?->pemenang) ? $ppbj->pemenang : '(.................)');
-        $tglPemenangRaw = !empty($sp->tanggal_pemenang)
+            : (! empty($ppbj?->pemenang) ? $ppbj->pemenang : '(.................)');
+        $tglPemenangRaw = ! empty($sp->tanggal_pemenang)
             ? $sp->tanggal_pemenang
             : ($ppbj?->tgl_pemenang ?? null);
-        $tglPemenang = !empty($tglPemenangRaw)
+        $tglPemenang = ! empty($tglPemenangRaw)
             ? \Carbon\Carbon::parse($tglPemenangRaw)->locale('id')->translatedFormat('d F Y')
             : '(.................)';
 
-        $tglPr = (!empty($ppbj?->tgl_ppbj))
+        $tglPr = (! empty($ppbj?->tgl_ppbj))
             ? \Carbon\Carbon::parse($ppbj->tgl_ppbj)->locale('id')->translatedFormat('d F Y')
-            : ((!empty($ppbj?->tgl_terima_pr)) ? \Carbon\Carbon::parse($ppbj->tgl_terima_pr)->locale('id')->translatedFormat('d F Y') : '(....................)');
+            : ((! empty($ppbj?->tgl_terima_pr)) ? \Carbon\Carbon::parse($ppbj->tgl_terima_pr)->locale('id')->translatedFormat('d F Y') : '(....................)');
 
-        $tglAwalKontrak = !empty($sp->awal_kontrak)
+        $tglAwalKontrak = ! empty($sp->awal_kontrak)
             ? \Carbon\Carbon::parse($sp->awal_kontrak)->locale('id')->translatedFormat('d F Y')
             : '(....................)';
-        $tglAkhirKontrak = !empty($sp->akhir_kontrak)
+        $tglAkhirKontrak = ! empty($sp->akhir_kontrak)
             ? \Carbon\Carbon::parse($sp->akhir_kontrak)->locale('id')->translatedFormat('d F Y')
             : '(....................)';
 
@@ -2359,7 +2367,7 @@ class SpController extends Controller
         $total = $subtotal + $ppn;
         $jampel5 = round($total * 0.05, 2);
 
-        $fmt = fn($n) => $this->formatMoney($n);
+        $fmt = fn ($n) => $this->formatMoney($n);
         $terbilangSubtotal = ucwords($this->terbilang($subtotal));
         $terbilangTotal = ucwords($this->terbilang($total));
         $terbilangJampel = ucwords($this->terbilang(round($jampel5)));
@@ -2381,13 +2389,13 @@ class SpController extends Controller
             $left = $depth === 0 ? 480 : 840;
             $hanging = $depth === 0 ? 480 : 360;
             $style = array_merge($pJ, ['indentation' => ['left' => $left, 'hanging' => $hanging]]);
-            $addPara($no . "\t" . $text, $style, $extraBold);
+            $addPara($no."\t".$text, $style, $extraBold);
         };
 
         $pPasal = ['alignment' => 'center', 'spaceAfter' => 0, 'spaceBefore' => 180, 'lineHeight' => 1.0];
         $pPasalLine = ['alignment' => 'center', 'spaceAfter' => 120, 'spaceBefore' => 0, 'lineHeight' => 1.0];
         $addPasal = function (string $no, array $judulLines) use ($section, $fb, $pPasal, $pPasalLine) {
-            $section->addText('PASAL ' . $no, $fb, $pPasal);
+            $section->addText('PASAL '.$no, $fb, $pPasal);
             foreach ($judulLines as $idx => $line) {
                 $section->addText($line, $fb, $idx === count($judulLines) - 1 ? $pPasalLine : ['alignment' => 'center', 'spaceAfter' => 0, 'spaceBefore' => 0, 'lineHeight' => 1.0]);
             }
@@ -2413,17 +2421,17 @@ class SpController extends Controller
         $section->addText('DAN', $fb, $pC);
         $section->addText($vendorUp, $fb, $pTitleLine);
         $section->addTextBreak(1, $p0);
-        $section->addText('Nomor : ' . $sp->nomor_sp, $fs, $pC);
-        $section->addText('Tanggal : ' . $tgl, $fs, $pC);
+        $section->addText('Nomor : '.$sp->nomor_sp, $fs, $pC);
+        $section->addText('Tanggal : '.$tgl, $fs, $pC);
         $section->addTextBreak(1, $p0);
 
-        $addNo('I.', 'PERUSAHAAN PERSEROAN PT SUPERINTENDING COMPANY OF INDONESIA disingkat PT SUCOFINDO (PERSERO) NPWP: 01.300.992.3-093.000, yang didirikan dengan Akta Notaris Johan Arifin Lumban Tobing Sutan Arifin di Jakarta No. 42 tanggal 22 Oktober 1956, sebagaimana telah diubah terakhir dengan Akta Pernyataan Keputusan Rapat PT SUPERINTENDING COMPANY OF INDONESIA (Persero) dari Notaris Jose Dimas Satria, SH., M.KN di Jakarta Selatan tanggal 23 Juni 2025 Nomor 130 Tentang Perubahan Anggaran Dasar PT SUPERINTENDING COMPANY OF INDONESIA (Persero) dan telah mendapatkan pengesahan dalam Keputusan Menteri Hukum dan HAM Republik Indonesia tanggal 23 Juni 2025 Nomor : AHU-0139502 Tahun 2025, beralamat di “GRAHA SUPERINTENDING COMPANY OF INDONESIA” Jl. KH. Guru Amin No.Kav 34, RT.4/RW.1, Kelurahan Pancoran, Kecamatan Pancoran, Jakarta Selatan DKI Jakarta 12780, berdasarkan Ketentuan Umum Pengadaan Barang dan Jasa PT SUPERINTENDING COMPANY OF INDONESIA (Persero) dalam perbuatan hukum ini diwakili secara sah oleh ' . $penandatanganSci . ' Jabatan ' . $jabatanSci . ' selanjutnya dalam Kontrak ini disebut sebagai PIHAK KESATU.', 0, [$penandatanganSci, $jabatanSci]);
-        $addNo('II.', $vendorUp . ' NPWP ' . $npwpV . ', yang beralamat di ' . $alamatV . ' dalam perbuatan hukum ini diwakili secara sah oleh ' . $direktur . ' jabatan ' . $jabatanVendor . ', selanjutnya dalam Kontrak ini disebut sebagai PIHAK KEDUA.', 0, [$vendorUp, $direktur, $jabatanVendor]);
+        $addNo('I.', 'PERUSAHAAN PERSEROAN PT SUPERINTENDING COMPANY OF INDONESIA disingkat PT SUCOFINDO (PERSERO) NPWP: 01.300.992.3-093.000, yang didirikan dengan Akta Notaris Johan Arifin Lumban Tobing Sutan Arifin di Jakarta No. 42 tanggal 22 Oktober 1956, sebagaimana telah diubah terakhir dengan Akta Pernyataan Keputusan Rapat PT SUPERINTENDING COMPANY OF INDONESIA (Persero) dari Notaris Jose Dimas Satria, SH., M.KN di Jakarta Selatan tanggal 23 Juni 2025 Nomor 130 Tentang Perubahan Anggaran Dasar PT SUPERINTENDING COMPANY OF INDONESIA (Persero) dan telah mendapatkan pengesahan dalam Keputusan Menteri Hukum dan HAM Republik Indonesia tanggal 23 Juni 2025 Nomor : AHU-0139502 Tahun 2025, beralamat di “GRAHA SUPERINTENDING COMPANY OF INDONESIA” Jl. KH. Guru Amin No.Kav 34, RT.4/RW.1, Kelurahan Pancoran, Kecamatan Pancoran, Jakarta Selatan DKI Jakarta 12780, berdasarkan Ketentuan Umum Pengadaan Barang dan Jasa PT SUPERINTENDING COMPANY OF INDONESIA (Persero) dalam perbuatan hukum ini diwakili secara sah oleh '.$penandatanganSci.' Jabatan '.$jabatanSci.' selanjutnya dalam Kontrak ini disebut sebagai PIHAK KESATU.', 0, [$penandatanganSci, $jabatanSci]);
+        $addNo('II.', $vendorUp.' NPWP '.$npwpV.', yang beralamat di '.$alamatV.' dalam perbuatan hukum ini diwakili secara sah oleh '.$direktur.' jabatan '.$jabatanVendor.', selanjutnya dalam Kontrak ini disebut sebagai PIHAK KEDUA.', 0, [$vendorUp, $direktur, $jabatanVendor]);
 
         $addPara('Berdasarkan pertimbangan-pertimbangan sebagai berikut:');
-        $addNo('1.', 'Bahwa PIHAK KESATU telah menyampaikan surat kepada PIHAK KEDUA RFQ ' . $rfqText . ' No. ' . $noPph . ' tanggal ' . $tglPph . ' perihal Surat Permintaan Penawaran Harga (SPPH) dan Negosiasi Harga;');
-        $addNo('2.', 'Bahwa PIHAK KEDUA telah menyampaikan surat kepada PIHAK KESATU No. ' . ($sp->sph ?: '(.................)') . ' tanggal ' . ($sp->tgl_sph ? \Carbon\Carbon::parse($sp->tgl_sph)->locale('id')->translatedFormat('d F Y') : '(.................)') . ' perihal Penawaran dan Negosiasi Harga;');
-        $addNo('3.', 'Bahwa PIHAK KESATU telah menyampaikan surat kepada PIHAK KEDUA No. ' . $noPemenang . ' tanggal ' . $tglPemenang . ' perihal Pengumuman Penetapan Pemasok Pelaksana Pengadaan ' . $deskripsi . ' untuk PT SUPERINTENDING COMPANY OF INDONESIA (Persero) Cabang Pekanbaru;');
+        $addNo('1.', 'Bahwa PIHAK KESATU telah menyampaikan surat kepada PIHAK KEDUA RFQ '.$rfqText.' No. '.$noPph.' tanggal '.$tglPph.' perihal Surat Permintaan Penawaran Harga (SPPH) dan Negosiasi Harga;');
+        $addNo('2.', 'Bahwa PIHAK KEDUA telah menyampaikan surat kepada PIHAK KESATU No. '.($sp->sph ?: '(.................)').' tanggal '.($sp->tgl_sph ? \Carbon\Carbon::parse($sp->tgl_sph)->locale('id')->translatedFormat('d F Y') : '(.................)').' perihal Penawaran dan Negosiasi Harga;');
+        $addNo('3.', 'Bahwa PIHAK KESATU telah menyampaikan surat kepada PIHAK KEDUA No. '.$noPemenang.' tanggal '.$tglPemenang.' perihal Pengumuman Penetapan Pemasok Pelaksana Pengadaan '.$deskripsi.' untuk PT SUPERINTENDING COMPANY OF INDONESIA (Persero) Cabang Pekanbaru;');
         $deskripsiBold = mb_strtoupper(trim((string) $deskripsi), 'UTF-8');
 
         $paraRun = $section->addTextRun($pJ);
@@ -2442,7 +2450,7 @@ class SpController extends Controller
         $addPasal('1', ['LINGKUP PEKERJAAN DAN HARGA BORONGAN']);
         $addPara('PIHAK KESATU menyerahkan pekerjaan kepada PIHAK KEDUA, sebagaimana PIHAK KEDUA menerima penyerahan pekerjaan tersebut dari PIHAK KESATU dan berjanji untuk melaksanakan pekerjaan dengan spesifikasi dan harga sebagai berikut:');
 
-        $fmtTable = fn($n) => $this->formatMoney($n);
+        $fmtTable = fn ($n) => $this->formatMoney($n);
         $tbl = $section->addTable([
             'borderSize' => 4,
             'borderColor' => '000001',
@@ -2478,8 +2486,8 @@ class SpController extends Controller
             $tbl->addCell(4540, $vT)->addText($cleanText($sp->deskripsi_pengadaan), $ci, $pl);
             $tbl->addCell(900, $vC)->addText('-', $c, $ph);
             $tbl->addCell(850, $vC)->addText('1', $c, $ph);
-            $tbl->addCell(1700, $vC)->addText('Rp ' . $fmtTable($subtotal) . ',-', $c, $pr);
-            $tbl->addCell(1950, $vC)->addText('Rp ' . $fmtTable($subtotal) . ',-', $c, $pr);
+            $tbl->addCell(1700, $vC)->addText('Rp '.$fmtTable($subtotal).',-', $c, $pr);
+            $tbl->addCell(1950, $vC)->addText('Rp '.$fmtTable($subtotal).',-', $c, $pr);
         } else {
             $no = 1;
             foreach ($items as $it) {
@@ -2488,14 +2496,14 @@ class SpController extends Controller
                 $tbl->addCell(4540, $vT)->addText($cleanText($it->nama_barang ?? ''), $ci, $pl);
                 $tbl->addCell(900, $vC)->addText($it->satuan ?: '-', $c, $ph);
                 $tbl->addCell(850, $vC)->addText($it->jumlah ?: '-', $c, $ph);
-                $tbl->addCell(1700, $vC)->addText('Rp ' . $fmtTable($it->harga_satuan ?? 0) . ',-', $c, $pr);
-                $tbl->addCell(1950, $vC)->addText('Rp ' . $fmtTable($it->subtotal ?? 0) . ',-', $c, $pr);
+                $tbl->addCell(1700, $vC)->addText('Rp '.$fmtTable($it->harga_satuan ?? 0).',-', $c, $pr);
+                $tbl->addCell(1950, $vC)->addText('Rp '.$fmtTable($it->subtotal ?? 0).',-', $c, $pr);
             }
         }
 
         $catatanPr = $sp->nomor_pr
-            ? 'Memenuhi PR Bidang ' . $bidangPr . ' PT Sucofindo Cabang Pekanbaru sesuai PR No. ' . $sp->linkedPpbjLabel() . ' tanggal ' . $tglPr . '.'
-            : 'Memenuhi PR Bidang ' . $bidangPr . ' PT Sucofindo Cabang Pekanbaru sesuai PR No. (....................) tanggal (....................).';
+            ? 'Memenuhi PR Bidang '.$bidangPr.' PT Sucofindo Cabang Pekanbaru sesuai PR No. '.$sp->linkedPpbjLabel().' tanggal '.$tglPr.'.'
+            : 'Memenuhi PR Bidang '.$bidangPr.' PT Sucofindo Cabang Pekanbaru sesuai PR No. (....................) tanggal (....................).';
         $catatanPr .= $this->ppbjRegistrationNoteByPr($sp->nomor_pr);
 
         // Summary: kolom Catatan dibuat vertical merge 3 baris supaya tidak muncul garis
@@ -2508,40 +2516,40 @@ class SpController extends Controller
         $catCell->addText('Catatan :', $c, $pl);
         $catCell->addText($catatanPr, $c, $pl);
         $tbl->addCell(1700, $vC)->addText('Harga', $c, $pl);
-        $tbl->addCell(1950, $vC)->addText('Rp ' . $fmtTable($subtotal) . ',-', $c, $pr);
+        $tbl->addCell(1950, $vC)->addText('Rp '.$fmtTable($subtotal).',-', $c, $pr);
 
         $tbl->addRow();
         $tbl->addCell(6790, $catatanContinueCell);
         $tbl->addCell(1700, $vC)->addText('PPN 11%', $c, $pl);
-        $tbl->addCell(1950, $vC)->addText('Rp ' . $fmtTable($ppn) . ',-', $c, $pr);
+        $tbl->addCell(1950, $vC)->addText('Rp '.$fmtTable($ppn).',-', $c, $pr);
 
         $tbl->addRow();
         $tbl->addCell(6790, $catatanContinueCell);
         $tbl->addCell(1700, $vC)->addText('Total', $cb, $pl);
-        $tbl->addCell(1950, $vC)->addText('Rp ' . $fmtTable($total), $cb, $pr);
+        $tbl->addCell(1950, $vC)->addText('Rp '.$fmtTable($total), $cb, $pr);
 
         $tbl->addRow();
         $terCell = $tbl->addCell(10440, ['gridSpan' => 6, 'valign' => 'center']);
         $terRun = $terCell->addTextRun($pl);
         $terRun->addText('Terbilang : ', $cb);
-        $terRun->addText($terbilangTotal . ' Rupiah', $cb);
+        $terRun->addText($terbilangTotal.' Rupiah', $cb);
         $section->addTextBreak(1, $p0);
 
         // ===================== PASAL 2 =====================
         $addPasal('2', ['JANGKA WAKTU PELAKSANAAN PEKERJAAN']);
-        $addNo('(1)', 'Jangka waktu pelaksanaan jasa pekerjaan terhitung sejak tanggal ' . $tglAwalKontrak . ' sampai dengan selambat-lambatnya tanggal ' . $tglAkhirKontrak . '.', 0, [$tglAwalKontrak, $tglAkhirKontrak]);
+        $addNo('(1)', 'Jangka waktu pelaksanaan jasa pekerjaan terhitung sejak tanggal '.$tglAwalKontrak.' sampai dengan selambat-lambatnya tanggal '.$tglAkhirKontrak.'.', 0, [$tglAwalKontrak, $tglAkhirKontrak]);
         $addNo('(2)', 'Untuk keperluan penyerahan jasa sebagaimana dimaksud pada ayat (1), PIHAK KESATU menyediakan tempat yang berlokasi di PT SUCOFINDO Cabang Pekanbaru, Kota Pekanbaru, Riau.');
 
         // ===================== PASAL 3 =====================
         $addPasal('3', ['PELAKSANAAN PEMBAYARAN']);
-        $nominalPembayaran = 'Rp. ' . $fmt($subtotal) . ',-';
+        $nominalPembayaran = 'Rp. '.$fmt($subtotal).',-';
         $pasal3 = [
             'PIHAK KESATU sebagai Perusahaan yang tergabung dalam Holding Jasa Survey memungut langsung (WAPU) sebesar PPN 11% (Sebelas Persen) kepada PIHAK KEDUA sesuai Peraturan Undang Undang No. 7 Tahun 2021 Tentang Harmonisasi Peraturan Perpajakan.',
             'PIHAK KESATU sebagai Perusahaan yang tergabung dalam Holding Jasa Survey memungut langsung (WAPU) PPh Pasal 23 kepada PIHAK KEDUA jika ada terkait dengan penyerahan jasa sebesar 2 % (dua persen) dari harga pembelian. Apabila PIHAK KEDUA tidak memiliki NPWP maka tarif lebih tinggi 100% (sebesar 4% dari harga pembelian) sesuai Peraturan Menteri Keuangan RI No. 141/2015 Pasal 1 ayat (1).',
             'PIHAK KEDUA merupakan perusahaan kena pajak apabila faktur pajak yang dikeluarkan oleh PIHAK KEDUA tidak diakui atau tidak benar menurut kantor pajak sehingga menyebabkan kerugian PIHAK KESATU maka akan dilakukan pemotongan beban PPN 11% (sebelas persen) dari total nilai kontrak untuk mengganti kerugian tersebut.',
             'Pembayaran ini akan dilakukan pemotongan atau pemungutan sesuai dengan peraturan pajak-pajak yang berlaku.',
             'Apabila ada perbedaan tanggal faktur pajak dengan tanggal penyampaian faktur pajak yang menyebabkan Badan Usaha Milik Negara (BUMN) dikenakan sanksi administrasi perpajakan maka sanksi tersebut akan ditanggung oleh PIHAK KEDUA.',
-            'Pembayaran sebesar ' . $nominalPembayaran . ' (' . $terbilangSubtotal . ' Rupiah) belum termasuk PPN 11% (sebelas persen) akan dibayarkan secara sekaligus setelah pelaksanaan pekerjaan dilaksanakan dan dinyatakan selesai, diverifikasi, dan disetujui oleh PIHAK KESATU melalui transfer ke Rekening Bank PIHAK KEDUA, setelah persyaratan tagihan pembayaran sebagaimana dimaksud pada ayat (8) diterima lengkap.',
+            'Pembayaran sebesar '.$nominalPembayaran.' ('.$terbilangSubtotal.' Rupiah) belum termasuk PPN 11% (sebelas persen) akan dibayarkan secara sekaligus setelah pelaksanaan pekerjaan dilaksanakan dan dinyatakan selesai, diverifikasi, dan disetujui oleh PIHAK KESATU melalui transfer ke Rekening Bank PIHAK KEDUA, setelah persyaratan tagihan pembayaran sebagaimana dimaksud pada ayat (8) diterima lengkap.',
             'Biaya transfer menjadi beban PIHAK KEDUA',
             'Pembayaran atas harga sebagaimana dimaksud pada ayat (6) pasal ini akan diatur dan dilaksanakan kepada PIHAK KEDUA setelah ditandatangani Kontrak ini oleh Para Pihak dan PIHAK KEDUA telah menyerahkan syarat-syarat sebagai berikut:',
         ];
@@ -2553,7 +2561,7 @@ class SpController extends Controller
             if ($i === 5) {
                 $extra[] = $nominalPembayaran;
             }
-            $addNo('(' . ($i + 1) . ')', $text, 0, $extra);
+            $addNo('('.($i + 1).')', $text, 0, $extra);
         }
 
         foreach ([
@@ -2573,7 +2581,7 @@ class SpController extends Controller
             'Receipt yang diterbitkan PIHAK KESATU (c/q Fungsi Umum Cabang Pekanbaru) dari aplikasi ERP;',
             'Nomor Rekening Bank PIHAK KEDUA.',
         ] as $idx => $doc) {
-            $addNo(chr(97 + $idx) . '.', $doc, 1);
+            $addNo(chr(97 + $idx).'.', $doc, 1);
         }
 
         $pasal3lanjutan = [
@@ -2583,14 +2591,14 @@ class SpController extends Controller
             'Dengan tetap tunduk kepada ketentuan ayat (11) Pasal ini, PIHAK KESATU akan melakukan pembayaran sebagaimana dimaksud pada ayat (6) melalui transfer ke Rekening Bank PIHAK KEDUA selambat-lambatnya 60 (enam puluh) hari kalender sejak dokumen tagihan lengkap diterima oleh PIHAK KESATU.',
         ];
         foreach ($pasal3lanjutan as $i => $text) {
-            $addNo('(' . ($i + 9) . ')', $text);
+            $addNo('('.($i + 9).')', $text);
         }
 
         // ===================== PASAL 4 =====================
         $addPasal('4', ['JAMINAN PELAKSANAAN']);
-        $addNo('(1)', 'PIHAK KEDUA harus menyerahkan kepada PIHAK KESATU Asli Jaminan Pelaksanaan (Performance Bond) sebesar 5% dari total harga keseluruhan setelah PPN 11% senilai Rp. ' . $fmt($jampel5) . ',- (' . $terbilangJampel . ' Rupiah) yang diterbitkan oleh Bank yang mempunyai program Surety Bond.', 0, ['Rp. ' . $fmt($jampel5) . ',-']);
+        $addNo('(1)', 'PIHAK KEDUA harus menyerahkan kepada PIHAK KESATU Asli Jaminan Pelaksanaan (Performance Bond) sebesar 5% dari total harga keseluruhan setelah PPN 11% senilai Rp. '.$fmt($jampel5).',- ('.$terbilangJampel.' Rupiah) yang diterbitkan oleh Bank yang mempunyai program Surety Bond.', 0, ['Rp. '.$fmt($jampel5).',-']);
         $addNo('(2)', 'Jaminan Pelaksanaan (Performance Bond) ayat (1) disetor/diserahkan oleh PIHAK KEDUA kepada PIHAK KESATU (c/q Fungsi Keuangan & Akuntansi), sedangkan copynya kepada Fungsi Umum PIHAK KESATU untuk kelengkapan dokumen Kontrak ini.', 0);
-        $addNo('(3)', 'Jaminan Pelaksanaan (Performance Bond) yang berupa Jaminan Bank sebagaimana dimaksud pada ayat (1) mempunyai masa berlaku sejak tanggal ' . $tglAwalKontrak . ' sampai dengan tanggal ' . $tglAkhirKontrak . ', Apabila Jaminan Pelaksanaan (Performance Bond) tersebut habis masa berlakunya sebelum seluruh pekerjaan selesai, maka PIHAK KEDUA berkewajiban untuk memperpanjang masa berlaku Jaminan Pelaksanaan (Performance Bond) dimaksud dan menyerahkannya kepada PIHAK KESATU selambat-lambatnya 7 (tujuh) hari kalender sebelum habisnya masa berlaku Jaminan Pelaksanaan (Performance Bond) tersebut.', 0);
+        $addNo('(3)', 'Jaminan Pelaksanaan (Performance Bond) yang berupa Jaminan Bank sebagaimana dimaksud pada ayat (1) mempunyai masa berlaku sejak tanggal '.$tglAwalKontrak.' sampai dengan tanggal '.$tglAkhirKontrak.', Apabila Jaminan Pelaksanaan (Performance Bond) tersebut habis masa berlakunya sebelum seluruh pekerjaan selesai, maka PIHAK KEDUA berkewajiban untuk memperpanjang masa berlaku Jaminan Pelaksanaan (Performance Bond) dimaksud dan menyerahkannya kepada PIHAK KESATU selambat-lambatnya 7 (tujuh) hari kalender sebelum habisnya masa berlaku Jaminan Pelaksanaan (Performance Bond) tersebut.', 0);
         $addNo('(4)', 'Apabila PIHAK KEDUA lalai ataupun sengaja tidak menyerahkan Jaminan Pelaksanaan (Performance Bond) yang telah diperpanjang dalam jangka waktu sebagaimana dimaksud pada ayat (3), maka PIHAK KESATU berhak secara sepihak tanpa perlu adanya pemberitahuan terlebih dahulu kepada PIHAK KEDUA untuk menguang-tunaikan Jaminan Pelaksanaan (Performance Bond) dimaksud, dalam waktu 6 (enam) hari kalender sebelum masa berlakunya berakhir dan berhak untuk tidak membayarkan atau berhak menahan angsuran selanjutnya.', 0);
         $addNo('(5)', 'Jaminan Pelaksanaan (Performance Bond) sebagaimana dimaksud pada ayat (1) dikembalikan oleh PIHAK KESATU kepada PIHAK KEDUA secara sekaligus setelah Pemenuhan seluruh pekerjaan sesuai dengan kontrak yang diterbitkan.', 0);
         $addNo('(6)', 'Apabila PIHAK KEDUA tidak dapat menyelesaikan pelaksanaan pekerjaan baik sebagian maupun seluruhnya sesuai dengan ketentuan-ketentuan dalam Kontrak ini, maka Jaminan Pelaksanaan (Performance Bond) menjadi milik PIHAK KESATU.', 0);
@@ -2685,7 +2693,7 @@ class SpController extends Controller
             $addPasal($noPasal, $judul);
 
             if ($noPasal === '6') {
-                $addPara('PIHAK KEDUA wajib menyerahkan laporan hasil pelaksanaan pekerjaan ' . $deskripsi . ' kepada PIHAK KESATU dalam jangka waktu sesuai masa kontrak.');
+                $addPara('PIHAK KEDUA wajib menyerahkan laporan hasil pelaksanaan pekerjaan '.$deskripsi.' kepada PIHAK KESATU dalam jangka waktu sesuai masa kontrak.');
 
                 continue;
             }
@@ -2697,7 +2705,7 @@ class SpController extends Controller
             }
 
             foreach ($ayatList as $idx => $text) {
-                $addNo('(' . ($idx + 1) . ')', $text);
+                $addNo('('.($idx + 1).')', $text);
 
                 if ($noPasal === '9' && $idx === 0) {
                     $addNo('a.', 'Gempa bumi besar, angin topan, banjir besar, kebakaran besar, tanah longsor dan wabah penyakit.', 1);
@@ -2712,7 +2720,7 @@ class SpController extends Controller
                         'Apabila PIHAK KEDUA terbukti tidak dapat melaksanakan Kontrak ini sebagaimana dimaksud dalam Pasal 1.',
                         'Apabila PIHAK KEDUA ternyata menyerahkan pelaksanaan pekerjaan baik sebagian atau seluruhnya kepada Pihak Ketiga tanpa persetujuan secara tertulis dari PIHAK KESATU.',
                     ] as $sidx => $sub) {
-                        $addNo(chr(97 + $sidx) . '.', $sub, 1);
+                        $addNo(chr(97 + $sidx).'.', $sub, 1);
                     }
                 }
 
@@ -2744,7 +2752,7 @@ class SpController extends Controller
                     $tblPejabat->addCell(240, $noBorderPejabat)->addText('a.', $fs, $pPejabat);
                     $tblPejabat->addCell(1800, $noBorderPejabat)->addText('PIHAK KESATU', $fb, $pPejabat);
                     $tblPejabat->addCell(250, $noBorderPejabat)->addText(':', $fs, $pPejabat);
-                    $tblPejabat->addCell(6230, $noBorderPejabat)->addText($bidangIpItu . ' / PEJABAT YANG DITUNJUK', $fs, $pPejabat);
+                    $tblPejabat->addCell(6230, $noBorderPejabat)->addText($bidangIpItu.' / PEJABAT YANG DITUNJUK', $fs, $pPejabat);
 
                     $tblPejabat->addRow();
                     $tblPejabat->addCell(480, $noBorderPejabat)->addText('', $fs, $pPejabat);
@@ -2829,14 +2837,14 @@ class SpController extends Controller
         $addNoPakta = function (string $no, string $text, int $depth = 0, array $extraBold = []) use ($addParaPakta, $pJ) {
             $left = $depth === 0 ? 360 : 720;
             $style = array_merge($pJ, ['indentation' => ['left' => $left, 'hanging' => 360]]);
-            $addParaPakta($no . "\t" . $text, $style, $extraBold);
+            $addParaPakta($no."\t".$text, $style, $extraBold);
         };
 
         $paktaTitle = ['bold' => true, 'size' => 14, 'name' => 'Arial'];
 
         $paktaSection->addText('PAKTA INTEGRITAS', $paktaTitle, $pC);
         $paktaSection->addTextBreak(1, $p0);
-        $addParaPakta('Kami yang bertanda tangan dibawah ini, sehubungan dengan pelaksanaan Pengadaan ' . $deskripsi . ' untuk PT SUCOFINDO, dengan ini menyatakan bahwa :');
+        $addParaPakta('Kami yang bertanda tangan dibawah ini, sehubungan dengan pelaksanaan Pengadaan '.$deskripsi.' untuk PT SUCOFINDO, dengan ini menyatakan bahwa :');
 
         foreach ([
             'Kami berjanji tidak akan melakukan praktek Korupsi, Kolusi & Nepotisme (KKN);',
@@ -2847,7 +2855,7 @@ class SpController extends Controller
             'Kami berjanji akan melaksanakan pengadaan tersebut di atas secara bersih, transparan dan profesional dengan mengerahkan segala kemampuan dan sumber daya secara optimal untuk memberikan hasil kerja terbaik.',
             'Kami akan menunda dan/atau membatalkan transaksi apabila dalam proses pengadaan ini terindikasi adanya Kecurangan atau Penyuapan atau Penyimpangan.',
         ] as $i => $text) {
-            $addNoPakta(($i + 1) . '.', $text);
+            $addNoPakta(($i + 1).'.', $text);
         }
 
         $addParaPakta('Apabila kami melanggar hal-hal yang telah kami nyatakan dalam Pakta Integritas ini, kami bersedia dikenakan sanksi moral, sanksi administrasi serta dituntut ganti rugi dan pidana sesuai dengan ketentuan peraturan perundang-undangan yang berlaku.');
@@ -2900,7 +2908,7 @@ class SpController extends Controller
         // Row 1: Tanggal dan Penyedia Eksternal
         $pkTbl->addRow();
         $lc = $pkTbl->addCell(4500, $pkNoBorderCell);
-        $lc->addText('Pekanbaru, ' . $tglPakta, $fs, $pPaktaSig);
+        $lc->addText('Pekanbaru, '.$tglPakta, $fs, $pPaktaSig);
 
         $rc = $pkTbl->addCell(4500, $pkNoBorderCell);
         $rc->addText('Penyedia Eksternal', $fs, $pPaktaSig);
@@ -2953,8 +2961,8 @@ class SpController extends Controller
         $cleanDesc = trim(preg_replace('/\s+/', ' ', $cleanDesc));
         $shortDesc = strlen($cleanDesc) > 40 ? substr($cleanDesc, 0, 40) : $cleanDesc;
 
-        $filename = 'Kontrak Ringkas Pengadaan ' . $shortDesc . '.docx';
-        $tempPath = storage_path('app/kontrak_ringkas_300_' . $sp->id . '_' . Str::random(8) . '.docx');
+        $filename = 'Kontrak Ringkas Pengadaan '.$shortDesc.'.docx';
+        $tempPath = storage_path('app/kontrak_ringkas_300_'.$sp->id.'_'.Str::random(8).'.docx');
         IOFactory::createWriter($phpWord, 'Word2007')->save($tempPath);
 
         $imagePath = $this->resolveKopSuratPath(false);
@@ -2964,8 +2972,8 @@ class SpController extends Controller
         }
         $this->repairDocxXmlForMicrosoftWord($tempPath);
 
-        if (!file_exists($tempPath) || filesize($tempPath) === 0) {
-            $fallbackPath = storage_path('app/fallback_' . $filename);
+        if (! file_exists($tempPath) || filesize($tempPath) === 0) {
+            $fallbackPath = storage_path('app/fallback_'.$filename);
             IOFactory::createWriter($phpWord, 'Word2007')->save($fallbackPath);
             $this->repairDocxXmlForMicrosoftWord($fallbackPath);
 
@@ -2981,8 +2989,7 @@ class SpController extends Controller
         ?string $bidangPr = null,
         ?string $penandatanganSci = null,
         ?string $jabatanSci = null
-    )
-    {
+    ) {
         $bidangPr = $this->resolvePrintBidangPr($bidangPr ?? request()->query('bidang_pr'));
         $signer = $this->resolvePrintSciSigner($sp, $penandatanganSci, $jabatanSci, $nilaiAcuan);
         $penandatanganSci = $signer['name'];
@@ -3049,29 +3056,29 @@ class SpController extends Controller
             : now()->locale('id')->translatedFormat('d F Y');
         $tglPakta = now()->locale('id')->translatedFormat('d F Y');
 
-        $tglPph = (!empty($ppbj?->tgl_spph))
+        $tglPph = (! empty($ppbj?->tgl_spph))
             ? \Carbon\Carbon::parse($ppbj->tgl_spph)->locale('id')->translatedFormat('d F Y')
             : '(.................)';
-        $noPph = !empty($ppbj?->spph_rfq_1) ? $ppbj->spph_rfq_1 : '(.................)';
+        $noPph = ! empty($ppbj?->spph_rfq_1) ? $ppbj->spph_rfq_1 : '(.................)';
 
-        $noPemenang = !empty($sp->nomor_pemenang)
+        $noPemenang = ! empty($sp->nomor_pemenang)
             ? $sp->nomor_pemenang
-            : (!empty($ppbj?->pemenang) ? $ppbj->pemenang : '(.................)');
-        $tglPemenangRaw = !empty($sp->tanggal_pemenang)
+            : (! empty($ppbj?->pemenang) ? $ppbj->pemenang : '(.................)');
+        $tglPemenangRaw = ! empty($sp->tanggal_pemenang)
             ? $sp->tanggal_pemenang
             : ($ppbj?->tgl_pemenang ?? null);
-        $tglPemenang = !empty($tglPemenangRaw)
+        $tglPemenang = ! empty($tglPemenangRaw)
             ? \Carbon\Carbon::parse($tglPemenangRaw)->locale('id')->translatedFormat('d F Y')
             : '(.................)';
 
-        $tglPr = (!empty($ppbj?->tgl_ppbj))
+        $tglPr = (! empty($ppbj?->tgl_ppbj))
             ? \Carbon\Carbon::parse($ppbj->tgl_ppbj)->locale('id')->translatedFormat('d F Y')
-            : ((!empty($ppbj?->tgl_terima_pr)) ? \Carbon\Carbon::parse($ppbj->tgl_terima_pr)->locale('id')->translatedFormat('d F Y') : '(....................)');
+            : ((! empty($ppbj?->tgl_terima_pr)) ? \Carbon\Carbon::parse($ppbj->tgl_terima_pr)->locale('id')->translatedFormat('d F Y') : '(....................)');
 
-        $tglAwalKontrak = !empty($sp->awal_kontrak)
+        $tglAwalKontrak = ! empty($sp->awal_kontrak)
             ? \Carbon\Carbon::parse($sp->awal_kontrak)->locale('id')->translatedFormat('d F Y')
             : '(....................)';
-        $tglAkhirKontrak = !empty($sp->akhir_kontrak)
+        $tglAkhirKontrak = ! empty($sp->akhir_kontrak)
             ? \Carbon\Carbon::parse($sp->akhir_kontrak)->locale('id')->translatedFormat('d F Y')
             : '(....................)';
 
@@ -3089,7 +3096,7 @@ class SpController extends Controller
         $total = $subtotal + $ppn;
         $jampel5 = round($total * 0.05, 2);
 
-        $fmt = fn($n) => $this->formatMoney($n);
+        $fmt = fn ($n) => $this->formatMoney($n);
         $terbilangSubtotal = ucwords($this->terbilang($subtotal));
         $terbilangTotal = ucwords($this->terbilang($total));
         $terbilangJampel = ucwords($this->terbilang(round($jampel5)));
@@ -3111,13 +3118,13 @@ class SpController extends Controller
             $left = $depth === 0 ? 480 : 840;
             $hanging = $depth === 0 ? 480 : 360;
             $style = array_merge($pJ, ['indentation' => ['left' => $left, 'hanging' => $hanging]]);
-            $addPara($no . "\t" . $text, $style, $extraBold);
+            $addPara($no."\t".$text, $style, $extraBold);
         };
 
         $pPasal = ['alignment' => 'center', 'spaceAfter' => 0, 'spaceBefore' => 180, 'lineHeight' => 1.0];
         $pPasalLine = ['alignment' => 'center', 'spaceAfter' => 120, 'spaceBefore' => 0, 'lineHeight' => 1.0];
         $addPasal = function (string $no, array $judulLines) use ($section, $fb, $pPasal, $pPasalLine) {
-            $section->addText('PASAL ' . $no, $fb, $pPasal);
+            $section->addText('PASAL '.$no, $fb, $pPasal);
             foreach ($judulLines as $idx => $line) {
                 $section->addText($line, $fb, $idx === count($judulLines) - 1 ? $pPasalLine : ['alignment' => 'center', 'spaceAfter' => 0, 'spaceBefore' => 0, 'lineHeight' => 1.0]);
             }
@@ -3143,17 +3150,17 @@ class SpController extends Controller
         $section->addText('DAN', $fb, $pC);
         $section->addText($vendorUp, $fb, $pTitleLine);
         $section->addTextBreak(1, $p0);
-        $section->addText('Nomor : ' . $sp->nomor_sp, $fs, $pC);
-        $section->addText('Tanggal : ' . $tgl, $fs, $pC);
+        $section->addText('Nomor : '.$sp->nomor_sp, $fs, $pC);
+        $section->addText('Tanggal : '.$tgl, $fs, $pC);
         $section->addTextBreak(1, $p0);
 
-        $addNo('I.', 'PERUSAHAAN PERSEROAN PT SUPERINTENDING COMPANY OF INDONESIA disingkat PT SUCOFINDO (PERSERO) NPWP: 01.300.992.3-093.000, yang didirikan dengan Akta Notaris Johan Arifin Lumban Tobing Sutan Arifin di Jakarta No. 42 tanggal 22 Oktober 1956, sebagaimana telah diubah terakhir dengan Akta Pernyataan Keputusan Rapat PT SUPERINTENDING COMPANY OF INDONESIA (Persero) dari Notaris Jose Dimas Satria, SH., M.KN di Jakarta Selatan tanggal 23 Juni 2025 Nomor 130 Tentang Perubahan Anggaran Dasar PT SUPERINTENDING COMPANY OF INDONESIA (Persero) dan telah mendapatkan pengesahan dalam Keputusan Menteri Hukum dan HAM Republik Indonesia tanggal 23 Juni 2025 Nomor : AHU-0139502 Tahun 2025, beralamat di “GRAHA SUPERINTENDING COMPANY OF INDONESIA” Jl. KH. Guru Amin No.Kav 34, RT.4/RW.1, Kelurahan Pancoran, Kecamatan Pancoran, Jakarta Selatan DKI Jakarta 12780, berdasarkan Ketentuan Umum Pengadaan Barang dan Jasa PT SUPERINTENDING COMPANY OF INDONESIA (Persero) dalam perbuatan hukum ini diwakili secara sah oleh ' . $penandatanganSci . ' Jabatan ' . $jabatanSci . ' selanjutnya dalam Kontrak ini disebut sebagai PIHAK KESATU.', 0, [$penandatanganSci, $jabatanSci]);
-        $addNo('II.', $vendorUp . ' NPWP ' . $npwpV . ', yang beralamat di ' . $alamatV . ' dalam perbuatan hukum ini diwakili secara sah oleh ' . $direktur . ' jabatan ' . $jabatanVendor . ', selanjutnya dalam Kontrak ini disebut sebagai PIHAK KEDUA.', 0, [$vendorUp, $direktur, $jabatanVendor]);
+        $addNo('I.', 'PERUSAHAAN PERSEROAN PT SUPERINTENDING COMPANY OF INDONESIA disingkat PT SUCOFINDO (PERSERO) NPWP: 01.300.992.3-093.000, yang didirikan dengan Akta Notaris Johan Arifin Lumban Tobing Sutan Arifin di Jakarta No. 42 tanggal 22 Oktober 1956, sebagaimana telah diubah terakhir dengan Akta Pernyataan Keputusan Rapat PT SUPERINTENDING COMPANY OF INDONESIA (Persero) dari Notaris Jose Dimas Satria, SH., M.KN di Jakarta Selatan tanggal 23 Juni 2025 Nomor 130 Tentang Perubahan Anggaran Dasar PT SUPERINTENDING COMPANY OF INDONESIA (Persero) dan telah mendapatkan pengesahan dalam Keputusan Menteri Hukum dan HAM Republik Indonesia tanggal 23 Juni 2025 Nomor : AHU-0139502 Tahun 2025, beralamat di “GRAHA SUPERINTENDING COMPANY OF INDONESIA” Jl. KH. Guru Amin No.Kav 34, RT.4/RW.1, Kelurahan Pancoran, Kecamatan Pancoran, Jakarta Selatan DKI Jakarta 12780, berdasarkan Ketentuan Umum Pengadaan Barang dan Jasa PT SUPERINTENDING COMPANY OF INDONESIA (Persero) dalam perbuatan hukum ini diwakili secara sah oleh '.$penandatanganSci.' Jabatan '.$jabatanSci.' selanjutnya dalam Kontrak ini disebut sebagai PIHAK KESATU.', 0, [$penandatanganSci, $jabatanSci]);
+        $addNo('II.', $vendorUp.' NPWP '.$npwpV.', yang beralamat di '.$alamatV.' dalam perbuatan hukum ini diwakili secara sah oleh '.$direktur.' jabatan '.$jabatanVendor.', selanjutnya dalam Kontrak ini disebut sebagai PIHAK KEDUA.', 0, [$vendorUp, $direktur, $jabatanVendor]);
 
         $addPara('Berdasarkan pertimbangan-pertimbangan sebagai berikut:');
-        $addNo('1.', 'Bahwa PIHAK KESATU telah menyampaikan surat kepada PIHAK KEDUA RFQ ' . $rfqText . ' No. ' . $noPph . ' tanggal ' . $tglPph . ' perihal Surat Permintaan Penawaran Harga (SPPH) dan Negosiasi Harga;');
-        $addNo('2.', 'Bahwa PIHAK KEDUA telah menyampaikan surat kepada PIHAK KESATU No. ' . ($sp->sph ?: '(.................)') . ' tanggal ' . ($sp->tgl_sph ? \Carbon\Carbon::parse($sp->tgl_sph)->locale('id')->translatedFormat('d F Y') : '(.................)') . ' perihal Penawaran dan Negosiasi Harga;');
-        $addNo('3.', 'Bahwa PIHAK KESATU telah menyampaikan surat kepada PIHAK KEDUA No. ' . $noPemenang . ' tanggal ' . $tglPemenang . ' perihal Pengumuman Penetapan Pemasok Pelaksana Pengadaan ' . $deskripsi . ' untuk PT SUPERINTENDING COMPANY OF INDONESIA (Persero) Cabang Pekanbaru;');
+        $addNo('1.', 'Bahwa PIHAK KESATU telah menyampaikan surat kepada PIHAK KEDUA RFQ '.$rfqText.' No. '.$noPph.' tanggal '.$tglPph.' perihal Surat Permintaan Penawaran Harga (SPPH) dan Negosiasi Harga;');
+        $addNo('2.', 'Bahwa PIHAK KEDUA telah menyampaikan surat kepada PIHAK KESATU No. '.($sp->sph ?: '(.................)').' tanggal '.($sp->tgl_sph ? \Carbon\Carbon::parse($sp->tgl_sph)->locale('id')->translatedFormat('d F Y') : '(.................)').' perihal Penawaran dan Negosiasi Harga;');
+        $addNo('3.', 'Bahwa PIHAK KESATU telah menyampaikan surat kepada PIHAK KEDUA No. '.$noPemenang.' tanggal '.$tglPemenang.' perihal Pengumuman Penetapan Pemasok Pelaksana Pengadaan '.$deskripsi.' untuk PT SUPERINTENDING COMPANY OF INDONESIA (Persero) Cabang Pekanbaru;');
         $deskripsiBold = mb_strtoupper(trim((string) $deskripsi), 'UTF-8');
 
         $paraRun = $section->addTextRun($pJ);
@@ -3172,7 +3179,7 @@ class SpController extends Controller
         $addPasal('1', ['LINGKUP PEKERJAAN DAN HARGA BORONGAN']);
         $addPara('PIHAK KESATU menyerahkan pekerjaan kepada PIHAK KEDUA, sebagaimana PIHAK KEDUA menerima penyerahan pekerjaan tersebut dari PIHAK KESATU dan berjanji untuk melaksanakan pekerjaan dengan spesifikasi dan harga sebagai berikut:');
 
-        $fmtTable = fn($n) => $this->formatMoney($n);
+        $fmtTable = fn ($n) => $this->formatMoney($n);
         $tbl = $section->addTable([
             'borderSize' => 4,
             'borderColor' => '000001',
@@ -3208,8 +3215,8 @@ class SpController extends Controller
             $tbl->addCell(4540, $vT)->addText($cleanText($sp->deskripsi_pengadaan), $ci, $pl);
             $tbl->addCell(900, $vC)->addText('-', $c, $ph);
             $tbl->addCell(850, $vC)->addText('1', $c, $ph);
-            $tbl->addCell(1700, $vC)->addText('Rp ' . $fmtTable($subtotal) . ',-', $c, $pr);
-            $tbl->addCell(1950, $vC)->addText('Rp ' . $fmtTable($subtotal) . ',-', $c, $pr);
+            $tbl->addCell(1700, $vC)->addText('Rp '.$fmtTable($subtotal).',-', $c, $pr);
+            $tbl->addCell(1950, $vC)->addText('Rp '.$fmtTable($subtotal).',-', $c, $pr);
         } else {
             $no = 1;
             foreach ($items as $it) {
@@ -3218,14 +3225,14 @@ class SpController extends Controller
                 $tbl->addCell(4540, $vT)->addText($cleanText($it->nama_barang ?? ''), $ci, $pl);
                 $tbl->addCell(900, $vC)->addText($it->satuan ?: '-', $c, $ph);
                 $tbl->addCell(850, $vC)->addText($it->jumlah ?: '-', $c, $ph);
-                $tbl->addCell(1700, $vC)->addText('Rp ' . $fmtTable($it->harga_satuan ?? 0) . ',-', $c, $pr);
-                $tbl->addCell(1950, $vC)->addText('Rp ' . $fmtTable($it->subtotal ?? 0) . ',-', $c, $pr);
+                $tbl->addCell(1700, $vC)->addText('Rp '.$fmtTable($it->harga_satuan ?? 0).',-', $c, $pr);
+                $tbl->addCell(1950, $vC)->addText('Rp '.$fmtTable($it->subtotal ?? 0).',-', $c, $pr);
             }
         }
 
         $catatanPr = $sp->nomor_pr
-            ? 'Memenuhi PR Bidang ' . $bidangPr . ' PT Sucofindo Cabang Pekanbaru sesuai PR No. ' . $sp->linkedPpbjLabel() . ' tanggal ' . $tglPr . '.'
-            : 'Memenuhi PR Bidang ' . $bidangPr . ' PT Sucofindo Cabang Pekanbaru sesuai PR No. (....................) tanggal (....................).';
+            ? 'Memenuhi PR Bidang '.$bidangPr.' PT Sucofindo Cabang Pekanbaru sesuai PR No. '.$sp->linkedPpbjLabel().' tanggal '.$tglPr.'.'
+            : 'Memenuhi PR Bidang '.$bidangPr.' PT Sucofindo Cabang Pekanbaru sesuai PR No. (....................) tanggal (....................).';
         $catatanPr .= $this->ppbjRegistrationNoteByPr($sp->nomor_pr);
 
         // Summary: kolom Catatan dibuat vertical merge 3 baris supaya tidak muncul garis
@@ -3238,40 +3245,40 @@ class SpController extends Controller
         $catCell->addText('Catatan :', $c, $pl);
         $catCell->addText($catatanPr, $c, $pl);
         $tbl->addCell(1700, $vC)->addText('Harga', $c, $pl);
-        $tbl->addCell(1950, $vC)->addText('Rp ' . $fmtTable($subtotal) . ',-', $c, $pr);
+        $tbl->addCell(1950, $vC)->addText('Rp '.$fmtTable($subtotal).',-', $c, $pr);
 
         $tbl->addRow();
         $tbl->addCell(6790, $catatanContinueCell);
         $tbl->addCell(1700, $vC)->addText('PPN 11%', $c, $pl);
-        $tbl->addCell(1950, $vC)->addText('Rp ' . $fmtTable($ppn) . ',-', $c, $pr);
+        $tbl->addCell(1950, $vC)->addText('Rp '.$fmtTable($ppn).',-', $c, $pr);
 
         $tbl->addRow();
         $tbl->addCell(6790, $catatanContinueCell);
         $tbl->addCell(1700, $vC)->addText('Total', $cb, $pl);
-        $tbl->addCell(1950, $vC)->addText('Rp ' . $fmtTable($total), $cb, $pr);
+        $tbl->addCell(1950, $vC)->addText('Rp '.$fmtTable($total), $cb, $pr);
 
         $tbl->addRow();
         $terCell = $tbl->addCell(10440, ['gridSpan' => 6, 'valign' => 'center']);
         $terRun = $terCell->addTextRun($pl);
         $terRun->addText('Terbilang : ', $cb);
-        $terRun->addText($terbilangTotal . ' Rupiah', $cb);
+        $terRun->addText($terbilangTotal.' Rupiah', $cb);
         $section->addTextBreak(1, $p0);
 
         // ===================== PASAL 2 =====================
         $addPasal('2', ['JANGKA WAKTU PELAKSANAAN PEKERJAAN']);
-        $addNo('(1)', 'Jangka waktu pelaksanaan jasa pekerjaan terhitung sejak tanggal ' . $tglAwalKontrak . ' sampai dengan selambat-lambatnya tanggal ' . $tglAkhirKontrak . '.', 0, [$tglAwalKontrak, $tglAkhirKontrak]);
+        $addNo('(1)', 'Jangka waktu pelaksanaan jasa pekerjaan terhitung sejak tanggal '.$tglAwalKontrak.' sampai dengan selambat-lambatnya tanggal '.$tglAkhirKontrak.'.', 0, [$tglAwalKontrak, $tglAkhirKontrak]);
         $addNo('(2)', 'Untuk keperluan penyerahan jasa sebagaimana dimaksud pada ayat (1), PIHAK KESATU menyediakan tempat yang berlokasi di PT SUCOFINDO Cabang Pekanbaru, Kota Pekanbaru, Riau.');
 
         // ===================== PASAL 3 =====================
         $addPasal('3', ['PELAKSANAAN PEMBAYARAN']);
-        $nominalPembayaran = 'Rp. ' . $fmt($subtotal) . ',-';
+        $nominalPembayaran = 'Rp. '.$fmt($subtotal).',-';
         $pasal3 = [
             'PIHAK KESATU sebagai Perusahaan yang tergabung dalam Holding Jasa Survey memungut langsung (WAPU) sebesar PPN 11% (Sebelas Persen) kepada PIHAK KEDUA sesuai Peraturan Undang Undang No. 7 Tahun 2021 Tentang Harmonisasi Peraturan Perpajakan.',
             'PIHAK KESATU sebagai Perusahaan yang tergabung dalam Holding Jasa Survey memungut langsung (WAPU) PPh Pasal 23 kepada PIHAK KEDUA jika ada terkait dengan penyerahan jasa sebesar 2 % (dua persen) dari harga pembelian. Apabila PIHAK KEDUA tidak memiliki NPWP maka tarif lebih tinggi 100% (sebesar 4% dari harga pembelian) sesuai Peraturan Menteri Keuangan RI No. 141/2015 Pasal 1 ayat (1).',
             'PIHAK KEDUA merupakan perusahaan kena pajak apabila faktur pajak yang dikeluarkan oleh PIHAK KEDUA tidak diakui atau tidak benar menurut kantor pajak sehingga menyebabkan kerugian PIHAK KESATU maka akan dilakukan pemotongan beban PPN 11% (sebelas persen) dari total nilai kontrak untuk mengganti kerugian tersebut.',
             'Pembayaran ini akan dilakukan pemotongan atau pemungutan sesuai dengan peraturan pajak-pajak yang berlaku.',
             'Apabila ada perbedaan tanggal faktur pajak dengan tanggal penyampaian faktur pajak yang menyebabkan Badan Usaha Milik Negara (BUMN) dikenakan sanksi administrasi perpajakan maka sanksi tersebut akan ditanggung oleh PIHAK KEDUA.',
-            'Pembayaran sebesar ' . $nominalPembayaran . ' (' . $terbilangSubtotal . ' Rupiah) belum termasuk PPN 11% (sebelas persen) akan dibayarkan secara sekaligus setelah pelaksanaan pekerjaan dilaksanakan dan dinyatakan selesai, diverifikasi, dan disetujui oleh PIHAK KESATU melalui transfer ke Rekening Bank PIHAK KEDUA, setelah persyaratan tagihan pembayaran sebagaimana dimaksud pada ayat (8) diterima lengkap.',
+            'Pembayaran sebesar '.$nominalPembayaran.' ('.$terbilangSubtotal.' Rupiah) belum termasuk PPN 11% (sebelas persen) akan dibayarkan secara sekaligus setelah pelaksanaan pekerjaan dilaksanakan dan dinyatakan selesai, diverifikasi, dan disetujui oleh PIHAK KESATU melalui transfer ke Rekening Bank PIHAK KEDUA, setelah persyaratan tagihan pembayaran sebagaimana dimaksud pada ayat (8) diterima lengkap.',
             'Biaya transfer menjadi beban PIHAK KEDUA',
             'Pembayaran atas harga sebagaimana dimaksud pada ayat (6) pasal ini akan diatur dan dilaksanakan kepada PIHAK KEDUA setelah ditandatangani Kontrak ini oleh Para Pihak dan PIHAK KEDUA telah menyerahkan syarat-syarat sebagai berikut:',
         ];
@@ -3283,7 +3290,7 @@ class SpController extends Controller
             if ($i === 5) {
                 $extra[] = $nominalPembayaran;
             }
-            $addNo('(' . ($i + 1) . ')', $text, 0, $extra);
+            $addNo('('.($i + 1).')', $text, 0, $extra);
         }
 
         foreach ([
@@ -3303,7 +3310,7 @@ class SpController extends Controller
             'Receipt yang diterbitkan PIHAK KESATU (c/q Fungsi Umum Cabang Pekanbaru) dari aplikasi ERP;',
             'Nomor Rekening Bank PIHAK KEDUA.',
         ] as $idx => $doc) {
-            $addNo(chr(97 + $idx) . '.', $doc, 1);
+            $addNo(chr(97 + $idx).'.', $doc, 1);
         }
 
         $pasal3lanjutan = [
@@ -3313,14 +3320,14 @@ class SpController extends Controller
             'Dengan tetap tunduk kepada ketentuan ayat (11) Pasal ini, PIHAK KESATU akan melakukan pembayaran sebagaimana dimaksud pada ayat (6) melalui transfer ke Rekening Bank PIHAK KEDUA selambat-lambatnya 60 (enam puluh) hari kalender sejak dokumen tagihan lengkap diterima oleh PIHAK KESATU.',
         ];
         foreach ($pasal3lanjutan as $i => $text) {
-            $addNo('(' . ($i + 9) . ')', $text);
+            $addNo('('.($i + 9).')', $text);
         }
 
         // ===================== PASAL 4 =====================
         $addPasal('4', ['JAMINAN PELAKSANAAN']);
-        $addNo('(1)', 'PIHAK KEDUA harus menyerahkan kepada PIHAK KESATU Asli Jaminan Pelaksanaan (Performance Bond) sebesar 5% dari total harga keseluruhan setelah PPN 11% senilai Rp. ' . $fmt($jampel5) . ',- (' . $terbilangJampel . ' Rupiah) yang diterbitkan oleh Bank yang mempunyai program Surety Bond.', 0, ['Rp. ' . $fmt($jampel5) . ',-']);
+        $addNo('(1)', 'PIHAK KEDUA harus menyerahkan kepada PIHAK KESATU Asli Jaminan Pelaksanaan (Performance Bond) sebesar 5% dari total harga keseluruhan setelah PPN 11% senilai Rp. '.$fmt($jampel5).',- ('.$terbilangJampel.' Rupiah) yang diterbitkan oleh Bank yang mempunyai program Surety Bond.', 0, ['Rp. '.$fmt($jampel5).',-']);
         $addNo('(2)', 'Jaminan Pelaksanaan (Performance Bond) ayat (1) disetor/diserahkan oleh PIHAK KEDUA kepada PIHAK KESATU (c/q Fungsi Keuangan & Akuntansi), sedangkan copynya kepada Fungsi Umum PIHAK KESATU untuk kelengkapan dokumen Kontrak ini.', 0);
-        $addNo('(3)', 'Jaminan Pelaksanaan (Performance Bond) yang berupa Jaminan Bank sebagaimana dimaksud pada ayat (1) mempunyai masa berlaku sejak tanggal ' . $tglAwalKontrak . ' sampai dengan tanggal ' . $tglAkhirKontrak . ', Apabila Jaminan Pelaksanaan (Performance Bond) tersebut habis masa berlakunya sebelum seluruh pekerjaan selesai, maka PIHAK KEDUA berkewajiban untuk memperpanjang masa berlaku Jaminan Pelaksanaan (Performance Bond) dimaksud dan menyerahkannya kepada PIHAK KESATU selambat-lambatnya 7 (tujuh) hari kalender sebelum habisnya masa berlaku Jaminan Pelaksanaan (Performance Bond) tersebut.', 0);
+        $addNo('(3)', 'Jaminan Pelaksanaan (Performance Bond) yang berupa Jaminan Bank sebagaimana dimaksud pada ayat (1) mempunyai masa berlaku sejak tanggal '.$tglAwalKontrak.' sampai dengan tanggal '.$tglAkhirKontrak.', Apabila Jaminan Pelaksanaan (Performance Bond) tersebut habis masa berlakunya sebelum seluruh pekerjaan selesai, maka PIHAK KEDUA berkewajiban untuk memperpanjang masa berlaku Jaminan Pelaksanaan (Performance Bond) dimaksud dan menyerahkannya kepada PIHAK KESATU selambat-lambatnya 7 (tujuh) hari kalender sebelum habisnya masa berlaku Jaminan Pelaksanaan (Performance Bond) tersebut.', 0);
         $addNo('(4)', 'Apabila PIHAK KEDUA lalai ataupun sengaja tidak menyerahkan Jaminan Pelaksanaan (Performance Bond) yang telah diperpanjang dalam jangka waktu sebagaimana dimaksud pada ayat (3), maka PIHAK KESATU berhak secara sepihak tanpa perlu adanya pemberitahuan terlebih dahulu kepada PIHAK KEDUA untuk menguang-tunaikan Jaminan Pelaksanaan (Performance Bond) dimaksud, dalam waktu 6 (enam) hari kalender sebelum masa berlakunya berakhir dan berhak untuk tidak membayarkan atau berhak menahan angsuran selanjutnya.', 0);
         $addNo('(5)', 'Jaminan Pelaksanaan (Performance Bond) sebagaimana dimaksud pada ayat (1) dikembalikan oleh PIHAK KESATU kepada PIHAK KEDUA secara sekaligus setelah Pemenuhan seluruh pekerjaan sesuai dengan kontrak yang diterbitkan.', 0);
         $addNo('(6)', 'Apabila PIHAK KEDUA tidak dapat menyelesaikan pelaksanaan pekerjaan baik sebagian maupun seluruhnya sesuai dengan ketentuan-ketentuan dalam Kontrak ini, maka Jaminan Pelaksanaan (Performance Bond) menjadi milik PIHAK KESATU.', 0);
@@ -3415,7 +3422,7 @@ class SpController extends Controller
             $addPasal($noPasal, $judul);
 
             if ($noPasal === '6') {
-                $addPara('PIHAK KEDUA wajib menyerahkan laporan hasil pelaksanaan pekerjaan ' . $deskripsi . ' kepada PIHAK KESATU dalam jangka waktu sesuai masa kontrak.');
+                $addPara('PIHAK KEDUA wajib menyerahkan laporan hasil pelaksanaan pekerjaan '.$deskripsi.' kepada PIHAK KESATU dalam jangka waktu sesuai masa kontrak.');
 
                 continue;
             }
@@ -3427,7 +3434,7 @@ class SpController extends Controller
             }
 
             foreach ($ayatList as $idx => $text) {
-                $addNo('(' . ($idx + 1) . ')', $text);
+                $addNo('('.($idx + 1).')', $text);
 
                 if ($noPasal === '9' && $idx === 0) {
                     $addNo('a.', 'Gempa bumi besar, angin topan, banjir besar, kebakaran besar, tanah longsor dan wabah penyakit.', 1);
@@ -3442,7 +3449,7 @@ class SpController extends Controller
                         'Apabila PIHAK KEDUA terbukti tidak dapat melaksanakan Kontrak ini sebagaimana dimaksud dalam Pasal 1.',
                         'Apabila PIHAK KEDUA ternyata menyerahkan pelaksanaan pekerjaan baik sebagian atau seluruhnya kepada Pihak Ketiga tanpa persetujuan secara tertulis dari PIHAK KESATU.',
                     ] as $sidx => $sub) {
-                        $addNo(chr(97 + $sidx) . '.', $sub, 1);
+                        $addNo(chr(97 + $sidx).'.', $sub, 1);
                     }
                 }
 
@@ -3474,7 +3481,7 @@ class SpController extends Controller
                     $tblPejabat->addCell(240, $noBorderPejabat)->addText('a.', $fs, $pPejabat);
                     $tblPejabat->addCell(1800, $noBorderPejabat)->addText('PIHAK KESATU', $fb, $pPejabat);
                     $tblPejabat->addCell(250, $noBorderPejabat)->addText(':', $fs, $pPejabat);
-                    $tblPejabat->addCell(6230, $noBorderPejabat)->addText($bidangIpItu . ' / PEJABAT YANG DITUNJUK', $fs, $pPejabat);
+                    $tblPejabat->addCell(6230, $noBorderPejabat)->addText($bidangIpItu.' / PEJABAT YANG DITUNJUK', $fs, $pPejabat);
 
                     $tblPejabat->addRow();
                     $tblPejabat->addCell(480, $noBorderPejabat)->addText('', $fs, $pPejabat);
@@ -3559,14 +3566,14 @@ class SpController extends Controller
         $addNoPakta = function (string $no, string $text, int $depth = 0, array $extraBold = []) use ($addParaPakta, $pJ) {
             $left = $depth === 0 ? 360 : 720;
             $style = array_merge($pJ, ['indentation' => ['left' => $left, 'hanging' => 360]]);
-            $addParaPakta($no . "\t" . $text, $style, $extraBold);
+            $addParaPakta($no."\t".$text, $style, $extraBold);
         };
 
         $paktaTitle = ['bold' => true, 'size' => 14, 'name' => 'Arial'];
 
         $paktaSection->addText('PAKTA INTEGRITAS', $paktaTitle, $pC);
         $paktaSection->addTextBreak(1, $p0);
-        $addParaPakta('Kami yang bertanda tangan dibawah ini, sehubungan dengan pelaksanaan Pengadaan ' . $deskripsi . ' untuk PT SUCOFINDO, dengan ini menyatakan bahwa :');
+        $addParaPakta('Kami yang bertanda tangan dibawah ini, sehubungan dengan pelaksanaan Pengadaan '.$deskripsi.' untuk PT SUCOFINDO, dengan ini menyatakan bahwa :');
 
         foreach ([
             'Kami berjanji tidak akan melakukan praktek Korupsi, Kolusi & Nepotisme (KKN);',
@@ -3577,7 +3584,7 @@ class SpController extends Controller
             'Kami berjanji akan melaksanakan pengadaan tersebut di atas secara bersih, transparan dan profesional dengan mengerahkan segala kemampuan dan sumber daya secara optimal untuk memberikan hasil kerja terbaik.',
             'Kami akan menunda dan/atau membatalkan transaksi apabila dalam proses pengadaan ini terindikasi adanya Kecurangan atau Penyuapan atau Penyimpangan.',
         ] as $i => $text) {
-            $addNoPakta(($i + 1) . '.', $text);
+            $addNoPakta(($i + 1).'.', $text);
         }
 
         $addParaPakta('Apabila kami melanggar hal-hal yang telah kami nyatakan dalam Pakta Integritas ini, kami bersedia dikenakan sanksi moral, sanksi administrasi serta dituntut ganti rugi dan pidana sesuai dengan ketentuan peraturan perundang-undangan yang berlaku.');
@@ -3630,7 +3637,7 @@ class SpController extends Controller
         // Row 1: Tanggal dan Penyedia Eksternal
         $pkTbl->addRow();
         $lc = $pkTbl->addCell(4500, $pkNoBorderCell);
-        $lc->addText('Pekanbaru, ' . $tglPakta, $fs, $pPaktaSig);
+        $lc->addText('Pekanbaru, '.$tglPakta, $fs, $pPaktaSig);
 
         $rc = $pkTbl->addCell(4500, $pkNoBorderCell);
         $rc->addText('Penyedia Eksternal', $fs, $pPaktaSig);
@@ -3683,8 +3690,8 @@ class SpController extends Controller
         $cleanDesc = trim(preg_replace('/\s+/', ' ', $cleanDesc));
         $shortDesc = strlen($cleanDesc) > 40 ? substr($cleanDesc, 0, 40) : $cleanDesc;
 
-        $filename = 'Kontrak Ringkas Pengadaan ' . $shortDesc . '.docx';
-        $tempPath = storage_path('app/kontrak_ringkas_500_' . $sp->id . '_' . Str::random(8) . '.docx');
+        $filename = 'Kontrak Ringkas Pengadaan '.$shortDesc.'.docx';
+        $tempPath = storage_path('app/kontrak_ringkas_500_'.$sp->id.'_'.Str::random(8).'.docx');
         IOFactory::createWriter($phpWord, 'Word2007')->save($tempPath);
 
         $imagePath = $this->resolveKopSuratPath(false);
@@ -3694,8 +3701,8 @@ class SpController extends Controller
         }
         $this->repairDocxXmlForMicrosoftWord($tempPath);
 
-        if (!file_exists($tempPath) || filesize($tempPath) === 0) {
-            $fallbackPath = storage_path('app/fallback_' . $filename);
+        if (! file_exists($tempPath) || filesize($tempPath) === 0) {
+            $fallbackPath = storage_path('app/fallback_'.$filename);
             IOFactory::createWriter($phpWord, 'Word2007')->save($fallbackPath);
             $this->repairDocxXmlForMicrosoftWord($fallbackPath);
 
@@ -3711,8 +3718,7 @@ class SpController extends Controller
         ?string $bidangPr = null,
         ?string $penandatanganSci = null,
         ?string $jabatanSci = null
-    )
-    {
+    ) {
         $bidangPr = $this->resolvePrintBidangPr($bidangPr ?? request()->query('bidang_pr'));
         $signer = $this->resolvePrintSciSigner($sp, $penandatanganSci, $jabatanSci, $nilaiAcuan);
         $penandatanganSci = $signer['name'];
@@ -3757,23 +3763,23 @@ class SpController extends Controller
         $rfqText = trim((string) ($sp->rfq ?? ''));
         $rfqText = $rfqText !== '' ? $rfqText : '.......';
 
-        $noPemenang = !empty($sp->nomor_pemenang)
+        $noPemenang = ! empty($sp->nomor_pemenang)
             ? $sp->nomor_pemenang
-            : (!empty($ppbj?->pemenang) ? $ppbj->pemenang : '(.................)');
+            : (! empty($ppbj?->pemenang) ? $ppbj->pemenang : '(.................)');
 
-        $tglPemenangRaw = !empty($sp->tanggal_pemenang)
+        $tglPemenangRaw = ! empty($sp->tanggal_pemenang)
             ? $sp->tanggal_pemenang
             : ($ppbj?->tgl_pemenang ?? null);
 
-        $tglPemenang = !empty($tglPemenangRaw)
+        $tglPemenang = ! empty($tglPemenangRaw)
             ? \Carbon\Carbon::parse($tglPemenangRaw)->locale('id')->translatedFormat('d F Y')
             : '(.................)';
 
-        $tglAwalKontrak = !empty($sp->awal_kontrak)
+        $tglAwalKontrak = ! empty($sp->awal_kontrak)
             ? \Carbon\Carbon::parse($sp->awal_kontrak)->locale('id')->translatedFormat('d F Y')
             : '(....................)';
 
-        $tglAkhirKontrak = !empty($sp->akhir_kontrak)
+        $tglAkhirKontrak = ! empty($sp->akhir_kontrak)
             ? \Carbon\Carbon::parse($sp->akhir_kontrak)->locale('id')->translatedFormat('d F Y')
             : '(....................)';
 
@@ -3797,20 +3803,20 @@ class SpController extends Controller
 
         $deskripsi = mb_strtoupper(trim((string) $sp->deskripsi_pengadaan), 'UTF-8');
 
-        $tglPph = (!empty($ppbj?->tgl_spph))
+        $tglPph = (! empty($ppbj?->tgl_spph))
             ? \Carbon\Carbon::parse($ppbj->tgl_spph)->locale('id')->translatedFormat('d F Y')
             : '(.................)';
-        $noPph = !empty($ppbj?->spph_rfq_1) ? $ppbj->spph_rfq_1 : '(.................)';
-        $noPemenang = !empty($ppbj?->pemenang)
+        $noPph = ! empty($ppbj?->spph_rfq_1) ? $ppbj->spph_rfq_1 : '(.................)';
+        $noPemenang = ! empty($ppbj?->pemenang)
             ? $ppbj->pemenang
             : '(.................)';
 
-        $tglPemenang = !empty($ppbj?->tgl_pemenang)
+        $tglPemenang = ! empty($ppbj?->tgl_pemenang)
             ? \Carbon\Carbon::parse($ppbj->tgl_pemenang)->locale('id')->translatedFormat('d F Y')
             : '(.................)';
-        $tglPr = (!empty($ppbj?->tgl_ppbj))
+        $tglPr = (! empty($ppbj?->tgl_ppbj))
             ? \Carbon\Carbon::parse($ppbj->tgl_ppbj)->locale('id')->translatedFormat('d F Y')
-            : ((!empty($ppbj?->tgl_terima_pr)) ? \Carbon\Carbon::parse($ppbj->tgl_terima_pr)->locale('id')->translatedFormat('d F Y') : null);
+            : ((! empty($ppbj?->tgl_terima_pr)) ? \Carbon\Carbon::parse($ppbj->tgl_terima_pr)->locale('id')->translatedFormat('d F Y') : null);
 
         $items = $sp->items;
         $subtotal = 0.0;
@@ -3822,7 +3828,7 @@ class SpController extends Controller
         }
         $ppn = round($subtotal * 0.11);
         $total = $subtotal + $ppn;
-        $fmt = fn($n) => $this->formatMoney($n);
+        $fmt = fn ($n) => $this->formatMoney($n);
         $terbilangSubtotal = ucwords($this->terbilang($subtotal));
         $terbilangTotal = ucwords($this->terbilang($total));
 
@@ -3843,13 +3849,13 @@ class SpController extends Controller
             $left = $depth === 0 ? 480 : 840;
             $hanging = $depth === 0 ? 480 : 360;
             $style = array_merge($pJ, ['indentation' => ['left' => $left, 'hanging' => $hanging]]);
-            $addPara($no . "\t" . $text, $style, $extraBold);
+            $addPara($no."\t".$text, $style, $extraBold);
         };
 
         $pPasal = ['alignment' => 'center', 'spaceAfter' => 0, 'spaceBefore' => 180, 'lineHeight' => 1.0];
         $pPasalLine = ['alignment' => 'center', 'spaceAfter' => 120, 'spaceBefore' => 0, 'lineHeight' => 1.0];
         $addPasal = function (string $no, array $judulLines) use ($section, $fb, $pPasal, $pPasalLine) {
-            $section->addText('PASAL ' . $no, $fb, $pPasal);
+            $section->addText('PASAL '.$no, $fb, $pPasal);
             foreach ($judulLines as $idx => $line) {
                 $section->addText($line, $fb, $idx === count($judulLines) - 1 ? $pPasalLine : ['alignment' => 'center', 'spaceAfter' => 0, 'spaceBefore' => 0, 'lineHeight' => 1.0]);
             }
@@ -3874,27 +3880,27 @@ class SpController extends Controller
         $section->addText('DAN', $fb, $pC);
         $section->addText($vendorUp, $fb, $pTitleLine);
         $section->addTextBreak(1, $p0);
-        $section->addText('Nomor : ' . $sp->nomor_sp, $fs, $pC);
-        $section->addText('Tanggal : ' . $tgl, $fs, $pC);
+        $section->addText('Nomor : '.$sp->nomor_sp, $fs, $pC);
+        $section->addText('Tanggal : '.$tgl, $fs, $pC);
         $section->addTextBreak(1, $p0);
 
         $addNo(
             'I.',
-            'PT SUPERINTENDING COMPANY OF INDONESIA disingkat PT SUCOFINDO, suatu perusahaan yang dibentuk dan didirikan berdasarkan Hukum Indonesia dengan Akta Notaris Johan Arifin Lumban Tobing Sutan Arifin di Jakarta tanggal 22 Oktober 1956 Nomor 42 sebagaimana telah diubah dengan Akta Pernyataan Keputusan Rapat PT SUCOFINDO (Persero) dari Notaris Indah Prastiti Extensia, SH. di Jakarta tanggal 8 Agustus 2008 Nomor 10 tentang Perubahan Anggaran Dasar PT SUCOFINDO (Persero) dan telah diubah terakhir dengan Akta Pernyataan Keputusan Para Pemegang Saham PT SUCOFINDO (Persero) dari Notaris Ruli Iskandar, SH di Jakarta tanggal 31 Desember 2021 Nomor 116 tentang Perubahan Anggaran Dasar PT Superintending Company of Indonesia yang telah disahkan Kementerian Hukum dan HAM No. AHU-0006596.AH.01.02 Tahun 2022 tanggal 26 Januari 2022, berkedudukan dan berkantor pusat di Jakarta, Graha Sucofindo, Jalan Raya Pasar Minggu Kavling 34 RT.04/RW.01, Kelurahan Pancoran, Kecamatan Pancoran, Jakarta Selatan, DKI Jakarta 12780, dalam kesepahaman ini diwakili oleh ' . $penandatanganSci . ' Jabatan ' . $jabatanSci . ' selanjutnya dalam Kontrak ini disebut sebagai PIHAK KESATU.',
+            'PT SUPERINTENDING COMPANY OF INDONESIA disingkat PT SUCOFINDO, suatu perusahaan yang dibentuk dan didirikan berdasarkan Hukum Indonesia dengan Akta Notaris Johan Arifin Lumban Tobing Sutan Arifin di Jakarta tanggal 22 Oktober 1956 Nomor 42 sebagaimana telah diubah dengan Akta Pernyataan Keputusan Rapat PT SUCOFINDO (Persero) dari Notaris Indah Prastiti Extensia, SH. di Jakarta tanggal 8 Agustus 2008 Nomor 10 tentang Perubahan Anggaran Dasar PT SUCOFINDO (Persero) dan telah diubah terakhir dengan Akta Pernyataan Keputusan Para Pemegang Saham PT SUCOFINDO (Persero) dari Notaris Ruli Iskandar, SH di Jakarta tanggal 31 Desember 2021 Nomor 116 tentang Perubahan Anggaran Dasar PT Superintending Company of Indonesia yang telah disahkan Kementerian Hukum dan HAM No. AHU-0006596.AH.01.02 Tahun 2022 tanggal 26 Januari 2022, berkedudukan dan berkantor pusat di Jakarta, Graha Sucofindo, Jalan Raya Pasar Minggu Kavling 34 RT.04/RW.01, Kelurahan Pancoran, Kecamatan Pancoran, Jakarta Selatan, DKI Jakarta 12780, dalam kesepahaman ini diwakili oleh '.$penandatanganSci.' Jabatan '.$jabatanSci.' selanjutnya dalam Kontrak ini disebut sebagai PIHAK KESATU.',
             0,
             [$penandatanganSci, $jabatanSci]
         );
-        $addNo('II.', $vendorUp . ' NPWP ' . $npwpV . ' yang beralamat di ' . $alamatV . ', dalam perbuatan hukum ini diwakili secara sah oleh ' . $direktur . ' jabatan ' . $jabatanVendor . ', selanjutnya dalam Kontrak ini disebut sebagai PIHAK KEDUA.', 0, [$vendorUp, $direktur, $jabatanVendor]);
+        $addNo('II.', $vendorUp.' NPWP '.$npwpV.' yang beralamat di '.$alamatV.', dalam perbuatan hukum ini diwakili secara sah oleh '.$direktur.' jabatan '.$jabatanVendor.', selanjutnya dalam Kontrak ini disebut sebagai PIHAK KEDUA.', 0, [$vendorUp, $direktur, $jabatanVendor]);
 
         $addPara('Berdasarkan pertimbangan-pertimbangan sebagai berikut :');
         $addNo(
             '1.',
-            'Bahwa PIHAK KESATU telah menyampaikan surat kepada PIHAK KEDUA RFQ ' . $rfqText . ' No. ' . $noPph . ' tanggal ' . $tglPph . ' perihal Surat Permintaan Penawaran Harga (SPPH) dan Negosiasi Harga;'
+            'Bahwa PIHAK KESATU telah menyampaikan surat kepada PIHAK KEDUA RFQ '.$rfqText.' No. '.$noPph.' tanggal '.$tglPph.' perihal Surat Permintaan Penawaran Harga (SPPH) dan Negosiasi Harga;'
         );
-        $addNo('2.', 'Bahwa PIHAK KEDUA telah menyampaikan surat kepada PIHAK KESATU No. ' . ($sp->sph ?: '(.................)') . ' tanggal ' . ($sp->tgl_sph ? \Carbon\Carbon::parse($sp->tgl_sph)->locale('id')->translatedFormat('d F Y') : '(.................)') . ' perihal Penawaran dan Negosiasi Harga;');
+        $addNo('2.', 'Bahwa PIHAK KEDUA telah menyampaikan surat kepada PIHAK KESATU No. '.($sp->sph ?: '(.................)').' tanggal '.($sp->tgl_sph ? \Carbon\Carbon::parse($sp->tgl_sph)->locale('id')->translatedFormat('d F Y') : '(.................)').' perihal Penawaran dan Negosiasi Harga;');
         $addNo(
             '3.',
-            'Bahwa PIHAK KESATU telah menyampaikan surat kepada PIHAK KEDUA No. ' . $noPemenang . ' tanggal ' . $tglPemenang . ' perihal Pengumuman Penetapan Pemasok Pelaksana Pengadaan ' . $deskripsi . ' untuk PT SUCOFINDO (Persero) Cabang Pekanbaru;'
+            'Bahwa PIHAK KESATU telah menyampaikan surat kepada PIHAK KEDUA No. '.$noPemenang.' tanggal '.$tglPemenang.' perihal Pengumuman Penetapan Pemasok Pelaksana Pengadaan '.$deskripsi.' untuk PT SUCOFINDO (Persero) Cabang Pekanbaru;'
         );
         $deskripsiBold = mb_strtoupper(trim((string) $deskripsi), 'UTF-8');
 
@@ -3918,7 +3924,7 @@ class SpController extends Controller
         // Struktur dibuat 7 kolom seperti template:
         // No | Nama | Satuan | Qty | Harga Satuan | Rp | Nilai Total
         // Bagian Jumlah/PPN/Total dibuat nested table di kanan agar tidak geser di Microsoft Word.
-        $fmtTable = fn($n) => $this->formatMoney($n);
+        $fmtTable = fn ($n) => $this->formatMoney($n);
 
         $tbl = $section->addTable([
             'borderSize' => 4,
@@ -3978,8 +3984,8 @@ class SpController extends Controller
         // Catatan kiri + Summary kanan dalam satu baris supaya tidak pakai vMerge.
         $tglPrText = $tglPr ?: '(....................)';
         $catatanPr = $sp->nomor_pr
-            ? 'Memenuhi PR Bidang ' . $bidangPr . ' PT Sucofindo Cabang Pekanbaru sesuai PR No. ' . $sp->linkedPpbjLabel() . ' tanggal ' . $tglPrText
-            : 'Memenuhi PR Bidang ' . $bidangPr . ' PT Sucofindo Cabang Pekanbaru sesuai PR No. (....................) tanggal (....................)';
+            ? 'Memenuhi PR Bidang '.$bidangPr.' PT Sucofindo Cabang Pekanbaru sesuai PR No. '.$sp->linkedPpbjLabel().' tanggal '.$tglPrText
+            : 'Memenuhi PR Bidang '.$bidangPr.' PT Sucofindo Cabang Pekanbaru sesuai PR No. (....................) tanggal (....................)';
         $catatanPr .= $this->ppbjRegistrationNoteByPr($sp->nomor_pr);
 
         $tbl->addRow();
@@ -4037,7 +4043,7 @@ class SpController extends Controller
         $terRun = $terCell->addTextRun($pl);
         $terRun->addText('Terbilang', $c);
         $terRun->addText('    :  ', $c);
-        $terRun->addText('(' . $terbilangTotal . ' Rupiah)', $cbi);
+        $terRun->addText('('.$terbilangTotal.' Rupiah)', $cbi);
         // Jarak bawah tabel dibuat lebih lega seperti template sebelum masuk PASAL 2.
         $section->addTextBreak(1, $p0);
 
@@ -4045,14 +4051,14 @@ class SpController extends Controller
         $addPasal('2', ['JANGKA WAKTU PELAKSANAAN PEKERJAAN', 'DAN TEMPAT PENYERAHAN BARANG']);
         $addNo(
             '(1)',
-            'PIHAK KEDUA sanggup dan berjanji untuk menyelesaikan pekerjaan sebagaimana dimaksud dalam Pasal 1 Kontrak ini serta menyerahkan kepada PIHAK KESATU untuk pemenuhan pengadaan terhitung sejak tanggal ' . $tglAwalKontrak . ' sampai dengan ' . $tglAkhirKontrak . '.'
+            'PIHAK KEDUA sanggup dan berjanji untuk menyelesaikan pekerjaan sebagaimana dimaksud dalam Pasal 1 Kontrak ini serta menyerahkan kepada PIHAK KESATU untuk pemenuhan pengadaan terhitung sejak tanggal '.$tglAwalKontrak.' sampai dengan '.$tglAkhirKontrak.'.'
         );
         $addNo('(2)', 'Untuk keperluan penyerahan barang sebagaimana dimaksud dalam ayat (1) berlokasi di PT SUCOFINDO Cabang Pekanbaru, Jl. A. Yani No. 79, Pekanbaru, Riau.');
 
         // ===================== PASAL 3 =====================
         $addPasal('3', ['PELAKSANAAN PEMBAYARAN']);
 
-        $nominalPembayaran = 'Rp.' . $fmt($subtotal);
+        $nominalPembayaran = 'Rp.'.$fmt($subtotal);
 
         $pasal3 = [
             'PIHAK KESATU sebagai Perusahaan yang tergabung dalam Holding Jasa Survey memungut langsung (WAPU) sebesar PPN 11% (Sebelas Persen) kepada PIHAK KEDUA sesuai Peraturan Undang Undang No. 7 Tahun 2021 Tentang Harmonisasi Perpajakan.',
@@ -4060,7 +4066,7 @@ class SpController extends Controller
             'PIHAK KEDUA merupakan perusahaan kena pajak apabila faktur pajak yang dikeluarkan oleh PIHAK KEDUA tidak diakui atau tidak benar menurut kantor pajak sehingga menyebabkan kerugian PIHAK KESATU maka akan dilakukan pemotongan beban PPN 11% (sebelas persen) dari total nilai kontrak untuk mengganti kerugian tersebut.',
             'Pembayaran ini akan dilakukan pemotongan atau pemungutan sesuai dengan peraturan pajak – pajak yang berlaku.',
             'Apabila ada perbedaan tanggal faktur pajak dengan tanggal penyampaian faktur pajak yang menyebabkan Badan Usaha Milik Negara (BUMN) dikenakan sanksi administrasi perpajakan maka sanksi tersebut akan ditanggung oleh PIHAK KEDUA.',
-            'Pembayaran sebesar ' . $nominalPembayaran . ',- (' . $terbilangSubtotal . ' Rupiah) belum termasuk PPN 11% (sebelas persen) adalah nilai maksimal yang bisa dilakukan penagihan dan akan dilakukan melalui transfer ke Rekening Bank PIHAK KEDUA.',
+            'Pembayaran sebesar '.$nominalPembayaran.',- ('.$terbilangSubtotal.' Rupiah) belum termasuk PPN 11% (sebelas persen) adalah nilai maksimal yang bisa dilakukan penagihan dan akan dilakukan melalui transfer ke Rekening Bank PIHAK KEDUA.',
             'Biaya transfer menjadi beban PIHAK KEDUA.',
             'Pembayaran atas harga sebagaimana dimaksud pada ayat (6) pasal ini akan diatur dan dilaksanakan kepada PIHAK KEDUA setelah ditandatangani Kontrak ini oleh Para Pihak dan PIHAK KEDUA telah menyerahkan syarat-syarat sebagai berikut :',
         ];
@@ -4076,7 +4082,7 @@ class SpController extends Controller
                 $extraBold[] = $nominalPembayaran;
             }
 
-            $addNo('(' . ($i + 1) . ')', $text, 0, $extraBold);
+            $addNo('('.($i + 1).')', $text, 0, $extraBold);
         }
         foreach ([
             'a.' => 'Surat Keterangan terdaftar dari KPP setempat;',
@@ -4103,7 +4109,7 @@ class SpController extends Controller
             13 => 'PIHAK KESATU (c/q. Divisi Keuangan & Akuntansi (KAK)) menerima dokumen tagihan dari PIHAK KEDUA setiap hari Senin dan Rabu dengan batas akhir pada tanggal 20 (dua puluh) setiap bulannya, apabila pada tanggal 20 (dua puluh) bukan jatuh pada hari Senin dan Rabu, maka tagihan tersebut dimasukan ke awal bulan berikutnya.',
             14 => 'PIHAK KESATU akan melakukan pembayaran sebagaimana dimaksud pada ayat (6) melalui transfer ke Rekening Bank PIHAK KEDUA selambat-lambatnya 60 (enam puluh) hari kalender sejak dokumen tagihan lengkap diterima oleh PIHAK KESATU.',
         ] as $no => $text) {
-            $addNo('(' . $no . ')', $text);
+            $addNo('('.$no.')', $text);
         }
 
         // ===================== PASAL 4 - 11 =====================
@@ -4205,7 +4211,7 @@ class SpController extends Controller
                 continue;
             }
             foreach ($ayatList as $idx => $text) {
-                $addNo('(' . ($idx + 1) . ')', $text);
+                $addNo('('.($idx + 1).')', $text);
                 if ($noPasal === '7' && $idx === 0) {
                     $addNo('a.', 'Gempa bumi besar, angin topan, banjir besar, kebakaran besar, tanah longsor dan wabah penyakit.', 1);
                     $addNo('b.', 'Pemberontakan, pemogokan umum, huru-hara, sabotase, perang dan kebijakan Pemerintah yang berakibat langsung terhadap Kontrak ini.', 1);
@@ -4255,7 +4261,7 @@ class SpController extends Controller
                     $tblPejabat->addCell(240, $noBorderPejabat)->addText('a.', $fs, $pPejabat);
                     $tblPejabat->addCell(1800, $noBorderPejabat)->addText('PIHAK KESATU', $fb, $pPejabat);
                     $tblPejabat->addCell(250, $noBorderPejabat)->addText(':', $fs, $pPejabat);
-                    $tblPejabat->addCell(6230, $noBorderPejabat)->addText($bidangIpItu . ' / pegawai yang ditunjuk.', $fs, $pPejabat);
+                    $tblPejabat->addCell(6230, $noBorderPejabat)->addText($bidangIpItu.' / pegawai yang ditunjuk.', $fs, $pPejabat);
 
                     // Baris b
                     $tblPejabat->addRow();
@@ -4366,14 +4372,14 @@ class SpController extends Controller
         $addNoPakta = function (string $no, string $text, int $depth = 0, array $extraBold = []) use ($addParaPakta, $pJ) {
             $left = $depth === 0 ? 360 : 720;
             $style = array_merge($pJ, ['indentation' => ['left' => $left, 'hanging' => 360]]);
-            $addParaPakta($no . "\t" . $text, $style, $extraBold);
+            $addParaPakta($no."\t".$text, $style, $extraBold);
         };
 
         $paktaTitle = ['bold' => true, 'size' => 14, 'name' => 'Arial'];
 
         $paktaSection->addText('PAKTA INTEGRITAS', $paktaTitle, $pC);
         $paktaSection->addTextBreak(1, $p0);
-        $addParaPakta('Kami yang bertanda tangan dibawah ini, sehubungan dengan pelaksanaan Pengadaan ' . $deskripsi . ' untuk PT SUCOFINDO, dengan ini menyatakan bahwa :');
+        $addParaPakta('Kami yang bertanda tangan dibawah ini, sehubungan dengan pelaksanaan Pengadaan '.$deskripsi.' untuk PT SUCOFINDO, dengan ini menyatakan bahwa :');
 
         foreach ([
             'Kami berjanji tidak akan melakukan praktek Korupsi, Kolusi & Nepotisme (KKN);',
@@ -4384,7 +4390,7 @@ class SpController extends Controller
             'Kami berjanji akan melaksanakan pengadaan tersebut di atas secara bersih, transparan dan profesional dengan mengerahkan segala kemampuan dan sumber daya secara optimal untuk memberikan hasil kerja terbaik.',
             'Kami akan menunda dan/atau membatalkan transaksi apabila dalam proses pengadaan ini terindikasi adanya Kecurangan atau Penyuapan atau Penyimpangan.',
         ] as $i => $text) {
-            $addNoPakta(($i + 1) . '.', $text);
+            $addNoPakta(($i + 1).'.', $text);
         }
 
         $addParaPakta('Apabila kami melanggar hal-hal yang telah kami nyatakan dalam Pakta Integritas ini, kami bersedia dikenakan sanksi moral, sanksi administrasi serta dituntut ganti rugi dan pidana sesuai dengan ketentuan peraturan perundang-undangan yang berlaku.');
@@ -4437,7 +4443,7 @@ class SpController extends Controller
         // Row 1: Tanggal dan Penyedia Eksternal
         $pkTbl->addRow();
         $lc = $pkTbl->addCell(4500, $pkNoBorderCell);
-        $lc->addText('Pekanbaru, ' . $tglPakta, $fs, $pPaktaSig);
+        $lc->addText('Pekanbaru, '.$tglPakta, $fs, $pPaktaSig);
 
         $rc = $pkTbl->addCell(4500, $pkNoBorderCell);
         $rc->addText('Penyedia Eksternal', $fs, $pPaktaSig);
@@ -4490,8 +4496,8 @@ class SpController extends Controller
         $cleanDesc = trim(preg_replace('/\s+/', ' ', $cleanDesc));
         $shortDesc = strlen($cleanDesc) > 40 ? substr($cleanDesc, 0, 40) : $cleanDesc;
 
-        $filename = 'Kontrak Pengadaan ' . $shortDesc . '.docx';
-        $tempPath = storage_path('app/kontrak_' . $sp->id . '_' . Str::random(8) . '.docx');
+        $filename = 'Kontrak Pengadaan '.$shortDesc.'.docx';
+        $tempPath = storage_path('app/kontrak_'.$sp->id.'_'.Str::random(8).'.docx');
         IOFactory::createWriter($phpWord, 'Word2007')->save($tempPath);
 
         // Ambil kop surat dari public/images. Nama pertama tetap prioritas.
@@ -4502,8 +4508,8 @@ class SpController extends Controller
         }
         $this->repairDocxXmlForMicrosoftWord($tempPath);
 
-        if (!file_exists($tempPath) || filesize($tempPath) === 0) {
-            $fallbackPath = storage_path('app/fallback_' . $filename);
+        if (! file_exists($tempPath) || filesize($tempPath) === 0) {
+            $fallbackPath = storage_path('app/fallback_'.$filename);
             IOFactory::createWriter($phpWord, 'Word2007')->save($fallbackPath);
             $this->repairDocxXmlForMicrosoftWord($fallbackPath);
 
@@ -4524,7 +4530,7 @@ class SpController extends Controller
         }
 
         // Plain text
-        if (!$this->isHtmlContent($html)) {
+        if (! $this->isHtmlContent($html)) {
             $this->renderPlainTextToCell($cell, $html, $paraStyle);
 
             return;
@@ -4536,7 +4542,7 @@ class SpController extends Controller
 
             return;
         } catch (\Throwable $e) {
-            \Log::warning('renderHtmlToCell: ' . $e->getMessage());
+            \Log::warning('renderHtmlToCell: '.$e->getMessage());
         }
 
         // Fallback
@@ -4582,7 +4588,7 @@ class SpController extends Controller
                 }
             }
 
-            return $kept ? ' style="' . implode('; ', $kept) . '"' : '';
+            return $kept ? ' style="'.implode('; ', $kept).'"' : '';
         }, $html) ?? $html;
         $html = preg_replace('/\s(class|id|data-[a-z\-]+|on[a-z]+)="[^"]*"/i', '', $html) ?? $html;
         $html = $this->sanitizeXml($html);
@@ -4594,7 +4600,7 @@ class SpController extends Controller
     {
         $dom = new \DOMDocument('1.0', 'UTF-8');
         libxml_use_internal_errors(true);
-        $dom->loadHTML('<?xml encoding="UTF-8"><html><body><div id="__root__">' . $html . '</div></body></html>');
+        $dom->loadHTML('<?xml encoding="UTF-8"><html><body><div id="__root__">'.$html.'</div></body></html>');
         libxml_clear_errors();
 
         $root = null;
@@ -4607,7 +4613,7 @@ class SpController extends Controller
                 }
             }
         }
-        if (!$root) {
+        if (! $root) {
             return;
         }
 
@@ -4616,7 +4622,7 @@ class SpController extends Controller
 
         foreach ($lines as $line) {
             $ps = $paraStyle;
-            if (!empty($line['align'])) {
+            if (! empty($line['align'])) {
                 $ps = array_merge($ps, ['alignment' => $line['align']]);
             }
 
@@ -4632,7 +4638,7 @@ class SpController extends Controller
                 $marker = ($prefix !== '') ? $prefix : '•';
                 $lps = array_merge($ps, ['indentation' => ['left' => 320, 'hanging' => 220]]);
                 $run = $cell->addTextRun($lps);
-                $run->addText($marker . ' ', $baseFn);
+                $run->addText($marker.' ', $baseFn);
                 foreach ($parts as $p) {
                     if ($p['text'] !== '') {
                         $run->addText($p['text'], $p['fs']);
@@ -4667,7 +4673,7 @@ class SpController extends Controller
         $cur = ['prefix' => '', 'parts' => [], 'align' => $align, 'list' => null];
 
         $flush = function () use (&$lines, &$cur, $align) {
-            if (!empty($cur['parts']) || $cur['prefix'] !== '' || $cur['list'] !== null) {
+            if (! empty($cur['parts']) || $cur['prefix'] !== '' || $cur['list'] !== null) {
                 $lines[] = $cur;
             }
             $cur = ['prefix' => '', 'parts' => [], 'align' => $align, 'list' => null];
@@ -4682,7 +4688,7 @@ class SpController extends Controller
 
                 continue;
             }
-            if (!($child instanceof \DOMElement)) {
+            if (! ($child instanceof \DOMElement)) {
                 continue;
             }
 
@@ -4699,12 +4705,12 @@ class SpController extends Controller
                 $listType = ($tag === 'ol') ? 'ol' : 'ul';
                 $counter = 1;
                 foreach ($child->childNodes as $li) {
-                    if (!($li instanceof \DOMElement) || strtolower($li->nodeName) !== 'li') {
+                    if (! ($li instanceof \DOMElement) || strtolower($li->nodeName) !== 'li') {
                         continue;
                     }
                     $la = $this->rtAlign($li);
                     $liAlign = $la ? $this->normalizeAlign($la) : $align;
-                    $marker = ($listType === 'ol') ? ($counter++ . '.') : '•';
+                    $marker = ($listType === 'ol') ? ($counter++.'.') : '•';
                     $liLines = $this->htmlToLines($li, $fs, $liAlign);
                     if (empty($liLines)) {
                         $lines[] = ['prefix' => $marker, 'parts' => [], 'align' => $liAlign, 'list' => $listType];
@@ -4734,7 +4740,7 @@ class SpController extends Controller
             $cf = $this->rtFont($fs, $child);
             $inlineLines = $this->htmlToLines($child, $cf, $cur['align']);
             if (count($inlineLines) <= 1) {
-                if (!empty($inlineLines)) {
+                if (! empty($inlineLines)) {
                     foreach ($inlineLines[0]['parts'] as $p) {
                         $cur['parts'][] = $p;
                     }
@@ -4860,7 +4866,7 @@ class SpController extends Controller
     {
         $hex = strtoupper(ltrim($hex, '#'));
         if (strlen($hex) === 3) {
-            $hex = $hex[0] . $hex[0] . $hex[1] . $hex[1] . $hex[2] . $hex[2];
+            $hex = $hex[0].$hex[0].$hex[1].$hex[1].$hex[2].$hex[2];
         }
 
         return $hex;
@@ -4876,7 +4882,7 @@ class SpController extends Controller
 
     private function repairDocxXmlForMicrosoftWord(string $docxPath): void
     {
-        if (!file_exists($docxPath) || filesize($docxPath) === 0) {
+        if (! file_exists($docxPath) || filesize($docxPath) === 0) {
             return;
         }
 
@@ -4888,12 +4894,12 @@ class SpController extends Controller
         try {
             for ($i = 0; $i < $zip->numFiles; $i++) {
                 $name = $zip->getNameIndex($i);
-                if (!is_string($name) || !preg_match('/\.(xml|rels)$/i', $name)) {
+                if (! is_string($name) || ! preg_match('/\.(xml|rels)$/i', $name)) {
                     continue;
                 }
 
                 $xml = $zip->getFromIndex($i);
-                if (!is_string($xml) || trim($xml) === '') {
+                if (! is_string($xml) || trim($xml) === '') {
                     continue;
                 }
 
@@ -4977,7 +4983,7 @@ class SpController extends Controller
 
     private function fixKontrakTablePasal1WordSafe(string $docxPath): void
     {
-        if (!file_exists($docxPath)) {
+        if (! file_exists($docxPath)) {
             return;
         }
 
@@ -4987,7 +4993,7 @@ class SpController extends Controller
         }
 
         $xml = $zip->getFromName('word/document.xml');
-        if (!is_string($xml) || trim($xml) === '') {
+        if (! is_string($xml) || trim($xml) === '') {
             $zip->close();
 
             return;
@@ -4996,7 +5002,7 @@ class SpController extends Controller
         $dom = new \DOMDocument('1.0', 'UTF-8');
         $dom->preserveWhiteSpace = false;
         $dom->formatOutput = false;
-        if (!@$dom->loadXML($xml)) {
+        if (! @$dom->loadXML($xml)) {
             $zip->close();
 
             return;
@@ -5007,16 +5013,16 @@ class SpController extends Controller
         $xp->registerNamespace('w', $wNs);
 
         $tbl = $xp->query('//w:tbl')->item(0);
-        if (!$tbl instanceof \DOMElement) {
+        if (! $tbl instanceof \DOMElement) {
             $zip->close();
 
             return;
         }
 
         $makeEl = function (string $tag, array $attrs = []) use ($dom, $wNs) {
-            $el = $dom->createElementNS($wNs, 'w:' . $tag);
+            $el = $dom->createElementNS($wNs, 'w:'.$tag);
             foreach ($attrs as $k => $v) {
-                $el->setAttributeNS($wNs, 'w:' . $k, (string) $v);
+                $el->setAttributeNS($wNs, 'w:'.$k, (string) $v);
             }
 
             return $el;
@@ -5025,7 +5031,7 @@ class SpController extends Controller
         $gridWidths = [1197, 3544, 851, 733, 1395, 567, 2153];
 
         $tblPr = $xp->query('./w:tblPr', $tbl)->item(0);
-        if (!$tblPr instanceof \DOMElement) {
+        if (! $tblPr instanceof \DOMElement) {
             $tblPr = $makeEl('tblPr');
             $tbl->insertBefore($tblPr, $tbl->firstChild);
         }
@@ -5058,18 +5064,18 @@ class SpController extends Controller
 
         $rows = $xp->query('./w:tr', $tbl);
         foreach ($rows as $tr) {
-            if (!$tr instanceof \DOMElement) {
+            if (! $tr instanceof \DOMElement) {
                 continue;
             }
             $cells = $xp->query('./w:tc', $tr);
             $lastIndex = $cells->length - 1;
             $colCursor = 0;
             foreach ($cells as $cIndex => $tc) {
-                if (!$tc instanceof \DOMElement) {
+                if (! $tc instanceof \DOMElement) {
                     continue;
                 }
                 $tcPr = $xp->query('./w:tcPr', $tc)->item(0);
-                if (!$tcPr instanceof \DOMElement) {
+                if (! $tcPr instanceof \DOMElement) {
                     $tcPr = $makeEl('tcPr');
                     $tc->insertBefore($tcPr, $tc->firstChild);
                 }
@@ -5084,7 +5090,7 @@ class SpController extends Controller
                 }
                 $colCursor += $span;
                 $tcW = $xp->query('./w:tcW', $tcPr)->item(0);
-                if (!$tcW instanceof \DOMElement) {
+                if (! $tcW instanceof \DOMElement) {
                     $tcW = $makeEl('tcW');
                     $tcPr->insertBefore($tcW, $tcPr->firstChild);
                 }
@@ -5121,12 +5127,12 @@ class SpController extends Controller
     // =========================================================
     private function injectHeaderWatermark(string $docxPath, string $imagePath, ?string $imagePath2 = null, ?string $nomorKontrak = null): void
     {
-        if (!file_exists($docxPath) || filesize($docxPath) === 0 || !file_exists($imagePath)) {
+        if (! file_exists($docxPath) || filesize($docxPath) === 0 || ! file_exists($imagePath)) {
             return;
         }
 
-        $tempPath = $docxPath . '.tmp_' . uniqid('', true) . '.docx';
-        if (!copy($docxPath, $tempPath)) {
+        $tempPath = $docxPath.'.tmp_'.uniqid('', true).'.docx';
+        if (! copy($docxPath, $tempPath)) {
             return;
         }
 
@@ -5162,8 +5168,8 @@ class SpController extends Controller
             $ext2 = 'jpg';
         }
 
-        $mediaName1 = 'kop_surat_halaman_1.' . $ext;
-        $mediaName2 = 'kop_surat_lanjutan.' . $ext2;
+        $mediaName1 = 'kop_surat_halaman_1.'.$ext;
+        $mediaName2 = 'kop_surat_lanjutan.'.$ext2;
         $mediaDefault = $hasPage2 ? $mediaName2 : $mediaName1;
 
         $makeHeaderXml = function (string $rid, string $title, string $shapeId, string $lanjutanText = '', string $shapeTop = '-113.5pt', bool $fullPageA4 = false): string {
@@ -5175,27 +5181,27 @@ class SpController extends Controller
                 $lanjutanXml = '';
                 if ($safeLanjutan !== '') {
                     $lanjutanXml =
-                        '<w:p><w:pPr><w:pStyle w:val="Header"/></w:pPr></w:p>' .
-                        '<w:p>' .
-                        '<w:pPr>' .
-                        '<w:pStyle w:val="Header"/>' .
-                        '<w:spacing w:before="280" w:after="0"/>' .
-                        '<w:jc w:val="right"/>' .
-                        '<w:rPr>' .
-                        '<w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/>' .
-                        '<w:i/><w:iCs/>' .
-                        '<w:sz w:val="22"/><w:szCs w:val="22"/>' .
-                        '</w:rPr>' .
-                        '</w:pPr>' .
-                        '<w:r>' .
-                        '<w:rPr>' .
-                        '<w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/>' .
-                        '<w:i/><w:iCs/>' .
-                        '<w:sz w:val="22"/><w:szCs w:val="22"/>' .
-                        '<w:position w:val="48"/>' .
-                        '</w:rPr>' .
-                        '<w:t>' . $safeLanjutan . '</w:t>' .
-                        '</w:r>' .
+                        '<w:p><w:pPr><w:pStyle w:val="Header"/></w:pPr></w:p>'.
+                        '<w:p>'.
+                        '<w:pPr>'.
+                        '<w:pStyle w:val="Header"/>'.
+                        '<w:spacing w:before="280" w:after="0"/>'.
+                        '<w:jc w:val="right"/>'.
+                        '<w:rPr>'.
+                        '<w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/>'.
+                        '<w:i/><w:iCs/>'.
+                        '<w:sz w:val="22"/><w:szCs w:val="22"/>'.
+                        '</w:rPr>'.
+                        '</w:pPr>'.
+                        '<w:r>'.
+                        '<w:rPr>'.
+                        '<w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/>'.
+                        '<w:i/><w:iCs/>'.
+                        '<w:sz w:val="22"/><w:szCs w:val="22"/>'.
+                        '<w:position w:val="48"/>'.
+                        '</w:rPr>'.
+                        '<w:t>'.$safeLanjutan.'</w:t>'.
+                        '</w:r>'.
                         '</w:p>';
                 }
             }
@@ -5204,26 +5210,26 @@ class SpController extends Controller
                 $shapeStyle = 'position:absolute;margin-left:0pt;margin-top:0pt;width:595.3pt;height:842.1pt;z-index:-251656192;mso-position-horizontal-relative:page;mso-position-vertical-relative:page';
                 $wrapAnchor = 'page';
             } else {
-                $shapeStyle = 'position:absolute;margin-left:-79pt;margin-top:' . $shapeTop . ';width:611.5pt;height:885.6pt;z-index:-251656192;mso-position-horizontal-relative:margin;mso-position-vertical-relative:margin';
+                $shapeStyle = 'position:absolute;margin-left:-79pt;margin-top:'.$shapeTop.';width:611.5pt;height:885.6pt;z-index:-251656192;mso-position-horizontal-relative:margin;mso-position-vertical-relative:margin';
                 $wrapAnchor = 'margin';
             }
 
-            return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' .
-                '<w:hdr xmlns:wpc="http://schemas.microsoft.com/office/word/2010/wordprocessingCanvas" xmlns:cx="http://schemas.microsoft.com/office/drawing/2014/chartex" xmlns:cx1="http://schemas.microsoft.com/office/drawing/2015/9/8/chartex" xmlns:cx2="http://schemas.microsoft.com/office/drawing/2015/10/21/chartex" xmlns:cx3="http://schemas.microsoft.com/office/drawing/2016/5/9/chartex" xmlns:cx4="http://schemas.microsoft.com/office/drawing/2016/5/10/chartex" xmlns:cx5="http://schemas.microsoft.com/office/drawing/2016/5/11/chartex" xmlns:cx6="http://schemas.microsoft.com/office/drawing/2016/5/12/chartex" xmlns:cx7="http://schemas.microsoft.com/office/drawing/2016/5/13/chartex" xmlns:cx8="http://schemas.microsoft.com/office/drawing/2016/5/14/chartex" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" xmlns:aink="http://schemas.microsoft.com/office/drawing/2016/ink" xmlns:am3d="http://schemas.microsoft.com/office/drawing/2017/model3d" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:wp14="http://schemas.microsoft.com/office/word/2010/wordprocessingDrawing" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:w10="urn:schemas-microsoft-com:office:word" xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml" xmlns:w15="http://schemas.microsoft.com/office/word/2012/wordml" xmlns:w16cex="http://schemas.microsoft.com/office/word/2018/wordml/cex" xmlns:w16cid="http://schemas.microsoft.com/office/word/2016/wordml/cid" xmlns:w16="http://schemas.microsoft.com/office/word/2018/wordml" xmlns:w16sdtdh="http://schemas.microsoft.com/office/word/2020/wordml/sdtdatahash" xmlns:w16se="http://schemas.microsoft.com/office/word/2015/wordml/symex" xmlns:wpg="http://schemas.microsoft.com/office/word/2010/wordprocessingGroup" xmlns:wpi="http://schemas.microsoft.com/office/word/2010/wordprocessingInk" xmlns:wne="http://schemas.microsoft.com/office/word/2006/wordml" xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape" mc:Ignorable="w14 w15 w16se w16cid w16 w16cex w16sdtdh wp14">' .
-                '<w:p><w:pPr><w:pStyle w:val="Header"/></w:pPr><w:r><w:rPr><w:noProof/></w:rPr><w:pict>' .
-                '<v:shapetype id="_x0000_t75" coordsize="21600,21600" o:spt="75" o:preferrelative="t" path="m@4@5l@4@11@9@11@9@5xe" filled="f" stroked="f"><v:stroke joinstyle="miter"/><v:formulas><v:f eqn="if lineDrawn pixelLineWidth 0"/><v:f eqn="sum @0 1 0"/><v:f eqn="sum 0 0 @1"/><v:f eqn="prod @2 1 2"/><v:f eqn="prod @3 21600 pixelWidth"/><v:f eqn="prod @3 21600 pixelHeight"/><v:f eqn="sum @0 0 1"/><v:f eqn="prod @6 1 2"/><v:f eqn="prod @7 21600 pixelWidth"/><v:f eqn="sum @8 21600 0"/><v:f eqn="prod @7 21600 pixelHeight"/><v:f eqn="sum @10 21600 0"/></v:formulas><v:path o:extrusionok="f" gradientshapeok="t" o:connecttype="rect"/><o:lock v:ext="edit" aspectratio="t"/></v:shapetype>' .
-                '<v:shape id="' . $shapeId . '" o:spid="_x0000_s2051" type="#_x0000_t75" stroked="f" filled="t" style="' . $shapeStyle . '" o:allowincell="f"><v:stroke on="f" opacity="0"/><v:imagedata r:id="' . $rid . '" o:title="' . $safeTitle . '"/><w10:wrap anchorx="' . $wrapAnchor . '" anchory="' . $wrapAnchor . '"/></v:shape>' .
-                '</w:pict></w:r></w:p>' . $lanjutanXml . '</w:hdr>';
+            return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'.
+                '<w:hdr xmlns:wpc="http://schemas.microsoft.com/office/word/2010/wordprocessingCanvas" xmlns:cx="http://schemas.microsoft.com/office/drawing/2014/chartex" xmlns:cx1="http://schemas.microsoft.com/office/drawing/2015/9/8/chartex" xmlns:cx2="http://schemas.microsoft.com/office/drawing/2015/10/21/chartex" xmlns:cx3="http://schemas.microsoft.com/office/drawing/2016/5/9/chartex" xmlns:cx4="http://schemas.microsoft.com/office/drawing/2016/5/10/chartex" xmlns:cx5="http://schemas.microsoft.com/office/drawing/2016/5/11/chartex" xmlns:cx6="http://schemas.microsoft.com/office/drawing/2016/5/12/chartex" xmlns:cx7="http://schemas.microsoft.com/office/drawing/2016/5/13/chartex" xmlns:cx8="http://schemas.microsoft.com/office/drawing/2016/5/14/chartex" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" xmlns:aink="http://schemas.microsoft.com/office/drawing/2016/ink" xmlns:am3d="http://schemas.microsoft.com/office/drawing/2017/model3d" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:wp14="http://schemas.microsoft.com/office/word/2010/wordprocessingDrawing" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:w10="urn:schemas-microsoft-com:office:word" xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml" xmlns:w15="http://schemas.microsoft.com/office/word/2012/wordml" xmlns:w16cex="http://schemas.microsoft.com/office/word/2018/wordml/cex" xmlns:w16cid="http://schemas.microsoft.com/office/word/2016/wordml/cid" xmlns:w16="http://schemas.microsoft.com/office/word/2018/wordml" xmlns:w16sdtdh="http://schemas.microsoft.com/office/word/2020/wordml/sdtdatahash" xmlns:w16se="http://schemas.microsoft.com/office/word/2015/wordml/symex" xmlns:wpg="http://schemas.microsoft.com/office/word/2010/wordprocessingGroup" xmlns:wpi="http://schemas.microsoft.com/office/word/2010/wordprocessingInk" xmlns:wne="http://schemas.microsoft.com/office/word/2006/wordml" xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape" mc:Ignorable="w14 w15 w16se w16cid w16 w16cex w16sdtdh wp14">'.
+                '<w:p><w:pPr><w:pStyle w:val="Header"/></w:pPr><w:r><w:rPr><w:noProof/></w:rPr><w:pict>'.
+                '<v:shapetype id="_x0000_t75" coordsize="21600,21600" o:spt="75" o:preferrelative="t" path="m@4@5l@4@11@9@11@9@5xe" filled="f" stroked="f"><v:stroke joinstyle="miter"/><v:formulas><v:f eqn="if lineDrawn pixelLineWidth 0"/><v:f eqn="sum @0 1 0"/><v:f eqn="sum 0 0 @1"/><v:f eqn="prod @2 1 2"/><v:f eqn="prod @3 21600 pixelWidth"/><v:f eqn="prod @3 21600 pixelHeight"/><v:f eqn="sum @0 0 1"/><v:f eqn="prod @6 1 2"/><v:f eqn="prod @7 21600 pixelWidth"/><v:f eqn="sum @8 21600 0"/><v:f eqn="prod @7 21600 pixelHeight"/><v:f eqn="sum @10 21600 0"/></v:formulas><v:path o:extrusionok="f" gradientshapeok="t" o:connecttype="rect"/><o:lock v:ext="edit" aspectratio="t"/></v:shapetype>'.
+                '<v:shape id="'.$shapeId.'" o:spid="_x0000_s2051" type="#_x0000_t75" stroked="f" filled="t" style="'.$shapeStyle.'" o:allowincell="f"><v:stroke on="f" opacity="0"/><v:imagedata r:id="'.$rid.'" o:title="'.$safeTitle.'"/><w10:wrap anchorx="'.$wrapAnchor.'" anchory="'.$wrapAnchor.'"/></v:shape>'.
+                '</w:pict></w:r></w:p>'.$lanjutanXml.'</w:hdr>';
         };
 
         try {
-            $putFile($imagePath, 'word/media/' . $mediaName1);
+            $putFile($imagePath, 'word/media/'.$mediaName1);
             if ($hasPage2) {
-                $putFile($imagePath2, 'word/media/' . $mediaName2);
+                $putFile($imagePath2, 'word/media/'.$mediaName2);
             }
 
             $isSuratPesananBiasa = trim((string) $nomorKontrak) === '';
-            $lanjutan = !$isSuratPesananBiasa ? ('Lanjutan Kontrak No. ' . trim((string) $nomorKontrak)) : '';
+            $lanjutan = ! $isSuratPesananBiasa ? ('Lanjutan Kontrak No. '.trim((string) $nomorKontrak)) : '';
 
             // Posisi kop halaman pertama disamakan untuk Surat Pesanan biasa
             // dan dokumen kontrak/SP di atas Rp50 juta agar hasil cetak konsisten.
@@ -5234,9 +5240,9 @@ class SpController extends Controller
             $putString('word/header3.xml', $makeHeaderXml('rId1', 'kop_surat_lanjutan_even', 'WordPictureWatermark27082706', $lanjutan, '-113.5pt', true));
 
             $makeRels = function (string $mediaTarget): string {
-                return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' .
-                    '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' .
-                    '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/' . htmlspecialchars($mediaTarget, ENT_XML1 | ENT_COMPAT, 'UTF-8') . '"/>' .
+                return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'.
+                    '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'.
+                    '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/'.htmlspecialchars($mediaTarget, ENT_XML1 | ENT_COMPAT, 'UTF-8').'"/>'.
                     '</Relationships>';
             };
 
@@ -5249,7 +5255,7 @@ class SpController extends Controller
             $putString('word/_rels/header4.xml.rels', $makeRels($mediaName1));
 
             // Footer khusus Pakta Integritas dikosongkan agar nomor halaman tidak muncul.
-            $blankFooterXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' .
+            $blankFooterXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'.
                 '<w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:p><w:pPr><w:pStyle w:val="Footer"/></w:pPr></w:p></w:ftr>';
             $putString('word/footer4.xml', $blankFooterXml);
 
@@ -5274,19 +5280,19 @@ class SpController extends Controller
                     $maxRid = max($maxRid, (int) $num);
                 }
 
-                $rIdFirst = 'rId' . (++$maxRid);
-                $rIdDefault = 'rId' . (++$maxRid);
-                $rIdEven = 'rId' . (++$maxRid);
-                $rIdPaktaHeader = 'rId' . (++$maxRid);
-                $rIdPaktaFooter = 'rId' . (++$maxRid);
+                $rIdFirst = 'rId'.(++$maxRid);
+                $rIdDefault = 'rId'.(++$maxRid);
+                $rIdEven = 'rId'.(++$maxRid);
+                $rIdPaktaHeader = 'rId'.(++$maxRid);
+                $rIdPaktaFooter = 'rId'.(++$maxRid);
 
                 $relsAdd =
-                    '<Relationship Id="' . $rIdFirst . '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header1.xml"/>' .
-                    '<Relationship Id="' . $rIdDefault . '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header2.xml"/>' .
-                    '<Relationship Id="' . $rIdEven . '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header3.xml"/>' .
-                    '<Relationship Id="' . $rIdPaktaHeader . '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header4.xml"/>' .
-                    '<Relationship Id="' . $rIdPaktaFooter . '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer4.xml"/>';
-                $docRels = str_replace('</Relationships>', $relsAdd . '</Relationships>', $docRels);
+                    '<Relationship Id="'.$rIdFirst.'" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header1.xml"/>'.
+                    '<Relationship Id="'.$rIdDefault.'" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header2.xml"/>'.
+                    '<Relationship Id="'.$rIdEven.'" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header3.xml"/>'.
+                    '<Relationship Id="'.$rIdPaktaHeader.'" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header4.xml"/>'.
+                    '<Relationship Id="'.$rIdPaktaFooter.'" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer4.xml"/>';
+                $docRels = str_replace('</Relationships>', $relsAdd.'</Relationships>', $docRels);
                 $putString($docRelsPath, $docRels);
 
                 $docXml = $zip->getFromName('word/document.xml');
@@ -5300,10 +5306,10 @@ class SpController extends Controller
                         if ($sectIndex === 1) {
                             // Section kontrak: pakai kop dan teks lanjutan kontrak.
                             $headerRefs =
-                                '<w:headerReference w:type="even" r:id="' . $rIdEven . '"/>' .
-                                '<w:headerReference w:type="default" r:id="' . $rIdDefault . '"/>' .
-                                '<w:headerReference w:type="first" r:id="' . $rIdFirst . '"/>';
-                            $sect = preg_replace('/(<w:sectPr\b[^>]*>)/', '$1' . $headerRefs, $sect, 1);
+                                '<w:headerReference w:type="even" r:id="'.$rIdEven.'"/>'.
+                                '<w:headerReference w:type="default" r:id="'.$rIdDefault.'"/>'.
+                                '<w:headerReference w:type="first" r:id="'.$rIdFirst.'"/>';
+                            $sect = preg_replace('/(<w:sectPr\b[^>]*>)/', '$1'.$headerRefs, $sect, 1);
                             if (strpos($sect, '<w:titlePg') === false) {
                                 $sect = str_replace('</w:sectPr>', '<w:titlePg/></w:sectPr>', $sect);
                             }
@@ -5311,20 +5317,20 @@ class SpController extends Controller
                             // Section Pakta Integritas: header dan footer kosong, jadi tidak ada lanjutan kontrak dan nomor halaman.
                             $sect = preg_replace('/<w:footerReference\b[^>]*\/>/', '', $sect);
                             $blankRefs =
-                                '<w:headerReference w:type="even" r:id="' . $rIdPaktaHeader . '"/>' .
-                                '<w:headerReference w:type="default" r:id="' . $rIdPaktaHeader . '"/>' .
-                                '<w:headerReference w:type="first" r:id="' . $rIdPaktaHeader . '"/>' .
-                                '<w:footerReference w:type="even" r:id="' . $rIdPaktaFooter . '"/>' .
-                                '<w:footerReference w:type="default" r:id="' . $rIdPaktaFooter . '"/>' .
-                                '<w:footerReference w:type="first" r:id="' . $rIdPaktaFooter . '"/>';
-                            $sect = preg_replace('/(<w:sectPr\b[^>]*>)/', '$1' . $blankRefs, $sect, 1);
+                                '<w:headerReference w:type="even" r:id="'.$rIdPaktaHeader.'"/>'.
+                                '<w:headerReference w:type="default" r:id="'.$rIdPaktaHeader.'"/>'.
+                                '<w:headerReference w:type="first" r:id="'.$rIdPaktaHeader.'"/>'.
+                                '<w:footerReference w:type="even" r:id="'.$rIdPaktaFooter.'"/>'.
+                                '<w:footerReference w:type="default" r:id="'.$rIdPaktaFooter.'"/>'.
+                                '<w:footerReference w:type="first" r:id="'.$rIdPaktaFooter.'"/>';
+                            $sect = preg_replace('/(<w:sectPr\b[^>]*>)/', '$1'.$blankRefs, $sect, 1);
                             if (strpos($sect, '<w:titlePg') === false) {
                                 $sect = str_replace('</w:sectPr>', '<w:titlePg/></w:sectPr>', $sect);
                             }
                         }
 
                         $bottomMargin = $isSuratPesananBiasa ? '2400' : '1304';
-                        $sect = preg_replace('/<w:pgMar\b[^>]*\/>/', '<w:pgMar w:top="1750" w:right="1418" w:bottom="' . $bottomMargin . '" w:left="1418" w:header="737" w:footer="709" w:gutter="0"/>', $sect, 1);
+                        $sect = preg_replace('/<w:pgMar\b[^>]*\/>/', '<w:pgMar w:top="1750" w:right="1418" w:bottom="'.$bottomMargin.'" w:left="1418" w:header="737" w:footer="709" w:gutter="0"/>', $sect, 1);
 
                         return $sect;
                     }, $docXml);
@@ -5335,21 +5341,21 @@ class SpController extends Controller
             $ct = $zip->getFromName('[Content_Types].xml');
             if ($ct !== false) {
                 foreach (['header1.xml', 'header2.xml', 'header3.xml', 'header4.xml', 'footer4.xml'] as $hf) {
-                    $ct = preg_replace('/<Override\b[^>]*PartName="\/word\/' . preg_quote($hf, '/') . '"[^>]*\/>/', '', $ct);
+                    $ct = preg_replace('/<Override\b[^>]*PartName="\/word\/'.preg_quote($hf, '/').'"[^>]*\/>/', '', $ct);
                 }
                 foreach (array_unique([$ext, $ext2]) as $e) {
-                    if (strpos($ct, 'Extension="' . $e . '"') === false) {
+                    if (strpos($ct, 'Extension="'.$e.'"') === false) {
                         $mime = ($e === 'png') ? 'image/png' : 'image/jpeg';
-                        $ct = str_replace('</Types>', '<Default Extension="' . $e . '" ContentType="' . $mime . '"/></Types>', $ct);
+                        $ct = str_replace('</Types>', '<Default Extension="'.$e.'" ContentType="'.$mime.'"/></Types>', $ct);
                     }
                 }
                 $headerOverrides =
-                    '<Override PartName="/word/header1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/>' .
-                    '<Override PartName="/word/header2.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/>' .
-                    '<Override PartName="/word/header3.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/>' .
-                    '<Override PartName="/word/header4.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/>' .
+                    '<Override PartName="/word/header1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/>'.
+                    '<Override PartName="/word/header2.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/>'.
+                    '<Override PartName="/word/header3.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/>'.
+                    '<Override PartName="/word/header4.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/>'.
                     '<Override PartName="/word/footer4.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/>';
-                $ct = str_replace('</Types>', $headerOverrides . '</Types>', $ct);
+                $ct = str_replace('</Types>', $headerOverrides.'</Types>', $ct);
                 $putString('[Content_Types].xml', $ct);
             }
         } catch (\Throwable $e) {
@@ -5359,14 +5365,14 @@ class SpController extends Controller
             return;
         }
 
-        if (!$zip->close()) {
+        if (! $zip->close()) {
             @unlink($tempPath);
 
             return;
         }
 
         if (file_exists($tempPath) && filesize($tempPath) > 500) {
-            if (!@rename($tempPath, $docxPath)) {
+            if (! @rename($tempPath, $docxPath)) {
                 @copy($tempPath, $docxPath);
                 @unlink($tempPath);
             }
@@ -5389,7 +5395,7 @@ class SpController extends Controller
             if (substr($name, -4) === '.xml' || substr($name, -5) === '.rels') {
                 $xml = $zip->getFromName($name);
                 $dom = new \DOMDocument;
-                if ($xml === false || !$dom->loadXML($xml)) {
+                if ($xml === false || ! $dom->loadXML($xml)) {
                     $ok = false;
                     break;
                 }
@@ -5414,7 +5420,7 @@ class SpController extends Controller
             $raw = $item['nama_barang'] ?? '';
             $nama = strip_tags($raw, '<b><strong><i><em><u><s><strike><del><sub><sup><span><font><div><p><br><ol><ul><li>');
 
-            if (!trim(strip_tags($nama))) {
+            if (! trim(strip_tags($nama))) {
                 continue;
             }
 
@@ -5442,7 +5448,7 @@ class SpController extends Controller
                 'jumlah' => $item['jumlah'] ?? null,
                 'harga_satuan' => $hargaSatuan,
                 'subtotal' => $subtotal,
-                'tgl_pemenuhan' => !empty($item['tgl_pemenuhan']) ? $item['tgl_pemenuhan'] : null,
+                'tgl_pemenuhan' => ! empty($item['tgl_pemenuhan']) ? $item['tgl_pemenuhan'] : null,
             ]);
         }
     }
@@ -5504,9 +5510,9 @@ class SpController extends Controller
         $allTerms = array_unique(array_merge($boldTerms, $italicTerms));
 
         // Urutkan dari yang paling panjang agar match lebih aman
-        usort($allTerms, fn($a, $b) => mb_strlen($b) - mb_strlen($a));
+        usort($allTerms, fn ($a, $b) => mb_strlen($b) - mb_strlen($a));
 
-        $pattern = '/(' . implode('|', array_map('preg_quote', $allTerms)) . ')/u';
+        $pattern = '/('.implode('|', array_map('preg_quote', $allTerms)).')/u';
 
         $run = $section->addTextRun($pStyle);
         $parts = preg_split($pattern, $text, -1, PREG_SPLIT_DELIM_CAPTURE);
@@ -5619,8 +5625,8 @@ class SpController extends Controller
         $line->addCell(9000, ['borderBottomSize' => 8, 'borderBottomColor' => '7F7F7F'])->addText('', $fs, $p0);
 
         $section->addTextBreak(1, $p0);
-        $section->addText('PENGADAAN ' . $pengadaanText, $fb, $pC);
-        $section->addText('PR NO. ' . $nomorPrText . ' TANGGAL ' . $tglPrText, $fb, $pC);
+        $section->addText('PENGADAAN '.$pengadaanText, $fb, $pC);
+        $section->addText('PR NO. '.$nomorPrText.' TANGGAL '.$tglPrText, $fb, $pC);
         $section->addTextBreak(1, $p0);
 
         $penyediaRun = $section->addTextRun($pL);
@@ -5773,7 +5779,7 @@ class SpController extends Controller
         $ketTbl->addCell(7550, $noBorderCell)->addText('**) Layak, jika seluruh keterangan memenuhi', $fb10, $pL);
 
         $section->addTextBreak(1, $p0);
-        $section->addText('Pekanbaru, ' . $tglCetak, $fs, $pL);
+        $section->addText('Pekanbaru, '.$tglCetak, $fs, $pL);
 
         $sigTbl = $section->addTable([
             'borderSize' => 0,
@@ -5795,11 +5801,11 @@ class SpController extends Controller
 
         $sigTbl->addRow();
         $sigTbl->addCell(4500, $noBorderCell)->addText('Nama     : ..............................', $fs, $pL);
-        $sigTbl->addCell(4500, $noBorderCell)->addText('Nama     : ' . $penandatanganSci, $fs, $pL);
+        $sigTbl->addCell(4500, $noBorderCell)->addText('Nama     : '.$penandatanganSci, $fs, $pL);
 
         $sigTbl->addRow();
         $sigTbl->addCell(4500, $noBorderCell)->addText('Jabatan  : ..............................', $fs, $pL);
-        $sigTbl->addCell(4500, $noBorderCell)->addText('Jabatan  : ' . $jabatanSci, $fs, $pL);
+        $sigTbl->addCell(4500, $noBorderCell)->addText('Jabatan  : '.$jabatanSci, $fs, $pL);
     }
 
     // =========================================================
@@ -5839,7 +5845,7 @@ class SpController extends Controller
             ]);
         }
 
-        if (!$oracleMode && $finalValue > 50000000 && !$isCalibrationProcurement) {
+        if (! $oracleMode && $finalValue > 50000000 && ! $isCalibrationProcurement) {
             throw ValidationException::withMessages([
                 'nilai_sp' => 'Nilai SP di atas Rp50.000.000 harus dibuat melalui mode Oracle ERP agar tidak tercampur dengan penomoran SP otomatis. Khusus pengadaan kalibrasi boleh tetap memakai mode SP biasa.',
             ]);
@@ -5858,7 +5864,7 @@ class SpController extends Controller
         }
 
         $haystack = mb_strtolower(implode(' ', array_filter(array_map(
-            fn($text) => html_entity_decode(strip_tags((string) $text), ENT_QUOTES | ENT_HTML5, 'UTF-8'),
+            fn ($text) => html_entity_decode(strip_tags((string) $text), ENT_QUOTES | ENT_HTML5, 'UTF-8'),
             $texts
         ))), 'UTF-8');
 
@@ -5872,12 +5878,12 @@ class SpController extends Controller
         $year ??= now()->year;
 
         $usedSequences = $this->spModeQuery(false)
-            ->when($excludeId, fn($q) => $q->where('id', '!=', $excludeId))
+            ->when($excludeId, fn ($q) => $q->where('id', '!=', $excludeId))
             ->where('nomor_sp', 'like', "%/SP/{$year}")
             ->orderBy('sequence_number')
             ->pluck('sequence_number')
-            ->map(fn($seq) => (int) $seq)
-            ->filter(fn($seq) => $seq > 0)
+            ->map(fn ($seq) => (int) $seq)
+            ->filter(fn ($seq) => $seq > 0)
             ->unique()
             ->values();
 
@@ -5965,7 +5971,7 @@ class SpController extends Controller
     {
         $documentType = preg_quote($documentType, '/');
 
-        if (!preg_match('/^\d+\/PKU-([IVXLCDM]+)\/' . $documentType . '\/(\d{4})$/i', trim($nomor), $matches)) {
+        if (! preg_match('/^\d+\/PKU-([IVXLCDM]+)\/'.$documentType.'\/(\d{4})$/i', trim($nomor), $matches)) {
             return null;
         }
 
@@ -5979,7 +5985,7 @@ class SpController extends Controller
     {
         $numberPeriod = $this->numberPeriodFromNomor($nomor, $documentType);
 
-        if (!$numberPeriod || !$date) {
+        if (! $numberPeriod || ! $date) {
             return null;
         }
 
@@ -5996,15 +6002,15 @@ class SpController extends Controller
     {
         $numberPeriod = $this->numberPeriodFromNomor($nomor, $documentType);
 
-        if (!$numberPeriod || !$date) {
+        if (! $numberPeriod || ! $date) {
             return trim($nomor);
         }
 
         [$year, $roman] = $this->periodFromDate($date);
 
         return preg_replace(
-            '/^(\d+\/PKU-)([IVXLCDM]+)(\/' . preg_quote($documentType, '/') . '\/)(\d{4})$/i',
-            '${1}' . $roman . '${3}' . $year,
+            '/^(\d+\/PKU-)([IVXLCDM]+)(\/'.preg_quote($documentType, '/').'\/)(\d{4})$/i',
+            '${1}'.$roman.'${3}'.$year,
             trim($nomor)
         );
     }
@@ -6069,7 +6075,7 @@ class SpController extends Controller
         }
 
         // Jika bukan HTML, langsung tambahkan sebagai teks biasa
-        if (!$this->isHtmlContent($html)) {
+        if (! $this->isHtmlContent($html)) {
             $run->addText($this->sanitizeXml($html), []);
 
             return;
@@ -6078,7 +6084,7 @@ class SpController extends Controller
         // Parse HTML sederhana untuk inline styling
         $dom = new \DOMDocument('1.0', 'UTF-8');
         libxml_use_internal_errors(true);
-        $dom->loadHTML('<?xml encoding="UTF-8"><div>' . $html . '</div>');
+        $dom->loadHTML('<?xml encoding="UTF-8"><div>'.$html.'</div>');
         libxml_clear_errors();
 
         $baseFs = ['size' => 11, 'name' => 'Calibri'];
@@ -6097,7 +6103,7 @@ class SpController extends Controller
                 continue;
             }
 
-            if (!($child instanceof \DOMElement)) {
+            if (! ($child instanceof \DOMElement)) {
                 continue;
             }
 
@@ -6231,31 +6237,31 @@ class SpController extends Controller
             return $baca[$angka];
         }
         if ($angka < 20) {
-            return $this->terbilang($angka - 10) . ' Belas';
+            return $this->terbilang($angka - 10).' Belas';
         }
         if ($angka < 100) {
-            return $this->terbilang(intdiv($angka, 10)) . ' Puluh' . ($angka % 10 ? ' ' . $this->terbilang($angka % 10) : '');
+            return $this->terbilang(intdiv($angka, 10)).' Puluh'.($angka % 10 ? ' '.$this->terbilang($angka % 10) : '');
         }
         if ($angka < 200) {
-            return 'Seratus' . ($angka - 100 ? ' ' . $this->terbilang($angka - 100) : '');
+            return 'Seratus'.($angka - 100 ? ' '.$this->terbilang($angka - 100) : '');
         }
         if ($angka < 1000) {
-            return $this->terbilang(intdiv($angka, 100)) . ' Ratus' . ($angka % 100 ? ' ' . $this->terbilang($angka % 100) : '');
+            return $this->terbilang(intdiv($angka, 100)).' Ratus'.($angka % 100 ? ' '.$this->terbilang($angka % 100) : '');
         }
         if ($angka < 2000) {
-            return 'Seribu' . ($angka - 1000 ? ' ' . $this->terbilang($angka - 1000) : '');
+            return 'Seribu'.($angka - 1000 ? ' '.$this->terbilang($angka - 1000) : '');
         }
         if ($angka < 1000000) {
-            return $this->terbilang(intdiv($angka, 1000)) . ' Ribu' . ($angka % 1000 ? ' ' . $this->terbilang($angka % 1000) : '');
+            return $this->terbilang(intdiv($angka, 1000)).' Ribu'.($angka % 1000 ? ' '.$this->terbilang($angka % 1000) : '');
         }
         if ($angka < 1000000000) {
-            return $this->terbilang(intdiv($angka, 1000000)) . ' Juta' . ($angka % 1000000 ? ' ' . $this->terbilang($angka % 1000000) : '');
+            return $this->terbilang(intdiv($angka, 1000000)).' Juta'.($angka % 1000000 ? ' '.$this->terbilang($angka % 1000000) : '');
         }
         if ($angka < 1000000000000) {
-            return $this->terbilang(intdiv($angka, 1000000000)) . ' Miliar' . ($angka % 1000000000 ? ' ' . $this->terbilang($angka % 1000000000) : '');
+            return $this->terbilang(intdiv($angka, 1000000000)).' Miliar'.($angka % 1000000000 ? ' '.$this->terbilang($angka % 1000000000) : '');
         }
         if ($angka < 1000000000000000) {
-            return $this->terbilang(intdiv($angka, 1000000000000)) . ' Triliun' . ($angka % 1000000000000 ? ' ' . $this->terbilang($angka % 1000000000000) : '');
+            return $this->terbilang(intdiv($angka, 1000000000000)).' Triliun'.($angka % 1000000000000 ? ' '.$this->terbilang($angka % 1000000000000) : '');
         }
 
         return (string) $angka;

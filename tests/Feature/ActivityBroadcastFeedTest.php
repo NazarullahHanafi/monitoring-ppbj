@@ -36,7 +36,7 @@ class ActivityBroadcastFeedTest extends TestCase
         $this->assertStringContainsString("show(activeIndex + 1)", $script);
         $this->assertStringContainsString('window.sessionStorage.getItem(cacheKey)', $script);
         $this->assertStringContainsString('cacheTtl = 60000', $script);
-        $this->assertStringContainsString('window.setTimeout(load, 1800)', $script);
+        $this->assertStringContainsString('window.setTimeout(load, 5000)', $script);
         $this->assertStringContainsString('--broadcast-start', $style);
         $this->assertStringContainsString('--broadcast-end', $style);
     }

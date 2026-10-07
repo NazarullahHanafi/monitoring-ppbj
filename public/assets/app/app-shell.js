@@ -289,7 +289,7 @@
                     hb();
                     tm = setInterval(hb, IV);
                 }
-                if (immediate) launch(); else startTimer = setTimeout(launch, 2500);
+                if (immediate) launch(); else startTimer = setTimeout(launch, 6500);
             }
             function stop() { if (startTimer) clearTimeout(startTimer); startTimer = null; if (moodCheckTimer) clearTimeout(moodCheckTimer); moodCheckTimer = null; clearInterval(tm); tm = null }
             document.addEventListener('visibilitychange', function () {
@@ -1347,7 +1347,7 @@
                     refreshMentionSummary();
                     mentionTimer = setInterval(refreshMentionSummary, 30000);
                 }
-                if (immediate) launch(); else mentionStartTimer = setTimeout(launch, 3600);
+                if (immediate) launch(); else mentionStartTimer = setTimeout(launch, 9000);
             }
             function stopMentionPoll() {
                 if (mentionStartTimer) clearTimeout(mentionStartTimer);

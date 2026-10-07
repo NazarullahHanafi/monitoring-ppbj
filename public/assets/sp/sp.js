@@ -2612,30 +2612,40 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
             document.getElementById('dariInput').addEventListener('change', doSearch);
             document.getElementById('sampaiInput').addEventListener('change', doSearch);
 
-            // Polling: mulai setelah render awal supaya halaman SP tidak terasa berat saat pertama dibuka.
+            // Data hasil render sudah mutakhir. Poll pertama cukup dijalankan
+            // setelah interval agar request awal tidak berebut dengan aset UI.
             if (IS_FIRST_PAGE && !HAS_FILTER && !document.hidden) {
-                setTimeout(() => {
-                    if (!document.hidden) pollNow();
-                    pollTimer = setInterval(pollNow, 45000);
-                }, 2500);
+                pollTimer = setInterval(pollNow, 45000);
             }
 
-            // Presence: ditunda sebentar agar tidak berebut dengan render tabel/modal.
+            // Presence kolaboratif bukan data utama halaman, jadi beri ruang
+            // untuk render dan interaksi pertama pengguna.
             if (!document.hidden) {
                 setTimeout(() => {
-                    if (!document.hidden) pollPresence();
-                    presenceTimer = setInterval(pollPresence, 45000);
-                }, 3000);
+                    if (!document.hidden) {
+                        pollPresence();
+                        presenceTimer = setInterval(pollPresence, 60000);
+                    }
+                }, 12000);
             }
             document.addEventListener('visibilitychange', () => {
-                if (document.hidden) { clearInterval(pollTimer); clearInterval(presenceTimer); }
+                if (document.hidden) {
+                    clearInterval(pollTimer);
+                    clearInterval(presenceTimer);
+                    pollTimer = null;
+                    presenceTimer = null;
+                }
                 else {
-                    if (IS_FIRST_PAGE && !HAS_FILTER) { pollNow(); pollTimer = setInterval(pollNow, 45000); }
-                    pollPresence(); presenceTimer = setInterval(pollPresence, 45000);
+                    if (IS_FIRST_PAGE && !HAS_FILTER && !pollTimer) pollTimer = setInterval(pollNow, 45000);
+                    if (!presenceTimer) presenceTimer = setInterval(pollPresence, 60000);
                 }
             });
-            window.addEventListener('beforeunload', () => {
+            window.addEventListener('pagehide', () => {
                 if (modalOpen) { const fd = new FormData(); fd.append('_token', document.querySelector('meta[name="csrf-token"]').content); navigator.sendBeacon(PRESENCE_STOP, fd); }
             });
-            checkOnboardingStatus();
+            if ('requestIdleCallback' in window) {
+                requestIdleCallback(checkOnboardingStatus, { timeout: 6000 });
+            } else {
+                setTimeout(checkOnboardingStatus, 5000);
+            }
         });

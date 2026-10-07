@@ -242,6 +242,6 @@
     if (cachedItems) {
         display(cachedItems);
     } else {
-        window.setTimeout(load, 1800);
+        window.setTimeout(load, 5000);
     }
 })();

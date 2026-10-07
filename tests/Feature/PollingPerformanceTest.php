@@ -32,8 +32,9 @@ class PollingPerformanceTest extends TestCase
         $this->assertStringContainsString('jquery-3.7.1.min.js', $layout);
         $this->assertStringContainsString('assets/app/app-shell.js', $layout);
         $this->assertStringContainsString("filemtime(public_path('assets/app/app-shell.js')) }}\" defer", $layout);
-        $this->assertStringContainsString('startTimer = setTimeout(launch, 2500)', $appShell);
-        $this->assertStringContainsString('mentionStartTimer = setTimeout(launch, 3600)', $appShell);
+        $this->assertStringContainsString('startTimer = setTimeout(launch, 6500)', $appShell);
+        $this->assertStringContainsString('mentionStartTimer = setTimeout(launch, 9000)', $appShell);
+        $this->assertStringContainsString('window.setTimeout(load, 5000)', file_get_contents(public_path('assets/app/activity-broadcast.js')));
         $this->assertStringContainsString("typeof window._chatHideContext === 'function'", $appShell);
         $this->assertStringNotContainsString(' } hideCtx() }', $appShell);
         $this->assertStringContainsString('type="text/plain" id="chatbot-runtime-source"', $chatbot);
@@ -59,6 +60,22 @@ class PollingPerformanceTest extends TestCase
         ] as $asset) {
             $this->assertFileExists(public_path('assets/vendor/ui/'.$asset));
         }
+    }
+
+    public function test_sp_and_spph_do_not_repeat_data_request_immediately_after_first_render(): void
+    {
+        $sp = file_get_contents(public_path('assets/sp/sp.js'));
+        $spph = file_get_contents(public_path('assets/spph/spph.js'));
+        $htaccess = file_get_contents(public_path('.htaccess'));
+
+        $this->assertStringNotContainsString('if (!document.hidden) pollNow();', $sp);
+        $this->assertStringNotContainsString('setTimeout(() => { if (!document.hidden) pollNow(); }, 2500)', $spph);
+        $this->assertStringContainsString('setInterval(pollNow, 45000)', $sp);
+        $this->assertStringContainsString('setInterval(pollNow, BACKGROUND_POLL_INTERVAL)', $spph);
+        $this->assertStringContainsString("window.addEventListener('pagehide'", $sp);
+        $this->assertStringContainsString("window.addEventListener('pagehide'", $spph);
+        $this->assertStringContainsString('AddOutputFilterByType DEFLATE', $htaccess);
+        $this->assertStringContainsString('stale-while-revalidate=86400', $htaccess);
     }
 
     public function test_sp_polling_is_limited_to_prevent_large_payloads(): void
