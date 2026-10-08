@@ -3,10 +3,12 @@
 namespace App\Http\Controllers;
 
 use App\Models\ActivityLog;
+use App\Models\SecurityDeviceSession;
 use App\Models\SecurityHoneypotEvent;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\View\View;
@@ -48,24 +50,23 @@ class OwnerSecurityController extends Controller
 
     public function destroySession(Request $request, string $sessionToken): RedirectResponse
     {
-        abort_unless(Schema::hasTable('sessions'), 404);
+        abort_unless(Schema::hasTable('security_device_sessions'), 404);
 
-        $session = DB::table('sessions')
-            ->whereNotNull('user_id')
-            ->where('last_activity', '>=', now()->subMinutes((int) config('session.lifetime', 120))->timestamp)
-            ->limit(100)
-            ->get(['id', 'user_id', 'ip_address'])
-            ->first(fn ($candidate) => hash_equals($this->sessionToken((string) $candidate->id), $sessionToken));
+        $session = SecurityDeviceSession::query()
+            ->where('session_hash', $sessionToken)
+            ->where('last_activity_at', '>=', now()->subMinutes((int) config('session.lifetime', 120)))
+            ->first();
 
         if (! $session) {
             return back()->with('error', 'Sesi sudah berakhir atau tidak ditemukan.');
         }
 
-        if (hash_equals((string) $request->session()->getId(), (string) $session->id)) {
+        if (hash_equals($this->sessionToken((string) $request->session()->getId()), $sessionToken)) {
             return back()->with('error', 'Sesi yang sedang digunakan tidak dapat diakhiri dari halaman ini.');
         }
 
-        DB::table('sessions')->where('id', $session->id)->delete();
+        $this->destroyUnderlyingSession($session);
+        $session->delete();
         $this->recordSessionAction($request, 'owner_session_revoked', $session);
 
         return back()->with('success', 'Sesi perangkat berhasil diakhiri.');
@@ -73,67 +74,76 @@ class OwnerSecurityController extends Controller
 
     public function destroyOtherSessions(Request $request): RedirectResponse
     {
-        abort_unless(Schema::hasTable('sessions'), 404);
+        abort_unless(Schema::hasTable('security_device_sessions'), 404);
 
-        $currentId = (string) $request->session()->getId();
-        $sessions = DB::table('sessions')
-            ->whereNotNull('user_id')
-            ->where('id', '!=', $currentId)
+        $currentHash = $this->sessionToken((string) $request->session()->getId());
+        $sessions = SecurityDeviceSession::query()
+            ->where('session_hash', '!=', $currentHash)
+            ->where('last_activity_at', '>=', now()->subMinutes((int) config('session.lifetime', 120)))
             ->get();
 
         if ($sessions->isEmpty()) {
             return back()->with('success', 'Tidak ada sesi lain yang perlu diakhiri.');
         }
 
-        DB::table('sessions')->whereIn('id', $sessions->pluck('id'))->delete();
+        $revoked = 0;
+
+        foreach ($sessions as $session) {
+            try {
+                $this->destroyUnderlyingSession($session);
+                $session->delete();
+                $revoked++;
+            } catch (\Throwable) {
+                // Registry yang rusak dipertahankan agar dapat diaudit ulang.
+            }
+        }
 
         ActivityLog::create([
             'user_id' => $request->user()->id,
             'model_type' => 'SecuritySession',
             'model_id' => null,
             'action' => 'owner_other_sessions_revoked',
-            'description' => 'Owner mengakhiri '.$sessions->count().' sesi perangkat lain.',
-            'changes' => ['revoked_count' => $sessions->count(), 'ip' => $request->ip()],
+            'description' => 'Owner mengakhiri '.$revoked.' sesi perangkat lain.',
+            'changes' => ['revoked_count' => $revoked, 'ip' => $request->ip()],
         ]);
 
-        return back()->with('success', $sessions->count().' sesi perangkat lain berhasil diakhiri.');
+        return back()->with('success', $revoked.' sesi perangkat lain berhasil diakhiri.');
     }
 
     private function activeSessions(Request $request)
     {
-        if (! Schema::hasTable('sessions')) {
+        if (! Schema::hasTable('security_device_sessions')) {
             return collect();
         }
 
-        $cutoff = now()->subMinutes((int) config('session.lifetime', 120))->timestamp;
-        $currentId = (string) $request->session()->getId();
+        $cutoff = now()->subMinutes((int) config('session.lifetime', 120));
+        $currentHash = $this->sessionToken((string) $request->session()->getId());
 
-        return DB::table('sessions')
-            ->leftJoin('users', 'users.id', '=', 'sessions.user_id')
-            ->whereNotNull('sessions.user_id')
-            ->where('sessions.last_activity', '>=', $cutoff)
-            ->orderByDesc('sessions.last_activity')
+        return DB::table('security_device_sessions')
+            ->leftJoin('users', 'users.id', '=', 'security_device_sessions.user_id')
+            ->where('security_device_sessions.last_activity_at', '>=', $cutoff)
+            ->orderByDesc('security_device_sessions.last_activity_at')
             ->limit(100)
             ->get([
-                'sessions.id',
-                'sessions.user_id',
-                'sessions.ip_address',
-                'sessions.user_agent',
-                'sessions.last_activity',
+                'security_device_sessions.session_hash',
+                'security_device_sessions.user_id',
+                'security_device_sessions.ip_address',
+                'security_device_sessions.user_agent',
+                'security_device_sessions.last_activity_at',
                 'users.name',
                 'users.email',
                 'users.role',
                 'users.department',
             ])
-            ->map(function ($session) use ($currentId) {
+            ->map(function ($session) use ($currentHash) {
                 $device = $this->describeDevice((string) $session->user_agent);
-                $session->is_current = hash_equals($currentId, (string) $session->id);
-                $session->session_token = $this->sessionToken((string) $session->id);
+                $session->is_current = hash_equals($currentHash, (string) $session->session_hash);
+                $session->session_token = $session->session_hash;
                 $session->browser = $device['browser'];
                 $session->platform = $device['platform'];
                 $session->device = $device['device'];
-                $session->last_active_at = Carbon::createFromTimestamp((int) $session->last_activity);
-                unset($session->id);
+                $session->last_active_at = Carbon::parse($session->last_activity_at);
+                unset($session->session_hash);
 
                 return $session;
             });
@@ -142,6 +152,12 @@ class OwnerSecurityController extends Controller
     private function sessionToken(string $sessionId): string
     {
         return hash_hmac('sha256', $sessionId, (string) config('app.key'));
+    }
+
+    private function destroyUnderlyingSession(SecurityDeviceSession $session): void
+    {
+        $sessionId = Crypt::decryptString($session->session_id_encrypted);
+        app('session')->driver()->getHandler()->destroy($sessionId);
     }
 
     private function describeDevice(string $agent): array
@@ -182,7 +198,7 @@ class OwnerSecurityController extends Controller
             ['label' => 'SameSite session', 'passed' => in_array(config('session.same_site'), ['lax', 'strict'], true), 'weight' => 5, 'detail' => 'Mengurangi risiko CSRF lintas situs.'],
             ['label' => 'Silent honeypot aktif', 'passed' => config('security.honeypot.enabled') && Schema::hasTable('security_honeypot_events'), 'weight' => 15, 'detail' => 'Scanner dicatat melalui access log tanpa memperlambat pengguna.'],
             ['label' => 'Direct PHP guard', 'passed' => $this->directPhpGuardEnabled(), 'weight' => 10, 'detail' => 'File PHP asing dihentikan sebelum masuk Laravel.'],
-            ['label' => 'Database session center', 'passed' => config('session.driver') === 'database' && Schema::hasTable('sessions'), 'weight' => 10, 'detail' => 'Sesi perangkat dapat diaudit dan dicabut owner.'],
+            ['label' => 'Encrypted session center', 'passed' => Schema::hasTable('security_device_sessions'), 'weight' => 10, 'detail' => 'Mendukung Redis/database; ID session disimpan terenkripsi dan tidak tampil di browser.'],
         ];
 
         $score = collect($checks)->where('passed', true)->sum('weight');

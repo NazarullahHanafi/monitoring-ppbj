@@ -2,11 +2,15 @@
 
 namespace Tests\Feature;
 
+use App\Http\Middleware\TrackAuthenticatedDevice;
 use App\Models\SecurityHoneypotEvent;
+use App\Models\SecurityDeviceSession;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Artisan;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Crypt;
+use Symfony\Component\HttpFoundation\Response;
 use Tests\TestCase;
 
 class OwnerSecurityCenterTest extends TestCase
@@ -79,16 +83,15 @@ class OwnerSecurityCenterTest extends TestCase
     {
         $owner = $this->owner();
         $other = User::factory()->create();
-        DB::table('sessions')->insert([
-            'id' => 'otherdevice123',
+        $token = hash_hmac('sha256', 'otherdevice123', (string) config('app.key'));
+        SecurityDeviceSession::create([
+            'session_hash' => $token,
+            'session_id_encrypted' => Crypt::encryptString('otherdevice123'),
             'user_id' => $other->id,
             'ip_address' => '203.0.113.10',
             'user_agent' => 'Mozilla/5.0 (Windows NT 10.0) Chrome/120.0',
-            'payload' => '',
-            'last_activity' => now()->timestamp,
+            'last_activity_at' => now(),
         ]);
-
-        $token = hash_hmac('sha256', 'otherdevice123', (string) config('app.key'));
 
         $this->actingAs($owner)
             ->get(route('owner.security.index'))
@@ -99,9 +102,30 @@ class OwnerSecurityCenterTest extends TestCase
         $this->delete(route('owner.security.sessions.destroy', $token))
             ->assertRedirect();
 
-        $this->assertDatabaseMissing('sessions', ['id' => 'otherdevice123']);
+        $this->assertDatabaseMissing('security_device_sessions', ['session_hash' => $token]);
         $this->assertDatabaseHas('activity_logs', ['action' => 'owner_session_revoked']);
 
+    }
+
+    public function test_authenticated_device_is_registered_with_encrypted_session_id(): void
+    {
+        $user = User::factory()->create();
+        $session = app('session')->driver();
+        $session->start();
+        $request = Request::create('/dashboard', 'GET', [], [], [], [
+            'REMOTE_ADDR' => '203.0.113.25',
+            'HTTP_USER_AGENT' => 'Mozilla/5.0 (Android 14) Chrome/120.0 Mobile',
+        ]);
+        $request->setLaravelSession($session);
+        $request->setUserResolver(fn () => $user);
+
+        app(TrackAuthenticatedDevice::class)->terminate($request, new Response());
+
+        $device = SecurityDeviceSession::query()->sole();
+        $this->assertSame($user->id, $device->user_id);
+        $this->assertSame('203.0.113.25', $device->ip_address);
+        $this->assertNotSame($session->getId(), $device->session_id_encrypted);
+        $this->assertSame($session->getId(), Crypt::decryptString($device->session_id_encrypted));
     }
 
     private function owner(): User
