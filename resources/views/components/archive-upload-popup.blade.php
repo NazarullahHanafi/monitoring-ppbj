@@ -50,6 +50,8 @@
                 padding: 0 12px; border-radius: 9px; background: #2563eb; color: #fff !important;
                 font-size: 10px; font-weight: 850; text-decoration: none;
             }
+            .archive-browser-actions { display: flex; flex: 0 0 auto; flex-wrap: wrap; gap: 7px; }
+            .archive-browser-link.is-secondary { background: #0f766e; }
             .archive-browser-item.is-package .archive-browser-link { background: #059669; }
             .archive-browser-empty {
                 padding: 24px 18px; border: 1px dashed #cbd5e1; border-radius: 14px;
@@ -73,7 +75,7 @@
             @media (max-width: 640px) {
                 .archive-browser-summary, .archive-browser-item { align-items: stretch; }
                 .archive-browser-item { flex-direction: column; }
-                .archive-browser-link { width: 100%; }
+                .archive-browser-actions, .archive-browser-link { width: 100%; }
                 .archive-browser-list { max-height: 48vh; }
             }
         </style>
@@ -323,7 +325,7 @@
 
                         if (response.status === 409 || data.state === 'duplicate') {
                             const previous = data.previous_document || {};
-                            const previewUrl = previous.preview_url || previous.download_url || '';
+                            const previewUrl = previous.preview_gateway_url || previous.preview_url || previous.download_url || '';
                             const duplicateDecision = await Swal.fire({
                                 icon: 'warning',
                                 title: 'Dokumen ini sudah pernah diupload',
@@ -362,7 +364,7 @@
                             throw new Error(data.message || 'Upload ke Sistem Arsip belum berhasil.');
                         }
 
-                        const previewUrl = data.document?.preview_url || data.document?.download_url;
+                        const previewUrl = data.document?.preview_gateway_url || data.document?.preview_url || data.document?.download_url;
                         await Swal.fire({
                             icon: 'success',
                             title: data.replaced ? 'Lampiran berhasil diperbarui' : 'Lampiran masuk arsip',
@@ -440,7 +442,7 @@
                     ).join('');
 
                 const packageCards = packages.map((item) => {
-                    const url = safeArchiveAttachmentUrl(item?.package_download_url);
+                    const url = safeArchiveAttachmentUrl(item?.package_gateway_url || item?.package_download_url);
                     if (!url) return '';
                     const meta = [
                         item?.nomor_pr ? `PR ${item.nomor_pr}` : '',
@@ -452,12 +454,13 @@
                             <p class="archive-browser-item-name">${escapeArchiveUploadHtml(item?.name || 'Paket arsip lengkap')}</p>
                             <p class="archive-browser-item-meta">${meta || 'Paket ZIP siap audit'}</p>
                         </div>
-                        <a class="archive-browser-link" href="${escapeArchiveUploadHtml(url)}" target="_blank" rel="noopener noreferrer">Buka ZIP</a>
+                        <a class="archive-browser-link" data-archive-download href="${escapeArchiveUploadHtml(url)}">Unduh ZIP</a>
                     </div>`;
                 }).join('');
 
                 const documentCards = documents.map((item) => {
-                    const url = safeArchiveAttachmentUrl(item?.preview_url || item?.download_url);
+                    const previewUrl = safeArchiveAttachmentUrl(item?.preview_gateway_url || item?.preview_url || item?.download_url);
+                    const downloadUrl = safeArchiveAttachmentUrl(item?.download_gateway_url || item?.download_url);
                     const meta = [
                         item?.nomor_pr ? `PR ${item.nomor_pr}` : '',
                         item?.type || '', item?.size || '',
@@ -471,7 +474,10 @@
                             <p class="archive-browser-item-meta">${meta || 'Dokumen arsip'}</p>
                             ${location ? `<span class="archive-browser-location">Lokasi fisik: ${escapeArchiveUploadHtml(location)}</span>` : ''}
                         </div>
-                        ${url ? `<a class="archive-browser-link" href="${escapeArchiveUploadHtml(url)}" target="_blank" rel="noopener noreferrer">Preview</a>` : ''}
+                        <div class="archive-browser-actions">
+                            ${previewUrl ? `<a class="archive-browser-link" href="${escapeArchiveUploadHtml(previewUrl)}" target="_blank" rel="noopener noreferrer">Preview</a>` : ''}
+                            ${downloadUrl ? `<a class="archive-browser-link is-secondary" data-archive-download href="${escapeArchiveUploadHtml(downloadUrl)}">Unduh</a>` : ''}
+                        </div>
                     </div>`;
                 }).join('');
 

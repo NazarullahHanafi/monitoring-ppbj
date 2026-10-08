@@ -3,6 +3,7 @@
 use App\Http\Controllers\AccountController;
 use App\Http\Controllers\ActivityBroadcastController;
 use App\Http\Controllers\ArchiveAttachmentController;
+use App\Http\Controllers\ArchiveDownloadGatewayController;
 use App\Http\Controllers\ChatController;
 use App\Http\Controllers\CollaborationCalendarController;
 use App\Http\Controllers\ContactMessageController;
@@ -79,6 +80,10 @@ Route::get('/home', function () {
 })->middleware(['auth'])->name('dashboard');
 
 Route::middleware(['auth', 'readonly.block'])->group(function () {
+    Route::get('/archive-gateway', ArchiveDownloadGatewayController::class)
+        ->name('archive.gateway')
+        ->middleware('throttle:60,1');
+
     Route::get('/activity-broadcast/feed', ActivityBroadcastController::class)
         ->name('activity-broadcast.feed')
         ->middleware([\App\Http\Middleware\DisableLoggingForPolling::class, 'throttle:60,1']);

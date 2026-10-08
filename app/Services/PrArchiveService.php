@@ -38,7 +38,7 @@ class PrArchiveService
 
         return Cache::remember(
             $cacheKey,
-            max(30, (int) config('services.pr_archive.cache_seconds', 300)),
+            min(300, max(30, (int) config('services.pr_archive.cache_seconds', 300))),
             fn () => $this->requestArchive($baseUrl, $prNumber)
         );
     }
@@ -77,6 +77,10 @@ class PrArchiveService
                 $previousDocument = is_array($payload)
                     ? $this->normaliseUploadedDocument(['document' => Arr::get($payload, 'previous_document', [])], $baseUrl)
                     : [];
+                $previousDocument = $this->decorateDocument(
+                    $previousDocument,
+                    (string) ($metadata['nomor_pr'] ?? '')
+                );
 
                 return $this->result('duplicate', $payload['message'] ?? 'Dokumen dengan jenis yang sama sudah pernah diupload.', [
                     'has_archive' => true,
@@ -103,6 +107,7 @@ class PrArchiveService
 
             $payload = $response->json();
             $document = is_array($payload) ? $this->normaliseUploadedDocument($payload, $baseUrl) : [];
+            $document = $this->decorateDocument($document, (string) ($metadata['nomor_pr'] ?? ''));
 
             $this->forgetPrCache((string) ($metadata['nomor_pr'] ?? ''));
 
@@ -167,8 +172,14 @@ class PrArchiveService
                 return $this->result('unavailable', 'Format jawaban sistem arsip tidak dikenali.');
             }
 
-            $documents = $this->normaliseDocuments($payload, $baseUrl);
-            $packages = $this->normalisePackages($payload, $baseUrl);
+            $documents = collect($this->normaliseDocuments($payload, $baseUrl))
+                ->map(fn (array $document) => $this->decorateDocument($document, $prNumber))
+                ->values()
+                ->all();
+            $packages = collect($this->normalisePackages($payload, $baseUrl))
+                ->map(fn (array $package) => $this->decoratePackage($package, $prNumber))
+                ->values()
+                ->all();
             $reportedCount = (int) (Arr::get($payload, 'document_count')
                 ?? Arr::get($payload, 'data.document_count')
                 ?? count($documents));
@@ -297,6 +308,35 @@ class PrArchiveService
         }
 
         return $this->normaliseDocuments(['documents' => [$item]], $baseUrl)[0] ?? [];
+    }
+
+    private function decorateDocument(array $document, string $prNumber): array
+    {
+        $id = (string) ($document['id'] ?? '');
+        $prNumber = trim($prNumber);
+
+        $document['nomor_pr'] = $prNumber;
+        $document['preview_gateway_url'] = $id !== '' && filled($document['preview_url'] ?? $document['download_url'] ?? null)
+            ? route('archive.gateway', ['pr' => $prNumber, 'file' => $id, 'action' => 'preview'], false)
+            : null;
+        $document['download_gateway_url'] = $id !== '' && filled($document['download_url'] ?? null)
+            ? route('archive.gateway', ['pr' => $prNumber, 'file' => $id, 'action' => 'download'], false)
+            : null;
+
+        return $document;
+    }
+
+    private function decoratePackage(array $package, string $prNumber): array
+    {
+        $id = (string) ($package['id'] ?? '');
+        $prNumber = trim($prNumber);
+
+        $package['nomor_pr'] = $prNumber;
+        $package['package_gateway_url'] = $id !== '' && filled($package['package_download_url'] ?? null)
+            ? route('archive.gateway', ['pr' => $prNumber, 'file' => $id, 'action' => 'package'], false)
+            : null;
+
+        return $package;
     }
 
     private function cleanUploadMetadata(array $metadata): array

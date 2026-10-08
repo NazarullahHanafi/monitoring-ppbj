@@ -1373,7 +1373,7 @@
             });
         };
     </script>
-    <script src="{{ asset('assets/ppbj/ppbj.js') }}?v=20260922d" defer></script>
+    <script src="{{ asset('assets/ppbj/ppbj.js') }}?v=20261008a" defer></script>
 
 @endpush
 

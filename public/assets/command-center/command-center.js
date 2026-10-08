@@ -326,8 +326,8 @@
     }
 
     function archiveDocumentHtml(document, index) {
-        var previewUrl = safeUrl(document.preview_url || document.download_url);
-        var downloadUrl = safeUrl(document.download_url);
+        var previewUrl = safeUrl(document.preview_gateway_url || document.preview_url || document.download_url);
+        var downloadUrl = safeUrl(document.download_gateway_url || document.download_url);
         var location = document.location && document.location.label ? document.location.label : '';
         var metadata = [document.type, document.date || document.uploaded_at, location].filter(Boolean);
         var actions = '';
@@ -335,8 +335,8 @@
         if (previewUrl) {
             actions += '<a class="cc-archive-action" href="' + esc(previewUrl) + '" target="_blank" rel="noopener noreferrer">Buka</a>';
         }
-        if (downloadUrl && downloadUrl !== previewUrl) {
-            actions += '<a class="cc-archive-action cc-archive-action-secondary" href="' + esc(downloadUrl) + '" target="_blank" rel="noopener noreferrer">Unduh</a>';
+        if (downloadUrl) {
+            actions += '<a class="cc-archive-action cc-archive-action-secondary" data-archive-download href="' + esc(downloadUrl) + '">Unduh</a>';
         }
 
         return '<article class="cc-archive-item"><div class="cc-archive-icon" aria-hidden="true">' + (index + 1) + '</div>' +

@@ -95,6 +95,8 @@ class PrArchiveIntegrationTest extends TestCase
                             'box_code' => 'R01-T02-B005',
                         ],
                         'download_url' => 'https://arsip.example.test/documents/10/download',
+                        'preview_gateway_url' => '/archive-gateway?pr=PR%2F2026%2F001&file=10&action=preview',
+                        'download_gateway_url' => '/archive-gateway?pr=PR%2F2026%2F001&file=10&action=download',
                     ],
                     [
                         'name' => 'Laporan Pelaksanaan',
@@ -138,6 +140,82 @@ class PrArchiveIntegrationTest extends TestCase
             ->getJson("/ppbj/{$failedPpbjId}/archive")
             ->assertOk()
             ->assertJson(['state' => 'unavailable', 'has_archive' => false]);
+    }
+
+    public function test_archive_gateway_resolves_a_short_lived_signed_url_before_redirecting(): void
+    {
+        config([
+            'services.pr_archive.base_url' => 'https://arsip.example.test',
+            'services.pr_archive.pr_path' => '/api/pr/documents',
+        ]);
+
+        $target = 'https://arsip.example.test/api/archive/attachments/71/download?expires=1791435600&signature=fresh';
+
+        Http::fake([
+            'https://arsip.example.test/*' => Http::response([
+                'has_archive' => true,
+                'document_count' => 1,
+                'documents' => [[
+                    'id' => 71,
+                    'name' => 'Lampiran pengadaan.pdf',
+                    'preview_url' => 'https://arsip.example.test/api/archive/attachments/71/preview?expires=1791435600&signature=fresh',
+                    'download_url' => $target,
+                ]],
+            ]),
+        ]);
+
+        [$user] = $this->generalUserAndPpbj('PKB/PR-26/CON/0227');
+
+        $response = $this->actingAs($user)->get(route('archive.gateway', [
+            'pr' => 'PKB/PR-26/CON/0227',
+            'file' => 71,
+            'action' => 'download',
+        ]));
+
+        $response->assertRedirect($target)
+            ->assertHeader('Cache-Control', 'max-age=0, no-store, private')
+            ->assertHeader('X-Content-Type-Options', 'nosniff');
+
+        Http::assertSentCount(1);
+    }
+
+    public function test_archive_gateway_rejects_an_external_redirect_target(): void
+    {
+        config([
+            'services.pr_archive.base_url' => 'https://arsip.example.test',
+            'services.pr_archive.pr_path' => '/api/pr/documents',
+        ]);
+
+        Http::fake([
+            'https://arsip.example.test/*' => Http::response([
+                'has_archive' => true,
+                'document_count' => 1,
+                'documents' => [[
+                    'id' => 72,
+                    'name' => 'Target tidak sah.pdf',
+                    'download_url' => 'https://malicious.example.test/steal',
+                ]],
+            ]),
+        ]);
+
+        [$user] = $this->generalUserAndPpbj('PR-UNTRUSTED');
+
+        $this->actingAs($user)
+            ->get(route('archive.gateway', [
+                'pr' => 'PR-UNTRUSTED',
+                'file' => 72,
+                'action' => 'download',
+            ]))
+            ->assertNotFound();
+    }
+
+    public function test_archive_gateway_requires_authentication(): void
+    {
+        $this->get(route('archive.gateway', [
+            'pr' => 'PR-PRIVATE',
+            'file' => 1,
+            'action' => 'download',
+        ]))->assertRedirect(route('login'));
     }
 
     public function test_archive_endpoint_is_only_available_to_umum_department(): void

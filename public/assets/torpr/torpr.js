@@ -629,8 +629,8 @@
                             ${doc.location ? ` • ${escapeHtml(doc.location)}` : ''}
                         </div>
                         <div class="flex flex-wrap gap-2">
-                            ${doc.preview_url ? `<a class="torpr-my-mini-btn" target="_blank" rel="noopener" href="${escapeHtml(doc.preview_url)}">Lihat</a>` : ''}
-                            ${doc.download_url ? `<a class="torpr-my-mini-btn" target="_blank" rel="noopener" href="${escapeHtml(doc.download_url)}">Unduh</a>` : ''}
+                            ${(doc.preview_gateway_url || doc.preview_url) ? `<a class="torpr-my-mini-btn" target="_blank" rel="noopener" href="${escapeHtml(doc.preview_gateway_url || doc.preview_url)}">Lihat</a>` : ''}
+                            ${(doc.download_gateway_url || doc.download_url) ? `<a class="torpr-my-mini-btn" data-archive-download href="${escapeHtml(doc.download_gateway_url || doc.download_url)}">Unduh</a>` : ''}
                         </div>
                     </div>
                 `).join('');
@@ -638,7 +638,7 @@
                 const packageHtml = packages.map(pkg => `
                     <div class="mt-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-emerald-900 dark:border-emerald-400/20 dark:bg-emerald-400/10 dark:text-emerald-100">
                         📦 ${escapeHtml(pkg.name || 'Paket arsip')} • ${escapeHtml(pkg.file_count || 0)} file
-                        ${pkg.package_download_url ? `<a class="ml-2 underline font-black" target="_blank" rel="noopener" href="${escapeHtml(pkg.package_download_url)}">Unduh Paket</a>` : ''}
+                        ${(pkg.package_gateway_url || pkg.package_download_url) ? `<a class="ml-2 underline font-black" data-archive-download href="${escapeHtml(pkg.package_gateway_url || pkg.package_download_url)}">Unduh Paket</a>` : ''}
                     </div>
                 `).join('');
 

@@ -1281,7 +1281,8 @@
 
                 if (Array.isArray(packages) && packages.length) {
                     packages.forEach((packageItem) => {
-                        if (!packageItem?.package_download_url) return;
+                        const packageUrl = packageItem?.package_gateway_url || packageItem?.package_download_url;
+                        if (!packageUrl) return;
 
                         const packageCard = document.createElement('div');
                         packageCard.className = 'flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3 dark:border-emerald-700/50 dark:bg-emerald-900/20';
@@ -1304,9 +1305,8 @@
                         info.append(title, meta);
 
                         const link = document.createElement('a');
-                        link.href = packageItem.package_download_url;
-                        link.target = '_blank';
-                        link.rel = 'noopener noreferrer';
+                        link.href = packageUrl;
+                        link.dataset.archiveDownload = 'true';
                         link.className = 'inline-flex shrink-0 items-center rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-emerald-700';
                         link.textContent = 'ZIP Paket';
 
@@ -1340,7 +1340,10 @@
 
                     item.append(info);
 
-                    const previewUrl = documentItem.preview_url || documentItem.download_url;
+                    const previewUrl = documentItem.preview_gateway_url || documentItem.preview_url || documentItem.download_url;
+                    const downloadUrl = documentItem.download_gateway_url || documentItem.download_url;
+                    const actions = document.createElement('div');
+                    actions.className = 'flex shrink-0 flex-wrap gap-2';
                     if (previewUrl) {
                         const link = document.createElement('a');
                         link.href = previewUrl;
@@ -1348,8 +1351,18 @@
                         link.rel = 'noopener noreferrer';
                         link.className = 'inline-flex shrink-0 items-center rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-blue-700';
                         link.textContent = 'Preview';
-                        item.append(link);
+                        actions.append(link);
                     }
+                    if (downloadUrl) {
+                        const link = document.createElement('a');
+                        link.href = downloadUrl;
+                        link.dataset.archiveDownload = 'true';
+                        link.className = 'inline-flex shrink-0 items-center rounded-lg bg-teal-700 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-teal-800';
+                        link.textContent = 'Unduh';
+                        actions.append(link);
+                    }
+
+                    if (actions.childElementCount) item.append(actions);
 
                     list.append(item);
                 });
