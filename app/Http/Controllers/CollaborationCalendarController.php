@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
@@ -38,7 +39,100 @@ class CollaborationCalendarController extends Controller
             ->limit(500)
             ->get(['id', 'name', 'department', 'role']);
 
-        return view('collaboration-calendar.index', compact('users'));
+        $portfolios = Cache::remember('collaboration_calendar_portfolios_v1', 1800, fn () => Ppbj::query()
+            ->whereNotNull('portofolio')
+            ->where('portofolio', '!=', '')
+            ->distinct()
+            ->orderBy('portofolio')
+            ->limit(200)
+            ->pluck('portofolio'));
+
+        return view('collaboration-calendar.index', compact('users', 'portfolios'));
+    }
+
+    public function searchPpbj(Request $request): JsonResponse
+    {
+        $this->ensureDepartment($request->user());
+
+        $validated = $request->validate([
+            'q' => ['nullable', 'string', 'max:120'],
+            'portfolio' => ['nullable', 'string', 'max:100'],
+            'receiver_id' => ['nullable', 'integer', Rule::exists('users', 'id')->where('is_active', true)],
+            'date_from' => ['nullable', 'date_format:Y-m-d'],
+            'date_to' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:date_from'],
+        ]);
+
+        $term = trim((string) ($validated['q'] ?? ''));
+        abort_if($term !== '' && mb_strlen($term) < 2, 422, 'Ketik minimal 2 karakter untuk mencari PR.');
+
+        $rows = Ppbj::query()
+            ->select([
+                'id', 'ppbj_no', 'uraian', 'portofolio', 'buyer', 'created_by_user_id',
+                'general_registration_number', 'general_registered_at', 'general_registered_by_user_id',
+                'tgl_ppbj', 'tgl_terima_pr', 'tgl_diserahkan', 'total_sebelum_ppn',
+                'penyedia_eksternal', 'pemenang', 'status', 'status_sla',
+            ])
+            ->with([
+                'createdBy:id,name,department',
+                'generalRegisteredBy:id,name,department',
+            ])
+            ->when($term !== '', function (Builder $query) use ($term) {
+                $like = '%'.addcslashes($term, '%_\\').'%';
+
+                $query->where(function (Builder $search) use ($like) {
+                    $search->where('ppbj_no', 'like', $like)
+                        ->orWhere('uraian', 'like', $like)
+                        ->orWhere('buyer', 'like', $like)
+                        ->orWhere('penyedia_eksternal', 'like', $like)
+                        ->orWhere('pemenang', 'like', $like)
+                        ->orWhere('general_registration_number', 'like', $like)
+                        ->orWhereHas('generalRegisteredBy', fn (Builder $receiver) => $receiver->where('name', 'like', $like));
+                });
+            })
+            ->when(filled($validated['portfolio'] ?? null), fn (Builder $query) => $query->where('portofolio', $validated['portfolio']))
+            ->when(filled($validated['receiver_id'] ?? null), fn (Builder $query) => $query->where('general_registered_by_user_id', $validated['receiver_id']))
+            ->when(filled($validated['date_from'] ?? null), fn (Builder $query) => $query->whereDate('tgl_ppbj', '>=', $validated['date_from']))
+            ->when(filled($validated['date_to'] ?? null), fn (Builder $query) => $query->whereDate('tgl_ppbj', '<=', $validated['date_to']))
+            ->when(
+                $term !== '',
+                fn (Builder $query) => $query
+                    ->orderByRaw('CASE WHEN ppbj_no = ? THEN 0 WHEN ppbj_no LIKE ? THEN 1 WHEN uraian LIKE ? THEN 2 ELSE 3 END', [
+                        $term,
+                        addcslashes($term, '%_\\').'%',
+                        addcslashes($term, '%_\\').'%',
+                    ])
+                    ->latest('id'),
+                fn (Builder $query) => $query->latest('tgl_ppbj')->latest('id')
+            )
+            ->limit(12)
+            ->get();
+
+        return response()->json([
+            'results' => $rows->map(fn (Ppbj $ppbj) => [
+                'id' => $ppbj->id,
+                'ppbj_no' => $ppbj->ppbj_no,
+                'description' => $ppbj->uraian,
+                'portfolio' => $ppbj->portofolio,
+                'buyer' => $ppbj->buyer,
+                'creator' => $ppbj->createdBy?->only(['id', 'name', 'department']),
+                'receiver' => $ppbj->generalRegisteredBy?->only(['id', 'name', 'department']),
+                'registration_number' => $ppbj->general_registration_number,
+                'pr_date' => $this->journeyDate($ppbj->tgl_ppbj),
+                'pr_date_raw' => $ppbj->tgl_ppbj,
+                'received_date' => $this->journeyDate($ppbj->general_registered_at ?: $ppbj->tgl_terima_pr ?: $ppbj->tgl_diserahkan, filled($ppbj->general_registered_at)),
+                'value' => $this->journeyMoney($ppbj->total_sebelum_ppn),
+                'value_raw' => (float) ($ppbj->total_sebelum_ppn ?? 0),
+                'vendor' => $ppbj->penyedia_eksternal ?: $ppbj->pemenang,
+                'status' => $ppbj->status,
+                'sla_status' => $ppbj->status_sla,
+            ])->values(),
+            'meta' => [
+                'shown' => $rows->count(),
+                'limit' => 12,
+                'has_filters' => $term !== '' || filled($validated['portfolio'] ?? null) || filled($validated['receiver_id'] ?? null)
+                    || filled($validated['date_from'] ?? null) || filled($validated['date_to'] ?? null),
+            ],
+        ]);
     }
 
     public function events(Request $request): JsonResponse

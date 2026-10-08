@@ -236,6 +236,58 @@ class CollaborationCalendarTest extends TestCase
             ->assertForbidden();
     }
 
+    public function test_pr_finder_returns_bounded_detailed_and_filtered_results(): void
+    {
+        $umum = $this->user('umum');
+        $receiver = $this->user('umum');
+        $other = $this->user('finance');
+        $match = $this->ppbj([
+            'ppbj_no' => 'PKB/PR-26/CON/9876',
+            'uraian' => 'Pengadaan alat laboratorium khusus',
+            'portofolio' => 'PK - LAB',
+            'buyer' => 'Buyer Uji',
+            'tgl_ppbj' => '2026-10-02',
+            'tgl_terima_pr' => '2026-10-03',
+            'general_registered_by_user_id' => $receiver->id,
+            'general_registration_number' => 'REG-UMUM/2026/9876',
+            'total_sebelum_ppn' => 1375000000,
+            'penyedia_eksternal' => 'Vendor Laboratorium',
+        ]);
+        $this->ppbj([
+            'ppbj_no' => 'PKB/PR-26/CON/9877',
+            'uraian' => 'Pengadaan kendaraan',
+            'portofolio' => 'PROPERTY',
+            'tgl_ppbj' => '2026-09-01',
+        ]);
+
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+        $response = $this->actingAs($umum)->getJson(route('collaboration-calendar.ppbj-search', [
+            'q' => 'laboratorium',
+            'portfolio' => 'PK - LAB',
+            'receiver_id' => $receiver->id,
+            'date_from' => '2026-10-01',
+            'date_to' => '2026-10-31',
+        ]));
+        $queryCount = count(DB::getQueryLog());
+        DB::disableQueryLog();
+
+        $response->assertOk()
+            ->assertJsonCount(1, 'results')
+            ->assertJsonPath('results.0.id', $match->id)
+            ->assertJsonPath('results.0.ppbj_no', 'PKB/PR-26/CON/9876')
+            ->assertJsonPath('results.0.description', 'Pengadaan alat laboratorium khusus')
+            ->assertJsonPath('results.0.portfolio', 'PK - LAB')
+            ->assertJsonPath('results.0.receiver.name', $receiver->name)
+            ->assertJsonPath('results.0.value', 'Rp 1.375.000.000')
+            ->assertJsonPath('results.0.pr_date', '02 Okt 2026');
+        $this->assertLessThanOrEqual(4, $queryCount, "PR finder memakai {$queryCount} query.");
+
+        $this->actingAs($other)
+            ->getJson(route('collaboration-calendar.ppbj-search', ['q' => 'laboratorium']))
+            ->assertForbidden();
+    }
+
     private function user(string $department): User
     {
         return User::factory()->create([

@@ -14,8 +14,12 @@
         currentEvent: null,
         cache: new Map(),
         journeyCache: new Map(),
+        prSearchCache: new Map(),
         controller: null,
         journeyController: null,
+        prSearchController: null,
+        prSearchTimer: null,
+        selectedPpbj: null,
     };
 
     const els = {
@@ -38,6 +42,15 @@
         journeyLoading: $('#journeyLoading'),
         journeyContent: $('#journeyContent'),
         save: $('#calendarSave'),
+        prQuery: $('#calendarPrQuery'),
+        prPanel: $('#calendarPrPanel'),
+        prResults: $('#calendarPrResults'),
+        prState: $('#calendarPrState'),
+        prSelected: $('#calendarPrSelected'),
+        prPortfolio: $('#calendarPrPortfolio'),
+        prReceiver: $('#calendarPrReceiver'),
+        prDateFrom: $('#calendarPrDateFrom'),
+        prDateTo: $('#calendarPrDateTo'),
     };
 
     const sourceLabels = {
@@ -276,15 +289,165 @@
         els.form.elements.status.value = event?.status || 'planned';
         els.form.elements.audience.value = event?.audience || 'all';
         els.form.elements.assignee_id.value = event?.assignee?.id || '';
-        els.form.elements.ppbj_no.value = event?.ppbj?.ppbj_no || '';
+        resetPrPicker();
+        if (event?.ppbj) selectPpbj({
+            id: event.ppbj.id,
+            ppbj_no: event.ppbj.ppbj_no,
+            description: event.ppbj.uraian,
+        });
         els.formModal.hidden = false;
         document.body.style.overflow = 'hidden';
         setTimeout(() => els.form.elements.title.focus(), 0);
     }
 
     function closeForm() {
+        state.prSearchController?.abort();
+        window.clearTimeout(state.prSearchTimer);
         els.formModal.hidden = true;
         restoreBodyScroll();
+    }
+
+    function resetPrPicker() {
+        state.selectedPpbj = null;
+        els.form.elements.ppbj_no.value = '';
+        els.prQuery.value = '';
+        els.prPortfolio.value = '';
+        els.prReceiver.value = '';
+        els.prDateFrom.value = '';
+        els.prDateTo.value = '';
+        els.prSelected.hidden = true;
+        els.prSelected.replaceChildren();
+        els.prPanel.hidden = true;
+        els.prResults.replaceChildren();
+        $('#calendarPrClear').hidden = true;
+    }
+
+    function schedulePrSearch(immediate = false) {
+        window.clearTimeout(state.prSearchTimer);
+        const hasQuery = els.prQuery.value.trim().length >= 2;
+        const hasFilter = Boolean(els.prPortfolio.value || els.prReceiver.value || els.prDateFrom.value || els.prDateTo.value);
+        $('#calendarPrClear').hidden = !els.prQuery.value && !hasFilter && !state.selectedPpbj;
+        if (!hasQuery && !hasFilter) {
+            els.prPanel.hidden = false;
+            els.prResults.replaceChildren();
+            els.prState.textContent = 'Ketik minimal 2 karakter atau gunakan filter untuk menemukan PR.';
+            return;
+        }
+        state.prSearchTimer = window.setTimeout(searchPpbj, immediate ? 0 : 320);
+    }
+
+    async function searchPpbj() {
+        const params = new URLSearchParams();
+        const values = {
+            q: els.prQuery.value.trim(),
+            portfolio: els.prPortfolio.value,
+            receiver_id: els.prReceiver.value,
+            date_from: els.prDateFrom.value,
+            date_to: els.prDateTo.value,
+        };
+        Object.entries(values).forEach(([key, value]) => { if (value) params.set(key, value); });
+        const cacheKey = params.toString();
+        els.prPanel.hidden = false;
+        els.prState.textContent = 'Mencari PR yang paling relevan…';
+        els.prResults.replaceChildren();
+
+        if (state.prSearchCache.has(cacheKey)) {
+            renderPrResults(state.prSearchCache.get(cacheKey));
+            return;
+        }
+
+        state.prSearchController?.abort();
+        state.prSearchController = new AbortController();
+        try {
+            const response = await fetch(`${root.dataset.prSearchUrl}?${params}`, {
+                headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                credentials: 'same-origin',
+                signal: state.prSearchController.signal,
+            });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(Object.values(data.errors || {}).flat()[0] || data.message || 'Pencarian PR gagal.');
+            state.prSearchCache.set(cacheKey, data);
+            if (state.prSearchCache.size > 20) state.prSearchCache.delete(state.prSearchCache.keys().next().value);
+            renderPrResults(data);
+        } catch (error) {
+            if (error.name !== 'AbortError') els.prState.textContent = error.message;
+        }
+    }
+
+    function renderPrResults(data) {
+        const results = Array.isArray(data.results) ? data.results : [];
+        els.prResults.replaceChildren();
+        els.prState.textContent = results.length
+            ? `${results.length} PR paling relevan ditemukan. Pilih satu untuk ditautkan.`
+            : 'PR tidak ditemukan. Coba kata kunci atau filter lain.';
+
+        results.forEach((record) => {
+            const button = element('button', 'pr-result');
+            button.type = 'button';
+            button.setAttribute('role', 'option');
+            const top = element('div', 'pr-result-top');
+            top.append(element('strong', '', record.ppbj_no), element('span', '', record.value || 'Nilai belum diisi'));
+            const description = element('p', '', record.description || 'Uraian pengadaan belum tersedia');
+            const facts = element('div', 'pr-result-facts');
+            [
+                `Portofolio: ${record.portfolio || 'Belum diisi'}`,
+                `Tanggal PR: ${record.pr_date || 'Belum diisi'}`,
+                `Penerima: ${record.receiver?.name || 'Belum tercatat'}`,
+                `Tanggal diterima: ${record.received_date || 'Belum tercatat'}`,
+                `Buyer: ${record.buyer || 'Belum tercatat'}`,
+                `Vendor: ${record.vendor || 'Belum ditetapkan'}`,
+            ].forEach((fact) => facts.append(element('span', '', fact)));
+            button.append(top, description, facts);
+            button.addEventListener('click', () => selectPpbj(record));
+            els.prResults.append(button);
+        });
+    }
+
+    function selectPpbj(record) {
+        state.selectedPpbj = record;
+        els.form.elements.ppbj_no.value = record.ppbj_no || '';
+        els.prQuery.value = record.ppbj_no || '';
+        $('#calendarPrClear').hidden = false;
+        els.prPanel.hidden = true;
+        els.prSelected.hidden = false;
+        els.prSelected.replaceChildren();
+
+        const heading = element('div', 'pr-selected-head');
+        const copy = element('div');
+        copy.append(element('small', '', 'PR TERPILIH'), element('strong', '', record.ppbj_no || 'PR'));
+        const remove = element('button', '', 'Ganti / lepas');
+        remove.type = 'button';
+        remove.addEventListener('click', clearSelectedPpbj);
+        heading.append(copy, remove);
+        const description = element('p', '', record.description || 'Uraian pengadaan belum tersedia');
+        const facts = element('div', 'pr-selected-facts');
+        [
+            ['Nilai PR', record.value || 'Muat detail untuk melihat nilai'],
+            ['Portofolio', record.portfolio || 'Belum diisi'],
+            ['Tanggal PR', record.pr_date || 'Belum diisi'],
+            ['Dibuat oleh', record.creator?.name || record.buyer || 'Belum tercatat'],
+            ['Penerima', record.receiver?.name || 'Belum tercatat'],
+            ['Tanggal diterima', record.received_date || 'Belum tercatat'],
+            ['Buyer/PIC', record.buyer || 'Belum tercatat'],
+            ['Registrasi', record.registration_number || 'Belum tersedia'],
+            ['Vendor', record.vendor || 'Belum ditetapkan'],
+            ['Status SLA', record.sla_status || record.status || 'Belum tersedia'],
+        ].forEach(([label, value]) => {
+            const item = element('span');
+            item.append(element('small', '', label), element('b', '', value));
+            facts.append(item);
+        });
+        els.prSelected.append(heading, description, facts);
+    }
+
+    function clearSelectedPpbj() {
+        state.selectedPpbj = null;
+        els.form.elements.ppbj_no.value = '';
+        els.prSelected.hidden = true;
+        els.prSelected.replaceChildren();
+        els.prQuery.value = '';
+        schedulePrSearch(true);
+        els.prQuery.focus();
     }
 
     function withHour(date, hour) {
@@ -659,6 +822,25 @@
     $('#calendarFullscreen').addEventListener('click', toggleFullscreen);
     document.addEventListener('fullscreenchange', syncFullscreenLabel);
     $('#calendarAdd')?.addEventListener('click', () => openForm());
+    els.prQuery?.addEventListener('input', () => {
+        if (state.selectedPpbj && els.prQuery.value.trim() !== state.selectedPpbj.ppbj_no) {
+            state.selectedPpbj = null;
+            els.form.elements.ppbj_no.value = '';
+            els.prSelected.hidden = true;
+            els.prSelected.replaceChildren();
+        }
+        schedulePrSearch();
+    });
+    els.prQuery?.addEventListener('focus', () => schedulePrSearch());
+    [els.prPortfolio, els.prReceiver, els.prDateFrom, els.prDateTo].forEach((control) => control?.addEventListener('change', () => schedulePrSearch(true)));
+    $('#calendarPrClear')?.addEventListener('click', clearSelectedPpbj);
+    $('#calendarPrFilterReset')?.addEventListener('click', () => {
+        els.prPortfolio.value = '';
+        els.prReceiver.value = '';
+        els.prDateFrom.value = '';
+        els.prDateTo.value = '';
+        schedulePrSearch(true);
+    });
     els.form.addEventListener('submit', saveEvent);
     $$('[data-close-modal]').forEach((button) => button.addEventListener('click', closeForm));
     $$('[data-close-detail]').forEach((button) => button.addEventListener('click', closeDetail));

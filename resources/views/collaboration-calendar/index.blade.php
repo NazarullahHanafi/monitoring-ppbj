@@ -11,6 +11,7 @@
         class="collab-calendar"
         id="collabCalendar"
         data-events-url="{{ route('collaboration-calendar.events') }}"
+        data-pr-search-url="{{ route('collaboration-calendar.ppbj-search') }}"
         data-journey-template="{{ url('/collaboration-calendar/journey/__PPBJ__') }}"
         data-store-url="{{ route('collaboration-calendar.store') }}"
         data-update-template="{{ url('/collaboration-calendar/events/__EVENT__') }}"
@@ -133,9 +134,27 @@
                     </section>
 
                     <section class="calendar-form-section form-section-context">
-                        <div class="form-section-heading"><b>03</b><div><h3>Konteks pengadaan</h3><p>Tautkan agenda ke PR agar perjalanan pengadaan dapat dibuka dari kalender.</p></div></div>
+                        <div class="form-section-heading"><b>03</b><div><h3>PR Finder & konteks pengadaan</h3><p>Cari berdasarkan nomor PR, uraian, penerima, vendor, atau nomor registrasi tanpa memuat seluruh data.</p></div></div>
                         <div class="calendar-form-grid">
-                            <label class="form-span-2"><span>Nomor PR/PPBJ <small>(opsional, harus sama persis)</small></span><input type="text" name="ppbj_no" maxlength="50" placeholder="PKB/PR-26/CON/0001"></label>
+                            <div class="pr-picker form-span-2" id="calendarPrPicker">
+                                <input type="hidden" name="ppbj_no">
+                                <label class="pr-search-field">
+                                    <span>Cari PR/PPBJ <small>(opsional)</small></span>
+                                    <div class="pr-search-input-wrap"><span>⌕</span><input type="search" id="calendarPrQuery" maxlength="120" autocomplete="off" placeholder="Nomor PR, pengadaan, penerima, vendor…"><button type="button" id="calendarPrClear" aria-label="Bersihkan pencarian" hidden>×</button></div>
+                                </label>
+                                <div class="pr-filter-grid" aria-label="Filter pencarian PR">
+                                    <label><span>Portofolio</span><select id="calendarPrPortfolio"><option value="">Semua portofolio</option>@foreach($portfolios as $portfolio)<option value="{{ $portfolio }}">{{ $portfolio }}</option>@endforeach</select></label>
+                                    <label><span>Penerima Umum</span><select id="calendarPrReceiver"><option value="">Semua penerima</option>@foreach($users->where('department', 'umum') as $user)<option value="{{ $user->id }}">{{ $user->name }}</option>@endforeach</select></label>
+                                    <label><span>Tanggal PR dari</span><input type="date" id="calendarPrDateFrom"></label>
+                                    <label><span>Sampai</span><input type="date" id="calendarPrDateTo"></label>
+                                    <button type="button" class="pr-filter-reset" id="calendarPrFilterReset">Reset filter</button>
+                                </div>
+                                <div class="pr-selected" id="calendarPrSelected" hidden></div>
+                                <div class="pr-search-panel" id="calendarPrPanel" hidden>
+                                    <div class="pr-search-state" id="calendarPrState">Ketik minimal 2 karakter atau gunakan filter.</div>
+                                    <div class="pr-search-results" id="calendarPrResults" role="listbox" aria-label="Hasil pencarian PR"></div>
+                                </div>
+                            </div>
                             <label class="form-span-2"><span>Catatan Kolaborasi</span><textarea name="description" maxlength="2000" rows="3" placeholder="Tuliskan konteks, kebutuhan, dan hasil yang diharapkan…"></textarea></label>
                         </div>
                     </section>
