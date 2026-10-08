@@ -30,7 +30,11 @@ return new class extends Migration
             $table->string('audience', 20)->default('all');
             $table->foreignId('creator_id')->constrained('users')->cascadeOnDelete();
             $table->foreignId('assignee_id')->nullable()->constrained('users')->nullOnDelete();
-            $table->foreignId('ppbj_id')->nullable()->constrained('ppbj')->nullOnDelete();
+            // Tabel PPBJ production berasal dari skema legacy dan memakai BIGINT
+            // signed. Definisi eksplisit menjaga foreign key kompatibel di semua
+            // environment tanpa mengubah primary key tabel bisnis yang sudah ada.
+            $table->bigInteger('ppbj_id')->nullable();
+            $table->foreign('ppbj_id')->references('id')->on('ppbj')->nullOnDelete();
             $table->unsignedInteger('version')->default(1);
             $table->timestamps();
 
