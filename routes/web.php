@@ -82,7 +82,7 @@ Route::get('/home', function () {
 Route::middleware(['auth', 'readonly.block'])->group(function () {
     Route::get('/archive-gateway', ArchiveDownloadGatewayController::class)
         ->name('archive.gateway')
-        ->middleware('throttle:60,1');
+        ->middleware('throttle:20,1');
 
     Route::get('/activity-broadcast/feed', ActivityBroadcastController::class)
         ->name('activity-broadcast.feed')

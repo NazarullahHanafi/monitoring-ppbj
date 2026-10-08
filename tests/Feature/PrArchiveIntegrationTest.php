@@ -142,7 +142,7 @@ class PrArchiveIntegrationTest extends TestCase
             ->assertJson(['state' => 'unavailable', 'has_archive' => false]);
     }
 
-    public function test_archive_gateway_resolves_a_short_lived_signed_url_before_redirecting(): void
+    public function test_archive_gateway_streams_a_short_lived_signed_url_without_exposing_onedrive(): void
     {
         config([
             'services.pr_archive.base_url' => 'https://arsip.example.test',
@@ -151,8 +151,16 @@ class PrArchiveIntegrationTest extends TestCase
 
         $target = 'https://arsip.example.test/api/archive/attachments/71/download?expires=1791435600&signature=fresh';
 
-        Http::fake([
-            'https://arsip.example.test/*' => Http::response([
+        Http::fake(function (Request $request) use ($target) {
+            if ($request->url() === $target) {
+                return Http::response('%PDF-archive-test', 200, [
+                    'Content-Type' => 'application/pdf',
+                    'Content-Length' => '17',
+                    'Accept-Ranges' => 'bytes',
+                ]);
+            }
+
+            return Http::response([
                 'has_archive' => true,
                 'document_count' => 1,
                 'documents' => [[
@@ -161,8 +169,8 @@ class PrArchiveIntegrationTest extends TestCase
                     'preview_url' => 'https://arsip.example.test/api/archive/attachments/71/preview?expires=1791435600&signature=fresh',
                     'download_url' => $target,
                 ]],
-            ]),
-        ]);
+            ]);
+        });
 
         [$user] = $this->generalUserAndPpbj('PKB/PR-26/CON/0227');
 
@@ -172,11 +180,14 @@ class PrArchiveIntegrationTest extends TestCase
             'action' => 'download',
         ]));
 
-        $response->assertRedirect($target)
+        $response->assertOk()
             ->assertHeader('Cache-Control', 'max-age=0, no-store, private')
-            ->assertHeader('X-Content-Type-Options', 'nosniff');
+            ->assertHeader('X-Content-Type-Options', 'nosniff')
+            ->assertHeader('Content-Type', 'application/pdf')
+            ->assertHeader('Content-Disposition', 'attachment; filename="Lampiran pengadaan.pdf"');
 
-        Http::assertSentCount(1);
+        $this->assertSame('%PDF-archive-test', $response->streamedContent());
+        Http::assertSentCount(2);
     }
 
     public function test_archive_gateway_rejects_an_external_redirect_target(): void
