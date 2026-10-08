@@ -473,9 +473,14 @@
                                     ? ($isCancelled ? 'Dibatalkan' : 'Selesai')
                                     : (($rowLiveRemaining ?? (int) ($row->sisa_target_sla ?? 0)) . ' hari'));
                             $slaOutcomeLabel = method_exists($row, 'slaOutcomeLabel') ? $row->slaOutcomeLabel() : null;
-                            $slaOutcomeClass = method_exists($row, 'slaOutcomeColorClass')
-                                ? $row->slaOutcomeColorClass()
-                                : 'bg-slate-100 text-slate-700 ring-slate-200 dark:bg-slate-700 dark:text-slate-200 dark:ring-slate-600';
+                            $slaOutcomeRemaining = method_exists($row, 'slaFinalRemainingDays')
+                                ? $row->slaFinalRemainingDays()
+                                : null;
+                            $slaOutcomeTone = match (true) {
+                                $slaOutcomeRemaining === null => 'neutral',
+                                $slaOutcomeRemaining < 0 => 'late',
+                                default => 'ahead',
+                            };
                             $slaExplanation = method_exists($row, 'slaExplanation')
                                 ? $row->slaExplanation()
                                 : ($isSlaComplete
@@ -591,7 +596,8 @@
                                 <div class="inline-flex flex-col items-center gap-1">
                                     <span class="font-semibold text-gray-700 dark:text-gray-200">{{ $slaMainLabel }}</span>
                                     @if($slaOutcomeLabel)
-                                        <span class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold ring-1 {{ $slaOutcomeClass }}">
+                                        <span class="ppbj-sla-outcome inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-extrabold"
+                                            data-sla-tone="{{ $slaOutcomeTone }}">
                                             {{ $slaOutcomeLabel }}
                                         </span>
                                     @endif
@@ -1191,7 +1197,7 @@
 @endsection
 
 @push('styles')
-    <link rel="stylesheet" href="{{ asset('assets/ppbj/ppbj.css') }}?v=20260819b">
+    <link rel="stylesheet" href="{{ asset('assets/ppbj/ppbj.css') }}?v=20261008a">
 @endpush
 
 @push('scripts')
