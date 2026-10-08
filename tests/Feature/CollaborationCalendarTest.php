@@ -25,7 +25,10 @@ class CollaborationCalendarTest extends TestCase
             ->get(route('collaboration-calendar.index'))
             ->assertOk()
             ->assertSee('Collaborative Calendar')
-            ->assertSee('Kalender Kolaborasi');
+            ->assertSee('Kalender Kolaborasi')
+            ->assertSee('Cari PR')
+            ->assertSee('Cari & Telusuri PR', false)
+            ->assertSee('Pilih PR');
 
         $this->actingAs($operasional)
             ->get(route('collaboration-calendar.index'))

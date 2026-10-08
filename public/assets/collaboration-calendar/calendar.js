@@ -20,6 +20,8 @@
         prSearchController: null,
         prSearchTimer: null,
         selectedPpbj: null,
+        linkedPpbj: null,
+        prFinderMode: 'browse',
     };
 
     const els = {
@@ -32,6 +34,7 @@
         focusSubtitle: $('#focusSubtitle'),
         focusEvents: $('#focusEvents'),
         formModal: $('#calendarFormModal'),
+        prFinderModal: $('#calendarPrFinderModal'),
         detailModal: $('#calendarDetailModal'),
         form: $('#calendarForm'),
         formTitle: $('#calendarFormTitle'),
@@ -51,6 +54,9 @@
         prReceiver: $('#calendarPrReceiver'),
         prDateFrom: $('#calendarPrDateFrom'),
         prDateTo: $('#calendarPrDateTo'),
+        prPreview: $('#calendarPrPreview'),
+        agendaPrEmpty: $('#calendarAgendaPrEmpty'),
+        agendaPrSelected: $('#calendarAgendaPrSelected'),
     };
 
     const sourceLabels = {
@@ -273,7 +279,7 @@
         return loadEvents(true);
     }
 
-    function openForm(event = null, selectedDate = state.selected) {
+    function openForm(event = null, selectedDate = state.selected, linkedRecord = null) {
         state.currentEvent = event;
         els.form.reset();
         els.formError.hidden = true;
@@ -289,12 +295,13 @@
         els.form.elements.status.value = event?.status || 'planned';
         els.form.elements.audience.value = event?.audience || 'all';
         els.form.elements.assignee_id.value = event?.assignee?.id || '';
-        resetPrPicker();
+        resetAgendaPpbj();
         if (event?.ppbj) selectPpbj({
             id: event.ppbj.id,
             ppbj_no: event.ppbj.ppbj_no,
             description: event.ppbj.uraian,
-        });
+        }, true);
+        else if (linkedRecord) selectAgendaPpbj(linkedRecord);
         els.formModal.hidden = false;
         document.body.style.overflow = 'hidden';
         setTimeout(() => els.form.elements.title.focus(), 0);
@@ -309,7 +316,6 @@
 
     function resetPrPicker() {
         state.selectedPpbj = null;
-        els.form.elements.ppbj_no.value = '';
         els.prQuery.value = '';
         els.prPortfolio.value = '';
         els.prReceiver.value = '';
@@ -317,9 +323,41 @@
         els.prDateTo.value = '';
         els.prSelected.hidden = true;
         els.prSelected.replaceChildren();
-        els.prPanel.hidden = true;
+        els.prPanel.hidden = false;
         els.prResults.replaceChildren();
+        els.prState.textContent = 'Ketik minimal 2 karakter atau gunakan filter untuk menemukan PR.';
+        $('.pr-preview-empty', els.prPreview).hidden = false;
         $('#calendarPrClear').hidden = true;
+        syncPrFinderActions();
+    }
+
+    function openPrFinder(mode = 'browse') {
+        state.prFinderMode = mode;
+        resetPrPicker();
+        $('#calendarPrFinderTitle').textContent = mode === 'attach' ? 'Pilih PR untuk Agenda' : 'Cari & Telusuri PR';
+        $('#calendarPrFinderHint').textContent = mode === 'attach'
+            ? 'Pilih PR lalu tautkan ke agenda yang sedang dibuat.'
+            : 'Pencarian dimuat sesuai kebutuhan, bukan seluruh database sekaligus.';
+        els.prFinderModal.hidden = false;
+        document.body.style.overflow = 'hidden';
+        setTimeout(() => els.prQuery.focus(), 0);
+    }
+
+    function closePrFinder() {
+        state.prSearchController?.abort();
+        window.clearTimeout(state.prSearchTimer);
+        els.prFinderModal.hidden = true;
+        restoreBodyScroll();
+    }
+
+    function syncPrFinderActions() {
+        const selected = Boolean(state.selectedPpbj?.id);
+        const journey = $('#calendarPrJourneyAction');
+        const attach = $('#calendarPrAttachAction');
+        const create = $('#calendarPrCreateAgenda');
+        if (journey) journey.hidden = !selected;
+        if (attach) attach.hidden = !selected || state.prFinderMode !== 'attach';
+        if (create) create.hidden = !selected || state.prFinderMode === 'attach';
     }
 
     function schedulePrSearch(immediate = false) {
@@ -403,13 +441,17 @@
         });
     }
 
-    function selectPpbj(record) {
+    function selectPpbj(record, attachDirectly = false) {
+        if (attachDirectly) {
+            selectAgendaPpbj(record);
+            return;
+        }
         state.selectedPpbj = record;
-        els.form.elements.ppbj_no.value = record.ppbj_no || '';
         els.prQuery.value = record.ppbj_no || '';
         $('#calendarPrClear').hidden = false;
-        els.prPanel.hidden = true;
+        els.prPanel.hidden = false;
         els.prSelected.hidden = false;
+        $('.pr-preview-empty', els.prPreview).hidden = true;
         els.prSelected.replaceChildren();
 
         const heading = element('div', 'pr-selected-head');
@@ -438,16 +480,104 @@
             facts.append(item);
         });
         els.prSelected.append(heading, description, facts);
+        syncPrFinderActions();
     }
 
     function clearSelectedPpbj() {
         state.selectedPpbj = null;
-        els.form.elements.ppbj_no.value = '';
         els.prSelected.hidden = true;
         els.prSelected.replaceChildren();
+        $('.pr-preview-empty', els.prPreview).hidden = false;
         els.prQuery.value = '';
+        syncPrFinderActions();
         schedulePrSearch(true);
         els.prQuery.focus();
+    }
+
+    function selectAgendaPpbj(record) {
+        state.linkedPpbj = record;
+        els.form.elements.ppbj_no.value = record.ppbj_no || '';
+        els.agendaPrEmpty.hidden = true;
+        els.agendaPrSelected.hidden = false;
+        els.agendaPrSelected.replaceChildren();
+
+        const copy = element('div');
+        copy.append(
+            element('small', '', 'PR DITAUTKAN'),
+            element('strong', '', record.ppbj_no || 'PR'),
+            element('span', '', record.description || 'Uraian pengadaan belum tersedia')
+        );
+        const actions = element('div', 'agenda-pr-actions');
+        const change = element('button', 'calendar-button calendar-button-soft', 'Ganti PR');
+        change.type = 'button';
+        change.addEventListener('click', () => openPrFinder('attach'));
+        const remove = element('button', 'calendar-button calendar-button-ghost', 'Lepas');
+        remove.type = 'button';
+        remove.addEventListener('click', resetAgendaPpbj);
+        actions.append(change, remove);
+        els.agendaPrSelected.append(copy, actions);
+    }
+
+    function resetAgendaPpbj() {
+        state.linkedPpbj = null;
+        els.form.elements.ppbj_no.value = '';
+        els.agendaPrEmpty.hidden = false;
+        els.agendaPrSelected.hidden = true;
+        els.agendaPrSelected.replaceChildren();
+    }
+
+    function attachSelectedPpbj() {
+        if (!state.selectedPpbj) return;
+        const record = state.selectedPpbj;
+        closePrFinder();
+        selectAgendaPpbj(record);
+    }
+
+    function createAgendaFromPpbj() {
+        if (!state.selectedPpbj) return;
+        const record = state.selectedPpbj;
+        closePrFinder();
+        openForm(null, state.selected, record);
+    }
+
+    function openFinderJourney() {
+        const record = state.selectedPpbj;
+        if (!record?.id) return;
+        closePrFinder();
+        state.currentEvent = { ppbj: { id: record.id, ppbj_no: record.ppbj_no, uraian: record.description } };
+        resetJourney();
+        $('#detailSource').textContent = 'DIGITAL PROCUREMENT JOURNEY';
+        $('#detailTitle').textContent = record.ppbj_no || 'Perjalanan PR';
+        $('#detailDescription').textContent = record.description || 'Rangkaian proses pengadaan lintas role.';
+        $('#detailBadges').replaceChildren(
+            element('span', 'event-tag event-collaboration', record.portfolio || 'Portofolio belum diisi'),
+            element('span', 'event-tag event-milestone', record.value || 'Nilai belum diisi')
+        );
+        const grid = $('#detailGrid');
+        grid.replaceChildren();
+        [
+            ['Tanggal PR', record.pr_date || 'Belum diisi'],
+            ['Penerima Umum', record.receiver?.name || 'Belum tercatat'],
+            ['Buyer / PIC', record.buyer || 'Belum tercatat'],
+            ['Vendor', record.vendor || 'Belum ditetapkan'],
+        ].forEach(([label, value]) => {
+            const wrap = element('div');
+            wrap.append(element('dt', '', label), element('dd', '', value));
+            grid.append(wrap);
+        });
+        $('#detailStatusWrap').hidden = true;
+        $('#calendarEdit').hidden = true;
+        $('#calendarDelete').hidden = true;
+        const openPr = $('#calendarOpenPr');
+        openPr.hidden = false;
+        openPr.href = `/ppbj?search=${encodeURIComponent(record.ppbj_no || '')}`;
+        const journeyButton = $('#calendarJourneyButton');
+        journeyButton.hidden = false;
+        journeyButton.disabled = false;
+        journeyButton.textContent = '◎ Lihat Perjalanan PR';
+        els.detailModal.hidden = false;
+        document.body.style.overflow = 'hidden';
+        loadJourney();
     }
 
     function withHour(date, hour) {
@@ -714,7 +844,7 @@
     }
 
     function restoreBodyScroll() {
-        if (els.formModal.hidden && els.detailModal.hidden && !document.body.classList.contains('calendar-fullscreen-fallback')) {
+        if (els.formModal.hidden && els.prFinderModal.hidden && els.detailModal.hidden && !document.body.classList.contains('calendar-fullscreen-fallback')) {
             document.body.style.overflow = '';
         }
     }
@@ -822,12 +952,15 @@
     $('#calendarFullscreen').addEventListener('click', toggleFullscreen);
     document.addEventListener('fullscreenchange', syncFullscreenLabel);
     $('#calendarAdd')?.addEventListener('click', () => openForm());
+    $('#calendarPrFinderOpen')?.addEventListener('click', () => openPrFinder('browse'));
+    $('#calendarAgendaChoosePr')?.addEventListener('click', () => openPrFinder('attach'));
     els.prQuery?.addEventListener('input', () => {
         if (state.selectedPpbj && els.prQuery.value.trim() !== state.selectedPpbj.ppbj_no) {
             state.selectedPpbj = null;
-            els.form.elements.ppbj_no.value = '';
             els.prSelected.hidden = true;
             els.prSelected.replaceChildren();
+            $('.pr-preview-empty', els.prPreview).hidden = false;
+            syncPrFinderActions();
         }
         schedulePrSearch();
     });
@@ -841,6 +974,10 @@
         els.prDateTo.value = '';
         schedulePrSearch(true);
     });
+    $('#calendarPrJourneyAction')?.addEventListener('click', openFinderJourney);
+    $('#calendarPrAttachAction')?.addEventListener('click', attachSelectedPpbj);
+    $('#calendarPrCreateAgenda')?.addEventListener('click', createAgendaFromPpbj);
+    $$('[data-close-pr-finder]').forEach((button) => button.addEventListener('click', closePrFinder));
     els.form.addEventListener('submit', saveEvent);
     $$('[data-close-modal]').forEach((button) => button.addEventListener('click', closeForm));
     $$('[data-close-detail]').forEach((button) => button.addEventListener('click', closeDetail));
@@ -850,7 +987,8 @@
     $$('[data-status]', $('#detailStatusWrap')).forEach((button) => button.addEventListener('click', () => updateStatus(button.dataset.status)));
     document.addEventListener('keydown', (event) => {
         if (event.key !== 'Escape') return;
-        if (!els.formModal.hidden) closeForm();
+        if (!els.prFinderModal.hidden) closePrFinder();
+        else if (!els.formModal.hidden) closeForm();
         else if (!els.detailModal.hidden) closeDetail();
         else if (document.body.classList.contains('calendar-fullscreen-fallback')) {
             document.body.classList.remove('calendar-fullscreen-fallback');

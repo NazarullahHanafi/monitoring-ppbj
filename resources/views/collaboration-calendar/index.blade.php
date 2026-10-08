@@ -34,6 +34,7 @@
             <div class="calendar-hero-actions">
                 <div class="calendar-live-pill"><span></span> Sinkron saat dibuka</div>
                 <button type="button" class="calendar-button calendar-button-ghost" id="calendarFullscreen">⛶ Layar Penuh</button>
+                <button type="button" class="calendar-button calendar-button-search" id="calendarPrFinderOpen">⌕ Cari PR</button>
                 @unless(auth()->user()->isReadOnly())
                     <button type="button" class="calendar-button calendar-button-primary" id="calendarAdd">＋ Agenda Bersama</button>
                 @endunless
@@ -134,26 +135,15 @@
                     </section>
 
                     <section class="calendar-form-section form-section-context">
-                        <div class="form-section-heading"><b>03</b><div><h3>PR Finder & konteks pengadaan</h3><p>Cari berdasarkan nomor PR, uraian, penerima, vendor, atau nomor registrasi tanpa memuat seluruh data.</p></div></div>
+                        <div class="form-section-heading"><b>03</b><div><h3>Konteks pengadaan</h3><p>Tautkan PR bila agenda ini berhubungan dengan proses pengadaan tertentu.</p></div></div>
                         <div class="calendar-form-grid">
-                            <div class="pr-picker form-span-2" id="calendarPrPicker">
+                            <div class="agenda-pr-link form-span-2">
                                 <input type="hidden" name="ppbj_no">
-                                <label class="pr-search-field">
-                                    <span>Cari PR/PPBJ <small>(opsional)</small></span>
-                                    <div class="pr-search-input-wrap"><span>⌕</span><input type="search" id="calendarPrQuery" maxlength="120" autocomplete="off" placeholder="Nomor PR, pengadaan, penerima, vendor…"><button type="button" id="calendarPrClear" aria-label="Bersihkan pencarian" hidden>×</button></div>
-                                </label>
-                                <div class="pr-filter-grid" aria-label="Filter pencarian PR">
-                                    <label><span>Portofolio</span><select id="calendarPrPortfolio"><option value="">Semua portofolio</option>@foreach($portfolios as $portfolio)<option value="{{ $portfolio }}">{{ $portfolio }}</option>@endforeach</select></label>
-                                    <label><span>Penerima Umum</span><select id="calendarPrReceiver"><option value="">Semua penerima</option>@foreach($users->where('department', 'umum') as $user)<option value="{{ $user->id }}">{{ $user->name }}</option>@endforeach</select></label>
-                                    <label><span>Tanggal PR dari</span><input type="date" id="calendarPrDateFrom"></label>
-                                    <label><span>Sampai</span><input type="date" id="calendarPrDateTo"></label>
-                                    <button type="button" class="pr-filter-reset" id="calendarPrFilterReset">Reset filter</button>
+                                <div class="agenda-pr-empty" id="calendarAgendaPrEmpty">
+                                    <div><b>Belum ada PR yang ditautkan</b><span>Agenda tetap dapat dibuat tanpa referensi PR.</span></div>
+                                    <button type="button" class="calendar-button calendar-button-soft" id="calendarAgendaChoosePr">⌕ Pilih PR</button>
                                 </div>
-                                <div class="pr-selected" id="calendarPrSelected" hidden></div>
-                                <div class="pr-search-panel" id="calendarPrPanel" hidden>
-                                    <div class="pr-search-state" id="calendarPrState">Ketik minimal 2 karakter atau gunakan filter.</div>
-                                    <div class="pr-search-results" id="calendarPrResults" role="listbox" aria-label="Hasil pencarian PR"></div>
-                                </div>
+                                <div class="agenda-pr-selected" id="calendarAgendaPrSelected" hidden></div>
                             </div>
                             <label class="form-span-2"><span>Catatan Kolaborasi</span><textarea name="description" maxlength="2000" rows="3" placeholder="Tuliskan konteks, kebutuhan, dan hasil yang diharapkan…"></textarea></label>
                         </div>
@@ -165,6 +155,51 @@
                     <button type="submit" class="calendar-button calendar-button-primary" id="calendarSave">Simpan Agenda</button>
                 </div>
             </form>
+        </div>
+
+        <div class="calendar-modal" id="calendarPrFinderModal" hidden role="dialog" aria-modal="true" aria-labelledby="calendarPrFinderTitle">
+            <div class="calendar-modal-backdrop" data-close-pr-finder></div>
+            <div class="calendar-modal-card pr-finder-card">
+                <div class="modal-head pr-finder-head">
+                    <div><span>PROCUREMENT INTELLIGENCE</span><h2 id="calendarPrFinderTitle">Cari & Telusuri PR</h2><p>Temukan PR tanpa membuka agenda, lalu lihat detail atau perjalanan lengkapnya.</p></div>
+                    <button type="button" class="modal-close" data-close-pr-finder aria-label="Tutup">×</button>
+                </div>
+                <div class="pr-finder-body">
+                    <div class="pr-picker" id="calendarPrPicker">
+                        <label class="pr-search-field">
+                            <span>Pencarian terpadu</span>
+                            <div class="pr-search-input-wrap"><span>⌕</span><input type="search" id="calendarPrQuery" maxlength="120" autocomplete="off" placeholder="Nomor PR, pengadaan, penerima, vendor, registrasi…"><button type="button" id="calendarPrClear" aria-label="Bersihkan pencarian" hidden>×</button></div>
+                        </label>
+                        <div class="pr-filter-grid" aria-label="Filter pencarian PR">
+                            <label><span>Portofolio</span><select id="calendarPrPortfolio"><option value="">Semua portofolio</option>@foreach($portfolios as $portfolio)<option value="{{ $portfolio }}">{{ $portfolio }}</option>@endforeach</select></label>
+                            <label><span>Penerima Umum</span><select id="calendarPrReceiver"><option value="">Semua penerima</option>@foreach($users->where('department', 'umum') as $user)<option value="{{ $user->id }}">{{ $user->name }}</option>@endforeach</select></label>
+                            <label><span>Tanggal PR dari</span><input type="date" id="calendarPrDateFrom"></label>
+                            <label><span>Sampai</span><input type="date" id="calendarPrDateTo"></label>
+                            <button type="button" class="pr-filter-reset" id="calendarPrFilterReset">Reset filter</button>
+                        </div>
+                        <div class="pr-finder-layout">
+                            <div class="pr-search-panel" id="calendarPrPanel">
+                                <div class="pr-search-state" id="calendarPrState">Ketik minimal 2 karakter atau gunakan filter untuk menemukan PR.</div>
+                                <div class="pr-search-results" id="calendarPrResults" role="listbox" aria-label="Hasil pencarian PR"></div>
+                            </div>
+                            <div class="pr-finder-preview" id="calendarPrPreview">
+                                <div class="pr-preview-empty"><span>⌕</span><b>Pilih sebuah PR</b><p>Ringkasan nilai, penerima, portofolio, vendor, tanggal, dan status SLA akan tampil di sini.</p></div>
+                                <div class="pr-selected" id="calendarPrSelected" hidden></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-error" id="calendarPrFinderError" hidden></div>
+                <div class="modal-actions pr-finder-actions">
+                    <span id="calendarPrFinderHint">Pencarian tidak memuat seluruh database sekaligus.</span>
+                    <button type="button" class="calendar-button calendar-button-ghost" data-close-pr-finder>Tutup</button>
+                    <button type="button" class="calendar-button calendar-button-journey" id="calendarPrJourneyAction" hidden>◎ Lihat Perjalanan PR</button>
+                    @unless(auth()->user()->isReadOnly())
+                        <button type="button" class="calendar-button calendar-button-soft" id="calendarPrAttachAction" hidden>Tautkan ke Agenda</button>
+                        <button type="button" class="calendar-button calendar-button-primary" id="calendarPrCreateAgenda" hidden>＋ Buat Agenda dari PR</button>
+                    @endunless
+                </div>
+            </div>
         </div>
 
         <div class="calendar-modal" id="calendarDetailModal" hidden role="dialog" aria-modal="true" aria-labelledby="detailTitle">
