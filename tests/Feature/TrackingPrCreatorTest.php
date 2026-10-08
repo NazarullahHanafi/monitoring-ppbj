@@ -58,6 +58,10 @@ class TrackingPrCreatorTest extends TestCase
             ->get(route('tracking.index', ['q' => 'PKB/PR-26/CON/0402']))
             ->assertOk()
             ->assertSee('Eli')
+            ->assertSee('Experience V3')
+            ->assertSee('Procurement Journey')
+            ->assertSee('Next Best Action')
+            ->assertSee('assets/app/tracking-pr-v3.css', false)
             ->assertDontSee('Tidak Diketahui');
     }
 
@@ -191,5 +195,46 @@ class TrackingPrCreatorTest extends TestCase
             ->assertOk()
             ->assertJsonPath('items.0.nomor', 'PKB/PR-26/CON/0602')
             ->assertJsonPath('items.0.source_label', 'PPBJ');
+    }
+
+    public function test_internal_ppbj_tracking_renders_v3_summary_and_lazy_audit(): void
+    {
+        $viewer = User::factory()->create([
+            'department' => 'operasional',
+            'role' => 'superadmin',
+        ]);
+
+        DB::table('ppbj')->insert([
+            'ppbj_no' => 'PKB/PR-26/CON/0699',
+            'tgl_ppbj' => '2026-10-08',
+            'uraian' => 'Pengadaan pengujian Tracking V3',
+            'buyer' => 'Nazar',
+            'portofolio' => 'INS',
+            'total_sebelum_ppn' => 125000000,
+            'status' => 'ON TRACK',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->actingAs($viewer)
+            ->get(route('tracking.index', ['q' => 'PKB/PR-26/CON/0699']))
+            ->assertOk()
+            ->assertSee('Experience V3')
+            ->assertSee('Kepatuhan SLA')
+            ->assertSee('Realisasi Nilai')
+            ->assertSee('Next Best Action')
+            ->assertSee('id="content-timeline" class="tv3-tab-content tv3-section p-6 hidden"', false);
+    }
+
+    public function test_tracking_v3_frontend_stays_within_lightweight_budget(): void
+    {
+        $view = file_get_contents(resource_path('views/tracking/index.blade.php'));
+        $stylesheet = file_get_contents(public_path('assets/app/tracking-pr-v3.css'));
+
+        $this->assertStringNotContainsString('setInterval(', $view);
+        $this->assertStringContainsString('AbortController', $view);
+        $this->assertStringContainsString('content-visibility: auto', $stylesheet);
+        $this->assertStringContainsString('prefers-reduced-motion: reduce', $stylesheet);
+        $this->assertLessThan(20 * 1024, strlen($stylesheet));
     }
 }

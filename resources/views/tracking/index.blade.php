@@ -427,41 +427,25 @@
             color: #9ca3af;
         }
     </style>
+    <link rel="stylesheet" href="{{ asset('assets/app/tracking-pr-v3.css') }}?v=3.0.0">
 @endpush
 
 @section('content')
-    <div class="w-full px-4 sm:px-6 lg:px-8 py-6">
-        {{-- Header --}}
-        <div class="mb-6">
-            <h1
-                class="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 dark:text-white bg-clip-text text-transparent">
-                📍 Tracking PR & PPBJ
-            </h1>
-            <p class="text-sm text-gray-600 dark:text-gray-400 mt-1 flex items-center gap-2">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
-                Lacak status PR dan PPBJ secara real-time dengan timeline lengkap
-            </p>
-            <div class="flex flex-wrap gap-3 mt-3">
-                <span
-                    class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
-                    <span class="w-2 h-2 rounded-full bg-blue-500"></span>
-                    Cari Nomor PR
-                </span>
-                <span
-                    class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
-                    <span class="w-2 h-2 rounded-full bg-blue-500"></span>
-                    Cari Nomor PPBJ
-                </span>
+    <div class="tracking-v3 w-full px-4 sm:px-6 lg:px-8 py-6">
+        <div class="tv3-page-hero">
+            <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                    <div class="tv3-eyebrow"><span class="tv3-live-dot"></span> Digital Procurement Intelligence</div>
+                    <h1 class="tv3-title">Tracking PR &amp; PPBJ</h1>
+                    <p class="tv3-subtitle">Satu pandangan untuk memahami perjalanan pengadaan, kepatuhan SLA, nilai, dokumen, dan langkah berikutnya secara cepat.</p>
+                </div>
+                <div class="tv3-version" aria-label="Tracking PR versi 3"><span>✦</span> Experience V3</div>
             </div>
         </div>
-
         {{-- Search Form --}}
         {{-- Search Form - STICKY --}}
         <form method="GET"
-            class="bg-white/80 dark:bg-gray-800/80 backdrop-blur-xl p-4 sm:p-6 rounded-2xl shadow-xl border border-gray-200/50 dark:border-gray-700/50 mb-6 flex flex-col sm:flex-row gap-4 sticky top-0 z-40"
+            class="tv3-search bg-white/80 dark:bg-gray-800/80 backdrop-blur-xl p-4 rounded-2xl shadow-xl border border-gray-200/50 dark:border-gray-700/50 mb-6 flex flex-col sm:flex-row gap-4 sticky top-0 z-40"
             autocomplete="off" id="searchForm">
 
             <div class="w-full relative flex-1">
@@ -615,8 +599,8 @@
                         return '-';
                     try {
                         if ($date instanceof \Carbon\Carbon)
-                            return $date->format($format);
-                        return \Carbon\Carbon::parse($date)->format($format);
+                            return $date->locale('id')->translatedFormat($format);
+                        return \Carbon\Carbon::parse($date)->locale('id')->translatedFormat($format);
                     } catch (\Exception $e) {
                         return '-';
                     }
@@ -817,9 +801,9 @@
             @endphp
 
             <div
-                class="bg-white/80 dark:bg-gray-800/80 backdrop-blur-xl rounded-2xl shadow-xl border border-gray-200/50 dark:border-gray-700/50 overflow-hidden">
+                class="tv3-result-shell bg-white/80 dark:bg-gray-800/80 backdrop-blur-xl rounded-2xl shadow-xl border border-gray-200/50 dark:border-gray-700/50 overflow-hidden">
                 {{-- Header --}}
-                <div class="bg-gradient-to-r from-purple-600 to-indigo-700 p-6 text-white">
+                <div class="tv3-passport bg-gradient-to-r from-purple-600 to-indigo-700 p-6 text-white">
                     <div class="flex items-start justify-between gap-4">
                         <div class="flex-1">
                             <div class="flex items-center gap-2 mb-2">
@@ -845,9 +829,9 @@
                                     </span>
                                 @endif
                             </div>
-                            <div class="text-2xl font-bold text-gray dark:text-white">{{ $ppbj->ppbj_no }}</div>
+                            <div class="tv3-record-number text-2xl font-bold text-white">{{ $ppbj->ppbj_no }}</div>
                             @if($ppbj->uraian)
-                                <div class="text-sm mt-1 line-clamp-2 text-gray-800 dark:text-purple-200">
+                                <div class="tv3-record-description text-sm mt-1 line-clamp-2 text-purple-100">
                                     {{ Str::limit($ppbj->uraian, 100) }}</div>
                             @endif
                         </div>
@@ -882,7 +866,7 @@
                                     </div>
                                     <div style="display:flex;flex-direction:column;align-items:center;gap:2px;">
                                         <span style="font-size:14px;line-height:1;">{{ $t['icon'] }}</span>
-                                        <span
+                                        <span class="tv3-stage-label"
                                             style="display:block;font-size:9px;font-weight:700;color:#312e81;background:rgba(255,255,255,0.92);padding:1px 6px;border-radius:4px;white-space:nowrap;letter-spacing:0.02em;">
                                             {{ $t['name'] }}
                                         </span>
@@ -899,7 +883,7 @@
                 </div>
 
                 {{-- Stats Cards --}}
-                <div class="p-6 border-b border-gray-200 dark:border-gray-700">
+                <div class="tv3-metrics p-6 border-b border-gray-200 dark:border-gray-700">
                     <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
                         <div class="info-card">
                             <div class="text-[10px] text-gray-500 dark:text-gray-400 uppercase font-bold mb-1">Total Nilai</div>
@@ -926,37 +910,76 @@
                         </div>
 
                         <div class="info-card">
-                            <div class="text-[10px] text-gray-500 dark:text-gray-400 uppercase font-bold mb-1">Sisa Target SLA
-                            </div>
+                            <div class="text-[10px] text-gray-500 dark:text-gray-400 uppercase font-bold mb-1">Kepatuhan SLA</div>
                             @php
                                 $sisaColor = ($ppbj->sisa_target_sla ?? 0) > 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400';
                                 $sisaText = ($ppbj->sisa_target_sla ?? 0) > 0
                                     ? $ppbj->sisa_target_sla . ' hari'
                                     : 'Terlambat ' . abs($ppbj->sisa_target_sla ?? 0) . ' hari';
                             @endphp
-                            <div class="text-lg font-bold {{ $sisaColor }}">{{ $sisaText }}</div>
-                            <div class="text-[10px] text-gray-400">Target: {{ $ppbj->target_sla_hari ?? 0 }} hari</div>
+                            @if(($ppbj->status_sla ?? '') === 'LENGKAP')
+                                <div class="text-lg font-bold text-blue-600 dark:text-blue-300">Proses selesai</div>
+                                <div class="tv3-data-note">{{ ($ppbj->sisa_target_sla ?? 0) < 0 ? 'Rampung ' . abs($ppbj->sisa_target_sla) . ' hari setelah target' : 'Rampung sesuai target' }}</div>
+                            @else
+                                <div class="text-lg font-bold {{ $sisaColor }}">{{ $sisaText }}</div>
+                                <div class="tv3-data-note">Target proses: {{ $ppbj->target_sla_hari ?? 0 }} hari</div>
+                            @endif
                         </div>
 
                         <div class="info-card">
-                            <div class="text-[10px] text-gray-500 dark:text-gray-400 uppercase font-bold mb-1">Realisasi</div>
+                            <div class="text-[10px] text-gray-500 dark:text-gray-400 uppercase font-bold mb-1">Realisasi Nilai</div>
                             <div class="text-lg font-bold text-gray-900 dark:text-white">{{ $ppbj->persentase_realisasi ?? 0 }}%
                             </div>
-                            <div class="text-[10px] text-gray-400">{{ $ppbj->realisasi_sla ?? 0 }} hari</div>
+                            <div class="tv3-data-note">Durasi tercatat: {{ $ppbj->realisasi_sla ?? 0 }} hari</div>
                         </div>
                     </div>
                 </div>
 
-                {{-- Story Progress ala status WhatsApp --}}
+                @php
+                    if (($ppbj->status ?? '') === 'CANCELLED') {
+                        $nextActionTitle = 'Proses ditutup karena dibatalkan';
+                        $nextActionCopy = $ppbj->cancel_reason ?: 'Tidak ada tindakan lanjutan untuk paket ini.';
+                        $nextActionState = 'Ditutup';
+                    } elseif ($nextStep > 0) {
+                        $nextActionTitle = 'Lengkapi ' . ($tahapan[$nextStep - 1]['name'] ?? 'tahap berikutnya');
+                        $nextActionCopy = 'Dokumen tahap berikutnya belum tercatat. Perbarui data agar perjalanan pengadaan tetap akurat.';
+                        $nextActionState = 'Perlu tindakan';
+                    } elseif (empty($ppbj->no_invoice)) {
+                        $nextActionTitle = 'Lengkapi invoice dan arsip akhir';
+                        $nextActionCopy = 'Tahapan utama selesai, tetapi nomor invoice belum tersedia pada rekam pengadaan.';
+                        $nextActionState = 'Finishing';
+                    } else {
+                        $nextActionTitle = 'Perjalanan pengadaan telah lengkap';
+                        $nextActionCopy = 'Seluruh tahapan utama dan invoice sudah tercatat. Data siap digunakan untuk monitoring dan audit.';
+                        $nextActionState = 'Tuntas';
+                    }
+                @endphp
+
+                <div class="tv3-action-panel tv3-section">
+                    <div class="flex items-start gap-3">
+                        <span class="tv3-action-icon" aria-hidden="true">✦</span>
+                        <div>
+                            <div class="tv3-action-label">Next Best Action</div>
+                            <div class="tv3-action-title">{{ $nextActionTitle }}</div>
+                            <div class="tv3-action-copy">{{ $nextActionCopy }}</div>
+                            @if(($ppbj->status_sla ?? '') === 'LENGKAP' && ($ppbj->sisa_target_sla ?? 0) < 0)
+                                <div class="tv3-integrity-note"><span>ℹ</span><span>Status <strong>Lengkap</strong> berarti proses telah selesai. Keterangan terlambat menunjukkan selisih penyelesaian terhadap target SLA.</span></div>
+                            @endif
+                        </div>
+                    </div>
+                    <span class="tv3-action-state">{{ $nextActionState }}</span>
+                </div>
+
+                {{-- Procurement Journey V3 --}}
                 @if(!empty($ppbjEvents))
-                    <div class="px-6 py-6 border-b border-gray-200 dark:border-gray-700">
+                    <div class="tv3-section px-6 py-6 border-b border-gray-200 dark:border-gray-700">
                         <div class="tracking-story-shell">
                             <div class="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
                                 <div>
-                                    <div class="text-[11px] font-black uppercase tracking-[0.18em] text-purple-600 dark:text-purple-300">Story Progress</div>
-                                    <div class="text-lg font-black text-gray-900 dark:text-white">Status berjalan dari awal sampai selesai</div>
+                                    <div class="text-[11px] font-black uppercase tracking-[0.18em] text-purple-600 dark:text-purple-300">Procurement Journey</div>
+                                    <div class="text-lg font-black text-gray-900 dark:text-white">Perjalanan lengkap dari permintaan sampai invoice</div>
                                 </div>
-                                <div class="text-xs font-semibold text-gray-500 dark:text-gray-300">Ringkas, cepat, dan mudah dibaca user</div>
+                                <div class="text-xs font-semibold text-gray-500 dark:text-gray-300">Pilih tahap untuk membuka detail</div>
                             </div>
                             <div class="tracking-story-strip mt-4">
                                 @foreach($ppbjEvents as $storyIndex => $story)
@@ -1054,21 +1077,21 @@
                 @endif
 
                 {{-- Tabs --}}
-                <div class="border-b border-gray-200 dark:border-gray-700">
+                <div class="tv3-tabs border-b border-gray-200 dark:border-gray-700">
                     <div class="flex">
-                        <button type="button" onclick="switchTab('timeline')" id="tab-timeline"
-                            class="tab-btn active px-6 py-3 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">
-                            📅 Timeline ({{ count($ppbjEvents) }})
-                        </button>
                         <button type="button" onclick="switchTab('detail')" id="tab-detail"
+                            class="tab-btn active px-6 py-3 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">
+                            📋 Data Lengkap
+                        </button>
+                        <button type="button" onclick="switchTab('timeline')" id="tab-timeline"
                             class="tab-btn px-6 py-3 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">
-                            📋 Detail Lengkap
+                            📅 Audit Waktu ({{ count($ppbjEvents) }})
                         </button>
                     </div>
                 </div>
 
                 {{-- Timeline Content --}}
-                <div id="content-timeline" class="p-6">
+                <div id="content-timeline" class="tv3-tab-content tv3-section p-6 hidden">
                     <div class="timeline">
                         @foreach($ppbjEvents as $e)
                             <div class="tl-row">
@@ -1088,7 +1111,7 @@
                 </div>
 
                 {{-- Detail Content --}}
-                <div id="content-detail" class="p-6 hidden">
+                <div id="content-detail" class="tv3-tab-content tv3-section p-6">
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                         {{-- Info Utama --}}
                         <div class="space-y-4">
@@ -1413,9 +1436,9 @@
             @endphp
 
             <div
-                class="bg-white/80 dark:bg-gray-800/80 backdrop-blur-xl rounded-2xl shadow-xl border border-gray-200/50 dark:border-gray-700/50 overflow-hidden">
+                class="tv3-result-shell bg-white/80 dark:bg-gray-800/80 backdrop-blur-xl rounded-2xl shadow-xl border border-gray-200/50 dark:border-gray-700/50 overflow-hidden">
                 {{-- PR Header --}}
-                <div class="bg-gradient-to-r from-blue-600 to-indigo-700 p-6 text-white">
+                <div class="tv3-passport bg-gradient-to-r from-blue-600 to-indigo-700 p-6 text-white">
                     <div class="flex items-start justify-between gap-4">
                         <div class="flex-1">
                             <div class="flex items-center gap-2 mb-2">
@@ -1423,13 +1446,13 @@
                                     class="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold uppercase bg-white/20 backdrop-blur">Purchase
                                     Request</span>
                             </div>
-                            <div class="text-2xl font-bold flex items-center gap-3">
+                            <div class="tv3-record-number text-2xl font-bold flex items-center gap-3">
                                 {{ $row->nomor_pr }}
                                 <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-bold bg-white/20">📊
                                     {{ count($events) }}</span>
                             </div>
                             @if($row->tujuan_pengadaan)
-                                <div class="text-blue-200 text-sm mt-1">{{ $row->tujuan_pengadaan }}</div>
+                                <div class="tv3-record-description text-blue-100 text-sm mt-1">{{ $row->tujuan_pengadaan }}</div>
                             @endif
                         </div>
                         <div class="text-right">
@@ -1468,14 +1491,42 @@
                     @endif
                 </div>
 
-                {{-- Story Progress ala status WhatsApp --}}
+                @php
+                    $prActionTitle = match ($lastEvent['status'] ?? 'pending') {
+                        'rejected' => 'Tindak lanjuti penolakan PR',
+                        'pending' => 'Selesaikan tahap yang sedang berjalan',
+                        default => $row->linked_ppbj ? 'Pantau penyelesaian paket pengadaan' : 'Lanjutkan PR ke proses PPBJ',
+                    };
+                    $prActionCopy = !empty($row->stuck_reminders)
+                        ? ($row->stuck_reminders[0]['message'] ?? 'Periksa kelengkapan dan pemilik tindakan berikutnya.')
+                        : ($row->linked_ppbj ? 'PR sudah terhubung dengan PPBJ. Buka journey untuk melihat capaian proses berikutnya.' : 'PR telah siap diteruskan agar proses pengadaan dapat dimonitor end-to-end.');
+                    $prActionState = match ($lastEvent['status'] ?? 'pending') {
+                        'rejected' => 'Perlu koreksi',
+                        'pending' => 'Dalam proses',
+                        default => 'Terpantau',
+                    };
+                @endphp
+
+                <div class="tv3-action-panel tv3-section">
+                    <div class="flex items-start gap-3">
+                        <span class="tv3-action-icon" aria-hidden="true">✦</span>
+                        <div>
+                            <div class="tv3-action-label">Next Best Action</div>
+                            <div class="tv3-action-title">{{ $prActionTitle }}</div>
+                            <div class="tv3-action-copy">{{ $prActionCopy }}</div>
+                        </div>
+                    </div>
+                    <span class="tv3-action-state">{{ $prActionState }}</span>
+                </div>
+
+                {{-- Procurement Journey V3 --}}
                 @if(!empty($events))
-                    <div class="px-6 pt-6">
+                    <div class="tv3-section px-6 pt-6">
                         <div class="tracking-story-shell">
                             <div class="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
                                 <div>
-                                    <div class="text-[11px] font-black uppercase tracking-[0.18em] text-blue-600 dark:text-blue-300">Story Progress</div>
-                                    <div class="text-lg font-black text-gray-900 dark:text-white">Cerita singkat perjalanan PR ini</div>
+                                    <div class="text-[11px] font-black uppercase tracking-[0.18em] text-blue-600 dark:text-blue-300">Procurement Journey</div>
+                                    <div class="text-lg font-black text-gray-900 dark:text-white">Perjalanan PR dari dibuat sampai proses pengadaan</div>
                                 </div>
                                 <div class="text-xs font-semibold text-gray-500 dark:text-gray-300">Klik kartu untuk lihat ringkasannya</div>
                             </div>
@@ -1545,6 +1596,11 @@
                     </div>
                 @endif
 
+                <details class="tv3-section mx-6 my-6 overflow-hidden rounded-2xl border border-gray-200 bg-gray-50/70 dark:border-gray-700 dark:bg-gray-900/40">
+                    <summary class="cursor-pointer select-none px-5 py-4 text-sm font-black text-gray-900 outline-none hover:bg-blue-50 dark:text-white dark:hover:bg-blue-950/25">
+                        Buka audit trail dan kronologi lengkap
+                    </summary>
+
                 {{-- Audit Detail --}}
                 @if(!empty($row->audit_details))
                     <div class="px-6 pt-6">
@@ -1613,6 +1669,7 @@
                         @endforeach
                     </div>
                 </div>
+                </details>
             </div>
         @endif
     </div>
@@ -1626,22 +1683,22 @@
                 div.textContent = value || '';
                 return div.innerHTML;
             };
+            const isDark = document.documentElement.classList.contains('dark');
 
             Swal.fire({
                 title: safe(title),
                 html: `
-                    <div class="text-left rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950 dark:border-blue-800 dark:bg-blue-950/45 dark:text-blue-100">
-                        <div class="mb-3 inline-flex items-center rounded-full bg-white px-3 py-1 text-xs font-black text-blue-700 ring-1 ring-blue-100 dark:bg-gray-900 dark:text-blue-200 dark:ring-blue-800">
-                            ${safe(time)}
-                        </div>
-                        <div class="leading-relaxed">${safe(description)}</div>
+                    <div class="tv3-dialog-body">
+                        <div class="tv3-dialog-time">${safe(time)}</div>
+                        <div class="text-sm leading-relaxed">${safe(description)}</div>
                     </div>
                 `,
                 confirmButtonText: 'Oke, paham',
                 confirmButtonColor: '#2563eb',
+                background: isDark ? '#0f1a2c' : '#ffffff',
+                color: isDark ? '#f8fafc' : '#0f172a',
                 customClass: {
-                    popup: 'rounded-3xl',
-                    title: 'text-gray-900 dark:text-white',
+                    popup: 'tracking-v3-dialog',
                 },
             });
         };
@@ -1652,6 +1709,7 @@
                 div.textContent = value || '';
                 return div.innerHTML;
             };
+            const isDark = document.documentElement.classList.contains('dark');
 
             const result = await Swal.fire({
                 title: 'Konfirmasi barang diterima?',
@@ -1669,6 +1727,9 @@
                 confirmButtonColor: '#10b981',
                 cancelButtonColor: '#64748b',
                 reverseButtons: true,
+                background: isDark ? '#0f1a2c' : '#ffffff',
+                color: isDark ? '#f8fafc' : '#0f172a',
+                customClass: { popup: 'tracking-v3-dialog' },
             });
 
             if (!result.isConfirmed) return;
@@ -1721,6 +1782,8 @@
             let debounceTimer = null;
             let activeIndex = -1;
             let items = [];
+            let suggestController = null;
+            const suggestCache = new Map();
 
             function openBox() { box.classList.remove('hidden'); }
             function closeBox() { box.classList.add('hidden'); activeIndex = -1; }
@@ -1755,12 +1818,26 @@
             function selectItem(idx) { const item = items[idx]; if (!item) return; input.value = item.nomor; closeBox(); input.closest('form').submit(); }
 
             async function fetchSuggest(query) {
+                const cacheKey = query.toLocaleLowerCase('id-ID');
+                if (suggestCache.has(cacheKey)) return suggestCache.get(cacheKey);
+
+                if (suggestController) suggestController.abort();
+                suggestController = new AbortController();
                 try {
-                    const res = await fetch("{{ route('tracking.suggest') }}?q=" + encodeURIComponent(query), { headers: { 'Accept': 'application/json' } });
+                    const res = await fetch("{{ route('tracking.suggest') }}?q=" + encodeURIComponent(query), {
+                        headers: { 'Accept': 'application/json' },
+                        signal: suggestController.signal,
+                    });
                     if (!res.ok) return [];
                     const data = await res.json();
-                    return Array.isArray(data.items) ? data.items : [];
-                } catch (e) { return []; }
+                    const result = Array.isArray(data.items) ? data.items : [];
+                    if (suggestCache.size >= 24) suggestCache.delete(suggestCache.keys().next().value);
+                    suggestCache.set(cacheKey, result);
+                    return result;
+                } catch (e) {
+                    if (e.name === 'AbortError') return null;
+                    return [];
+                }
             }
 
             input.addEventListener('input', () => {
@@ -1770,7 +1847,9 @@
                 hint.innerHTML = '<svg class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>Mencari...';
                 openBox();
                 debounceTimer = setTimeout(async () => {
-                    items = await fetchSuggest(q);
+                    const result = await fetchSuggest(q);
+                    if (result === null || input.value.trim() !== q) return;
+                    items = result;
                     const prC = items.filter(i => i.source_type === 'pr').length;
                     const ppC = items.filter(i => i.source_type === 'ppbj').length;
                     let h = '<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>';
