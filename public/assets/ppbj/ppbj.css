@@ -510,36 +510,87 @@ mark.search-hl {
         }
 
         /*
-         * Status KRITIS harus tetap terbaca di kedua tema. Selector statis ini
-         * sengaja tidak bergantung pada class Tailwind dinamis dari model agar
-         * tidak terhapus saat proses build/purge CSS.
+         * Palet status kontrak eksplisit agar hasil build Tailwind dan cache
+         * browser tidak pernah membuat teks pucat di atas badge terang.
          */
+        .ppbj-contract-status {
+            border: 1px solid transparent;
+            line-height: 1.25;
+            text-shadow: none;
+        }
+
+        .ppbj-contract-status[data-contract-tone="success"] {
+            background-color: #dcfce7 !important;
+            border-color: #86efac !important;
+            color: #166534 !important;
+        }
+
+        html.dark .ppbj-contract-status[data-contract-tone="success"] {
+            background-color: #065f46 !important;
+            border-color: #34d399 !important;
+            color: #ecfdf5 !important;
+        }
+
+        .ppbj-contract-status[data-contract-tone="active"] {
+            background-color: #dbeafe !important;
+            border-color: #93c5fd !important;
+            color: #1e40af !important;
+        }
+
+        html.dark .ppbj-contract-status[data-contract-tone="active"] {
+            background-color: #1e3a8a !important;
+            border-color: #60a5fa !important;
+            color: #eff6ff !important;
+        }
+
+        .ppbj-contract-status[data-contract-tone="warning"] {
+            background-color: #fef3c7 !important;
+            border-color: #fbbf24 !important;
+            color: #92400e !important;
+        }
+
+        html.dark .ppbj-contract-status[data-contract-tone="warning"] {
+            background-color: #78350f !important;
+            border-color: #fbbf24 !important;
+            color: #fffbeb !important;
+        }
+
         .ppbj-contract-status[data-contract-tone="critical"] {
-            background-color: #fff7ed !important;
+            background-color: #ffedd5 !important;
+            border-color: #fb923c !important;
             color: #9a3412 !important;
-            box-shadow: inset 0 0 0 1px #fdba74 !important;
-            text-shadow: none !important;
         }
 
-        .dark .ppbj-contract-status[data-contract-tone="critical"] {
-            background-color: #7c2d12 !important;
-            color: #ffedd5 !important;
-            box-shadow: inset 0 0 0 1px #fb923c !important;
-            text-shadow: 0 1px 1px rgba(0, 0, 0, 0.28) !important;
-        }
-
-        .ppbj-contract-status[data-contract-tone="very-critical"] {
-            background-color: #fee2e2 !important;
-            color: #991b1b !important;
-            box-shadow: inset 0 0 0 1px #f87171 !important;
-            text-shadow: none !important;
-        }
-
-        html.dark .ppbj-contract-status[data-contract-tone="very-critical"] {
-            background-color: #991b1b !important;
+        html.dark .ppbj-contract-status[data-contract-tone="critical"] {
+            background-color: #9a3412 !important;
+            border-color: #fb923c !important;
             color: #ffffff !important;
-            box-shadow: inset 0 0 0 1px #fca5a5, 0 2px 8px rgba(127, 29, 29, 0.35) !important;
-            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55) !important;
+        }
+
+        .ppbj-contract-status[data-contract-tone="very-critical"],
+        .ppbj-contract-status[data-contract-tone="danger"] {
+            background-color: #fee2e2 !important;
+            border-color: #f87171 !important;
+            color: #991b1b !important;
+        }
+
+        html.dark .ppbj-contract-status[data-contract-tone="very-critical"],
+        html.dark .ppbj-contract-status[data-contract-tone="danger"] {
+            background-color: #991b1b !important;
+            border-color: #fca5a5 !important;
+            color: #ffffff !important;
+        }
+
+        .ppbj-contract-status[data-contract-tone="neutral"] {
+            background-color: #e2e8f0 !important;
+            border-color: #94a3b8 !important;
+            color: #334155 !important;
+        }
+
+        html.dark .ppbj-contract-status[data-contract-tone="neutral"] {
+            background-color: #334155 !important;
+            border-color: #64748b !important;
+            color: #f8fafc !important;
         }
 
         /*

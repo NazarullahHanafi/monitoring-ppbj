@@ -1497,12 +1497,12 @@
                     do_updated_at: 'Audit DO Terakhir',
                 };
                 const slaResultLabel = d.sla_outcome_label || (d.sla_is_complete ? 'SLA berhenti' : d.sla_final_label || '-');
-                const slaRemainingValue = Number((d.sla_current_remaining_days ?? d.sisa_target_sla) || 0);
-                const slaResultClass = d.sla_is_complete
-                    ? 'bg-blue-50 text-blue-700 ring-blue-200 dark:bg-blue-500/15 dark:text-blue-200 dark:ring-blue-500/30'
-                    : (slaRemainingValue < 0
-                        ? 'bg-rose-50 text-rose-700 ring-rose-200 dark:bg-rose-500/15 dark:text-rose-200 dark:ring-rose-500/30'
-                        : 'bg-emerald-50 text-emerald-700 ring-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-200 dark:ring-emerald-500/30');
+                const slaToneValue = d.sla_is_complete
+                    ? d.sla_final_remaining_days
+                    : (d.sla_current_remaining_days ?? d.sisa_target_sla);
+                const slaResultTone = slaToneValue === null || slaToneValue === undefined
+                    ? 'neutral'
+                    : (Number(slaToneValue) < 0 ? 'late' : 'ahead');
 
                 html += `
                     <div class="md:col-span-2 rounded-2xl border border-blue-200 bg-gradient-to-br from-blue-50 via-white to-emerald-50 p-4 shadow-sm dark:border-blue-500/30 dark:from-blue-950/40 dark:via-gray-800 dark:to-emerald-950/30">
@@ -1511,7 +1511,7 @@
                                 <div class="text-[11px] font-black uppercase tracking-[0.18em] text-blue-600 dark:text-blue-300">Audit SLA</div>
                                 <div class="mt-1 text-base font-black text-gray-900 dark:text-white">Ringkasan perhitungan sisa SLA</div>
                             </div>
-                            <span class="inline-flex items-center rounded-full px-3 py-1 text-xs font-black ring-1 ${slaResultClass}">
+                            <span class="ppbj-sla-outcome inline-flex items-center rounded-full px-3 py-1 text-xs font-black" data-sla-tone="${slaResultTone}">
                                 ${escapeHtml(slaResultLabel)}
                             </span>
                         </div>
@@ -1547,13 +1547,17 @@
 
                 const contractStatus = d.contract_status_label || 'BELUM AKTIF';
                 const contractRemaining = d.contract_remaining_days;
-                const contractTone = ['MELEWATI BATAS', 'TANGGAL TIDAK VALID', 'SERAH TERIMA TERLAMBAT'].includes(contractStatus)
-                    ? 'bg-rose-50 text-rose-700 ring-rose-200 dark:bg-rose-500/15 dark:text-rose-200 dark:ring-rose-500/30'
-                    : (['SANGAT KRITIS', 'KRITIS', 'BERAKHIR HARI INI', 'SEGERA BERAKHIR', 'DOKUMEN SERAH TERIMA BELUM LENGKAP'].includes(contractStatus)
-                        ? 'bg-amber-50 text-amber-700 ring-amber-200 dark:bg-amber-500/15 dark:text-amber-200 dark:ring-amber-500/30'
-                        : (contractStatus === 'SERAH TERIMA SELESAI'
-                            ? 'bg-emerald-50 text-emerald-700 ring-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-200 dark:ring-emerald-500/30'
-                            : 'bg-blue-50 text-blue-700 ring-blue-200 dark:bg-blue-500/15 dark:text-blue-200 dark:ring-blue-500/30'));
+                const contractTone = ['SANGAT KRITIS', 'BERAKHIR HARI INI'].includes(contractStatus)
+                    ? 'very-critical'
+                    : (contractStatus === 'KRITIS'
+                        ? 'critical'
+                        : (['MELEWATI BATAS', 'TANGGAL TIDAK VALID', 'SERAH TERIMA TERLAMBAT'].includes(contractStatus)
+                            ? 'danger'
+                            : (['DOKUMEN SERAH TERIMA BELUM LENGKAP', 'SEGERA BERAKHIR', 'BATAS BELUM DIATUR'].includes(contractStatus)
+                                ? 'warning'
+                                : (contractStatus === 'SERAH TERIMA SELESAI'
+                                    ? 'success'
+                                    : (contractStatus === 'AKTIF' ? 'active' : 'neutral')))));
                 const remainingText = contractRemaining === null || contractRemaining === undefined
                     ? '-'
                     : (Number(contractRemaining) >= 0
@@ -1571,7 +1575,7 @@
                                 <div class="text-[11px] font-black uppercase tracking-[0.18em] text-violet-600 dark:text-violet-300">Masa Pemenuhan / Kontrak</div>
                                 <div class="mt-1 text-base font-black text-gray-900 dark:text-white">Pemantauan tanggal SPK sampai batas pemenuhan</div>
                             </div>
-                            <span class="inline-flex items-center rounded-full px-3 py-1 text-xs font-black ring-1 ${contractTone}">
+                            <span class="ppbj-contract-status inline-flex items-center rounded-full px-3 py-1 text-xs font-black" data-contract-tone="${contractTone}">
                                 ${escapeHtml(contractStatus)}
                             </span>
                         </div>

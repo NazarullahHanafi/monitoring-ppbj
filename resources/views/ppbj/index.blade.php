@@ -489,49 +489,43 @@
 
                             if ($isCancelled) {
                                 $displayStatusSla = 'CANCELLED';
-                                $statusColor = 'bg-gray-600';
+                                $statusColor = 'bg-slate-600 text-white dark:bg-slate-500 dark:text-white';
                             } elseif ($isSlaComplete) {
                                 $displayStatusSla = 'LENGKAP';
-                                $statusColor = 'bg-blue-600';
+                                $statusColor = 'bg-blue-700 text-white dark:bg-blue-600 dark:text-white';
                             } else {
                                 $sisaSla = method_exists($row, 'slaCurrentRemainingDays')
                                     ? $row->slaCurrentRemainingDays()
                                     : ($rowLiveRemaining ?? (int) ($row->sisa_target_sla ?? 0));
                                 if ($sisaSla === null) {
                                     $displayStatusSla = 'BELUM DIHITUNG';
-                                    $statusColor = 'bg-slate-500';
+                                    $statusColor = 'bg-slate-600 text-white dark:bg-slate-500 dark:text-white';
                                 } elseif ($sisaSla < 0) {
                                     $displayStatusSla = 'OVERDUE';
-                                    $statusColor = 'bg-red-600';
+                                    $statusColor = 'bg-red-700 text-white dark:bg-red-600 dark:text-white';
                                 } elseif ($sisaSla === 0) {
                                     $displayStatusSla = 'JATUH TEMPO';
-                                    $statusColor = 'bg-orange-600';
+                                    $statusColor = 'bg-orange-700 text-white dark:bg-orange-600 dark:text-white';
                                 } elseif ($sisaSla <= 2) {
                                     $displayStatusSla = 'WARNING';
-                                    $statusColor = 'bg-yellow-500';
+                                    $statusColor = 'bg-amber-300 text-amber-950 dark:bg-amber-400 dark:text-amber-950';
                                 } else {
                                     $displayStatusSla = 'ON TRACK';
-                                    $statusColor = 'bg-green-600';
+                                    $statusColor = 'bg-emerald-700 text-white dark:bg-emerald-600 dark:text-white';
                                 }
                             }
 
                             $contractStatus = method_exists($row, 'contractStatusLabel')
                                 ? $row->contractStatusLabel()
                                 : (empty($row->tgl_spk) ? 'BELUM AKTIF' : (empty($row->promised_date) ? 'BATAS BELUM DIATUR' : 'AKTIF'));
-                            $contractStatusClass = method_exists($row, 'contractStatusColorClass')
-                                ? $row->contractStatusColorClass()
-                                : 'bg-slate-100 text-slate-700 ring-slate-200 dark:bg-slate-700 dark:text-slate-200 dark:ring-slate-600';
                             $contractStatusTone = match ($contractStatus) {
                                 'SANGAT KRITIS', 'BERAKHIR HARI INI' => 'very-critical',
                                 'KRITIS' => 'critical',
-                                default => 'default',
-                            };
-                            // Status kritis memakai warna inline berkontras tinggi agar tidak
-                            // dapat ditimpa oleh class tema/Tailwind lama yang masih tercache.
-                            $contractStatusStyle = match ($contractStatusTone) {
-                                'very-critical' => 'background-color:#991b1b !important;color:#ffffff !important;border:1px solid #fca5a5 !important;box-shadow:0 2px 8px rgba(127,29,29,.35) !important;text-shadow:none !important;',
-                                'critical' => 'background-color:#9a3412 !important;color:#ffffff !important;border:1px solid #fb923c !important;box-shadow:0 2px 8px rgba(154,52,18,.28) !important;text-shadow:none !important;',
-                                default => '',
+                                'MELEWATI BATAS', 'TANGGAL TIDAK VALID', 'SERAH TERIMA TERLAMBAT' => 'danger',
+                                'DOKUMEN SERAH TERIMA BELUM LENGKAP', 'SEGERA BERAKHIR', 'BATAS BELUM DIATUR' => 'warning',
+                                'SERAH TERIMA SELESAI' => 'success',
+                                'AKTIF' => 'active',
+                                default => 'neutral',
                             };
                             $contractExplanation = method_exists($row, 'contractExplanation')
                                 ? $row->contractExplanation()
@@ -607,8 +601,7 @@
                             <td class="px-4 py-3 text-center" title="{{ $contractExplanation }}">
                                 <div class="inline-flex max-w-[170px] flex-col items-center gap-1">
                                     <span data-contract-tone="{{ $contractStatusTone }}"
-                                        @if($contractStatusStyle !== '') style="{{ $contractStatusStyle }}" @endif
-                                        class="ppbj-contract-status inline-flex items-center rounded-full px-2 py-1 text-[9px] font-extrabold ring-1 {{ $contractStatusTone === 'default' ? $contractStatusClass : '' }}">
+                                        class="ppbj-contract-status inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-extrabold">
                                         {{ $contractStatus }}
                                     </span>
                                     @if($contractEndDate)
@@ -631,7 +624,7 @@
 
                             <td class="px-4 py-3 text-center">
                                 <span
-                                    class="status-badge inline-flex items-center justify-center px-2 py-1 rounded-md text-xs font-bold text-white {{ $statusColor }}">
+                                    class="status-badge inline-flex items-center justify-center rounded-md px-2 py-1 text-xs font-bold {{ $statusColor }}">
                                     {{ $displayStatusSla }}
                                 </span>
                             </td>
@@ -1197,7 +1190,7 @@
 @endsection
 
 @push('styles')
-    <link rel="stylesheet" href="{{ asset('assets/ppbj/ppbj.css') }}?v=20261008a">
+    <link rel="stylesheet" href="{{ asset('assets/ppbj/ppbj.css') }}?v=20261008b">
 @endpush
 
 @push('scripts')
@@ -1373,7 +1366,7 @@
             });
         };
     </script>
-    <script src="{{ asset('assets/ppbj/ppbj.js') }}?v=20261008a" defer></script>
+    <script src="{{ asset('assets/ppbj/ppbj.js') }}?v=20261008b" defer></script>
 
 @endpush
 
