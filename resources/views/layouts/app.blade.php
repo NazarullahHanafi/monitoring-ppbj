@@ -102,6 +102,9 @@
                     <a href="{{ route('dashboard.indexumum') }}"
                         class="nav-item group flex items-center gap-3 px-4 py-3 rounded-xl {{ request()->is('dashboard*') ? 'active' : 'text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-blue-600 dark:hover:text-blue-400' }}"><span
                             class="icon-box text-xl">📊</span><span class="nav-text font-medium">Dashboard</span></a>
+                    <a href="{{ route('collaboration-calendar.index') }}"
+                        class="nav-item group flex items-center gap-3 px-4 py-3 rounded-xl {{ request()->is('collaboration-calendar*') ? 'active' : 'text-gray-700 dark:text-gray-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 hover:text-indigo-600 dark:hover:text-indigo-400' }}"><span
+                            class="icon-box text-xl">🗓️</span><span class="nav-text font-medium">Kalender Kolaborasi</span></a>
                     <a href="{{ route('command-center.index') }}"
                         class="nav-item group flex items-center gap-3 px-4 py-3 rounded-xl {{ request()->is('command-center*') ? 'active' : 'text-gray-700 dark:text-gray-300 hover:bg-violet-50 dark:hover:bg-violet-900/20 hover:text-violet-600 dark:hover:text-violet-400' }}"><span
                             class="icon-box text-xl">✦</span><span class="nav-text font-medium">Command Center</span></a>
@@ -185,6 +188,9 @@
                     <a href="{{ route('ops.dashboard') }}"
                         class="nav-item group flex items-center gap-3 px-4 py-3 rounded-xl {{ request()->is('ops/dashboard') ? 'active' : 'text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-blue-600 dark:hover:text-blue-400' }}"><span
                             class="icon-box text-xl">📊</span><span class="nav-text font-medium">Dashboard</span></a>
+                    <a href="{{ route('collaboration-calendar.index') }}"
+                        class="nav-item group flex items-center gap-3 px-4 py-3 rounded-xl {{ request()->is('collaboration-calendar*') ? 'active' : 'text-gray-700 dark:text-gray-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 hover:text-indigo-600 dark:hover:text-indigo-400' }}"><span
+                            class="icon-box text-xl">🗓️</span><span class="nav-text font-medium">Kalender Kolaborasi</span></a>
                     <a href="{{ route('torpr.index') }}"
                         class="nav-item group flex items-center gap-3 px-4 py-3 rounded-xl {{ request()->is('torpr*') ? 'active' : 'text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-blue-600 dark:hover:text-blue-400' }}"><span
                             class="icon-box text-xl">🧾</span><span class="nav-text font-medium">TORPR</span></a>
@@ -223,6 +229,10 @@
                             class="nav-item block px-4 py-3 rounded-xl {{ request()->is('dashboard*') ? 'active' : 'text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-blue-900/20' }}"><span
                                 class="flex items-center gap-3"><span class="text-xl">📊</span><span
                                     class="font-medium">Dashboard</span></span></a>
+                        <a href="{{ route('collaboration-calendar.index') }}"
+                            class="nav-item block px-4 py-3 rounded-xl {{ request()->is('collaboration-calendar*') ? 'active' : 'text-gray-700 dark:text-gray-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/20' }}"><span
+                                class="flex items-center gap-3"><span class="text-xl">🗓️</span><span
+                                    class="font-medium">Kalender Kolaborasi</span></span></a>
                         <a href="{{ route('command-center.index') }}"
                             class="nav-item block px-4 py-3 rounded-xl {{ request()->is('command-center*') ? 'active' : 'text-gray-700 dark:text-gray-300 hover:bg-violet-50 dark:hover:bg-violet-900/20' }}"><span
                                 class="flex items-center gap-3"><span class="text-xl">✦</span><span
@@ -305,6 +315,10 @@
                             class="nav-item block px-4 py-3 rounded-xl {{ request()->is('ops/dashboard') ? 'active' : 'text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-blue-900/20' }}"><span
                                 class="flex items-center gap-3"><span class="text-xl">📊</span><span
                                     class="font-medium">Dashboard</span></span></a>
+                        <a href="{{ route('collaboration-calendar.index') }}"
+                            class="nav-item block px-4 py-3 rounded-xl {{ request()->is('collaboration-calendar*') ? 'active' : 'text-gray-700 dark:text-gray-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/20' }}"><span
+                                class="flex items-center gap-3"><span class="text-xl">🗓️</span><span
+                                    class="font-medium">Kalender Kolaborasi</span></span></a>
                         <a href="{{ route('torpr.index') }}"
                             class="nav-item block px-4 py-3 rounded-xl {{ request()->is('torpr*') ? 'active' : 'text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-blue-900/20' }}"><span
                                 class="flex items-center gap-3"><span class="text-xl">🧾</span><span

@@ -4,6 +4,7 @@ use App\Http\Controllers\AccountController;
 use App\Http\Controllers\ActivityBroadcastController;
 use App\Http\Controllers\ArchiveAttachmentController;
 use App\Http\Controllers\ChatController;
+use App\Http\Controllers\CollaborationCalendarController;
 use App\Http\Controllers\ContactMessageController;
 use App\Http\Controllers\CommandCenterController;
 use App\Http\Controllers\DashboardController;
@@ -133,6 +134,25 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
         ->whereNumber('id')
         ->name('chat.reads');
     Route::get('/chat/users', [ChatController::class, 'getUsers'])->name('chat.users');
+
+    Route::prefix('collaboration-calendar')->name('collaboration-calendar.')->group(function () {
+        Route::get('/', [CollaborationCalendarController::class, 'index'])->name('index');
+        Route::get('/events', [CollaborationCalendarController::class, 'events'])
+            ->middleware('throttle:90,1')
+            ->name('events');
+        Route::post('/events', [CollaborationCalendarController::class, 'store'])
+            ->middleware('throttle:20,1')
+            ->name('store');
+        Route::patch('/events/{event}', [CollaborationCalendarController::class, 'update'])
+            ->middleware('throttle:30,1')
+            ->name('update');
+        Route::patch('/events/{event}/status', [CollaborationCalendarController::class, 'updateStatus'])
+            ->middleware('throttle:40,1')
+            ->name('status');
+        Route::delete('/events/{event}', [CollaborationCalendarController::class, 'destroy'])
+            ->middleware('throttle:20,1')
+            ->name('destroy');
+    });
 
     Route::middleware('owner')->group(function () {
         Route::get('/owner', [OwnerController::class, 'index'])->name('owner.index');
