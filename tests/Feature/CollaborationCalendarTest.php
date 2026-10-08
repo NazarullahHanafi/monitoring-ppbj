@@ -4,6 +4,8 @@ namespace Tests\Feature;
 
 use App\Models\CollaborationEvent;
 use App\Models\Ppbj;
+use App\Models\Sp;
+use App\Models\Spph;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -157,6 +159,81 @@ class CollaborationCalendarTest extends TestCase
             ->assertJsonFragment(['source' => 'contract'])
             ->assertJsonFragment(['source' => 'milestone']);
         $this->assertLessThanOrEqual(6, $queryCount, "Calendar memakai {$queryCount} query.");
+    }
+
+    public function test_pr_journey_is_detailed_secure_and_available_to_both_roles(): void
+    {
+        $creator = $this->user('operasional');
+        $receiver = $this->user('umum');
+        $other = $this->user('finance');
+        $ppbj = $this->ppbj([
+            'created_by_user_id' => $creator->id,
+            'general_registration_number' => 'REG-UMUM/2026/999',
+            'general_registered_at' => now()->subDays(8),
+            'general_registered_by_user_id' => $receiver->id,
+            'tgl_terima_pr' => today()->subDays(8),
+            'spph_rfq_1' => '999/PKU-X/SPPH/2026',
+            'tgl_spph' => today()->subDays(7),
+            'awarding_sp' => '999/PKU-X/SP/2026',
+            'tgl_spk' => today()->subDays(4),
+            'nilai_sp_spk' => 9_500_000,
+            'do_no' => 'BAST-999',
+            'do_date' => today()->subDay(),
+            'bpg_no' => 'BPG-999',
+            'tgl_bpg' => today(),
+            'no_invoice' => 'INV-999',
+            'tgl_invoice' => today(),
+        ]);
+        $spph = Spph::query()->create([
+            'nomor_spph' => '999/PKU-X/SPPH/2026',
+            'sequence_number' => 999,
+            'tanggal' => today()->subDays(7),
+            'nomor_pr' => $ppbj->ppbj_no,
+            'nama_vendor' => 'Vendor Uji',
+            'deskripsi_pengadaan' => $ppbj->uraian,
+            'pic' => $receiver->name,
+            'created_by_user_id' => $receiver->id,
+        ]);
+        $sp = Sp::query()->create([
+            'nomor_sp' => '999/PKU-X/SP/2026',
+            'sequence_number' => 999,
+            'tanggal_sp' => today()->subDays(4),
+            'nilai_sp' => 9_500_000,
+            'nomor_pr' => $ppbj->ppbj_no,
+            'nama_vendor' => 'Vendor Uji',
+            'deskripsi_pengadaan' => $ppbj->uraian,
+            'pic' => $receiver->name,
+            'created_by_user_id' => $receiver->id,
+        ]);
+        $ppbj->spphs()->attach($spph->id, ['urutan' => 1]);
+        $ppbj->sps()->attach($sp->id, ['urutan' => 1]);
+
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+        $response = $this->actingAs($receiver)
+            ->getJson(route('collaboration-calendar.journey', $ppbj));
+        $queryCount = count(DB::getQueryLog());
+        DB::disableQueryLog();
+
+        $response->assertOk()
+            ->assertJsonPath('record.ppbj_no', $ppbj->ppbj_no)
+            ->assertJsonPath('record.registration_number', 'REG-UMUM/2026/999')
+            ->assertJsonPath('stages.0.actor.name', $creator->name)
+            ->assertJsonPath('stages.0.actor.department', 'operasional')
+            ->assertJsonPath('stages.1.actor.name', $receiver->name)
+            ->assertJsonPath('stages.2.documents.0.actor.name', $receiver->name)
+            ->assertJsonPath('stages.4.documents.0.number', '999/PKU-X/SP/2026')
+            ->assertJsonPath('stages.7.state', 'done')
+            ->assertJsonPath('stages.7.summary', 'Invoice tercatat dengan nomor INV-999.');
+        $this->assertLessThanOrEqual(18, $queryCount, "Journey memakai {$queryCount} query.");
+
+        $this->actingAs($creator)
+            ->getJson(route('collaboration-calendar.journey', $ppbj))
+            ->assertOk();
+
+        $this->actingAs($other)
+            ->getJson(route('collaboration-calendar.journey', $ppbj))
+            ->assertForbidden();
     }
 
     private function user(string $department): User

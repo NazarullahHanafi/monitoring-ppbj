@@ -140,6 +140,10 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
         Route::get('/events', [CollaborationCalendarController::class, 'events'])
             ->middleware('throttle:90,1')
             ->name('events');
+        Route::get('/journey/{ppbj}', [CollaborationCalendarController::class, 'journey'])
+            ->whereNumber('ppbj')
+            ->middleware('throttle:60,1')
+            ->name('journey');
         Route::post('/events', [CollaborationCalendarController::class, 'store'])
             ->middleware('throttle:20,1')
             ->name('store');

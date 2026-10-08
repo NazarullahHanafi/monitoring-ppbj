@@ -13,7 +13,9 @@
         events: [],
         currentEvent: null,
         cache: new Map(),
+        journeyCache: new Map(),
         controller: null,
+        journeyController: null,
     };
 
     const els = {
@@ -31,6 +33,10 @@
         formTitle: $('#calendarFormTitle'),
         formError: $('#calendarFormError'),
         detailError: $('#calendarDetailError'),
+        detailCard: $('#calendarDetailCard'),
+        journey: $('#calendarJourney'),
+        journeyLoading: $('#journeyLoading'),
+        journeyContent: $('#journeyContent'),
         save: $('#calendarSave'),
     };
 
@@ -333,6 +339,7 @@
 
     function openDetail(event) {
         state.currentEvent = event;
+        resetJourney();
         $('#detailSource').textContent = sourceLabels[event.source] || 'AGENDA';
         $('#detailTitle').textContent = event.title;
         $('#detailDescription').textContent = event.description || 'Tidak ada catatan tambahan.';
@@ -366,6 +373,10 @@
         const openPr = $('#calendarOpenPr');
         openPr.hidden = !event.url;
         if (event.url) openPr.href = event.url;
+        const journeyButton = $('#calendarJourneyButton');
+        journeyButton.hidden = !event.ppbj?.id;
+        journeyButton.disabled = false;
+        journeyButton.textContent = '◎ Lihat Perjalanan PR';
         $('#calendarEdit').hidden = !event.can_edit;
         $('#calendarDelete').hidden = !event.can_delete;
         els.detailModal.hidden = false;
@@ -373,8 +384,170 @@
     }
 
     function closeDetail() {
+        state.journeyController?.abort();
+        resetJourney();
         els.detailModal.hidden = true;
         restoreBodyScroll();
+    }
+
+    function resetJourney() {
+        els.journey.hidden = true;
+        els.journeyLoading.hidden = true;
+        els.journeyContent.replaceChildren();
+        els.detailCard.classList.remove('is-journey');
+    }
+
+    async function loadJourney() {
+        const ppbjId = state.currentEvent?.ppbj?.id;
+        if (!ppbjId) return;
+
+        const button = $('#calendarJourneyButton');
+        els.journey.hidden = false;
+        els.detailCard.classList.add('is-journey');
+        button.disabled = true;
+        button.textContent = 'Memuat perjalanan…';
+
+        const cached = state.journeyCache.get(String(ppbjId));
+        if (cached) {
+            renderJourney(cached);
+            button.textContent = '✓ Perjalanan PR Terbuka';
+            return;
+        }
+
+        state.journeyController?.abort();
+        state.journeyController = new AbortController();
+        els.journeyLoading.hidden = false;
+        els.journeyContent.replaceChildren();
+
+        try {
+            const url = routeTemplate(root.dataset.journeyTemplate, ppbjId, '__PPBJ__');
+            const response = await fetch(url, {
+                credentials: 'same-origin',
+                headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                signal: state.journeyController.signal,
+            });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(data.message || 'Perjalanan PR tidak dapat dimuat.');
+            state.journeyCache.set(String(ppbjId), data);
+            if (state.journeyCache.size > 12) state.journeyCache.delete(state.journeyCache.keys().next().value);
+            renderJourney(data);
+            button.textContent = '✓ Perjalanan PR Terbuka';
+        } catch (error) {
+            if (error.name !== 'AbortError') {
+                showError(els.detailError, error.message);
+                button.disabled = false;
+                button.textContent = 'Coba Lagi Perjalanan PR';
+            }
+        } finally {
+            els.journeyLoading.hidden = true;
+        }
+    }
+
+    function renderJourney(data) {
+        const record = data.record || {};
+        const fragment = document.createDocumentFragment();
+        const header = element('div', 'journey-overview');
+        const heading = element('div', 'journey-overview-copy');
+        heading.append(
+            element('span', 'journey-kicker', 'DIGITAL PROCUREMENT JOURNEY'),
+            element('h3', '', record.ppbj_no || 'Perjalanan PR'),
+            element('p', '', record.description || 'Rangkaian proses pengadaan lintas role.')
+        );
+        const progress = element('div', 'journey-progress');
+        const progressValue = record.total_stages ? Math.round((Number(record.completed_stages || 0) / Number(record.total_stages)) * 100) : 0;
+        progress.append(element('strong', '', `${record.completed_stages || 0}/${record.total_stages || 0}`), element('span', '', 'tahap lengkap'));
+        const progressBar = element('i');
+        progressBar.style.setProperty('--journey-progress', `${progressValue}%`);
+        progress.append(progressBar);
+        header.append(heading, progress);
+        fragment.append(header);
+
+        const facts = element('div', 'journey-facts');
+        [
+            ['Asal / Buyer', record.buyer || 'Belum tercatat'],
+            ['Vendor', record.vendor || 'Belum ditentukan'],
+            ['Nilai PR', record.pr_value || 'Belum tercatat'],
+            ['Nilai SP', record.sp_value || 'Belum tercatat'],
+            ['Progress', `${Number(record.progress || 0)}%`],
+            ['Status SLA', record.sla_status || 'Belum dihitung'],
+        ].forEach(([label, value]) => {
+            const fact = element('div');
+            fact.append(element('span', '', label), element('b', '', value));
+            facts.append(fact);
+        });
+        fragment.append(facts);
+
+        const rail = element('div', 'journey-rail');
+        (data.stages || []).forEach((stage, index) => {
+            const item = element('div', `journey-rail-item is-${stage.state}`);
+            item.append(element('b', '', stage.state === 'done' ? '✓' : String(index + 1)), element('span', '', stage.label));
+            rail.append(item);
+        });
+        fragment.append(rail);
+
+        const timeline = element('div', 'journey-timeline');
+        (data.stages || []).forEach((stage, index) => timeline.append(renderJourneyStage(stage, index)));
+        fragment.append(timeline);
+
+        const replay = element('div', 'journey-replay-grid');
+        replay.append(
+            renderJourneyReplay('TRACKING REAL', data.tracking || [], 'Belum ada pembaruan tracking real.'),
+            renderJourneyReplay('AUDIT AKTIVITAS', data.audit || [], 'Belum ada catatan audit untuk PR ini.')
+        );
+        fragment.append(replay);
+        els.journeyContent.replaceChildren(fragment);
+    }
+
+    function renderJourneyStage(stage, index) {
+        const card = element('article', `journey-stage is-${stage.state}`);
+        const marker = element('div', 'journey-stage-marker', stage.state === 'done' ? '✓' : String(index + 1));
+        const body = element('div', 'journey-stage-body');
+        const head = element('div', 'journey-stage-head');
+        const title = element('div');
+        title.append(element('h4', '', stage.label), element('span', '', stage.date || (stage.state === 'done' ? 'Tanggal belum tercatat' : 'Menunggu tahap sebelumnya')));
+        const actor = element('div', 'journey-actor');
+        actor.append(element('b', '', stage.actor?.name || 'Belum tercatat'), element('small', '', capitalize(stage.actor?.department || 'system')));
+        head.append(title, actor);
+        body.append(head, element('p', 'journey-stage-summary', stage.summary || ''));
+
+        if (Array.isArray(stage.details) && stage.details.length) {
+            const list = element('ul', 'journey-detail-list');
+            stage.details.forEach((detail) => list.append(element('li', '', detail)));
+            body.append(list);
+        }
+
+        if (Array.isArray(stage.documents) && stage.documents.length) {
+            const documents = element('div', 'journey-documents');
+            stage.documents.forEach((document) => {
+                const doc = element('div', 'journey-document');
+                const docCopy = element('div');
+                docCopy.append(element('b', '', document.number || 'Dokumen'), element('span', '', [document.date, document.vendor || document.value].filter(Boolean).join(' • ')));
+                const docActor = element('small', '', document.actor?.name || 'Sistem');
+                doc.append(docCopy, docActor);
+                documents.append(doc);
+            });
+            body.append(documents);
+        }
+
+        card.append(marker, body);
+        return card;
+    }
+
+    function renderJourneyReplay(title, rows, emptyText) {
+        const panel = element('section', 'journey-replay');
+        panel.append(element('h4', '', title));
+        if (!rows.length) {
+            panel.append(element('p', 'journey-replay-empty', emptyText));
+            return panel;
+        }
+        rows.slice(0, 12).forEach((row) => {
+            const item = element('div', 'journey-replay-item');
+            const copy = element('div');
+            copy.append(element('b', '', row.title || 'Aktivitas'), element('span', '', row.description || row.action || ''));
+            item.append(copy, element('small', '', [row.date, row.actor?.name].filter(Boolean).join(' • ')));
+            panel.append(item);
+        });
+        return panel;
     }
 
     function restoreBodyScroll() {
@@ -437,8 +610,8 @@
         return data;
     }
 
-    function routeTemplate(template, id) {
-        return template.replace('__EVENT__', encodeURIComponent(id));
+    function routeTemplate(template, id, placeholder = '__EVENT__') {
+        return template.replace(placeholder, encodeURIComponent(id));
     }
 
     function showError(target, message) {
@@ -491,6 +664,7 @@
     $$('[data-close-detail]').forEach((button) => button.addEventListener('click', closeDetail));
     $('#calendarEdit').addEventListener('click', () => { const event = state.currentEvent; closeDetail(); openForm(event); });
     $('#calendarDelete').addEventListener('click', deleteEvent);
+    $('#calendarJourneyButton').addEventListener('click', loadJourney);
     $$('[data-status]', $('#detailStatusWrap')).forEach((button) => button.addEventListener('click', () => updateStatus(button.dataset.status)));
     document.addEventListener('keydown', (event) => {
         if (event.key !== 'Escape') return;

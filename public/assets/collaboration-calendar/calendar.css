@@ -15,6 +15,8 @@
     contain: layout style;
 }
 
+.collab-calendar [hidden] { display: none !important; }
+
 .dark .collab-calendar {
     --cc-bg: #07101f;
     --cc-card: #0f1b2e;
@@ -302,25 +304,34 @@
 .calendar-legend i { width: 8px; height: 8px; border-radius: 3px; }
 .legend-collab { background: #6366f1; }.legend-sla { background: #eab308; }.legend-contract { background: #f43f5e; }.legend-milestone { background: #10b981; }
 
-.calendar-modal { position: fixed; inset: 0; z-index: 100000; display: grid; place-items: center; padding: 18px; }
+.calendar-modal { position: fixed; inset: 0; z-index: 100000; display: grid; place-items: center; padding: 24px; overflow: hidden; }
 .calendar-modal[hidden] { display: none !important; }
-.calendar-modal-backdrop { position: absolute; inset: 0; background: rgba(2, 6, 23, .72); }
-.calendar-modal-card { position: relative; width: min(720px, 100%); max-height: calc(100vh - 36px); overflow: auto; border: 1px solid var(--cc-line); border-radius: 24px; color: var(--cc-text); background: var(--cc-card); box-shadow: 0 30px 90px rgba(2, 6, 23, .35); }
-.modal-head { display: flex; justify-content: space-between; align-items: start; gap: 20px; padding: 23px 25px 18px; border-bottom: 1px solid var(--cc-line); }
+.calendar-modal-backdrop { position: absolute; inset: 0; background: rgba(2, 6, 23, .72); backdrop-filter: blur(2px); }
+.calendar-modal-card { position: relative; display: flex; flex-direction: column; width: min(760px, 100%); max-height: calc(100dvh - 48px); overflow: hidden; border: 1px solid var(--cc-line); border-radius: 24px; color: var(--cc-text); background: var(--cc-card); box-shadow: 0 30px 90px rgba(2, 6, 23, .35); }
+.calendar-form-card { width: min(960px, 100%); }
+.modal-head { display: flex; flex: 0 0 auto; justify-content: space-between; align-items: start; gap: 20px; padding: 23px 25px 18px; border-bottom: 1px solid var(--cc-line); background: linear-gradient(135deg, var(--cc-card), var(--cc-card-soft)); }
 .modal-head h2 { margin: 6px 0 0; font-size: 23px; font-weight: 950; letter-spacing: -.03em; }
 .modal-close { width: 36px; height: 36px; border: 0; border-radius: 11px; color: var(--cc-muted); background: var(--cc-card-soft); cursor: pointer; font-size: 22px; }
-.calendar-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; padding: 22px 25px; }
+.calendar-form-body { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; min-height: 0; padding: 18px 20px; overflow-y: auto; overscroll-behavior: contain; }
+.calendar-form-section { min-width: 0; padding: 17px; border: 1px solid var(--cc-line); border-radius: 17px; background: var(--cc-card-soft); }
+.form-section-context { grid-column: 1 / -1; }
+.form-section-heading { display: flex; align-items: flex-start; gap: 11px; margin-bottom: 15px; }
+.form-section-heading > b { display: grid; flex: 0 0 30px; width: 30px; height: 30px; place-items: center; border-radius: 10px; color: #fff; background: linear-gradient(135deg, #2563eb, #7c3aed); font-size: 9px; letter-spacing: .05em; }
+.form-section-heading h3 { margin: 1px 0 3px; font-size: 13px; font-weight: 950; }
+.form-section-heading p { margin: 0; color: var(--cc-muted); font-size: 9px; line-height: 1.45; }
+.calendar-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 13px; }
 .calendar-form-grid label { display: grid; gap: 7px; }
 .calendar-form-grid textarea { resize: vertical; }
 .form-span-2 { grid-column: span 2; }
 .calendar-check { display: flex !important; align-items: center; align-self: end; min-height: 40px; grid-template-columns: auto 1fr; }
 .calendar-check input { min-height: 0; width: 17px; height: 17px; }
 .calendar-check > span { text-transform: none !important; letter-spacing: 0 !important; }
-.modal-actions { display: flex; justify-content: flex-end; gap: 9px; padding: 16px 25px 22px; border-top: 1px solid var(--cc-line); }
+.modal-actions { display: flex; flex: 0 0 auto; justify-content: flex-end; gap: 9px; padding: 15px 25px 18px; border-top: 1px solid var(--cc-line); background: var(--cc-card); }
 .modal-error { margin: 0 25px 14px; padding: 11px 13px; border-radius: 10px; color: #b91c1c; background: #fef2f2; font-size: 11px; font-weight: 750; }
 .dark .modal-error { color: #fecaca; background: #451a1a; }
 
-.calendar-detail-card { width: min(680px, 100%); }
+.calendar-detail-card { width: min(720px, 100%); transition: width .2s ease; }
+.calendar-detail-card.is-journey { width: min(1180px, 100%); }
 .detail-badges { display: flex; flex-wrap: wrap; gap: 7px; padding: 20px 25px 0; }
 .detail-description { margin: 16px 25px; padding: 15px; color: var(--cc-muted); background: var(--cc-card-soft); border-radius: 13px; font-size: 12px; line-height: 1.65; white-space: pre-wrap; }
 .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 0; padding: 0 25px 20px; }
@@ -332,6 +343,64 @@
 .status-quick > div { display: flex; flex-wrap: wrap; gap: 7px; }
 .status-quick button { padding: 7px 10px; border: 1px solid var(--cc-line); border-radius: 9px; color: var(--cc-text); background: var(--cc-card); cursor: pointer; font-size: 10px; font-weight: 800; }
 .status-quick button.is-active { color: #fff; background: #4f46e5; border-color: #4f46e5; }
+.calendar-button-journey { color: #fff; border-color: transparent; background: linear-gradient(135deg, #0f766e, #2563eb); }
+.calendar-button-journey:disabled { cursor: default; opacity: .78; }
+
+.calendar-detail-card.is-journey .detail-badges,
+.calendar-detail-card.is-journey .detail-description,
+.calendar-detail-card.is-journey .detail-grid,
+.calendar-detail-card.is-journey .status-quick { display: none; }
+.pr-journey { flex: 1 1 auto; min-height: 0; margin: 18px 25px 20px; padding: 18px; overflow-y: auto; overscroll-behavior: contain; border: 1px solid var(--cc-line); border-radius: 18px; background: var(--cc-card-soft); }
+.pr-journey[hidden], .journey-loading[hidden] { display: none !important; }
+.journey-loading { display: flex; align-items: center; justify-content: center; gap: 12px; min-height: 180px; color: var(--cc-muted); }
+.journey-loading > span { width: 22px; height: 22px; border: 3px solid #bfdbfe; border-top-color: #2563eb; border-radius: 50%; animation: calendar-spin .7s linear infinite; }
+.journey-loading b, .journey-loading small { display: block; }
+.journey-loading b { color: var(--cc-text); font-size: 12px; }
+.journey-loading small { margin-top: 3px; font-size: 9px; }
+.journey-overview { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; padding: 18px; border-radius: 16px; color: #fff; background: linear-gradient(135deg, #0b1f46, #3730a3 62%, #2563eb); }
+.journey-kicker { color: #67e8f9; font-size: 8px; font-weight: 950; letter-spacing: .14em; }
+.journey-overview h3 { margin: 7px 0 5px; font-size: 20px; font-weight: 950; letter-spacing: -.02em; }
+.journey-overview p { max-width: 660px; margin: 0; color: #dbeafe; font-size: 10px; line-height: 1.5; }
+.journey-progress { flex: 0 0 115px; padding: 11px; border: 1px solid rgba(255,255,255,.2); border-radius: 13px; background: rgba(255,255,255,.1); }
+.journey-progress strong, .journey-progress span { display: block; }
+.journey-progress strong { font-size: 18px; }.journey-progress span { color: #dbeafe; font-size: 8px; }
+.journey-progress i { display: block; height: 5px; margin-top: 9px; overflow: hidden; border-radius: 99px; background: rgba(255,255,255,.2); }
+.journey-progress i::after { display: block; width: var(--journey-progress); height: 100%; border-radius: inherit; background: #5eead4; content: ''; }
+.journey-facts { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; margin: 12px 0; }
+.journey-facts > div { min-width: 0; padding: 10px; border: 1px solid var(--cc-line); border-radius: 12px; background: var(--cc-card); }
+.journey-facts span, .journey-facts b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.journey-facts span { color: var(--cc-muted); font-size: 8px; font-weight: 850; text-transform: uppercase; }
+.journey-facts b { margin-top: 5px; font-size: 10px; }
+.journey-rail { display: grid; grid-template-columns: repeat(8, minmax(70px, 1fr)); gap: 5px; margin: 0 0 16px; overflow-x: auto; scrollbar-width: thin; }
+.journey-rail-item { min-width: 75px; padding: 8px 5px; text-align: center; border: 1px solid var(--cc-line); border-radius: 11px; background: var(--cc-card); }
+.journey-rail-item b { display: grid; width: 20px; height: 20px; margin: 0 auto 5px; place-items: center; border-radius: 50%; color: var(--cc-muted); background: var(--cc-card-soft); font-size: 8px; }
+.journey-rail-item span { display: block; font-size: 7px; font-weight: 850; line-height: 1.25; }
+.journey-rail-item.is-done { border-color: rgba(16,185,129,.35); }.journey-rail-item.is-done b { color: #fff; background: #10b981; }
+.journey-rail-item.is-current { border-color: #818cf8; box-shadow: inset 0 0 0 1px #818cf8; }.journey-rail-item.is-current b { color: #fff; background: #6366f1; }
+.journey-timeline { position: relative; display: grid; gap: 10px; }
+.journey-stage { display: grid; grid-template-columns: 32px minmax(0, 1fr); gap: 11px; }
+.journey-stage-marker { position: relative; z-index: 1; display: grid; width: 28px; height: 28px; place-items: center; border: 3px solid var(--cc-card-soft); border-radius: 50%; color: #64748b; background: #e2e8f0; font-size: 9px; font-weight: 950; }
+.journey-stage:not(:last-child) .journey-stage-marker::after { position: absolute; top: 25px; left: 10px; z-index: -1; width: 2px; height: calc(100% + 18px); background: var(--cc-line); content: ''; }
+.journey-stage.is-done .journey-stage-marker { color: #fff; background: #10b981; }.journey-stage.is-current .journey-stage-marker { color: #fff; background: #6366f1; }
+.journey-stage-body { min-width: 0; padding: 13px; border: 1px solid var(--cc-line); border-radius: 14px; background: var(--cc-card); }
+.journey-stage.is-current .journey-stage-body { border-color: #818cf8; box-shadow: inset 3px 0 #6366f1; }
+.journey-stage-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.journey-stage-head h4 { margin: 0; font-size: 12px; font-weight: 950; }.journey-stage-head > div > span { color: var(--cc-muted); font-size: 8px; }
+.journey-actor { flex: 0 0 auto; max-width: 230px; padding: 6px 9px; text-align: right; border-radius: 10px; background: var(--cc-card-soft); }
+.journey-actor b, .journey-actor small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.journey-actor b { font-size: 9px; }.journey-actor small { margin-top: 2px; color: var(--cc-muted); font-size: 7px; text-transform: uppercase; }
+.journey-stage-summary { margin: 8px 0 0; color: var(--cc-muted); font-size: 10px; line-height: 1.5; }
+.journey-detail-list { display: flex; flex-wrap: wrap; gap: 5px; margin: 9px 0 0; padding: 0; list-style: none; }
+.journey-detail-list li { padding: 5px 8px; border-radius: 8px; color: var(--cc-text); background: var(--cc-card-soft); font-size: 8px; font-weight: 750; }
+.journey-documents { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin-top: 9px; }
+.journey-document { display: flex; align-items: center; justify-content: space-between; gap: 9px; padding: 8px; border: 1px dashed var(--cc-line); border-radius: 10px; }
+.journey-document b, .journey-document span { display: block; }.journey-document b { font-size: 9px; }.journey-document span, .journey-document small { color: var(--cc-muted); font-size: 7px; }
+.journey-replay-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 14px; }
+.journey-replay { padding: 13px; border: 1px solid var(--cc-line); border-radius: 14px; background: var(--cc-card); }
+.journey-replay h4 { margin: 0 0 9px; color: #06b6d4; font-size: 8px; font-weight: 950; letter-spacing: .12em; }
+.journey-replay-item { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; padding: 8px 0; border-top: 1px solid var(--cc-line); }
+.journey-replay-item b, .journey-replay-item span { display: block; }.journey-replay-item b { font-size: 9px; }.journey-replay-item span, .journey-replay-item small { color: var(--cc-muted); font-size: 7px; line-height: 1.4; }
+.journey-replay-item small { flex: 0 0 120px; text-align: right; }.journey-replay-empty { margin: 0; color: var(--cc-muted); font-size: 9px; }
 
 .collab-calendar:fullscreen {
     max-width: none;
@@ -367,6 +436,9 @@ body.calendar-fullscreen-fallback .collab-calendar { position: fixed; inset: 0; 
     .calendar-board-wrap { overflow-x: auto; }
     .calendar-weekdays, .calendar-grid { min-width: 760px; }
     .calendar-day { min-height: 112px; }
+    .calendar-form-body { grid-template-columns: 1fr; }
+    .form-section-context { grid-column: auto; }
+    .journey-facts { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 
 @media (max-width: 560px) {
@@ -377,6 +449,14 @@ body.calendar-fullscreen-fallback .collab-calendar { position: fixed; inset: 0; 
     .calendar-month-title { width: 100%; order: -1; margin: 0 0 5px; }
     .calendar-form-grid, .detail-grid { grid-template-columns: 1fr; }
     .form-span-2 { grid-column: span 1; }
+    .calendar-modal { padding: 8px; }
+    .calendar-modal-card { max-height: calc(100dvh - 16px); border-radius: 18px; }
+    .calendar-form-body { padding: 12px; }
+    .journey-overview, .journey-stage-head { flex-direction: column; }
+    .journey-progress { width: 100%; flex-basis: auto; }
+    .journey-facts { grid-template-columns: 1fr 1fr; }
+    .journey-documents, .journey-replay-grid { grid-template-columns: 1fr; }
+    .journey-actor { max-width: 100%; text-align: left; }
     .modal-actions { flex-wrap: wrap; }
     .modal-actions .calendar-button { flex: 1; }
 }

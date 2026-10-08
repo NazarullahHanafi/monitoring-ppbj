@@ -11,6 +11,7 @@
         class="collab-calendar"
         id="collabCalendar"
         data-events-url="{{ route('collaboration-calendar.events') }}"
+        data-journey-template="{{ url('/collaboration-calendar/journey/__PPBJ__') }}"
         data-store-url="{{ route('collaboration-calendar.store') }}"
         data-update-template="{{ url('/collaboration-calendar/events/__EVENT__') }}"
         data-status-template="{{ url('/collaboration-calendar/events/__EVENT__/status') }}"
@@ -110,17 +111,34 @@
                 </div>
                 <input type="hidden" name="event_id" id="eventId">
                 <input type="hidden" name="version" id="eventVersion">
-                <div class="calendar-form-grid">
-                    <label class="form-span-2"><span>Judul Agenda</span><input type="text" name="title" maxlength="120" required placeholder="Contoh: Review kelengkapan dokumen PR"></label>
-                    <label><span>Mulai</span><input type="datetime-local" name="starts_at" required></label>
-                    <label><span>Selesai</span><input type="datetime-local" name="ends_at"></label>
-                    <label class="calendar-check"><input type="checkbox" name="all_day" value="1"><span>Agenda sepanjang hari</span></label>
-                    <label><span>Prioritas</span><select name="priority" required><option value="low">Rendah</option><option value="normal" selected>Normal</option><option value="high">Tinggi</option><option value="critical">Kritis</option></select></label>
-                    <label><span>Status</span><select name="status" required><option value="planned">Direncanakan</option><option value="in_progress">Dikerjakan</option><option value="done">Selesai</option><option value="cancelled">Dibatalkan</option></select></label>
-                    <label><span>Dapat Dilihat Oleh</span><select name="audience" required><option value="all">Semua Role</option><option value="operasional">Operasional</option><option value="umum">Umum</option></select></label>
-                    <label class="form-span-2"><span>Penanggung Jawab</span><select name="assignee_id"><option value="">Belum ditentukan</option>@foreach($users as $user)<option value="{{ $user->id }}" data-department="{{ $user->department }}">{{ $user->name }} — {{ ucfirst($user->department) }}</option>@endforeach</select></label>
-                    <label class="form-span-2"><span>Nomor PR/PPBJ <small>(opsional, harus sama persis)</small></span><input type="text" name="ppbj_no" maxlength="50" placeholder="PKB/PR-26/CON/0001"></label>
-                    <label class="form-span-2"><span>Catatan Kolaborasi</span><textarea name="description" maxlength="2000" rows="4" placeholder="Tuliskan konteks, kebutuhan, dan hasil yang diharapkan…"></textarea></label>
+                <div class="calendar-form-body">
+                    <section class="calendar-form-section">
+                        <div class="form-section-heading"><b>01</b><div><h3>Agenda & waktu</h3><p>Tentukan kegiatan, jadwal, dan tingkat prioritas.</p></div></div>
+                        <div class="calendar-form-grid">
+                            <label class="form-span-2"><span>Judul Agenda</span><input type="text" name="title" maxlength="120" required placeholder="Contoh: Review kelengkapan dokumen PR"></label>
+                            <label><span>Mulai</span><input type="datetime-local" name="starts_at" required></label>
+                            <label><span>Selesai</span><input type="datetime-local" name="ends_at"></label>
+                            <label class="calendar-check"><input type="checkbox" name="all_day" value="1"><span>Agenda sepanjang hari</span></label>
+                            <label><span>Prioritas</span><select name="priority" required><option value="low">Rendah</option><option value="normal" selected>Normal</option><option value="high">Tinggi</option><option value="critical">Kritis</option></select></label>
+                        </div>
+                    </section>
+
+                    <section class="calendar-form-section">
+                        <div class="form-section-heading"><b>02</b><div><h3>Kolaborasi lintas role</h3><p>Atur visibilitas, status, dan PIC yang bertanggung jawab.</p></div></div>
+                        <div class="calendar-form-grid">
+                            <label><span>Status</span><select name="status" required><option value="planned">Direncanakan</option><option value="in_progress">Dikerjakan</option><option value="done">Selesai</option><option value="cancelled">Dibatalkan</option></select></label>
+                            <label><span>Dapat Dilihat Oleh</span><select name="audience" required><option value="all">Semua Role</option><option value="operasional">Operasional</option><option value="umum">Umum</option></select></label>
+                            <label class="form-span-2"><span>Penanggung Jawab</span><select name="assignee_id"><option value="">Belum ditentukan</option>@foreach($users as $user)<option value="{{ $user->id }}" data-department="{{ $user->department }}">{{ $user->name }} — {{ ucfirst($user->department) }}</option>@endforeach</select></label>
+                        </div>
+                    </section>
+
+                    <section class="calendar-form-section form-section-context">
+                        <div class="form-section-heading"><b>03</b><div><h3>Konteks pengadaan</h3><p>Tautkan agenda ke PR agar perjalanan pengadaan dapat dibuka dari kalender.</p></div></div>
+                        <div class="calendar-form-grid">
+                            <label class="form-span-2"><span>Nomor PR/PPBJ <small>(opsional, harus sama persis)</small></span><input type="text" name="ppbj_no" maxlength="50" placeholder="PKB/PR-26/CON/0001"></label>
+                            <label class="form-span-2"><span>Catatan Kolaborasi</span><textarea name="description" maxlength="2000" rows="3" placeholder="Tuliskan konteks, kebutuhan, dan hasil yang diharapkan…"></textarea></label>
+                        </div>
+                    </section>
                 </div>
                 <div class="modal-error" id="calendarFormError" hidden></div>
                 <div class="modal-actions">
@@ -132,7 +150,7 @@
 
         <div class="calendar-modal" id="calendarDetailModal" hidden role="dialog" aria-modal="true" aria-labelledby="detailTitle">
             <div class="calendar-modal-backdrop" data-close-detail></div>
-            <div class="calendar-modal-card calendar-detail-card">
+            <div class="calendar-modal-card calendar-detail-card" id="calendarDetailCard">
                 <div class="modal-head">
                     <div><span id="detailSource">AGENDA</span><h2 id="detailTitle">Detail Agenda</h2></div>
                     <button type="button" class="modal-close" data-close-detail aria-label="Tutup">×</button>
@@ -140,6 +158,10 @@
                 <div class="detail-badges" id="detailBadges"></div>
                 <p class="detail-description" id="detailDescription"></p>
                 <dl class="detail-grid" id="detailGrid"></dl>
+                <section class="pr-journey" id="calendarJourney" hidden aria-live="polite">
+                    <div class="journey-loading" id="journeyLoading" hidden><span></span><div><b>Menyiapkan perjalanan PR</b><small>Memuat aktor, dokumen, dan milestone secara aman…</small></div></div>
+                    <div id="journeyContent"></div>
+                </section>
                 <div class="status-quick" id="detailStatusWrap" hidden>
                     <span>Perbarui status</span>
                     <div><button type="button" data-status="planned">Rencana</button><button type="button" data-status="in_progress">Dikerjakan</button><button type="button" data-status="done">Selesai</button><button type="button" data-status="cancelled">Batal</button></div>
@@ -147,7 +169,8 @@
                 <div class="modal-error" id="calendarDetailError" hidden></div>
                 <div class="modal-actions">
                     <button type="button" class="calendar-button calendar-button-danger" id="calendarDelete" hidden>Hapus</button>
-                    <a class="calendar-button calendar-button-soft" id="calendarOpenPr" href="#" hidden rel="noopener">Buka Data PR</a>
+                    <button type="button" class="calendar-button calendar-button-journey" id="calendarJourneyButton" hidden>◎ Lihat Perjalanan PR</button>
+                    <a class="calendar-button calendar-button-soft" id="calendarOpenPr" href="#" hidden rel="noopener">Buka Menu PR</a>
                     <button type="button" class="calendar-button calendar-button-ghost" id="calendarEdit" hidden>Edit</button>
                     <button type="button" class="calendar-button calendar-button-primary" data-close-detail>Tutup</button>
                 </div>
