@@ -45,6 +45,13 @@ class MonitorPerformance
             $minuteKey = now()->format('YmdHi');
             $statusCode = $response?->getStatusCode() ?? 500;
 
+            // URL acak dari scanner/bot bukan traffic pengguna. Sebagian besar
+            // sudah dihentikan oleh Apache, tetapi guard ini menjaga metrik
+            // tetap akurat bila aplikasi berjalan tanpa .htaccess (mis. Nginx).
+            if ($this->isScannerProbe($request) || ($statusCode === 404 && ! $request->user())) {
+                return;
+            }
+
             $trafficCount = $this->increment("perf:traffic:{$minuteKey}", 120);
 
             if ($elapsedMs >= $this->slowRequestMs()) {
@@ -102,6 +109,25 @@ class MonitorPerformance
             'spph/presence/*',
             'approval/pr-receipts/pending-count'
         );
+    }
+
+    private function isScannerProbe(Request $request): bool
+    {
+        $path = strtolower('/'.ltrim($request->path(), '/'));
+
+        if (preg_match('#/(?:wp-admin|wp-content|wp-includes)(?:/|$)#', $path) === 1) {
+            return true;
+        }
+
+        if (preg_match('#/(?:xmlrpc|wp-login|wp-config)\.php(?:/|$)#', $path) === 1) {
+            return true;
+        }
+
+        if (preg_match('#/(?:\.env|\.git|\.svn|\.hg)(?:/|$)#', $path) === 1) {
+            return true;
+        }
+
+        return str_ends_with($path, '.php') && $path !== '/index.php';
     }
 
     private function increment(string $key, int $seconds): int

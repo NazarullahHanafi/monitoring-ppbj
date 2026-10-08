@@ -5,6 +5,26 @@
 
     RewriteEngine On
 
+    # ------------------------------------------------------------------
+    # Security guard: hentikan scanner sebelum request masuk ke Laravel.
+    # SIMONPR bukan WordPress dan hanya public/index.php yang boleh menjadi
+    # entry point PHP. Gunakan 404 untuk tidak membocorkan aturan keamanan.
+    # ------------------------------------------------------------------
+    RewriteCond %{REMOTE_ADDR} ^40\.74\.77\.37$
+    RewriteRule ^ - [R=404,L]
+
+    RewriteCond %{REQUEST_METHOD} ^(?:TRACE|TRACK)$ [NC]
+    RewriteRule ^ - [R=405,L]
+
+    RewriteRule ^(?:wp-admin|wp-content|wp-includes)(?:/|$) - [R=404,L,NC]
+    RewriteRule ^(?:xmlrpc\.php|wp-login\.php|wp-config\.php)(?:/|$) - [R=404,L,NC]
+    RewriteRule ^(?!index\.php$).*\.php(?:/.*)?$ - [R=404,L,NC]
+
+    # Jangan izinkan file konfigurasi, repository, atau tool development
+    # diakses dari web walaupun suatu saat tidak sengaja ikut terunggah.
+    RewriteRule (^|/)\.(?:env|git|svn|hg)(?:/|$) - [R=404,L,NC]
+    RewriteRule ^(?:artisan|composer\.(?:json|lock)|package(?:-lock)?\.json|phpunit\.xml(?:\.dist)?|vite\.config\.js)$ - [R=404,L,NC]
+
     # Handle Authorization Header
     RewriteCond %{HTTP:Authorization} .
     RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
@@ -40,7 +60,15 @@
 </IfModule>
 
 <IfModule mod_headers.c>
+    Header always unset X-Powered-By
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set X-Frame-Options "SAMEORIGIN"
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+    Header always set Permissions-Policy "camera=(), microphone=(), geolocation=()"
+
     <FilesMatch "\.(?:css|js|jpg|jpeg|png|gif|webp|svg|ico|woff2?)$">
         Header set Cache-Control "public, max-age=604800, stale-while-revalidate=86400"
     </FilesMatch>
 </IfModule>
+
+ServerSignature Off
