@@ -25,6 +25,10 @@
     RewriteRule (^|/)\.(?:env|git|svn|hg)(?:/|$) - [R=404,L,NC]
     RewriteRule ^(?:artisan|composer\.(?:json|lock)|package(?:-lock)?\.json|phpunit\.xml(?:\.dist)?|vite\.config\.js)$ - [R=404,L,NC]
 
+    # Semua halaman dan cookie autentikasi wajib melewati HTTPS.
+    RewriteCond %{HTTPS} !=on
+    RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [R=301,L,NE]
+
     # Handle Authorization Header
     RewriteCond %{HTTP:Authorization} .
     RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]

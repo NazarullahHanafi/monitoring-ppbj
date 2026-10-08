@@ -19,6 +19,13 @@ Schedule::command('ppbj:contract-reminders')
     ->withoutOverlapping(10)
     ->onOneServer();
 
+// Membaca access log di belakang layar. Request scanner tetap dihentikan
+// Apache sehingga sensor keamanan ini tidak menambah waktu respons pengguna.
+Schedule::command('security:scan-honeypot')
+    ->everyMinute()
+    ->withoutOverlapping(2)
+    ->runInBackground();
+
 // Shared hosting tidak menjalankan daemon queue permanen. Worker singkat ini
 // menguras email dan notifikasi Telegram tiap menit lalu berhenti, sehingga
 // request web tidak menunggu koneksi eksternal dan worker PHP tetap tersedia.

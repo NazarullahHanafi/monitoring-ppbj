@@ -39,6 +39,7 @@ class SecurityScannerProtectionTest extends TestCase
         $this->assertStringContainsString('wp-admin|wp-content|wp-includes', $rules);
         $this->assertStringContainsString('(?!index\\.php$).*\\.php', $rules);
         $this->assertStringContainsString('40\\.74\\.77\\.37', $rules);
+        $this->assertStringContainsString('RewriteCond %{HTTPS} !=on', $rules);
         $this->assertStringContainsString('Header unset X-Powered-By', $rules);
         $this->assertStringContainsString('Header always unset X-Powered-By', $rules);
     }

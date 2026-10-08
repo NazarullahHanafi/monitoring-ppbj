@@ -13,7 +13,7 @@ class EnsureOwnerAccess
     {
         $user = $request->user();
 
-        if (! $user || ! $user->isOwner()) {
+        if (! $user || ! $user->canAccessOwnerCenter()) {
             Log::warning('Owner-only area access denied', [
                 'user_id' => $user?->id,
                 'email' => $user?->email,

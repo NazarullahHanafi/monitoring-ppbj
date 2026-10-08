@@ -20,6 +20,7 @@
         ];
 
         $quickLinks = [
+            ['label' => 'Security Center', 'route' => route('owner.security.index'), 'icon' => 'SC', 'desc' => 'Honeypot, sesi & skor'],
             ['label' => 'Management Users', 'route' => route('users.index'), 'icon' => 'US', 'desc' => 'Kelola akun dan role'],
             ['label' => 'Pesan Contact', 'route' => route('contact-messages.index'), 'icon' => 'PC', 'desc' => 'Baca pesan landing'],
             ['label' => 'Laporan PPBJ', 'route' => route('ppbj.report'), 'icon' => 'LP', 'desc' => 'Analisis audit dan nilai'],

@@ -47,6 +47,13 @@ class User extends Authenticatable
         return $email !== '' && in_array($email, $ownerEmails, true);
     }
 
+    public function canAccessOwnerCenter(): bool
+    {
+        return $this->isOwner()
+            && strtolower(trim((string) $this->role)) === 'superadmin'
+            && strtolower(trim((string) $this->department)) === 'umum';
+    }
+
     /**
      * Tentukan apakah fitur mood ditampilkan untuk akun ini.
      */

@@ -12,6 +12,7 @@ use App\Http\Controllers\LandingController;
 use App\Http\Controllers\MasterDataController;
 use App\Http\Controllers\OperasionalDashboardController;
 use App\Http\Controllers\OwnerController;
+use App\Http\Controllers\OwnerSecurityController;
 use App\Http\Controllers\PpbjController;
 use App\Http\Controllers\PresenceController;
 use App\Http\Controllers\PrReceiptApprovalController;
@@ -136,6 +137,12 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
     Route::middleware('owner')->group(function () {
         Route::get('/owner', [OwnerController::class, 'index'])->name('owner.index');
         Route::get('/owner/audit/export', [OwnerController::class, 'exportAudit'])->name('owner.audit.export');
+        Route::get('/owner/security', [OwnerSecurityController::class, 'index'])->name('owner.security.index');
+        Route::delete('/owner/security/sessions/{sessionToken}', [OwnerSecurityController::class, 'destroySession'])
+            ->where('sessionToken', '[a-f0-9]{64}')
+            ->name('owner.security.sessions.destroy');
+        Route::delete('/owner/security/sessions', [OwnerSecurityController::class, 'destroyOtherSessions'])
+            ->name('owner.security.sessions.destroy-others');
     });
 
     // ========================

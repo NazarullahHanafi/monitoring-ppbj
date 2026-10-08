@@ -48,6 +48,25 @@ class OwnerAccessTest extends TestCase
             ->assertForbidden();
     }
 
+    public function test_configured_owner_still_requires_superadmin_umum_role(): void
+    {
+        config(['app.owner_emails' => ['superadmin@sucofindo.com']]);
+
+        foreach ([
+            ['role' => 'user', 'department' => 'umum'],
+            ['role' => 'superadmin', 'department' => 'operasional'],
+        ] as $identity) {
+            $owner = User::factory()->create(array_merge([
+                'email' => fake()->unique()->safeEmail(),
+            ], $identity));
+            config(['app.owner_emails' => [strtolower($owner->email)]]);
+
+            $this->actingAs($owner)
+                ->get(route('owner.index'))
+                ->assertForbidden();
+        }
+    }
+
     public function test_owner_can_export_filtered_audit_log(): void
     {
         config(['app.owner_emails' => ['superadmin@sucofindo.com']]);
