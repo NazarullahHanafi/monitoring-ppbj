@@ -416,7 +416,7 @@
         const results = Array.isArray(data.results) ? data.results : [];
         els.prResults.replaceChildren();
         els.prState.textContent = results.length
-            ? `${results.length} PR paling relevan ditemukan. Pilih satu untuk ditautkan.`
+            ? `${results.length} PR paling relevan ditemukan. ${state.prFinderMode === 'attach' ? 'Pilih satu untuk ditautkan ke agenda.' : 'Pilih satu untuk melihat detail.'}`
             : 'PR tidak ditemukan. Coba kata kunci atau filter lain.';
 
         results.forEach((record) => {
@@ -457,7 +457,7 @@
         const heading = element('div', 'pr-selected-head');
         const copy = element('div');
         copy.append(element('small', '', 'PR TERPILIH'), element('strong', '', record.ppbj_no || 'PR'));
-        const remove = element('button', '', 'Ganti / lepas');
+        const remove = element('button', '', state.prFinderMode === 'attach' ? 'Ganti / lepas' : 'Bersihkan pilihan');
         remove.type = 'button';
         remove.addEventListener('click', clearSelectedPpbj);
         heading.append(copy, remove);
