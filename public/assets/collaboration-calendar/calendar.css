@@ -274,6 +274,7 @@
 .day-more { color: var(--cc-muted); font-size: 9px; font-weight: 850; text-align: center; }
 
 .calendar-loading { position: absolute; inset: 0; z-index: 5; display: flex; align-items: center; justify-content: center; gap: 10px; color: var(--cc-muted); background: rgba(255,255,255,.82); }
+.calendar-loading[hidden] { display: none !important; }
 .dark .calendar-loading { background: rgba(7,16,31,.85); }
 .calendar-loading span { width: 18px; height: 18px; border: 3px solid #c7d2fe; border-top-color: #4f46e5; border-radius: 50%; animation: calendar-spin .7s linear infinite; }
 @keyframes calendar-spin { to { transform: rotate(360deg); } }
