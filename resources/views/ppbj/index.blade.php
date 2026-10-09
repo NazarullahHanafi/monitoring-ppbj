@@ -13,10 +13,10 @@
 
         <div class="flex gap-2 flex-wrap">
             <button type="button" onclick="openPpbjMentionInbox()"
-                class="relative inline-flex items-center justify-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-2 font-semibold text-indigo-700 shadow-sm transition hover:bg-indigo-100 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-200 dark:hover:bg-indigo-500/20">
+                class="ppbj-mention-inbox-trigger">
                 <span>💬 Mention Saya</span>
                 <span id="ppbjMentionHeaderBadge"
-                    class="{{ $collaborationMentionCount > 0 ? '' : 'hidden' }} min-w-5 rounded-full bg-rose-600 px-1.5 py-0.5 text-center text-[10px] font-extrabold text-white">
+                    class="ppbj-mention-header-badge {{ $collaborationMentionCount > 0 ? '' : 'hidden' }}">
                     {{ $collaborationMentionCount }}
                 </span>
             </button>
@@ -673,9 +673,9 @@
                                         <span>Tracking Real</span>
                                     </button>
                                     <button type="button" onclick="openPpbjNotes({{ $row->id }})"
-                                        class="relative inline-flex items-center gap-1 rounded-md bg-indigo-50 px-2 py-1 text-[9px] font-bold leading-none text-indigo-700 ring-1 ring-indigo-200 transition hover:bg-indigo-100 dark:bg-indigo-500/15 dark:text-indigo-200 dark:ring-indigo-500/30">
-                                        <span>💬 Catatan</span>
-                                        <span id="ppbjNoteCount_{{ $row->id }}">{{ (int) ($row->collaboration_note_count ?? 0) }}</span>
+                                        class="ppbj-notes-trigger">
+                                        <span class="ppbj-notes-trigger__label">💬 Catatan</span>
+                                        <span class="ppbj-notes-trigger__count" id="ppbjNoteCount_{{ $row->id }}">{{ (int) ($row->collaboration_note_count ?? 0) }}</span>
                                         @if((int) ($row->collaboration_unread_count ?? 0) > 0)
                                             <span id="ppbjNoteUnread_{{ $row->id }}"
                                                 class="absolute -right-2 -top-2 min-w-4 rounded-full bg-rose-600 px-1 py-0.5 text-[8px] font-black text-white">
@@ -1274,7 +1274,7 @@
 @endsection
 
 @push('styles')
-    <link rel="stylesheet" href="{{ asset('assets/ppbj/ppbj.css') }}?v=20261009c">
+    <link rel="stylesheet" href="{{ asset('assets/ppbj/ppbj.css') }}?v=20261009d">
 @endpush
 
 @push('scripts')
