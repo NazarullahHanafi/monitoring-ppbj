@@ -38,6 +38,7 @@ mark.search-hl {
 .ppbj-preflight[data-status="blocked"] .ppbj-preflight__score strong { color: #be123c; }
 
 /* ===== PPBJ COLLABORATION NOTES ===== */
+#ppbjNotesModal, #ppbjMentionInboxModal { z-index: 170; }
 .ppbj-notes-shell, .ppbj-mention-inbox { display: flex; width: min(760px, 96vw); max-height: min(780px, 92vh); flex-direction: column; overflow: hidden; border: 1px solid #dbeafe; border-radius: 24px; background: #fff; color: #0f172a; box-shadow: 0 32px 90px rgba(15, 23, 42, .28); }
 .ppbj-mention-inbox { width: min(680px, 96vw); }
 .ppbj-notes-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; border-bottom: 1px solid #e2e8f0; background: linear-gradient(135deg, #eef2ff, #ecfeff); padding: 19px 21px; }
