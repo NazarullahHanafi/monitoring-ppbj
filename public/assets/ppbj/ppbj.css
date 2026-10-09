@@ -774,20 +774,21 @@ html.dark .ppbj-mention-user:hover, html.dark .ppbj-mention-user[data-selected="
 
         /* Dark Mode */
         .dark .ppbj-swal-popup {
-            background: #1e293b !important;
+            border-color: #475569 !important;
+            background: #111827 !important;
         }
 
         .dark .ppbj-warning-title {
-            color: #f1f5f9;
+            color: #ffffff;
         }
 
         .dark .ppbj-warning-card {
-            background: #0f172a;
-            border-color: #334155;
+            background: #172033;
+            border-color: #475569;
         }
 
         .dark .ppbj-warning-row p {
-            color: #94a3b8;
+            color: #e2e8f0;
         }
 
         .dark .ppbj-warning-row+.ppbj-warning-row {
@@ -799,7 +800,7 @@ html.dark .ppbj-mention-user:hover, html.dark .ppbj-mention-user[data-selected="
         }
 
         .dark .ppbj-warning-link {
-            color: #60a5fa;
+            color: #93c5fd;
         }
 
         .dark .ppbj-warning-link::after {
@@ -811,12 +812,12 @@ html.dark .ppbj-mention-user:hover, html.dark .ppbj-mention-user[data-selected="
         }
 
         .dark .ppbj-warning-alert {
-            background: rgba(220, 38, 38, 0.08);
-            border-color: rgba(220, 38, 38, 0.25);
+            background: #450a0a;
+            border-color: #be123c;
         }
 
         .dark .ppbj-warning-alert p {
-            color: #fca5a5;
+            color: #fecdd3;
         }
 
         .dark .ppbj-warning-ring {
