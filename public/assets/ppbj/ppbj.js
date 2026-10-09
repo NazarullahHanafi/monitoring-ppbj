@@ -89,7 +89,7 @@
             }
 
             return items.map((item) => `
-                <div class="relative rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-950/70">
+                <div class="ppbj-tracking-item relative rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-950/70">
                     <div class="absolute -left-2 top-5 h-4 w-4 rounded-full border-2 border-white bg-cyan-500 shadow dark:border-slate-900"></div>
                     <div class="flex flex-wrap items-start justify-between gap-3">
                         <div class="min-w-0">
@@ -119,6 +119,7 @@
             window.realTrackingItemsByPpbj[ppbj.id] = data.items || [];
             const quickButtons = Object.entries(data.templates || {}).map(([key, template]) => `
                 <button type="button" onclick="addRealTrackingQuick(${ppbj.id}, '${key}', ${template.requires_date ? 'true' : 'false'})"
+                    data-ppbj-tracking-quick
                     class="rounded-2xl border border-slate-200 bg-white px-3 py-3 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-cyan-300 hover:shadow-lg dark:border-slate-700 dark:bg-slate-950/60 dark:hover:border-cyan-500">
                     <div class="text-lg">${escapeHtml(template.emoji || '•')}</div>
                     <div class="mt-1 text-xs font-black text-slate-900 dark:text-white">${escapeHtml(template.title)}</div>
@@ -126,7 +127,7 @@
             `).join('');
 
             return `
-                <div class="text-left font-[Montserrat,system-ui,sans-serif]">
+                <div class="ppbj-tracking-dialog text-left font-[Montserrat,system-ui,sans-serif]">
                     <div class="rounded-3xl bg-gradient-to-r from-blue-600 via-violet-600 to-cyan-500 p-5 text-white shadow-xl">
                         <div class="text-[11px] font-black uppercase tracking-[0.22em] text-white/75">Tracking Real PPBJ</div>
                         <div class="mt-1 text-2xl font-black">${escapeHtml(ppbj.ppbj_no || '-')}</div>
@@ -138,13 +139,13 @@
                         </div>
                     </div>
 
-                    <div class="mt-4 rounded-3xl border border-cyan-200 bg-cyan-50 p-4 text-sm font-semibold leading-relaxed text-cyan-900 dark:border-cyan-500/30 dark:bg-cyan-500/10 dark:text-cyan-100">
+                    <div class="ppbj-tracking-tip mt-4 rounded-3xl border border-cyan-200 bg-cyan-50 p-4 text-sm font-semibold leading-relaxed text-cyan-900 dark:border-cyan-500/30 dark:bg-cyan-500/10 dark:text-cyan-100">
                         Fitur masa depan aktif: setiap update bisa diberi <b>tanggal reminder</b>, jadi PPBJ yang butuh follow up bisa ditandai sejak awal.
                     </div>
 
                     <div class="mt-4 grid grid-cols-2 gap-3 md:grid-cols-3">${quickButtons}</div>
 
-                    <form id="realTrackingManualForm" class="mt-4 rounded-3xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-950/40">
+                    <form id="realTrackingManualForm" class="ppbj-tracking-form mt-4 rounded-3xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-950/40">
                         <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
                             <label class="block">
                                 <span class="text-xs font-black uppercase tracking-wide text-slate-600 dark:text-slate-200">Judul tracking</span>

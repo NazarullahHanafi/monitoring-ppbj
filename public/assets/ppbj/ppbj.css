@@ -215,6 +215,54 @@ html.dark .ppbj-goods-confirm-card {
 html.dark .ppbj-goods-confirm-card__eyebrow { color: #67e8f9; }
 html.dark .ppbj-goods-confirm-card__number { color: #f0fdfa; }
 html.dark .ppbj-goods-confirm-card__hint { color: #bae6fd; }
+
+/* Isi popup Tracking Real memakai komponen yang sama di light/dark. */
+.ppbj-tracking-tip {
+    border-color: #a5f3fc !important;
+    background: #ecfeff !important;
+    color: #164e63 !important;
+}
+
+[data-ppbj-tracking-quick],
+.ppbj-tracking-item,
+.ppbj-tracking-form {
+    border-color: #dbe4f0 !important;
+    background: #ffffff !important;
+    color: #0f172a !important;
+}
+
+[data-ppbj-tracking-quick] {
+    cursor: pointer;
+}
+
+[data-ppbj-tracking-quick]:hover {
+    border-color: #22d3ee !important;
+    box-shadow: 0 12px 26px rgba(8, 145, 178, .14) !important;
+}
+
+.ppbj-tracking-form {
+    background: #f8fafc !important;
+}
+
+html.dark .ppbj-tracking-tip {
+    border-color: #155e75 !important;
+    background: rgba(8, 47, 73, .58) !important;
+    color: #cffafe !important;
+}
+
+html.dark [data-ppbj-tracking-quick],
+html.dark .ppbj-tracking-item,
+html.dark .ppbj-tracking-form {
+    border-color: #334155 !important;
+    background: #0f172a !important;
+    color: #f8fafc !important;
+}
+
+html.dark [data-ppbj-tracking-quick]:hover {
+    border-color: #22d3ee !important;
+    background: #172554 !important;
+    box-shadow: 0 14px 30px rgba(0, 0, 0, .28) !important;
+}
 .ppbj-info-center { display: inline-flex; min-width: 98px; flex-direction: column; align-items: center; gap: 6px; }
 .ppbj-action-launch { position: relative; display: inline-flex; min-width: 82px; align-items: center; justify-content: center; gap: 6px; border: 1px solid #2563eb; border-radius: 10px; background: linear-gradient(135deg, #2563eb, #4f46e5); padding: 7px 11px; color: #fff; font-size: 11px; font-weight: 900; line-height: 1; box-shadow: 0 7px 16px rgba(37,99,235,.2); cursor: pointer; transition: transform .16s ease, box-shadow .16s ease, filter .16s ease; }
 .ppbj-action-launch:hover { transform: translateY(-1px); filter: brightness(1.08); box-shadow: 0 10px 22px rgba(37,99,235,.28); }
