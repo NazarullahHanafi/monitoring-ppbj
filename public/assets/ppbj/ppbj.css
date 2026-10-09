@@ -89,10 +89,12 @@ html.dark .ppbj-notes-head { border-color: #334155; background: linear-gradient(
 html.dark .ppbj-notes-head h2, html.dark .ppbj-note__meta strong, html.dark .ppbj-mention-user strong, html.dark .ppbj-inbox-item strong { color: #f8fafc; }
 html.dark .ppbj-notes-head p:last-child, html.dark .ppbj-note__meta, html.dark .ppbj-mention-user span { color: #cbd5e1; }
 html.dark .ppbj-notes-close { border-color: #475569; background: #1e293b; color: #e2e8f0; }
+html.dark .ppbj-notes-state { color: #cbd5e1; }
 html.dark .ppbj-note__bubble, html.dark .ppbj-inbox-item { border-color: #334155; background: #1e293b; }
 html.dark .ppbj-note__body, html.dark .ppbj-inbox-item p { color: #e2e8f0; }
 html.dark .ppbj-notes-composer { border-color: #334155; background: #111827; }
 html.dark .ppbj-notes-composer textarea, html.dark .ppbj-mention-picker, html.dark .ppbj-mention-picker input { border-color: #475569; background: #1e293b; color: #f8fafc; }
+html.dark .ppbj-mention-button { background: #312e81; color: #e0e7ff; }
 html.dark .ppbj-mention-user:hover, html.dark .ppbj-mention-user[data-selected="true"], html.dark .ppbj-inbox-item:hover { background: #312e81; }
 
 @media (max-width: 640px) {

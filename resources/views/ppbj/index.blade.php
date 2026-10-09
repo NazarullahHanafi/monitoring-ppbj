@@ -1274,7 +1274,7 @@
 @endsection
 
 @push('styles')
-    <link rel="stylesheet" href="{{ asset('assets/ppbj/ppbj.css') }}?v=20261009a">
+    <link rel="stylesheet" href="{{ asset('assets/ppbj/ppbj.css') }}?v=20261009b">
 @endpush
 
 @push('scripts')
