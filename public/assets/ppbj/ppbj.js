@@ -421,12 +421,10 @@
             const result = await Swal.fire({
                 title: 'Barang/pekerjaan sudah datang?',
                 html: `
-                    <div class="text-left space-y-3">
-                        <div class="rounded-2xl border border-cyan-200 bg-cyan-50 p-3 text-sm text-cyan-900 dark:border-cyan-700/60 dark:bg-cyan-900/30 dark:text-cyan-100">
-                            <div class="text-xs font-black uppercase tracking-widest opacity-70">PPBJ / PR</div>
-                            <div class="mt-1 font-black">${escapeHtml(ppbjNo || '-')}</div>
-                            <div class="mt-2 text-xs leading-relaxed">Status ini akan terlihat oleh Operasional dan masuk ke timeline tracking.</div>
-                        </div>
+                    <div class="ppbj-goods-confirm-card">
+                        <div class="ppbj-goods-confirm-card__eyebrow">PPBJ / PR</div>
+                        <div class="ppbj-goods-confirm-card__number">${escapeHtml(ppbjNo || '-')}</div>
+                        <div class="ppbj-goods-confirm-card__hint">Status ini akan terlihat oleh Operasional dan masuk ke timeline tracking.</div>
                     </div>
                 `,
                 input: 'textarea',
@@ -441,6 +439,11 @@
                 cancelButtonText: 'Batal',
                 confirmButtonColor: '#0891b2',
                 cancelButtonColor: '#64748b',
+                customClass: {
+                    popup: 'ppbj-theme-dialog ppbj-goods-dialog',
+                    confirmButton: 'ppbj-theme-dialog__confirm',
+                    cancelButton: 'ppbj-theme-dialog__cancel',
+                },
                 preConfirm: async (note) => {
                     try {
                         const response = await fetch(`/ppbj/${id}/goods-arrived`, {

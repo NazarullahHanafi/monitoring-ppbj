@@ -40,6 +40,181 @@ mark.search-hl {
 /* ===== PPBJ COLLABORATION NOTES ===== */
 #ppbjNotesModal, #ppbjMentionInboxModal { z-index: 170; }
 #ppbjActionHubModal { z-index: 180; }
+
+/*
+ * SweetAlert dipakai oleh beberapa alur PPBJ (konfirmasi barang datang,
+ * tracking, export, cancel, dan catatan). Aturan ini sengaja semantik dan
+ * berada di aset PPBJ agar seluruh dialog konsisten tanpa menambah JavaScript
+ * atau request baru pada setiap popup.
+ */
+.swal2-popup {
+    border: 1px solid #dbe4f0 !important;
+    border-radius: 24px !important;
+    background: #ffffff !important;
+    color: #0f172a !important;
+    box-shadow: 0 28px 80px rgba(15, 23, 42, .24) !important;
+    font-family: Montserrat, Inter, ui-sans-serif, system-ui, sans-serif !important;
+}
+
+.swal2-title,
+.swal2-html-container,
+.swal2-input-label {
+    color: #0f172a !important;
+}
+
+.swal2-title {
+    font-size: clamp(1.28rem, 2vw, 1.75rem) !important;
+    font-weight: 800 !important;
+    line-height: 1.25 !important;
+}
+
+.swal2-html-container {
+    font-size: .94rem !important;
+    line-height: 1.6 !important;
+}
+
+.swal2-input-label {
+    font-size: .9rem !important;
+    font-weight: 700 !important;
+}
+
+.swal2-input,
+.swal2-textarea,
+.swal2-select,
+.swal2-html-container input:not([type="checkbox"]):not([type="radio"]),
+.swal2-html-container textarea,
+.swal2-html-container select {
+    border: 1px solid #cbd5e1 !important;
+    border-radius: 14px !important;
+    background: #f8fafc !important;
+    color: #0f172a !important;
+    box-shadow: none !important;
+}
+
+.swal2-input:focus,
+.swal2-textarea:focus,
+.swal2-select:focus,
+.swal2-html-container input:focus,
+.swal2-html-container textarea:focus,
+.swal2-html-container select:focus {
+    border-color: #2563eb !important;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, .16) !important;
+    outline: none !important;
+}
+
+.swal2-input::placeholder,
+.swal2-textarea::placeholder,
+.swal2-html-container input::placeholder,
+.swal2-html-container textarea::placeholder {
+    color: #64748b !important;
+    opacity: 1 !important;
+}
+
+.swal2-actions {
+    gap: 9px;
+}
+
+.swal2-styled {
+    border-radius: 11px !important;
+    font-weight: 800 !important;
+    box-shadow: none !important;
+}
+
+.swal2-close {
+    color: #64748b !important;
+}
+
+.swal2-validation-message {
+    border-radius: 12px !important;
+    background: #fff1f2 !important;
+    color: #9f1239 !important;
+    font-weight: 700 !important;
+}
+
+html.dark .swal2-popup {
+    border-color: #334155 !important;
+    background: #111827 !important;
+    color: #f8fafc !important;
+    box-shadow: 0 30px 90px rgba(0, 0, 0, .58) !important;
+}
+
+html.dark .swal2-title,
+html.dark .swal2-html-container,
+html.dark .swal2-input-label {
+    color: #f8fafc !important;
+}
+
+html.dark .swal2-input,
+html.dark .swal2-textarea,
+html.dark .swal2-select,
+html.dark .swal2-html-container input:not([type="checkbox"]):not([type="radio"]),
+html.dark .swal2-html-container textarea,
+html.dark .swal2-html-container select {
+    border-color: #475569 !important;
+    background: #1e293b !important;
+    color: #f8fafc !important;
+}
+
+html.dark .swal2-input::placeholder,
+html.dark .swal2-textarea::placeholder,
+html.dark .swal2-html-container input::placeholder,
+html.dark .swal2-html-container textarea::placeholder {
+    color: #94a3b8 !important;
+}
+
+html.dark .swal2-close {
+    color: #cbd5e1 !important;
+}
+
+html.dark .swal2-validation-message {
+    background: #450a0a !important;
+    color: #fecdd3 !important;
+}
+
+html.dark .swal2-timer-progress-bar {
+    background: rgba(148, 163, 184, .45) !important;
+}
+
+.ppbj-goods-confirm-card {
+    border: 1px solid #a5f3fc;
+    border-radius: 18px;
+    background: linear-gradient(135deg, #ecfeff, #eff6ff);
+    padding: 15px 16px;
+    color: #164e63;
+    text-align: left;
+}
+
+.ppbj-goods-confirm-card__eyebrow {
+    color: #0e7490;
+    font-size: .72rem;
+    font-weight: 900;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+}
+
+.ppbj-goods-confirm-card__number {
+    margin-top: 3px;
+    color: #0f3b52;
+    font-size: .98rem;
+    font-weight: 900;
+}
+
+.ppbj-goods-confirm-card__hint {
+    margin-top: 9px;
+    color: #155e75;
+    font-size: .78rem;
+    line-height: 1.55;
+}
+
+html.dark .ppbj-goods-confirm-card {
+    border-color: #155e75;
+    background: linear-gradient(135deg, rgba(8, 47, 73, .9), rgba(15, 23, 42, .95));
+    color: #cffafe;
+}
+
+html.dark .ppbj-goods-confirm-card__eyebrow { color: #67e8f9; }
+html.dark .ppbj-goods-confirm-card__number { color: #f0fdfa; }
+html.dark .ppbj-goods-confirm-card__hint { color: #bae6fd; }
 .ppbj-info-center { display: inline-flex; min-width: 98px; flex-direction: column; align-items: center; gap: 6px; }
 .ppbj-action-launch { position: relative; display: inline-flex; min-width: 82px; align-items: center; justify-content: center; gap: 6px; border: 1px solid #2563eb; border-radius: 10px; background: linear-gradient(135deg, #2563eb, #4f46e5); padding: 7px 11px; color: #fff; font-size: 11px; font-weight: 900; line-height: 1; box-shadow: 0 7px 16px rgba(37,99,235,.2); cursor: pointer; transition: transform .16s ease, box-shadow .16s ease, filter .16s ease; }
 .ppbj-action-launch:hover { transform: translateY(-1px); filter: brightness(1.08); box-shadow: 0 10px 22px rgba(37,99,235,.28); }
