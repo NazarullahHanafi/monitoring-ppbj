@@ -1980,6 +1980,11 @@
             ppbjForm.addEventListener('submit', async function (e) {
                 e.preventDefault();
 
+                if (typeof window.runPpbjPreflight === 'function') {
+                    const mayContinue = await window.runPpbjPreflight(true);
+                    if (!mayContinue) return;
+                }
+
                 await checkPpbjNoUnique();
                 const hasClientError = !errPpbjNo.classList.contains('hidden');
                 if (hasClientError || lastServerKnownDuplicate) {
@@ -2405,4 +2410,280 @@
                     });
             }
 
+        })();
+
+        // ==========================================
+        // PRE-FLIGHT + COLLABORATION NOTES
+        // ==========================================
+        (function () {
+            const config = window.PPBJ_PAGE_CONFIG || {};
+            const csrf = config.csrfToken || document.querySelector('meta[name="csrf-token"]')?.content || '';
+            const notesModal = document.getElementById('ppbjNotesModal');
+            const notesContent = document.getElementById('ppbjNotesContent');
+            const notesLoading = document.getElementById('ppbjNotesLoading');
+            const notesList = document.getElementById('ppbjNotesList');
+            const notesForm = document.getElementById('ppbjNotesForm');
+            const noteBody = document.getElementById('ppbjNoteBody');
+            const noteSubmit = document.getElementById('ppbjNoteSubmit');
+            const mentionPicker = document.getElementById('ppbjMentionPicker');
+            const mentionSearch = document.getElementById('ppbjMentionSearch');
+            const mentionUsers = document.getElementById('ppbjMentionUsers');
+            const mentionChips = document.getElementById('ppbjMentionChips');
+            const mentionInboxModal = document.getElementById('ppbjMentionInboxModal');
+            let activePpbjId = null;
+            let availableUsers = [];
+            let selectedMentions = new Map();
+
+            const escape = (value) => String(value ?? '')
+                .replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
+                .replaceAll('"', '&quot;').replaceAll("'", '&#039;');
+
+            function toast(icon, title, text) {
+                if (window.Swal) {
+                    return Swal.fire({ icon, title, text, confirmButtonColor: '#4f46e5' });
+                }
+                window.alert(`${title}\n${text || ''}`);
+            }
+
+            function formPayload() {
+                const form = document.getElementById('ppbjForm');
+                const payload = {};
+                form?.querySelectorAll('[name]').forEach((field) => {
+                    if (!field.name || field.name === '_token') return;
+                    payload[field.name] = field.value === '' ? null : field.value;
+                });
+                return payload;
+            }
+
+            function renderPreflight(result) {
+                const card = document.getElementById('ppbjPreflightCard');
+                const score = document.getElementById('ppbjPreflightScore');
+                const summary = document.getElementById('ppbjPreflightSummary');
+                const meta = document.getElementById('ppbjPreflightMeta');
+                const issues = document.getElementById('ppbjPreflightIssues');
+                if (!card || !result) return;
+
+                card.dataset.status = result.status || 'idle';
+                score.textContent = Number(result.score || 0);
+                summary.textContent = result.summary || 'Pemeriksaan selesai.';
+                const counts = result.counts || {};
+                meta.textContent = `${counts.error || 0} wajib diperbaiki · ${counts.warning || 0} perlu ditinjau`;
+                const list = Array.isArray(result.issues) ? result.issues : [];
+                issues.classList.toggle('hidden', list.length === 0);
+                issues.innerHTML = list.slice(0, 12).map((issue) => `
+                    <article class="ppbj-preflight-issue" data-severity="${escape(issue.severity)}">
+                        <span class="ppbj-preflight-issue__dot"></span>
+                        <div><strong>${escape(issue.title)}</strong><p>${escape(issue.detail)}</p>${issue.suggestion ? `<small>${escape(issue.suggestion)}</small>` : ''}</div>
+                    </article>`).join('');
+
+                const firstError = list.find((issue) => issue.severity === 'error' && issue.field);
+                if (firstError) {
+                    document.getElementById(firstError.field)?.classList.add('border-red-400', 'ring-2', 'ring-red-200');
+                }
+            }
+
+            window.runPpbjPreflight = async function (beforeSubmit = false) {
+                const button = document.getElementById('ppbjPreflightButton');
+                if (!config.preflightUrl) return true;
+                button && (button.disabled = true);
+                if (button) button.textContent = 'Memeriksa...';
+
+                try {
+                    const response = await fetch(config.preflightUrl, {
+                        method: 'POST',
+                        headers: { 'X-CSRF-TOKEN': csrf, 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                        body: JSON.stringify(formPayload()),
+                    });
+                    const result = await response.json();
+                    renderPreflight(result);
+
+                    if ((result.counts?.error || 0) > 0) {
+                        if (beforeSubmit) await toast('error', 'Belum dapat disimpan', result.summary);
+                        document.getElementById('ppbjPreflightCard')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        return false;
+                    }
+
+                    if (beforeSubmit && (result.counts?.warning || 0) > 0 && window.Swal) {
+                        const answer = await Swal.fire({
+                            icon: 'warning',
+                            title: `${result.counts.warning} hal perlu ditinjau`,
+                            text: 'Tidak ada kesalahan fatal. Anda dapat kembali memeriksa atau tetap menyimpan data.',
+                            showCancelButton: true,
+                            confirmButtonText: 'Tetap Simpan',
+                            cancelButtonText: 'Periksa Lagi',
+                            confirmButtonColor: '#4f46e5',
+                        });
+                        return answer.isConfirmed;
+                    }
+                    return true;
+                } catch (error) {
+                    if (beforeSubmit) await toast('error', 'Validasi tidak tersedia', 'Koneksi pemeriksaan gagal. Coba kembali agar data tidak tersimpan tanpa validasi.');
+                    return !beforeSubmit;
+                } finally {
+                    if (button) { button.disabled = false; button.textContent = 'Periksa Sekarang'; }
+                }
+            };
+
+            document.getElementById('ppbjForm')?.addEventListener('input', () => {
+                const card = document.getElementById('ppbjPreflightCard');
+                if (card?.dataset.status && card.dataset.status !== 'idle') {
+                    card.dataset.status = 'idle';
+                    document.getElementById('ppbjPreflightSummary').textContent = 'Data berubah. Jalankan pemeriksaan ulang sebelum menyimpan.';
+                    document.getElementById('ppbjPreflightMeta').textContent = 'Belum ada request baru yang dijalankan.';
+                }
+            });
+
+            function initials(name) {
+                return String(name || '?').trim().split(/\s+/).slice(0, 2).map((part) => part.charAt(0).toUpperCase()).join('');
+            }
+
+            function relativeDate(value) {
+                const date = new Date(value);
+                if (Number.isNaN(date.getTime())) return '-';
+                return date.toLocaleString('id-ID', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+            }
+
+            function renderNotes(notes) {
+                if (!notesList) return;
+                if (!notes.length) {
+                    notesList.innerHTML = '<div class="ppbj-notes-state">Belum ada catatan. Mulai dengan keputusan, pertanyaan, atau tindak lanjut pertama.</div>';
+                    return;
+                }
+                notesList.innerHTML = notes.map((note) => `
+                    <article class="ppbj-note" data-note-id="${note.id}">
+                        <div class="ppbj-note__avatar">${escape(initials(note.user_name))}</div>
+                        <div class="ppbj-note__bubble">
+                            <div class="ppbj-note__meta"><strong>${escape(note.user_name)}</strong><span>${escape(note.department)} · ${escape(note.role)}</span><span>${escape(relativeDate(note.created_at))}${note.edited_at ? ' · diedit' : ''}</span>
+                                ${note.can_manage ? `<span class="ppbj-note__actions"><button type="button" onclick="editPpbjNote(${note.id})">Edit</button><button type="button" onclick="deletePpbjNote(${note.id})">Hapus</button></span>` : ''}
+                            </div>
+                            <p class="ppbj-note__body">${escape(note.body)}</p>
+                            ${note.mentions?.length ? `<div class="ppbj-note__mentions">${note.mentions.map((user) => `<span class="ppbj-note__mention">@${escape(user.name)}</span>`).join('')}</div>` : ''}
+                        </div>
+                    </article>`).join('');
+                notesList.scrollTop = notesList.scrollHeight;
+            }
+
+            function renderMentionUsers(filter = '') {
+                const needle = String(filter).trim().toLowerCase();
+                const currentId = Number(config.currentUserId || 0);
+                const users = availableUsers.filter((user) => Number(user.id) !== currentId && (!needle || `${user.name} ${user.department} ${user.role}`.toLowerCase().includes(needle)));
+                mentionUsers.innerHTML = users.length ? users.map((user) => `
+                    <button type="button" class="ppbj-mention-user" data-user-id="${user.id}" data-selected="${selectedMentions.has(Number(user.id))}">
+                        <span><strong>${escape(user.name)}</strong><span>${escape(user.department)} · ${escape(user.role)}</span></span><strong>${selectedMentions.has(Number(user.id)) ? '✓' : '+'}</strong>
+                    </button>`).join('') : '<div class="ppbj-notes-state">User tidak ditemukan.</div>';
+            }
+
+            function renderMentionChips() {
+                const users = [...selectedMentions.values()];
+                mentionChips.classList.toggle('hidden', users.length === 0);
+                mentionChips.innerHTML = users.map((user) => `<button type="button" class="ppbj-mention-chip" data-remove-mention="${user.id}">@${escape(user.name)} ×</button>`).join('');
+            }
+
+            window.openPpbjNotes = async function (ppbjId) {
+                activePpbjId = Number(ppbjId);
+                selectedMentions.clear();
+                notesModal.classList.remove('hidden'); notesModal.classList.add('flex');
+                notesContent.classList.add('hidden'); notesContent.classList.remove('flex'); notesLoading.classList.remove('hidden');
+                document.body.style.overflow = 'hidden';
+                try {
+                    const response = await fetch(`${config.collaborationBaseUrl}/${activePpbjId}`, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+                    if (!response.ok) throw new Error('Catatan tidak dapat dimuat.');
+                    const data = await response.json();
+                    availableUsers = data.users || [];
+                    document.getElementById('ppbjNotesTitle').textContent = data.ppbj?.number || 'Catatan & Mention';
+                    document.getElementById('ppbjNotesSubtitle').textContent = data.ppbj?.description || 'Kolaborasi lintas role';
+                    renderNotes(data.notes || []); renderMentionUsers(); renderMentionChips();
+                    notesLoading.classList.add('hidden'); notesContent.classList.remove('hidden'); notesContent.classList.add('flex');
+                    document.getElementById(`ppbjNoteUnread_${activePpbjId}`)?.remove();
+                    const badge = document.getElementById('ppbjMentionHeaderBadge');
+                    if (badge) {
+                        const reduced = Math.max(0, Number(badge.textContent || 0) - Number(window.ppbjData?.[activePpbjId]?.collaboration_unread_count || 0));
+                        badge.textContent = reduced; badge.classList.toggle('hidden', reduced === 0);
+                    }
+                } catch (error) {
+                    notesLoading.textContent = error.message;
+                }
+            };
+
+            window.closePpbjNotes = function () {
+                notesModal.classList.add('hidden'); notesModal.classList.remove('flex');
+                mentionPicker?.classList.add('hidden'); document.body.style.overflow = '';
+            };
+
+            async function refreshActiveNotes() {
+                if (!activePpbjId) return;
+                const response = await fetch(`${config.collaborationBaseUrl}/${activePpbjId}`, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+                const data = await response.json(); renderNotes(data.notes || []);
+                const count = data.notes?.length || 0;
+                const el = document.getElementById(`ppbjNoteCount_${activePpbjId}`); if (el) el.textContent = count;
+            }
+
+            notesForm?.addEventListener('submit', async (event) => {
+                event.preventDefault();
+                const body = noteBody.value.trim();
+                if (body.length < 2 || !activePpbjId) return;
+                noteSubmit.disabled = true; noteSubmit.textContent = 'Mengirim...';
+                try {
+                    const response = await fetch(`${config.collaborationBaseUrl}/${activePpbjId}`, {
+                        method: 'POST', headers: { 'X-CSRF-TOKEN': csrf, 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                        body: JSON.stringify({ body, mentions: [...selectedMentions.keys()] }),
+                    });
+                    const data = await response.json();
+                    if (!response.ok) throw new Error(data.message || 'Catatan gagal dikirim.');
+                    noteBody.value = ''; selectedMentions.clear(); renderMentionChips(); renderMentionUsers();
+                    document.getElementById('ppbjNoteCounter').textContent = '0/2000';
+                    await refreshActiveNotes();
+                } catch (error) { await toast('error', 'Gagal mengirim', error.message); }
+                finally { noteSubmit.disabled = false; noteSubmit.textContent = 'Kirim Catatan'; }
+            });
+
+            noteBody?.addEventListener('input', () => { document.getElementById('ppbjNoteCounter').textContent = `${noteBody.value.length}/2000`; });
+            document.getElementById('ppbjMentionToggle')?.addEventListener('click', () => mentionPicker.classList.toggle('hidden'));
+            mentionSearch?.addEventListener('input', () => renderMentionUsers(mentionSearch.value));
+            mentionUsers?.addEventListener('click', (event) => {
+                const button = event.target.closest('[data-user-id]'); if (!button) return;
+                const id = Number(button.dataset.userId); const user = availableUsers.find((item) => Number(item.id) === id);
+                if (!user) return;
+                selectedMentions.has(id) ? selectedMentions.delete(id) : selectedMentions.set(id, user);
+                renderMentionUsers(mentionSearch.value); renderMentionChips();
+            });
+            mentionChips?.addEventListener('click', (event) => {
+                const button = event.target.closest('[data-remove-mention]'); if (!button) return;
+                selectedMentions.delete(Number(button.dataset.removeMention)); renderMentionChips(); renderMentionUsers(mentionSearch.value);
+            });
+
+            window.editPpbjNote = async function (noteId) {
+                const article = document.querySelector(`[data-note-id="${noteId}"]`);
+                const current = article?.querySelector('.ppbj-note__body')?.textContent || '';
+                if (!window.Swal) return;
+                const answer = await Swal.fire({ title: 'Edit catatan', input: 'textarea', inputValue: current, showCancelButton: true, confirmButtonText: 'Simpan', inputAttributes: { maxlength: 2000 } });
+                if (!answer.isConfirmed || String(answer.value || '').trim().length < 2) return;
+                const response = await fetch(`${config.collaborationBaseUrl}/notes/${noteId}`, { method: 'PATCH', headers: { 'X-CSRF-TOKEN': csrf, 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }, body: JSON.stringify({ body: String(answer.value).trim() }) });
+                if (response.ok) await refreshActiveNotes(); else await toast('error', 'Gagal', 'Catatan tidak dapat diperbarui.');
+            };
+
+            window.deletePpbjNote = async function (noteId) {
+                const answer = window.Swal ? await Swal.fire({ icon: 'warning', title: 'Hapus catatan?', text: 'Catatan dan status mention terkait akan dihapus.', showCancelButton: true, confirmButtonText: 'Hapus', confirmButtonColor: '#dc2626' }) : { isConfirmed: window.confirm('Hapus catatan?') };
+                if (!answer.isConfirmed) return;
+                const response = await fetch(`${config.collaborationBaseUrl}/notes/${noteId}`, { method: 'DELETE', headers: { 'X-CSRF-TOKEN': csrf, 'X-Requested-With': 'XMLHttpRequest' } });
+                if (response.ok) await refreshActiveNotes(); else await toast('error', 'Gagal', 'Catatan tidak dapat dihapus.');
+            };
+
+            window.openPpbjMentionInbox = async function () {
+                mentionInboxModal.classList.remove('hidden'); mentionInboxModal.classList.add('flex'); document.body.style.overflow = 'hidden';
+                const list = document.getElementById('ppbjMentionInboxList');
+                list.innerHTML = '<div class="ppbj-notes-state">Memuat mention...</div>';
+                try {
+                    const response = await fetch(`${config.collaborationBaseUrl}/mentions`, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+                    const data = await response.json();
+                    list.innerHTML = data.mentions?.length ? data.mentions.map((item) => `<button type="button" class="ppbj-inbox-item" data-open-ppbj-note="${item.ppbj_id}"><strong>${escape(item.ppbj_no)} · ${escape(item.user_name)}</strong><p>${escape(item.body)}</p><small>${escape(relativeDate(item.created_at))} · Buka percakapan</small></button>`).join('') : '<div class="ppbj-notes-state">Tidak ada mention baru. Semua sudah ditinjau.</div>';
+                } catch { list.innerHTML = '<div class="ppbj-notes-state">Mention tidak dapat dimuat.</div>'; }
+            };
+            window.closePpbjMentionInbox = function () { mentionInboxModal.classList.add('hidden'); mentionInboxModal.classList.remove('flex'); document.body.style.overflow = ''; };
+            document.getElementById('ppbjMentionInboxList')?.addEventListener('click', (event) => {
+                const button = event.target.closest('[data-open-ppbj-note]'); if (!button) return;
+                closePpbjMentionInbox(); openPpbjNotes(Number(button.dataset.openPpbjNote));
+            });
+            notesModal?.addEventListener('click', window.closePpbjNotes);
+            mentionInboxModal?.addEventListener('click', window.closePpbjMentionInbox);
         })();

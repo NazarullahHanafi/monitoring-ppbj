@@ -16,6 +16,7 @@ use App\Http\Controllers\OperasionalDashboardController;
 use App\Http\Controllers\OwnerController;
 use App\Http\Controllers\OwnerSecurityController;
 use App\Http\Controllers\PpbjController;
+use App\Http\Controllers\PpbjCollaborationController;
 use App\Http\Controllers\PresenceController;
 use App\Http\Controllers\PrReceiptApprovalController;
 use App\Http\Controllers\SatuanController;
@@ -166,6 +167,21 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
             ->name('destroy');
     });
 
+    // Catatan PPBJ bersifat lintas departemen. Isi dimuat hanya ketika panel dibuka,
+    // sehingga tidak menambah polling maupun beban pada halaman utama.
+    Route::prefix('ppbj-collaboration')->name('ppbj-collaboration.')->group(function () {
+        Route::get('/mentions', [PpbjCollaborationController::class, 'mentions'])
+            ->middleware('throttle:60,1')->name('mentions');
+        Route::get('/{ppbj}', [PpbjCollaborationController::class, 'index'])
+            ->whereNumber('ppbj')->middleware('throttle:60,1')->name('index');
+        Route::post('/{ppbj}', [PpbjCollaborationController::class, 'store'])
+            ->whereNumber('ppbj')->middleware('throttle:30,1')->name('store');
+        Route::patch('/notes/{note}', [PpbjCollaborationController::class, 'update'])
+            ->whereNumber('note')->middleware('throttle:30,1')->name('update');
+        Route::delete('/notes/{note}', [PpbjCollaborationController::class, 'destroy'])
+            ->whereNumber('note')->middleware('throttle:20,1')->name('destroy');
+    });
+
     Route::middleware('owner')->group(function () {
         Route::get('/owner', [OwnerController::class, 'index'])->name('owner.index');
         Route::get('/owner/audit/export', [OwnerController::class, 'exportAudit'])->name('owner.audit.export');
@@ -192,6 +208,7 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
 
         // ==== PPBJ ====
         Route::get('/ppbj/check-ppbj-no', [PpbjController::class, 'checkPpbjNo'])->name('ppbj.checkPpbjNo')->middleware('throttle:60,1');
+        Route::post('/ppbj/preflight', [PpbjController::class, 'preflight'])->name('ppbj.preflight')->middleware('throttle:60,1');
         Route::get('/ppbj/export', [PpbjController::class, 'export'])->name('ppbj.export')->middleware('throttle:10,1');
         Route::get('/ppbj/template', [PpbjController::class, 'downloadTemplate'])->name('ppbj.template');
         Route::get('/ppbj/report', [PpbjController::class, 'reportIndex'])->name('ppbj.report');

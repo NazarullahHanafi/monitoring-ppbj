@@ -12,6 +12,15 @@
         </div>
 
         <div class="flex gap-2 flex-wrap">
+            <button type="button" onclick="openPpbjMentionInbox()"
+                class="relative inline-flex items-center justify-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-2 font-semibold text-indigo-700 shadow-sm transition hover:bg-indigo-100 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-200 dark:hover:bg-indigo-500/20">
+                <span>💬 Mention Saya</span>
+                <span id="ppbjMentionHeaderBadge"
+                    class="{{ $collaborationMentionCount > 0 ? '' : 'hidden' }} min-w-5 rounded-full bg-rose-600 px-1.5 py-0.5 text-center text-[10px] font-extrabold text-white">
+                    {{ $collaborationMentionCount }}
+                </span>
+            </button>
+
             <button type="button" onclick="openImportModal()"
                 class="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 font-semibold text-white shadow-sm hover:bg-emerald-700 active:scale-[.99] transition">
                 <span>📤 Import Excel</span>
@@ -663,6 +672,17 @@
                                         class="inline-flex items-center gap-0.5 rounded-md bg-cyan-50 px-1.5 py-0.5 text-[9px] font-bold leading-none text-cyan-700 ring-1 ring-cyan-200 transition hover:bg-cyan-100 dark:bg-cyan-900/30 dark:text-cyan-200 dark:ring-cyan-700/60">
                                         <span>Tracking Real</span>
                                     </button>
+                                    <button type="button" onclick="openPpbjNotes({{ $row->id }})"
+                                        class="relative inline-flex items-center gap-1 rounded-md bg-indigo-50 px-2 py-1 text-[9px] font-bold leading-none text-indigo-700 ring-1 ring-indigo-200 transition hover:bg-indigo-100 dark:bg-indigo-500/15 dark:text-indigo-200 dark:ring-indigo-500/30">
+                                        <span>💬 Catatan</span>
+                                        <span id="ppbjNoteCount_{{ $row->id }}">{{ (int) ($row->collaboration_note_count ?? 0) }}</span>
+                                        @if((int) ($row->collaboration_unread_count ?? 0) > 0)
+                                            <span id="ppbjNoteUnread_{{ $row->id }}"
+                                                class="absolute -right-2 -top-2 min-w-4 rounded-full bg-rose-600 px-1 py-0.5 text-[8px] font-black text-white">
+                                                {{ (int) $row->collaboration_unread_count }} baru
+                                            </span>
+                                        @endif
+                                    </button>
                                     @if(!empty($row->goods_confirmed_at))
                                         <span class="inline-flex items-center gap-1 rounded-md bg-emerald-100 px-1.5 py-0.5 text-[9px] font-bold leading-none text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-900/40 dark:text-emerald-200 dark:ring-emerald-700/60"
                                             title="Dikonfirmasi oleh {{ $row->goods_confirmed_by_name ?: 'Operasional' }}">
@@ -928,6 +948,25 @@
                     </div>
                 @endforeach
 
+                <section id="ppbjPreflightCard" class="ppbj-preflight md:col-span-2" data-status="idle">
+                    <div class="ppbj-preflight__head">
+                        <div>
+                            <p class="ppbj-preflight__eyebrow">VALIDASI SEBELUM SUBMIT</p>
+                            <h3 class="ppbj-preflight__title">Pemeriksaan kualitas dan konsistensi data</h3>
+                            <p id="ppbjPreflightSummary" class="ppbj-preflight__summary">Pemeriksaan dijalankan saat diminta dan otomatis sebelum penyimpanan.</p>
+                        </div>
+                        <div class="ppbj-preflight__score">
+                            <strong id="ppbjPreflightScore">—</strong><span>/100</span>
+                        </div>
+                    </div>
+                    <div id="ppbjPreflightIssues" class="ppbj-preflight__issues hidden"></div>
+                    <div class="ppbj-preflight__footer">
+                        <span id="ppbjPreflightMeta">Tidak ada request latar belakang selama Anda mengetik.</span>
+                        <button type="button" id="ppbjPreflightButton" onclick="runPpbjPreflight(false)"
+                            class="ppbj-preflight__button">Periksa Sekarang</button>
+                    </div>
+                </section>
+
                 @if(!auth()->user()?->isReadOnly())
                     <div id="ppbjFormArchiveCard"
                         class="md:col-span-2 rounded-2xl border border-violet-200 bg-gradient-to-r from-violet-50 via-blue-50 to-cyan-50 p-4 dark:border-violet-500/30 dark:from-violet-950/40 dark:via-blue-950/35 dark:to-cyan-950/30">
@@ -974,6 +1013,51 @@
                     </button>
                 </div>
             </form>
+        </div>
+    </div>
+
+    {{-- ================= CATATAN KOLABORASI ================= --}}
+    <div id="ppbjNotesModal" class="fixed inset-0 z-[70] hidden items-center justify-center bg-slate-950/65 p-3 backdrop-blur-sm">
+        <div class="ppbj-notes-shell" onclick="event.stopPropagation()">
+            <header class="ppbj-notes-head">
+                <div>
+                    <p class="ppbj-notes-kicker">RUANG KOLABORASI PR</p>
+                    <h2 id="ppbjNotesTitle">Catatan & Mention</h2>
+                    <p id="ppbjNotesSubtitle">Memuat informasi...</p>
+                </div>
+                <button type="button" onclick="closePpbjNotes()" class="ppbj-notes-close" aria-label="Tutup">×</button>
+            </header>
+            <div id="ppbjNotesLoading" class="ppbj-notes-state">Memuat percakapan...</div>
+            <div id="ppbjNotesContent" class="hidden min-h-0 flex-1 flex-col">
+                <div id="ppbjNotesList" class="ppbj-notes-list"></div>
+                <form id="ppbjNotesForm" class="ppbj-notes-composer">
+                    <div id="ppbjMentionChips" class="ppbj-mention-chips hidden"></div>
+                    <textarea id="ppbjNoteBody" maxlength="2000" rows="3" placeholder="Tulis catatan, keputusan, kebutuhan revisi, atau tindak lanjut..."></textarea>
+                    <div class="ppbj-notes-compose-actions">
+                        <div class="relative">
+                            <button type="button" id="ppbjMentionToggle" class="ppbj-mention-button">@ Mention user</button>
+                            <div id="ppbjMentionPicker" class="ppbj-mention-picker hidden">
+                                <input id="ppbjMentionSearch" type="search" placeholder="Cari nama atau bagian...">
+                                <div id="ppbjMentionUsers" class="ppbj-mention-users"></div>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <span id="ppbjNoteCounter" class="text-xs text-slate-400">0/2000</span>
+                            <button type="submit" id="ppbjNoteSubmit" class="ppbj-note-submit">Kirim Catatan</button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div id="ppbjMentionInboxModal" class="fixed inset-0 z-[70] hidden items-center justify-center bg-slate-950/65 p-3 backdrop-blur-sm">
+        <div class="ppbj-mention-inbox" onclick="event.stopPropagation()">
+            <header class="ppbj-notes-head">
+                <div><p class="ppbj-notes-kicker">PUSAT MENTION</p><h2>Catatan yang membutuhkan perhatian Anda</h2></div>
+                <button type="button" onclick="closePpbjMentionInbox()" class="ppbj-notes-close">×</button>
+            </header>
+            <div id="ppbjMentionInboxList" class="ppbj-notes-list"><div class="ppbj-notes-state">Memuat mention...</div></div>
         </div>
     </div>
 
@@ -1190,7 +1274,7 @@
 @endsection
 
 @push('styles')
-    <link rel="stylesheet" href="{{ asset('assets/ppbj/ppbj.css') }}?v=20261008b">
+    <link rel="stylesheet" href="{{ asset('assets/ppbj/ppbj.css') }}?v=20261009a">
 @endpush
 
 @push('scripts')
@@ -1333,6 +1417,9 @@
             'csrfToken' => csrf_token(),
             'importPreviewUrl' => route('ppbj.import.preview'),
             'importProcessUrl' => route('ppbj.import.process'),
+            'preflightUrl' => route('ppbj.preflight'),
+            'collaborationBaseUrl' => url('/ppbj-collaboration'),
+            'currentUserId' => auth()->id(),
             'ppbjData' => $ppbjJsonData,
         ];
     @endphp
@@ -1366,7 +1453,7 @@
             });
         };
     </script>
-    <script src="{{ asset('assets/ppbj/ppbj.js') }}?v=20261008b" defer></script>
+    <script src="{{ asset('assets/ppbj/ppbj.js') }}?v=20261009a" defer></script>
 
 @endpush
 

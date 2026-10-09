@@ -14,6 +14,7 @@ use App\Models\User;
 use App\Services\PrArchiveService;
 use App\Services\ProcurementJourneyService;
 use App\Support\CacheBatch;
+use App\Support\PpbjSubmissionInspector;
 use Carbon\Carbon;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
@@ -270,6 +271,37 @@ class PpbjController extends Controller
             }
         }
 
+        // Dua agregasi terindeks untuk baris pada halaman aktif. Isi catatan tidak
+        // ikut dimuat dan baru diambil ketika panel kolaborasi dibuka.
+        $pagePpbjIds = collect($ppbj->items())->pluck('id')->map(fn ($id) => (int) $id)->all();
+        $collaborationNoteCounts = $pagePpbjIds === []
+            ? collect()
+            : DB::table('ppbj_collaboration_notes')
+                ->whereIn('ppbj_id', $pagePpbjIds)
+                ->select('ppbj_id', DB::raw('COUNT(*) as total'))
+                ->groupBy('ppbj_id')
+                ->pluck('total', 'ppbj_id');
+        $collaborationUnreadCounts = $pagePpbjIds === []
+            ? collect()
+            : DB::table('ppbj_note_mentions as mention')
+                ->join('ppbj_collaboration_notes as note', 'note.id', '=', 'mention.note_id')
+                ->where('mention.user_id', $request->user()->id)
+                ->whereNull('mention.read_at')
+                ->whereIn('note.ppbj_id', $pagePpbjIds)
+                ->select('note.ppbj_id', DB::raw('COUNT(*) as total'))
+                ->groupBy('note.ppbj_id')
+                ->pluck('total', 'note.ppbj_id');
+
+        foreach ($ppbj->items() as $row) {
+            $row->collaboration_note_count = (int) ($collaborationNoteCounts[$row->id] ?? 0);
+            $row->collaboration_unread_count = (int) ($collaborationUnreadCounts[$row->id] ?? 0);
+        }
+
+        $collaborationMentionCount = (int) DB::table('ppbj_note_mentions')
+            ->where('user_id', $request->user()->id)
+            ->whereNull('read_at')
+            ->count();
+
         // Informasi "ditemukan di kolom" dihitung dari data halaman yang sudah dimuat,
         // sehingga pencarian tidak lagi melakukan full-table scan tambahan.
         if ($searchContext !== null) {
@@ -307,6 +339,7 @@ class PpbjController extends Controller
             'buyers',
             'metodePengadaans',
             'penyediaEksternals',
+            'collaborationMentionCount',
             'searchContext'   // ← TAMBAHAN
         ));
     }
@@ -669,7 +702,7 @@ class PpbjController extends Controller
     // =====================
     // STORE (CREATE)
     // =====================
-    public function store(Request $request)
+    public function store(Request $request, PpbjSubmissionInspector $inspector)
     {
         $request->validate([
             'ppbj_no' => ['required', 'string', 'max:255', 'unique:ppbj,ppbj_no'],
@@ -686,6 +719,10 @@ class PpbjController extends Controller
             'ppbj_no.required' => 'No PPBJ wajib diisi.',
             'promised_date.after_or_equal' => 'Tanggal pemenuhan/berakhir kontrak tidak boleh lebih awal dari tanggal SPK/kontrak.',
         ]);
+
+        if ($blocked = $this->blockedPreflightResponse($inspector->inspect($request->all()))) {
+            return $blocked;
+        }
 
         try {
             $ppbj = DB::transaction(function () use ($request) {
@@ -761,7 +798,7 @@ class PpbjController extends Controller
     // =====================
     // UPDATE (EDIT)
     // =====================
-    public function update(Request $request, $id)
+    public function update(Request $request, $id, PpbjSubmissionInspector $inspector)
     {
         $ppbj = Ppbj::findOrFail($id);
 
@@ -788,6 +825,10 @@ class PpbjController extends Controller
             'ppbj_no.unique' => 'No PPBJ tersebut sudah ada.',
             'promised_date.after_or_equal' => 'Tanggal pemenuhan/berakhir kontrak tidak boleh lebih awal dari tanggal SPK/kontrak.',
         ]);
+
+        if ($blocked = $this->blockedPreflightResponse($inspector->inspect($request->all()))) {
+            return $blocked;
+        }
 
         try {
             $data = $request->only(Ppbj::manualFields());
@@ -816,6 +857,54 @@ class PpbjController extends Controller
             'archive_upload_url' => route('ppbj.archive-attachment', $ppbj),
             'archive_status_url' => route('ppbj.archive', $ppbj->id),
         ];
+    }
+
+    public function preflight(Request $request, PpbjSubmissionInspector $inspector)
+    {
+        $result = $inspector->inspect($request->all());
+        $number = trim((string) $request->input('ppbj_no'));
+        $ignoreId = (int) $request->input('id', 0);
+
+        if ($number !== '') {
+            $duplicate = DB::table('ppbj')
+                ->where('ppbj_no', $number)
+                ->when($ignoreId > 0, fn ($query) => $query->where('id', '!=', $ignoreId))
+                ->exists();
+
+            if ($duplicate) {
+                $result['issues'][] = [
+                    'severity' => 'error',
+                    'field' => 'ppbj_no',
+                    'title' => 'Nomor PR/PPBJ sudah digunakan',
+                    'detail' => 'Nomor yang sama sudah tersimpan pada Management PPBJ.',
+                    'suggestion' => 'Gunakan nomor lain atau buka dan perbarui data yang sudah ada.',
+                ];
+                $result['counts']['error']++;
+                $result['status'] = 'blocked';
+                $result['summary'] = 'Ada data yang wajib diperbaiki sebelum disimpan.';
+            }
+        }
+
+        return response()->json($result);
+    }
+
+    private function blockedPreflightResponse(array $result)
+    {
+        if (($result['counts']['error'] ?? 0) === 0) {
+            return null;
+        }
+
+        $errors = collect($result['issues'])
+            ->where('severity', 'error')
+            ->groupBy('field')
+            ->map(fn ($issues) => $issues->pluck('detail')->values()->all())
+            ->all();
+
+        return response()->json([
+            'message' => 'Validasi menemukan data yang wajib diperbaiki.',
+            'errors' => $errors,
+            'preflight' => $result,
+        ], 422);
     }
 
     // =====================
