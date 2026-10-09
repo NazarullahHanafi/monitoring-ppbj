@@ -833,6 +833,16 @@
             const cancelVerifiedByText = document.getElementById('cancelVerifiedByText');
             const cancelledAtText = document.getElementById('cancelledAtText');
             const detailArchiveCard = document.getElementById('detailArchiveCard');
+            const actionHubModal = document.getElementById('ppbjActionHubModal');
+            const actionHubTitle = document.getElementById('ppbjActionHubTitle');
+            const actionHubSubtitle = document.getElementById('ppbjActionHubSubtitle');
+            const actionHubPanel = actionHubModal?.querySelector('.ppbj-action-hub');
+            const actionArchiveState = document.getElementById('ppbjActionArchiveState');
+            const actionNotesCount = document.getElementById('ppbjActionNotesCount');
+            const actionGoods = document.getElementById('ppbjActionGoods');
+            const actionGoodsTitle = document.getElementById('ppbjActionGoodsTitle');
+            const actionGoodsHint = document.getElementById('ppbjActionGoodsHint');
+            let activeActionPpbjId = null;
 
             const formTitle = document.getElementById('formTitle');
             const ppbjIdInput = document.getElementById('ppbj_id');
@@ -1226,7 +1236,8 @@
                 const rowBadge = document.querySelector(`[data-archive-status][data-ppbj-id="${ppbjId}"]`);
 
                 if (badge) {
-                    badge.className = `inline-flex rounded-full px-2.5 py-1 text-[10px] font-bold ${ui.badge}`;
+                    badge.className = 'ppbj-archive-badge';
+                    badge.dataset.state = state;
                     badge.textContent = ui.label;
                 }
                 if (messageEl) messageEl.textContent = message || ui.label;
@@ -1236,11 +1247,15 @@
                     documents.classList.add('hidden');
                 }
                 if (rowBadge) {
-                    rowBadge.className = `inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-[9px] font-semibold leading-none ring-1 transition ${ui.row}`;
+                    rowBadge.className = 'ppbj-info-signal';
+                    rowBadge.dataset.state = state;
                     rowBadge.replaceChildren();
                     const dot = document.createElement('span');
-                    dot.className = `h-1 w-1 rounded-full ${ui.dot}`;
+                    dot.className = 'ppbj-info-signal__dot';
                     rowBadge.append(dot, document.createTextNode(ui.label));
+                }
+                if (activeActionPpbjId === Number(ppbjId) && actionArchiveState) {
+                    actionArchiveState.textContent = message || ui.label;
                 }
             }
 
@@ -1285,17 +1300,17 @@
                         if (!packageUrl) return;
 
                         const packageCard = document.createElement('div');
-                        packageCard.className = 'flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3 dark:border-emerald-700/50 dark:bg-emerald-900/20';
+                        packageCard.className = 'ppbj-archive-package';
 
                         const info = document.createElement('div');
-                        info.className = 'min-w-0 flex-1';
+                        info.className = 'ppbj-archive-item__info';
 
                         const title = document.createElement('p');
-                        title.className = 'text-sm font-bold text-emerald-900 dark:text-emerald-100';
+                        title.className = 'ppbj-archive-item__title ppbj-archive-item__title--package';
                         title.textContent = 'Paket arsip lengkap PR/PPBJ';
 
                         const meta = document.createElement('p');
-                        meta.className = 'mt-1 text-[11px] font-semibold text-emerald-700 dark:text-emerald-200';
+                        meta.className = 'ppbj-archive-item__meta';
                         const fileCount = Number(packageItem.file_count || 0);
                         meta.textContent = [
                             packageItem.document_number || packageItem.name || 'Paket arsip',
@@ -1307,7 +1322,7 @@
                         const link = document.createElement('a');
                         link.href = packageUrl;
                         link.dataset.archiveDownload = 'true';
-                        link.className = 'inline-flex shrink-0 items-center rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-emerald-700';
+                        link.className = 'ppbj-archive-action ppbj-archive-action--package';
                         link.textContent = 'ZIP Paket';
 
                         packageCard.append(info, link);
@@ -1317,15 +1332,15 @@
 
                 documents.forEach((documentItem) => {
                     const item = document.createElement('div');
-                    item.className = 'flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-3 dark:border-gray-700 dark:bg-gray-800';
+                    item.className = 'ppbj-archive-item';
 
                     const info = document.createElement('div');
-                    info.className = 'min-w-0 flex-1';
+                    info.className = 'ppbj-archive-item__info';
                     const name = document.createElement('p');
-                    name.className = 'truncate text-sm font-semibold text-gray-800 dark:text-white';
+                    name.className = 'ppbj-archive-item__title';
                     name.textContent = documentItem.name || 'Dokumen arsip';
                     const meta = document.createElement('p');
-                    meta.className = 'mt-1 text-[11px] text-gray-500 dark:text-gray-400';
+                    meta.className = 'ppbj-archive-item__meta';
                     meta.textContent = [documentItem.type, documentItem.size, formatArchiveDate(documentItem.date)]
                         .filter(Boolean).join(' • ') || 'Dokumen';
                     info.append(name, meta);
@@ -1333,7 +1348,7 @@
                     const locationText = formatArchiveLocation(documentItem.location);
                     if (locationText) {
                         const location = document.createElement('p');
-                        location.className = 'mt-1 inline-flex flex-wrap items-center gap-1 rounded-lg bg-amber-50 px-2 py-1 text-[11px] font-semibold text-amber-700 dark:bg-amber-900/30 dark:text-amber-200';
+                        location.className = 'ppbj-archive-item__location';
                         location.textContent = `Lokasi fisik: ${locationText}`;
                         info.append(location);
                     }
@@ -1343,13 +1358,13 @@
                     const previewUrl = documentItem.preview_gateway_url || documentItem.preview_url || documentItem.download_url;
                     const downloadUrl = documentItem.download_gateway_url || documentItem.download_url;
                     const actions = document.createElement('div');
-                    actions.className = 'flex shrink-0 flex-wrap gap-2';
+                    actions.className = 'ppbj-archive-item__actions';
                     if (previewUrl) {
                         const link = document.createElement('a');
                         link.href = previewUrl;
                         link.target = '_blank';
                         link.rel = 'noopener noreferrer';
-                        link.className = 'inline-flex shrink-0 items-center rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-blue-700';
+                        link.className = 'ppbj-archive-action';
                         link.textContent = 'Preview';
                         actions.append(link);
                     }
@@ -1357,7 +1372,7 @@
                         const link = document.createElement('a');
                         link.href = downloadUrl;
                         link.dataset.archiveDownload = 'true';
-                        link.className = 'inline-flex shrink-0 items-center rounded-lg bg-teal-700 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-teal-800';
+                        link.className = 'ppbj-archive-action ppbj-archive-action--download';
                         link.textContent = 'Unduh';
                         actions.append(link);
                     }
@@ -1389,6 +1404,76 @@
                     setArchiveState('unavailable', error.message || 'Sistem arsip sedang tidak dapat dihubungi.', id);
                 }
             }
+
+            window.openPpbjActionHub = function (id) {
+                const d = window.ppbjData?.[id];
+                if (!d || !actionHubModal) return;
+
+                activeActionPpbjId = Number(id);
+                actionHubTitle.textContent = d.ppbj_no || `PPBJ #${id}`;
+                actionHubSubtitle.textContent = d.uraian || 'Pilih tindakan yang diperlukan untuk data ini.';
+
+                const archiveSignal = document.querySelector(`[data-archive-status][data-ppbj-id="${id}"]`);
+                actionArchiveState.textContent = archiveSignal?.textContent?.trim() === 'Arsip'
+                    ? 'Periksa dokumen yang sudah tersimpan.'
+                    : (archiveSignal?.textContent?.trim() || 'Periksa status arsip.');
+
+                const noteCount = Number(document.getElementById(`ppbjNoteCount_${id}`)?.textContent || 0);
+                actionNotesCount.textContent = noteCount > 0
+                    ? `${noteCount} catatan kolaborasi tersedia.`
+                    : 'Belum ada catatan kolaborasi.';
+
+                const cancelled = String(d.status || '').toUpperCase() === 'CANCELLED';
+                actionGoods.disabled = cancelled || Boolean(d.goods_arrived_at) || Boolean(d.goods_confirmed_at);
+                if (cancelled) {
+                    actionGoodsTitle.textContent = 'Data dibatalkan';
+                    actionGoodsHint.textContent = 'Serah terima tidak dapat dicatat pada data ini.';
+                } else if (d.goods_confirmed_at) {
+                    actionGoodsTitle.textContent = 'Sudah diterima Operasional';
+                    actionGoodsHint.textContent = d.goods_confirmed_by_name ? `Dikonfirmasi oleh ${d.goods_confirmed_by_name}.` : 'Konfirmasi penerimaan sudah selesai.';
+                } else if (d.goods_arrived_at) {
+                    actionGoodsTitle.textContent = 'Menunggu konfirmasi Operasional';
+                    actionGoodsHint.textContent = d.goods_arrived_by_name ? `Ditandai datang oleh ${d.goods_arrived_by_name}.` : 'Barang/pekerjaan sudah ditandai datang.';
+                } else {
+                    actionGoodsTitle.textContent = 'Barang / pekerjaan datang';
+                    actionGoodsHint.textContent = 'Tandai serah terima untuk Operasional.';
+                }
+
+                actionHubModal.classList.remove('hidden');
+                actionHubModal.classList.add('flex');
+                document.body.style.overflow = 'hidden';
+            };
+
+            window.closePpbjActionHub = function () {
+                if (!actionHubModal) return;
+                actionHubModal.classList.add('hidden');
+                actionHubModal.classList.remove('flex');
+                document.body.style.overflow = '';
+            };
+
+            actionHubPanel?.addEventListener('click', (event) => {
+                const button = event.target.closest('[data-ppbj-action]');
+                if (!button || button.disabled || !activeActionPpbjId) return;
+
+                const id = activeActionPpbjId;
+                const d = window.ppbjData?.[id];
+                closePpbjActionHub();
+
+                switch (button.dataset.ppbjAction) {
+                    case 'detail': window.openDetail(id); break;
+                    case 'archive': window.openArchiveDetail(id); break;
+                    case 'upload': window.openPpbjArchiveUpload(id); break;
+                    case 'tracking': window.openRealTracking(id); break;
+                    case 'notes': window.openPpbjNotes(id); break;
+                    case 'goods': window.markGoodsArrived(id, d?.ppbj_no || `PPBJ #${id}`); break;
+                }
+            });
+
+            document.addEventListener('keydown', (event) => {
+                if (event.key === 'Escape' && actionHubModal && !actionHubModal.classList.contains('hidden')) {
+                    closePpbjActionHub();
+                }
+            });
 
             window.openDetail = function (id) {
                 const d = window.ppbjData?.[id];
@@ -1505,41 +1590,41 @@
                     : (Number(slaToneValue) < 0 ? 'late' : 'ahead');
 
                 html += `
-                    <div class="md:col-span-2 rounded-2xl border border-blue-200 bg-gradient-to-br from-blue-50 via-white to-emerald-50 p-4 shadow-sm dark:border-blue-500/30 dark:from-blue-950/40 dark:via-gray-800 dark:to-emerald-950/30">
-                        <div class="flex flex-wrap items-start justify-between gap-3">
+                    <div class="ppbj-detail-card ppbj-detail-card--sla">
+                        <div class="ppbj-detail-card__head">
                             <div>
-                                <div class="text-[11px] font-black uppercase tracking-[0.18em] text-blue-600 dark:text-blue-300">Audit SLA</div>
-                                <div class="mt-1 text-base font-black text-gray-900 dark:text-white">Ringkasan perhitungan sisa SLA</div>
+                                <div class="ppbj-detail-card__eyebrow">Audit SLA</div>
+                                <div class="ppbj-detail-card__title">Ringkasan perhitungan sisa SLA</div>
                             </div>
                             <span class="ppbj-sla-outcome inline-flex items-center rounded-full px-3 py-1 text-xs font-black" data-sla-tone="${slaResultTone}">
                                 ${escapeHtml(slaResultLabel)}
                             </span>
                         </div>
 
-                        <div class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-5">
-                            <div class="rounded-xl border border-slate-200 bg-white/80 p-3 dark:border-gray-700 dark:bg-gray-900/50">
-                                <div class="text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Target</div>
-                                <div class="mt-1 text-sm font-black text-slate-900 dark:text-white">${escapeHtml(d.target_sla_hari ?? '-')} hari</div>
+                        <div class="ppbj-detail-metrics">
+                            <div class="ppbj-detail-metric">
+                                <div class="ppbj-detail-metric__label">Target</div>
+                                <div class="ppbj-detail-metric__value">${escapeHtml(d.target_sla_hari ?? '-')} hari</div>
                             </div>
-                            <div class="rounded-xl border border-slate-200 bg-white/80 p-3 dark:border-gray-700 dark:bg-gray-900/50">
-                                <div class="text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Deadline</div>
-                                <div class="mt-1 text-sm font-black text-slate-900 dark:text-white">${escapeHtml(d.sla_target_date_label || '-')}</div>
+                            <div class="ppbj-detail-metric">
+                                <div class="ppbj-detail-metric__label">Deadline</div>
+                                <div class="ppbj-detail-metric__value">${escapeHtml(d.sla_target_date_label || '-')}</div>
                             </div>
-                            <div class="rounded-xl border border-slate-200 bg-white/80 p-3 dark:border-gray-700 dark:bg-gray-900/50">
-                                <div class="text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Mulai hitung</div>
-                                <div class="mt-1 text-sm font-black text-slate-900 dark:text-white">${escapeHtml(d.sla_start_source_label || '-')}</div>
+                            <div class="ppbj-detail-metric">
+                                <div class="ppbj-detail-metric__label">Mulai hitung</div>
+                                <div class="ppbj-detail-metric__value">${escapeHtml(d.sla_start_source_label || '-')}</div>
                             </div>
-                            <div class="rounded-xl border border-slate-200 bg-white/80 p-3 dark:border-gray-700 dark:bg-gray-900/50">
-                                <div class="text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">${d.sla_is_complete ? 'Realisasi' : 'Berjalan'}</div>
-                                <div class="mt-1 text-sm font-black text-slate-900 dark:text-white">${escapeHtml((d.sla_is_complete ? d.sla_used_days : d.sla_running_days) ?? '-')} hari</div>
+                            <div class="ppbj-detail-metric">
+                                <div class="ppbj-detail-metric__label">${d.sla_is_complete ? 'Realisasi' : 'Berjalan'}</div>
+                                <div class="ppbj-detail-metric__value">${escapeHtml((d.sla_is_complete ? d.sla_used_days : d.sla_running_days) ?? '-')} hari</div>
                             </div>
-                            <div class="rounded-xl border border-slate-200 bg-white/80 p-3 dark:border-gray-700 dark:bg-gray-900/50">
-                                <div class="text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Status hitung</div>
-                                <div class="mt-1 text-sm font-black text-slate-900 dark:text-white">${escapeHtml(d.sla_final_label || '-')}</div>
+                            <div class="ppbj-detail-metric">
+                                <div class="ppbj-detail-metric__label">Status hitung</div>
+                                <div class="ppbj-detail-metric__value">${escapeHtml(d.sla_final_label || '-')}</div>
                             </div>
                         </div>
 
-                        <p class="mt-4 rounded-xl border border-blue-100 bg-white/75 p-3 text-sm font-semibold leading-relaxed text-slate-700 dark:border-blue-500/20 dark:bg-gray-950/30 dark:text-slate-200">
+                        <p class="ppbj-detail-card__explanation">
                             ${escapeHtml(d.sla_explanation || 'Penjelasan SLA belum tersedia.')}
                         </p>
                     </div>
@@ -1569,40 +1654,40 @@
                     : remainingText;
 
                 html += `
-                    <div class="md:col-span-2 rounded-2xl border border-violet-200 bg-gradient-to-br from-violet-50 via-white to-cyan-50 p-4 shadow-sm dark:border-violet-500/30 dark:from-violet-950/30 dark:via-gray-800 dark:to-cyan-950/30">
-                        <div class="flex flex-wrap items-start justify-between gap-3">
+                    <div class="ppbj-detail-card ppbj-detail-card--contract">
+                        <div class="ppbj-detail-card__head">
                             <div>
-                                <div class="text-[11px] font-black uppercase tracking-[0.18em] text-violet-600 dark:text-violet-300">Masa Pemenuhan / Kontrak</div>
-                                <div class="mt-1 text-base font-black text-gray-900 dark:text-white">Pemantauan tanggal SPK sampai batas pemenuhan</div>
+                                <div class="ppbj-detail-card__eyebrow">Masa Pemenuhan / Kontrak</div>
+                                <div class="ppbj-detail-card__title">Pemantauan tanggal SPK sampai batas pemenuhan</div>
                             </div>
                             <span class="ppbj-contract-status inline-flex items-center rounded-full px-3 py-1 text-xs font-black" data-contract-tone="${contractTone}">
                                 ${escapeHtml(contractStatus)}
                             </span>
                         </div>
-                        <div class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
-                            <div class="rounded-xl border border-slate-200 bg-white/80 p-3 dark:border-gray-700 dark:bg-gray-900/50">
-                                <div class="text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Mulai kontrak</div>
-                                <div class="mt-1 text-sm font-black text-slate-900 dark:text-white">${escapeHtml(d.contract_start_date_label || '-')}</div>
+                        <div class="ppbj-detail-metrics">
+                            <div class="ppbj-detail-metric">
+                                <div class="ppbj-detail-metric__label">Mulai kontrak</div>
+                                <div class="ppbj-detail-metric__value">${escapeHtml(d.contract_start_date_label || '-')}</div>
                             </div>
-                            <div class="rounded-xl border border-slate-200 bg-white/80 p-3 dark:border-gray-700 dark:bg-gray-900/50">
-                                <div class="text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Batas pemenuhan</div>
-                                <div class="mt-1 text-sm font-black text-slate-900 dark:text-white">${escapeHtml(d.contract_end_date_label || '-')}</div>
-                                <div class="mt-1 text-[10px] font-bold text-slate-500 dark:text-slate-400">${escapeHtml(d.contract_end_date_source_label || 'Tidak dihitung')}</div>
+                            <div class="ppbj-detail-metric">
+                                <div class="ppbj-detail-metric__label">Batas pemenuhan</div>
+                                <div class="ppbj-detail-metric__value">${escapeHtml(d.contract_end_date_label || '-')}</div>
+                                <div class="ppbj-detail-metric__label">${escapeHtml(d.contract_end_date_source_label || 'Tidak dihitung')}</div>
                             </div>
-                            <div class="rounded-xl border border-slate-200 bg-white/80 p-3 dark:border-gray-700 dark:bg-gray-900/50">
-                                <div class="text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Durasi</div>
-                                <div class="mt-1 text-sm font-black text-slate-900 dark:text-white">${escapeHtml(d.contract_duration_days === null || d.contract_duration_days === undefined ? '-' : `${d.contract_duration_days} hari`)}</div>
+                            <div class="ppbj-detail-metric">
+                                <div class="ppbj-detail-metric__label">Durasi</div>
+                                <div class="ppbj-detail-metric__value">${escapeHtml(d.contract_duration_days === null || d.contract_duration_days === undefined ? '-' : `${d.contract_duration_days} hari`)}</div>
                             </div>
-                            <div class="rounded-xl border border-slate-200 bg-white/80 p-3 dark:border-gray-700 dark:bg-gray-900/50">
-                                <div class="text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Realisasi serah terima</div>
-                                <div class="mt-1 text-sm font-black text-slate-900 dark:text-white">${escapeHtml(d.handover_date_label || '-')}</div>
+                            <div class="ppbj-detail-metric">
+                                <div class="ppbj-detail-metric__label">Realisasi serah terima</div>
+                                <div class="ppbj-detail-metric__value">${escapeHtml(d.handover_date_label || '-')}</div>
                             </div>
-                            <div class="rounded-xl border border-slate-200 bg-white/80 p-3 dark:border-gray-700 dark:bg-gray-900/50">
-                                <div class="text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">${handoverComplete ? 'Kinerja final' : 'Sisa waktu'}</div>
-                                <div class="mt-1 text-sm font-black text-slate-900 dark:text-white">${escapeHtml(timingText)}</div>
+                            <div class="ppbj-detail-metric">
+                                <div class="ppbj-detail-metric__label">${handoverComplete ? 'Kinerja final' : 'Sisa waktu'}</div>
+                                <div class="ppbj-detail-metric__value">${escapeHtml(timingText)}</div>
                             </div>
                         </div>
-                        <p class="mt-4 rounded-xl border border-violet-100 bg-white/75 p-3 text-sm font-semibold leading-relaxed text-slate-700 dark:border-violet-500/20 dark:bg-gray-950/30 dark:text-slate-200">
+                        <p class="ppbj-detail-card__explanation">
                             ${escapeHtml(d.contract_explanation || 'Informasi masa pemenuhan belum tersedia.')}
                         </p>
                     </div>
@@ -1638,9 +1723,9 @@
                     }
 
                     html += `
-                                                                                <div class="border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 p-3 rounded-xl">
-                                                                                    <div class="text-[11px] text-gray-500 dark:text-gray-400">${escapeHtml(detailLabelMap[k] || k)}</div>
-                                                                                    <div class="font-semibold break-all text-gray-800 dark:text-gray-200">${escapeHtml(displayVal)}</div>
+                                                                                <div class="ppbj-detail-field">
+                                                                                    <div class="ppbj-detail-field__label">${escapeHtml(detailLabelMap[k] || k)}</div>
+                                                                                    <div class="ppbj-detail-field__value">${escapeHtml(displayVal)}</div>
                                                                                 </div>
                                                                             `;
                 });

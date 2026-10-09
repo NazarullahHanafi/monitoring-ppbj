@@ -647,58 +647,31 @@
                             </td>
 
                             <td class="px-4 py-3 text-center">
-                                <div class="inline-flex flex-col items-center gap-1">
-                                    <button type="button" onclick="openDetail({{ $row->id }})"
-                                        class="inline-flex items-center justify-center rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 transition">
-                                        Info
-                                    </button>
-                                    <button type="button" data-archive-status data-ppbj-id="{{ $row->id }}"
-                                        onclick="openArchiveDetail({{ $row->id }})"
-                                        class="inline-flex items-center gap-0.5 rounded-md bg-slate-100 px-1.5 py-0.5 text-[9px] font-semibold leading-none text-slate-600 ring-1 ring-slate-200 transition hover:bg-slate-200 dark:bg-gray-700 dark:text-gray-200 dark:ring-gray-600">
-                                        <span class="h-1 w-1 rounded-full bg-slate-400"></span>
-                                        Cek Arsip
-                                    </button>
-                                    @if(!auth()->user()?->isReadOnly())
-                                        <button type="button" onclick="openPpbjArchiveUpload({{ $row->id }})"
-                                            title="Upload lampiran PPBJ ke Sistem Arsip"
-                                            aria-label="Upload lampiran {{ $row->ppbj_no }}"
-                                            class="group inline-flex h-7 w-7 items-center justify-center rounded-lg bg-violet-50 text-violet-600 ring-1 ring-violet-200 transition hover:-translate-y-0.5 hover:bg-violet-600 hover:text-white hover:shadow-md dark:bg-violet-500/15 dark:text-violet-200 dark:ring-violet-500/30 dark:hover:bg-violet-500">
-                                            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5M5 14v4a2 2 0 002 2h10a2 2 0 002-2v-4" />
-                                            </svg>
-                                        </button>
-                                    @endif
-                                    <button type="button" onclick="openRealTracking({{ $row->id }})"
-                                        class="inline-flex items-center gap-0.5 rounded-md bg-cyan-50 px-1.5 py-0.5 text-[9px] font-bold leading-none text-cyan-700 ring-1 ring-cyan-200 transition hover:bg-cyan-100 dark:bg-cyan-900/30 dark:text-cyan-200 dark:ring-cyan-700/60">
-                                        <span>Tracking Real</span>
-                                    </button>
-                                    <button type="button" onclick="openPpbjNotes({{ $row->id }})"
-                                        class="ppbj-notes-trigger">
-                                        <span class="ppbj-notes-trigger__label">💬 Catatan</span>
-                                        <span class="ppbj-notes-trigger__count" id="ppbjNoteCount_{{ $row->id }}">{{ (int) ($row->collaboration_note_count ?? 0) }}</span>
+                                <div class="ppbj-info-center">
+                                    <button type="button" onclick="openPpbjActionHub({{ $row->id }})"
+                                        class="ppbj-action-launch" aria-label="Buka semua aksi untuk {{ $row->ppbj_no }}">
+                                        <span class="ppbj-action-launch__icon">⌘</span>
+                                        <span>Aksi</span>
+                                        <span aria-hidden="true">⌄</span>
                                         @if((int) ($row->collaboration_unread_count ?? 0) > 0)
-                                            <span id="ppbjNoteUnread_{{ $row->id }}"
-                                                class="absolute -right-2 -top-2 min-w-4 rounded-full bg-rose-600 px-1 py-0.5 text-[8px] font-black text-white">
-                                                {{ (int) $row->collaboration_unread_count }} baru
+                                            <span id="ppbjNoteUnread_{{ $row->id }}" class="ppbj-action-launch__notice">
+                                                {{ (int) $row->collaboration_unread_count }}
                                             </span>
                                         @endif
                                     </button>
-                                    @if(!empty($row->goods_confirmed_at))
-                                        <span class="inline-flex items-center gap-1 rounded-md bg-emerald-100 px-1.5 py-0.5 text-[9px] font-bold leading-none text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-900/40 dark:text-emerald-200 dark:ring-emerald-700/60"
-                                            title="Dikonfirmasi oleh {{ $row->goods_confirmed_by_name ?: 'Operasional' }}">
-                                            ✓ Diterima OP
+                                    <div class="ppbj-info-signals" aria-label="Ringkasan status">
+                                        <span data-archive-status data-ppbj-id="{{ $row->id }}" data-state="unknown" class="ppbj-info-signal">
+                                            <span class="ppbj-info-signal__dot"></span><span>Arsip</span>
                                         </span>
-                                    @elseif(!empty($row->goods_arrived_at))
-                                        <span class="inline-flex items-center gap-1 rounded-md bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold leading-none text-amber-700 ring-1 ring-amber-200 dark:bg-amber-900/40 dark:text-amber-200 dark:ring-amber-700/60"
-                                            title="Ditandai oleh {{ $row->goods_arrived_by_name ?: 'Umum' }}">
-                                            📦 Menunggu OP
+                                        <span class="ppbj-info-signal" data-state="notes" title="Jumlah catatan kolaborasi">
+                                            💬 <span id="ppbjNoteCount_{{ $row->id }}">{{ (int) ($row->collaboration_note_count ?? 0) }}</span>
                                         </span>
-                                    @elseif(!$isCancelled)
-                                        <button type="button" onclick="markGoodsArrived({{ $row->id }}, @js($row->ppbj_no))"
-                                            class="inline-flex items-center gap-0.5 rounded-md bg-cyan-50 px-1.5 py-0.5 text-[9px] font-bold leading-none text-cyan-700 ring-1 ring-cyan-200 transition hover:bg-cyan-100 dark:bg-cyan-900/30 dark:text-cyan-200 dark:ring-cyan-700/60">
-                                            📦 Barang datang
-                                        </button>
-                                    @endif
+                                        @if(!empty($row->goods_confirmed_at))
+                                            <span class="ppbj-info-signal" data-state="success" title="Dikonfirmasi oleh {{ $row->goods_confirmed_by_name ?: 'Operasional' }}">✓ Diterima OP</span>
+                                        @elseif(!empty($row->goods_arrived_at))
+                                            <span class="ppbj-info-signal" data-state="warning" title="Ditandai oleh {{ $row->goods_arrived_by_name ?: 'Umum' }}">Menunggu OP</span>
+                                        @endif
+                                    </div>
                                 </div>
                             </td>
 
@@ -738,18 +711,54 @@
         {{ $ppbj->links() }}
     </div>
 
+    {{-- ================= PUSAT AKSI PPBJ ================= --}}
+    <div id="ppbjActionHubModal" class="fixed inset-0 hidden items-center justify-center bg-slate-950/65 p-3 backdrop-blur-sm" onclick="closePpbjActionHub()">
+        <section class="ppbj-action-hub" role="dialog" aria-modal="true" aria-labelledby="ppbjActionHubTitle" onclick="event.stopPropagation()">
+            <header class="ppbj-action-hub__head">
+                <div>
+                    <p class="ppbj-action-hub__kicker">PUSAT AKSI PPBJ</p>
+                    <h2 id="ppbjActionHubTitle">Pilih tindakan</h2>
+                    <p id="ppbjActionHubSubtitle">Seluruh alat penting dalam satu tempat.</p>
+                </div>
+                <button type="button" class="ppbj-action-hub__close" onclick="closePpbjActionHub()" aria-label="Tutup">×</button>
+            </header>
+            <div class="ppbj-action-hub__grid">
+                <button type="button" class="ppbj-action-card" data-ppbj-action="detail">
+                    <span class="ppbj-action-card__icon" data-tone="blue">ⓘ</span><span><strong>Detail & Audit SLA</strong><small>Lihat seluruh data, SLA, dan masa pemenuhan.</small></span>
+                </button>
+                <button type="button" class="ppbj-action-card" data-ppbj-action="archive">
+                    <span class="ppbj-action-card__icon" data-tone="amber">▣</span><span><strong>Arsip & Lampiran</strong><small id="ppbjActionArchiveState">Periksa dokumen yang sudah tersimpan.</small></span>
+                </button>
+                @if(!auth()->user()?->isReadOnly())
+                    <button type="button" id="ppbjActionUpload" class="ppbj-action-card" data-ppbj-action="upload">
+                        <span class="ppbj-action-card__icon" data-tone="violet">⇧</span><span><strong>Upload Lampiran</strong><small>Tambah file ke paket arsip PR ini.</small></span>
+                    </button>
+                @endif
+                <button type="button" class="ppbj-action-card" data-ppbj-action="tracking">
+                    <span class="ppbj-action-card__icon" data-tone="cyan">↗</span><span><strong>Tracking Real</strong><small>Catat progres pekerjaan dan tindak lanjut.</small></span>
+                </button>
+                <button type="button" class="ppbj-action-card" data-ppbj-action="notes">
+                    <span class="ppbj-action-card__icon" data-tone="indigo">💬</span><span><strong>Catatan & Mention</strong><small id="ppbjActionNotesCount">Belum ada catatan kolaborasi.</small></span>
+                </button>
+                <button type="button" id="ppbjActionGoods" class="ppbj-action-card" data-ppbj-action="goods">
+                    <span class="ppbj-action-card__icon" data-tone="emerald">✓</span><span><strong id="ppbjActionGoodsTitle">Barang / pekerjaan datang</strong><small id="ppbjActionGoodsHint">Tandai serah terima untuk Operasional.</small></span>
+                </button>
+            </div>
+        </section>
+    </div>
+
     {{-- ================= MODAL DETAIL ================= --}}
     <div id="detailModal" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50" onclick="closeDetail()">
-        <div class="bg-white dark:bg-gray-800 w-full max-w-4xl rounded-2xl shadow-xl p-6 overflow-y-auto modal-pop text-gray-900 dark:text-gray-100"
+        <div class="ppbj-detail-shell modal-pop"
             style="max-height: 85vh;" onclick="event.stopPropagation()">
 
-            <div class="flex items-start justify-between gap-4 mb-4">
+            <div class="ppbj-detail-head">
                 <div>
-                    <h2 class="font-bold text-lg">Detail PPBJ</h2>
-                    <p id="detailHint" class="text-xs text-gray-500 dark:text-gray-400"></p>
+                    <p class="ppbj-detail-head__kicker">INFORMASI TERPADU</p>
+                    <h2>Detail PPBJ</h2>
+                    <p id="detailHint"></p>
                 </div>
-                <button type="button" onclick="closeDetail()"
-                    class="text-red-500 dark:text-red-400 text-xl leading-none hover:scale-105 transition">✕</button>
+                <button type="button" onclick="closeDetail()" class="ppbj-detail-close" aria-label="Tutup">×</button>
             </div>
 
             <div id="cancelledBanner"
@@ -793,12 +802,10 @@
                 </div>
             </div>
 
-            <div id="detailContent"
-                class="hidden grid grid-cols-1 md:grid-cols-2 gap-3 text-sm max-h-[65vh] overflow-y-auto pr-2">
+            <div id="detailContent" class="ppbj-detail-content hidden">
             </div>
 
-            <div id="detailArchiveCard"
-                class="hidden mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-gray-700 dark:bg-gray-900/60">
+            <div id="detailArchiveCard" class="ppbj-detail-archive hidden">
                 <div class="flex flex-wrap items-start justify-between gap-3">
                     <div class="flex items-start gap-3">
                         <span class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-700 text-white">
@@ -811,19 +818,19 @@
                         </span>
                         <div>
                             <div class="flex flex-wrap items-center gap-2">
-                                <p class="text-sm font-bold text-gray-800 dark:text-white">Arsip &amp; Laporan PR</p>
+                                <p class="ppbj-detail-archive__title">Arsip &amp; Laporan PR</p>
                                 <span id="detailArchiveBadge"
-                                    class="inline-flex rounded-full bg-slate-200 px-2.5 py-1 text-[10px] font-bold text-slate-600 dark:bg-gray-700 dark:text-gray-200">
+                                    class="ppbj-archive-badge" data-state="loading">
                                     Memeriksa
                                 </span>
                             </div>
-                            <p id="detailArchiveMessage" class="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+                            <p id="detailArchiveMessage" class="ppbj-detail-archive__message">
                                 Menghubungi sistem arsip...
                             </p>
                         </div>
                     </div>
                     <button id="detailArchiveRefresh" type="button" onclick="refreshCurrentPpbjArchive()"
-                        class="hidden rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-100 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700">
+                        class="ppbj-detail-archive__refresh hidden">
                         Periksa ulang
                     </button>
                 </div>
@@ -864,7 +871,7 @@
                     'tgl_pemenang' => ['Tanggal Pemenang', 'date'],
                     'tgl_spk' => ['Tanggal SPK', 'date'],
                     'nilai_sp_spk' => ['Nilai SP/SPK', 'currency'],
-                    'promised_date' => ['Tanggal Pemenuhan / Berakhir Kontrak', 'date'],
+                    'promised_date' => ['Tanggal Pemenuhan / Berakhir  Kontrak', 'date'],
                     'do_no' => ['No. DO / Surat Jalan / BAST', 'text'],
                     'do_date' => ['Tanggal DO / Surat Jalan / BAST', 'date'],
                     'bpg_no' => ['BPG No', 'text'],
@@ -1274,7 +1281,7 @@
 @endsection
 
 @push('styles')
-    <link rel="stylesheet" href="{{ asset('assets/ppbj/ppbj.css') }}?v=20261009d">
+    <link rel="stylesheet" href="{{ asset('assets/ppbj/ppbj.css') }}?v=20261009e">
 @endpush
 
 @push('scripts')
@@ -1453,7 +1460,7 @@
             });
         };
     </script>
-    <script src="{{ asset('assets/ppbj/ppbj.js') }}?v=20261009a" defer></script>
+    <script src="{{ asset('assets/ppbj/ppbj.js') }}?v=20261009e" defer></script>
 
 @endpush
 
