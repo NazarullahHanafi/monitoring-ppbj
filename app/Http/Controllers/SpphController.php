@@ -1119,9 +1119,8 @@ class SpphController extends Controller
             '1. Masa berlaku dan Surat Penawaran Harga ditandatangani oleh pejabat yang berwenang',
             '2. Jangka Waktu Pemenuhan (sebutkan.......hari kerja/....... Minggu/dll)',
             '3. Penawaran Harga dalam Mata Uang Rupiah',
-            '4. Pembayaran (..............hari kalender)',
+            '4. Pembayaran (60 hari kalender)',
             '5. Jangka Waktu Penawaran Harga (minimal 7 hari kerja)',
-            '6. Wajib melampirkan COPY TDEP dari PT SUCOFINDO (Persero) yang terbaru',
         ] as $klausul) {
             $section->addText($klausul, $fn, $pBoth);
         }
