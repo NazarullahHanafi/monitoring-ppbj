@@ -6,8 +6,8 @@ use App\Http\Controllers\ArchiveAttachmentController;
 use App\Http\Controllers\ArchiveDownloadGatewayController;
 use App\Http\Controllers\ChatController;
 use App\Http\Controllers\CollaborationCalendarController;
-use App\Http\Controllers\ContactMessageController;
 use App\Http\Controllers\CommandCenterController;
+use App\Http\Controllers\ContactMessageController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DocumentPreviewController;
 use App\Http\Controllers\LandingController;
@@ -15,8 +15,8 @@ use App\Http\Controllers\MasterDataController;
 use App\Http\Controllers\OperasionalDashboardController;
 use App\Http\Controllers\OwnerController;
 use App\Http\Controllers\OwnerSecurityController;
-use App\Http\Controllers\PpbjController;
 use App\Http\Controllers\PpbjCollaborationController;
+use App\Http\Controllers\PpbjController;
 use App\Http\Controllers\PresenceController;
 use App\Http\Controllers\PrReceiptApprovalController;
 use App\Http\Controllers\SatuanController;
@@ -288,9 +288,16 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
             ->name('approval.pr.export.pdf');
 
         Route::post('/approval/pr-receipts/{id}/approve', [PrReceiptApprovalController::class, 'approve'])
+            ->whereNumber('id')
             ->name('approval.pr.approve');
 
+        Route::get('/approval/pr-receipts/{id}/duplicate-check', [PrReceiptApprovalController::class, 'duplicateCheck'])
+            ->whereNumber('id')
+            ->middleware('throttle:60,1')
+            ->name('approval.pr.duplicate-check');
+
         Route::post('/approval/pr-receipts/{id}/reject', [PrReceiptApprovalController::class, 'reject'])
+            ->whereNumber('id')
             ->name('approval.pr.reject');
 
         Route::get('/approval/pr-receipts/pending-count', [PrReceiptApprovalController::class, 'pendingCount'])

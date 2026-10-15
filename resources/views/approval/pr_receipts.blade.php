@@ -737,36 +737,164 @@
             });
         });
 
-        window.approveReceipt = function (id) {
+        const duplicateCheckUrl = @json(route('approval.pr.duplicate-check', ['id' => '__ID__']));
+        const approveUrl = @json(route('approval.pr.approve', ['id' => '__ID__']));
+
+        function approvalPopupClasses() {
+            return {
+                popup: 'swal2-approval-popup',
+                title: 'swal2-approval-title',
+                htmlContainer: 'swal2-approval-html',
+                confirmButton: 'swal2-approval-confirm',
+                cancelButton: 'swal2-approval-cancel'
+            };
+        }
+
+        function submitApproval(id, confirmDuplicate) {
             Swal.fire({
-                title: 'Approve Request?',
-                html: 'Anda akan <strong>menyetujui</strong> penerimaan PR ini.<br><br>Lanjutkan?',
-                icon: 'question',
-                showCancelButton: true,
-                confirmButtonColor: '#10B981',
-                cancelButtonColor: '#6B7280',
-                confirmButtonText: '✓ Ya, Setujui',
-                cancelButtonText: 'Batal'
-            }).then((result) => {
-                if (result.isConfirmed) {
-                    Swal.fire({
-                        title: 'Memproses...',
-                        html: '<div style="display:flex;justify-content:center;"><div style="width:60px;height:60px;border:5px solid #E5E7EB;border-top-color:#10B981;border-radius:50%;animation:spin 1s linear infinite;"></div></div><style>@keyframes spin{to{transform:rotate(360deg)}}</style>',
-                        showConfirmButton: false,
-                        allowOutsideClick: false
-                    });
-                    const form = document.createElement('form');
-                    form.method = 'POST';
-                    form.action = `/approval/pr-receipts/${id}/approve`;
-                    const csrf = document.createElement('input');
-                    csrf.type = 'hidden';
-                    csrf.name = '_token';
-                    csrf.value = '{{ csrf_token() }}';
-                    form.appendChild(csrf);
-                    document.body.appendChild(form);
-                    form.submit();
-                }
+                title: 'Memproses persetujuan',
+                html: '<div class="approval-loading"><span></span><p>Validasi ulang dan menyimpan data PR...</p></div>',
+                showConfirmButton: false,
+                allowOutsideClick: false,
+                allowEscapeKey: false,
+                customClass: approvalPopupClasses()
             });
+
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = approveUrl.replace('__ID__', encodeURIComponent(id));
+
+            const fields = {
+                _token: @json(csrf_token()),
+                confirm_duplicate: confirmDuplicate ? '1' : '0'
+            };
+
+            Object.entries(fields).forEach(([name, value]) => {
+                const input = document.createElement('input');
+                input.type = 'hidden';
+                input.name = name;
+                input.value = value;
+                form.appendChild(input);
+            });
+
+            document.body.appendChild(form);
+            form.submit();
+        }
+
+        function duplicateSourceHtml(source, link) {
+            const records = (source.records || []).map(record => `
+                <div class="approval-conflict-record">
+                    <div>
+                        <strong>${escapeHtml(record.document_no || '-')}</strong>
+                        <span>${escapeHtml(record.description || '-')}</span>
+                        ${record.meta ? `<small>${escapeHtml(record.meta)}</small>` : ''}
+                    </div>
+                </div>
+            `).join('');
+
+            return `
+                <section class="approval-conflict-source">
+                    <div class="approval-conflict-source-head">
+                        <div>
+                            <span class="approval-conflict-dot"></span>
+                            <strong>${escapeHtml(source.label || 'Data terkait')}</strong>
+                            <small>${Number(source.count || 0)} data</small>
+                        </div>
+                        ${link ? `<a href="${escapeHtml(link)}" target="_blank" rel="noopener noreferrer">Periksa data</a>` : ''}
+                    </div>
+                    ${records}
+                </section>
+            `;
+        }
+
+        window.approveReceipt = async function (id) {
+            Swal.fire({
+                title: 'Memeriksa nomor PR',
+                html: '<div class="approval-loading"><span></span><p>Mencari data terkait di PPBJ, SPPH, dan SP...</p></div>',
+                showConfirmButton: false,
+                allowOutsideClick: false,
+                allowEscapeKey: false,
+                customClass: approvalPopupClasses()
+            });
+
+            try {
+                const response = await fetch(
+                    duplicateCheckUrl.replace('__ID__', encodeURIComponent(id)),
+                    { headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' } }
+                );
+                const data = await response.json().catch(() => ({}));
+
+                if (!response.ok) {
+                    throw new Error(data.message || 'Pemeriksaan nomor PR gagal.');
+                }
+
+                if (!data.has_conflicts) {
+                    const result = await Swal.fire({
+                        title: 'Setujui penerimaan PR?',
+                        html: `
+                            <div class="approval-safe-state">
+                                <div class="approval-safe-icon">✓</div>
+                                <div>
+                                    <strong>${escapeHtml(data.pr_number || '-')}</strong>
+                                    <p>Nomor PR belum ditemukan pada Management PPBJ, SPPH, maupun SP. PPBJ baru akan dibuat setelah disetujui.</p>
+                                </div>
+                            </div>
+                        `,
+                        showCancelButton: true,
+                        confirmButtonText: 'Ya, setujui PR',
+                        cancelButtonText: 'Batal',
+                        reverseButtons: true,
+                        focusCancel: true,
+                        customClass: approvalPopupClasses()
+                    });
+
+                    if (result.isConfirmed) submitApproval(id, false);
+                    return;
+                }
+
+                const sources = (data.sources || []).map(source =>
+                    duplicateSourceHtml(source, data.links?.[source.key])
+                ).join('');
+
+                const result = await Swal.fire({
+                    title: 'Nomor PR sudah digunakan',
+                    html: `
+                        <div class="approval-conflict-wrap">
+                            <div class="approval-conflict-number">
+                                <span>Nomor PR</span>
+                                <strong>${escapeHtml(data.pr_number || '-')}</strong>
+                                <small>Ditemukan ${Number(data.record_count || 0)} data pada ${Number(data.source_count || 0)} bagian.</small>
+                            </div>
+                            <div class="approval-conflict-list">${sources}</div>
+                            <div class="approval-overwrite-warning">
+                                <strong>Dampak jika tetap disetujui</strong>
+                                <p>Data dasar PR terbaru akan memperbarui data PR pada Management PPBJ. Dokumen dan riwayat proses SPPH/SP yang sudah ada tetap dipertahankan.</p>
+                            </div>
+                            <p class="approval-conflict-advice">Periksa dan lakukan perubahan pada data terkait terlebih dahulu bila nomor ini tidak seharusnya sama. Pastikan kembali sebelum menyetujui.</p>
+                        </div>
+                    `,
+                    showCancelButton: true,
+                    confirmButtonText: 'Tetap setujui & perbarui',
+                    cancelButtonText: 'Batal, periksa dahulu',
+                    reverseButtons: true,
+                    focusCancel: true,
+                    customClass: {
+                        ...approvalPopupClasses(),
+                        confirmButton: 'swal2-approval-confirm swal2-approval-confirm-danger'
+                    },
+                    width: 680
+                });
+
+                if (result.isConfirmed) submitApproval(id, true);
+            } catch (error) {
+                Swal.fire({
+                    title: 'Belum dapat memeriksa data',
+                    text: error.message || 'Silakan coba kembali.',
+                    icon: 'error',
+                    confirmButtonText: 'Tutup',
+                    customClass: approvalPopupClasses()
+                });
+            }
         };
 
         window.rejectReceipt = function (id) {
@@ -1296,6 +1424,421 @@
 
         .btn-detail-pr:hover::after {
             transform: translateX(100%);
+        }
+
+        /* ========== VALIDASI DUPLIKAT APPROVAL ========== */
+        .swal2-approval-popup {
+            width: min(680px, calc(100vw - 28px)) !important;
+            border: 1px solid #E2E8F0 !important;
+            border-radius: 22px !important;
+            background: #FFFFFF !important;
+            color: #0F172A !important;
+            box-shadow: 0 28px 70px rgba(15, 23, 42, .24) !important;
+        }
+
+        .dark .swal2-approval-popup {
+            border-color: #334155 !important;
+            background: #111827 !important;
+            color: #F8FAFC !important;
+            box-shadow: 0 28px 80px rgba(0, 0, 0, .58) !important;
+        }
+
+        .swal2-approval-title {
+            padding: 24px 26px 4px !important;
+            color: #0F172A !important;
+            font-size: 22px !important;
+            font-weight: 850 !important;
+            letter-spacing: -.02em !important;
+        }
+
+        .dark .swal2-approval-title {
+            color: #F8FAFC !important;
+        }
+
+        .swal2-approval-html {
+            margin: 14px 26px 4px !important;
+            color: #475569 !important;
+            text-align: left !important;
+        }
+
+        .dark .swal2-approval-html {
+            color: #CBD5E1 !important;
+        }
+
+        .swal2-approval-popup .swal2-actions {
+            width: auto !important;
+            margin: 20px 26px 24px !important;
+            gap: 10px !important;
+        }
+
+        .swal2-approval-confirm,
+        .swal2-approval-cancel {
+            margin: 0 !important;
+            border-radius: 11px !important;
+            padding: 11px 17px !important;
+            font-size: 13px !important;
+            font-weight: 800 !important;
+            box-shadow: none !important;
+        }
+
+        .swal2-approval-confirm {
+            background: #059669 !important;
+            color: #FFFFFF !important;
+        }
+
+        .swal2-approval-confirm:hover {
+            background: #047857 !important;
+        }
+
+        .swal2-approval-confirm-danger {
+            background: #DC2626 !important;
+        }
+
+        .swal2-approval-confirm-danger:hover {
+            background: #B91C1C !important;
+        }
+
+        .swal2-approval-cancel {
+            border: 1px solid #CBD5E1 !important;
+            background: #F8FAFC !important;
+            color: #334155 !important;
+        }
+
+        .dark .swal2-approval-cancel {
+            border-color: #475569 !important;
+            background: #1E293B !important;
+            color: #E2E8F0 !important;
+        }
+
+        .approval-loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 14px;
+            min-height: 76px;
+            text-align: left;
+        }
+
+        .approval-loading span {
+            width: 30px;
+            height: 30px;
+            flex: 0 0 auto;
+            border: 3px solid #D1FAE5;
+            border-top-color: #059669;
+            border-radius: 999px;
+            animation: approvalSpin .75s linear infinite;
+        }
+
+        .dark .approval-loading span {
+            border-color: #334155;
+            border-top-color: #34D399;
+        }
+
+        .approval-loading p {
+            margin: 0;
+            color: #475569;
+            font-size: 14px;
+            font-weight: 650;
+        }
+
+        .dark .approval-loading p {
+            color: #CBD5E1;
+        }
+
+        @keyframes approvalSpin {
+            to { transform: rotate(360deg); }
+        }
+
+        .approval-safe-state {
+            display: flex;
+            align-items: flex-start;
+            gap: 14px;
+            padding: 16px;
+            border: 1px solid #A7F3D0;
+            border-radius: 15px;
+            background: #ECFDF5;
+        }
+
+        .dark .approval-safe-state {
+            border-color: rgba(52, 211, 153, .35);
+            background: rgba(6, 78, 59, .25);
+        }
+
+        .approval-safe-icon {
+            display: grid;
+            width: 36px;
+            height: 36px;
+            flex: 0 0 auto;
+            place-items: center;
+            border-radius: 11px;
+            background: #059669;
+            color: #FFFFFF;
+            font-weight: 900;
+        }
+
+        .approval-safe-state strong {
+            display: block;
+            color: #065F46;
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            font-size: 14px;
+            overflow-wrap: anywhere;
+        }
+
+        .dark .approval-safe-state strong {
+            color: #A7F3D0;
+        }
+
+        .approval-safe-state p {
+            margin: 5px 0 0;
+            color: #047857;
+            font-size: 13px;
+            line-height: 1.55;
+        }
+
+        .dark .approval-safe-state p {
+            color: #D1FAE5;
+        }
+
+        .approval-conflict-wrap {
+            display: grid;
+            gap: 13px;
+        }
+
+        .approval-conflict-number {
+            display: grid;
+            gap: 3px;
+            padding: 14px 16px;
+            border: 1px solid #FCA5A5;
+            border-radius: 14px;
+            background: #FEF2F2;
+        }
+
+        .dark .approval-conflict-number {
+            border-color: rgba(248, 113, 113, .42);
+            background: rgba(127, 29, 29, .2);
+        }
+
+        .approval-conflict-number span {
+            color: #991B1B;
+            font-size: 10px;
+            font-weight: 850;
+            letter-spacing: .1em;
+            text-transform: uppercase;
+        }
+
+        .approval-conflict-number strong {
+            color: #7F1D1D;
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            font-size: 16px;
+            overflow-wrap: anywhere;
+        }
+
+        .approval-conflict-number small {
+            color: #B91C1C;
+            font-size: 11px;
+        }
+
+        .dark .approval-conflict-number span,
+        .dark .approval-conflict-number small {
+            color: #FCA5A5;
+        }
+
+        .dark .approval-conflict-number strong {
+            color: #FEE2E2;
+        }
+
+        .approval-conflict-list {
+            display: grid;
+            max-height: 285px;
+            gap: 9px;
+            overflow-y: auto;
+            overscroll-behavior: contain;
+            padding-right: 3px;
+        }
+
+        .approval-conflict-source {
+            overflow: hidden;
+            border: 1px solid #E2E8F0;
+            border-radius: 13px;
+            background: #FFFFFF;
+        }
+
+        .dark .approval-conflict-source {
+            border-color: #334155;
+            background: #0F172A;
+        }
+
+        .approval-conflict-source-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 11px 13px;
+            background: #F8FAFC;
+        }
+
+        .dark .approval-conflict-source-head {
+            background: #1E293B;
+        }
+
+        .approval-conflict-source-head > div {
+            display: flex;
+            align-items: center;
+            min-width: 0;
+            gap: 7px;
+        }
+
+        .approval-conflict-dot {
+            width: 8px;
+            height: 8px;
+            flex: 0 0 auto;
+            border-radius: 99px;
+            background: #EF4444;
+            box-shadow: 0 0 0 4px #FEE2E2;
+        }
+
+        .dark .approval-conflict-dot {
+            box-shadow: 0 0 0 4px rgba(239, 68, 68, .17);
+        }
+
+        .approval-conflict-source-head strong {
+            color: #1E293B;
+            font-size: 12px;
+        }
+
+        .dark .approval-conflict-source-head strong {
+            color: #F1F5F9;
+        }
+
+        .approval-conflict-source-head small {
+            color: #64748B;
+            font-size: 10px;
+        }
+
+        .dark .approval-conflict-source-head small {
+            color: #94A3B8;
+        }
+
+        .approval-conflict-source-head a {
+            flex: 0 0 auto;
+            border-radius: 8px;
+            background: #E0E7FF;
+            padding: 6px 9px;
+            color: #3730A3;
+            font-size: 10px;
+            font-weight: 800;
+            text-decoration: none;
+        }
+
+        .dark .approval-conflict-source-head a {
+            background: rgba(79, 70, 229, .25);
+            color: #C7D2FE;
+        }
+
+        .approval-conflict-record {
+            padding: 11px 13px;
+            border-top: 1px solid #F1F5F9;
+        }
+
+        .dark .approval-conflict-record {
+            border-top-color: #1E293B;
+        }
+
+        .approval-conflict-record div {
+            display: grid;
+            gap: 3px;
+        }
+
+        .approval-conflict-record strong {
+            color: #0F172A;
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            font-size: 12px;
+            overflow-wrap: anywhere;
+        }
+
+        .dark .approval-conflict-record strong {
+            color: #F8FAFC;
+        }
+
+        .approval-conflict-record span {
+            color: #475569;
+            font-size: 11px;
+            line-height: 1.45;
+        }
+
+        .dark .approval-conflict-record span {
+            color: #CBD5E1;
+        }
+
+        .approval-conflict-record small {
+            color: #64748B;
+            font-size: 10px;
+        }
+
+        .dark .approval-conflict-record small {
+            color: #94A3B8;
+        }
+
+        .approval-overwrite-warning {
+            padding: 13px 14px;
+            border: 1px solid #FCD34D;
+            border-radius: 13px;
+            background: #FFFBEB;
+        }
+
+        .dark .approval-overwrite-warning {
+            border-color: rgba(245, 158, 11, .42);
+            background: rgba(120, 53, 15, .2);
+        }
+
+        .approval-overwrite-warning strong {
+            display: block;
+            margin-bottom: 4px;
+            color: #92400E;
+            font-size: 12px;
+        }
+
+        .dark .approval-overwrite-warning strong {
+            color: #FDE68A;
+        }
+
+        .approval-overwrite-warning p,
+        .approval-conflict-advice {
+            margin: 0;
+            color: #78350F;
+            font-size: 11px;
+            line-height: 1.55;
+        }
+
+        .dark .approval-overwrite-warning p {
+            color: #FEF3C7;
+        }
+
+        .approval-conflict-advice {
+            color: #64748B;
+        }
+
+        .dark .approval-conflict-advice {
+            color: #94A3B8;
+        }
+
+        @media (max-width: 640px) {
+            .swal2-approval-title {
+                padding-inline: 18px !important;
+                font-size: 19px !important;
+            }
+
+            .swal2-approval-html {
+                margin-inline: 18px !important;
+            }
+
+            .swal2-approval-popup .swal2-actions {
+                margin-inline: 18px !important;
+            }
+
+            .approval-conflict-source-head {
+                align-items: flex-start;
+            }
         }
     </style>
 @endpush

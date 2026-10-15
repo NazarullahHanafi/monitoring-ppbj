@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\MasterBuyer;
 use App\Models\Ppbj;
 use App\Models\PrReceiptApproval;
+use App\Services\PrNumberConflictService;
 use App\Services\ProcurementJourneyService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
@@ -33,6 +34,8 @@ class PrReceiptApprovalController extends Controller
     private const CACHE_KEY_PENDING_COUNT = 'pr_receipt_pending_count';
 
     private const CACHE_TTL_SECONDS = 300; // sesuaikan: 10 / 30 / 60 detik
+
+    public function __construct(private readonly PrNumberConflictService $prNumberConflicts) {}
 
     public function index(Request $request)
     {
@@ -345,10 +348,50 @@ class PrReceiptApprovalController extends Controller
         return response()->json(['count' => (int) $count]);
     }
 
+    /**
+     * Pemeriksaan konflik dipanggil hanya ketika tombol Setujui ditekan.
+     * Endpoint ini tidak dipolling agar tidak menambah beban halaman approval.
+     */
+    public function duplicateCheck($id)
+    {
+        $approval = PrReceiptApproval::query()
+            ->select(['id', 'torpr_id', 'status'])
+            ->with('torpr:id,nomor_pr')
+            ->findOrFail($id);
+
+        if ($approval->status !== self::STATUS_PENDING) {
+            return response()->json([
+                'message' => 'Approval sudah diproses.',
+            ], 409);
+        }
+
+        $torpr = $approval->torpr;
+        if (! $torpr || blank($torpr->nomor_pr)) {
+            return response()->json([
+                'message' => 'Nomor PR kosong. Approval tidak dapat dilanjutkan.',
+            ], 422);
+        }
+
+        $result = $this->prNumberConflicts->inspect(
+            (string) $torpr->nomor_pr,
+            (int) $torpr->id,
+            (int) $approval->id
+        );
+
+        $result['links'] = [
+            'ppbj' => route('ppbj.index', ['search' => $torpr->nomor_pr]),
+            'spph' => route('spph.index', ['search' => $torpr->nomor_pr]),
+            'sp' => route('sp.index', ['search' => $torpr->nomor_pr]),
+            'approval' => route('approval.pr.index', ['q' => $torpr->nomor_pr, 'status' => self::STATUS_APPROVED]),
+        ];
+
+        return response()->json($result);
+    }
+
     public function approve(Request $request, $id)
     {
         try {
-            $result = DB::transaction(function () use ($id) {
+            $result = DB::transaction(function () use ($id, $request) {
 
                 $appr = PrReceiptApproval::with('torpr')
                     ->lockForUpdate()
@@ -362,6 +405,21 @@ class PrReceiptApprovalController extends Controller
 
                 if (! $torpr || ! $torpr->nomor_pr) {
                     return ['type' => 'error', 'msg' => 'Nomor PR kosong. Tidak bisa approve.'];
+                }
+
+                // Pemeriksaan ulang wajib dilakukan di server agar konfirmasi
+                // pada browser tidak dapat dilewati dengan mengirim form manual.
+                $conflicts = $this->prNumberConflicts->inspect(
+                    (string) $torpr->nomor_pr,
+                    (int) $torpr->id,
+                    (int) $appr->id
+                );
+
+                if ($conflicts['has_conflicts'] && ! $request->boolean('confirm_duplicate')) {
+                    return [
+                        'type' => 'duplicate',
+                        'msg' => 'Nomor PR '.$torpr->nomor_pr.' sudah digunakan. Periksa Management PPBJ, SP, atau SPPH lalu konfirmasi kembali jika tetap ingin menyetujui.',
+                    ];
                 }
 
                 $buyerName = $this->buyerNameFromApprover(auth()->user());
@@ -381,7 +439,7 @@ class PrReceiptApprovalController extends Controller
                 ]);
 
                 // 3) insert/update ke PPBJ (ppbj_no unik)
-                //    - jika sudah ada, jangan buat baru (warning)
+                //    - jika sudah ada dan sudah dikonfirmasi, perbarui data dasar PR
                 //    - buyer diisi dari user Umum yang approve
                 try {
                     $existingPpbj = DB::table('ppbj')
@@ -390,23 +448,12 @@ class PrReceiptApprovalController extends Controller
                         ->first();
 
                     if ($existingPpbj) {
-                        $existingUpdates = [];
+                        // Hanya data dasar PR yang ditimpa. Nomor SPPH, SP,
+                        // DO, BPG, invoice, progres, serta relasinya dipertahankan.
+                        $existingUpdates = $this->existingPpbjPayloadFromTorpr($torpr, $buyerName);
 
-                        if ($buyerName && blank($existingPpbj->buyer ?? null)) {
-                            $existingUpdates['buyer'] = $buyerName;
-                        }
-
-                        if (blank($existingPpbj->created_by_user_id ?? null) && Schema::hasColumn('ppbj', 'created_by_user_id')) {
+                        if (blank($existingPpbj->created_by_user_id ?? null) && $this->ppbjHasColumn('created_by_user_id')) {
                             $existingUpdates['created_by_user_id'] = auth()->id();
-                        }
-
-                        if (filled($torpr->portofolio) && blank($existingPpbj->portofolio ?? null)) {
-                            $existingUpdates['portofolio'] = $torpr->portofolio;
-                        }
-
-                        $tanggalPpbj = $this->tanggalPpbjFromTorpr($torpr);
-                        if ($tanggalPpbj && blank($existingPpbj->tgl_ppbj ?? null)) {
-                            $existingUpdates['tgl_ppbj'] = $tanggalPpbj;
                         }
 
                         if (blank($existingPpbj->general_registration_number ?? null)) {
@@ -427,7 +474,7 @@ class PrReceiptApprovalController extends Controller
 
                         return [
                             'type' => 'warning',
-                            'msg' => 'PR berhasil dikonfirmasi diterima Umum. Tetapi PPBJ tidak dibuat karena nomor sudah ada: '.$torpr->nomor_pr,
+                            'msg' => 'PR berhasil disetujui. Data dasar Management PPBJ untuk '.$torpr->nomor_pr.' telah diperbarui; dokumen SP/SPPH dan riwayat proses tetap dipertahankan.',
                             'nomor_pr' => $torpr->nomor_pr,
                         ];
                     }
@@ -438,6 +485,10 @@ class PrReceiptApprovalController extends Controller
                     ));
 
                 } catch (QueryException $e) {
+                    if (! $this->isUniqueConstraintViolation($e)) {
+                        throw $e;
+                    }
+
                     // fallback kalau race-condition unique
                     Cache::forget(self::CACHE_KEY_PENDING_COUNT);
                     $this->forgetTorprInfoCache((int) $torpr->id);
@@ -478,6 +529,9 @@ class PrReceiptApprovalController extends Controller
                 return back()->with('success', $result['msg']);
             }
             if ($result['type'] === 'warning') {
+                return back()->with('warning', $result['msg']);
+            }
+            if ($result['type'] === 'duplicate') {
                 return back()->with('warning', $result['msg']);
             }
 
@@ -548,14 +602,45 @@ class PrReceiptApprovalController extends Controller
             'updated_at' => now(),
         ];
 
-        return collect($payload)
-            ->filter(fn ($value, $column) => Schema::hasColumn('ppbj', $column))
+        return $this->onlyAvailablePpbjColumns($payload);
+    }
+
+    /**
+     * Data sumber PR terbaru yang aman untuk memperbarui PPBJ lama.
+     * Kolom proses setelah PR sengaja tidak disertakan agar jejak pengadaan
+     * yang sudah berjalan tidak terhapus saat nomor duplikat dikonfirmasi.
+     */
+    private function existingPpbjPayloadFromTorpr($torpr, ?string $buyerName): array
+    {
+        $total = (float) ($torpr->jumlah_pr ?? 0);
+        $payload = [
+            'tgl_terima_pr' => now()->toDateString(),
+            'uraian' => $torpr->tujuan_pengadaan,
+            'portofolio' => $torpr->portofolio,
+            'buyer' => $buyerName,
+            'total_sebelum_ppn' => $total,
+            'target_sla_hari' => Ppbj::hitungTargetSla($total),
+            'updated_at' => now(),
+        ];
+
+        if ($tanggalPpbj = $this->tanggalPpbjFromTorpr($torpr)) {
+            $payload['tgl_ppbj'] = $tanggalPpbj;
+        }
+
+        $payload = collect($payload)
+            ->filter(function ($value, $column): bool {
+                // Nilai angka nol valid, sedangkan teks kosong tidak boleh
+                // menghapus informasi lama yang masih berguna.
+                return is_numeric($value) || filled($value);
+            })
             ->all();
+
+        return $this->onlyAvailablePpbjColumns($payload);
     }
 
     private function generalRegistrationPayload(): array
     {
-        if (! Schema::hasColumn('ppbj', 'general_registration_number')) {
+        if (! $this->ppbjHasColumn('general_registration_number')) {
             return [];
         }
 
@@ -566,9 +651,41 @@ class PrReceiptApprovalController extends Controller
             'general_registered_by_user_id' => auth()->id(),
         ];
 
-        return collect($payload)
-            ->filter(fn ($value, $column) => Schema::hasColumn('ppbj', $column))
-            ->all();
+        return $this->onlyAvailablePpbjColumns($payload);
+    }
+
+    /**
+     * Ambil daftar kolom sekali per request. Sebelumnya setiap field memicu
+     * pemeriksaan schema tersendiri yang jauh lebih mahal pada shared hosting.
+     */
+    private function onlyAvailablePpbjColumns(array $payload): array
+    {
+        return array_intersect_key($payload, $this->ppbjColumnMap());
+    }
+
+    private function ppbjHasColumn(string $column): bool
+    {
+        return isset($this->ppbjColumnMap()[$column]);
+    }
+
+    private function ppbjColumnMap(): array
+    {
+        static $columns;
+
+        if ($columns === null) {
+            $columns = array_fill_keys(Schema::getColumnListing('ppbj'), true);
+        }
+
+        return $columns;
+    }
+
+    private function isUniqueConstraintViolation(QueryException $exception): bool
+    {
+        $sqlState = (string) ($exception->errorInfo[0] ?? $exception->getCode());
+        $message = strtolower($exception->getMessage());
+
+        return in_array($sqlState, ['23000', '23505'], true)
+            && (str_contains($message, 'duplicate') || str_contains($message, 'unique'));
     }
 
     private function nextGeneralRegistrationNumber(int $year): string

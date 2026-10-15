@@ -286,18 +286,204 @@ class ApprovalReceiptViewTest extends TestCase
         ]);
 
         $this->actingAs($umumUser)
-            ->post(route('approval.pr.approve', $approval->id))
+            ->post(route('approval.pr.approve', $approval->id), ['confirm_duplicate' => '1'])
             ->assertRedirect();
 
         $this->assertDatabaseHas('ppbj', [
             'ppbj_no' => 'PKB/PR-26/CON/0403',
             'tgl_ppbj' => '2026-06-13',
+            'uraian' => 'Pengadaan jasa existing',
             'portofolio' => 'CON',
             'buyer' => 'Buyer Baru',
+            'total_sebelum_ppn' => 17000000,
         ]);
 
         $this->assertDatabaseHas('master_buyer', [
             'nama' => 'Buyer Baru',
+        ]);
+    }
+
+    public function test_duplicate_pr_must_be_explicitly_confirmed_before_approval(): void
+    {
+        $umumUser = User::factory()->create([
+            'name' => 'Approver Umum',
+            'department' => 'umum',
+            'role' => 'superadmin',
+        ]);
+        $operasionalUser = User::factory()->create([
+            'department' => 'operasional',
+            'role' => 'user',
+        ]);
+        $nomorPr = 'PKB/PR-26/CON/0410';
+
+        DB::table('ppbj')->insert([
+            'ppbj_no' => $nomorPr,
+            'uraian' => 'Data lama yang belum boleh berubah',
+            'total_sebelum_ppn' => 5000000,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $torpr = Torpr::create([
+            'nomor_pr' => $nomorPr,
+            'tujuan_pengadaan' => 'Data PR terbaru',
+            'jumlah_pr' => 9000000,
+            'created_by_user_id' => $operasionalUser->id,
+        ]);
+        $approval = PrReceiptApproval::create([
+            'torpr_id' => $torpr->id,
+            'requested_by_user_id' => $operasionalUser->id,
+            'requested_name' => 'Operasional Test',
+            'requested_at' => now(),
+            'status' => 'PENDING',
+        ]);
+
+        $this->actingAs($umumUser)
+            ->post(route('approval.pr.approve', $approval->id))
+            ->assertRedirect()
+            ->assertSessionHas('warning');
+
+        $this->assertDatabaseHas('pr_receipt_approvals', [
+            'id' => $approval->id,
+            'status' => 'PENDING',
+        ]);
+        $this->assertDatabaseHas('ppbj', [
+            'ppbj_no' => $nomorPr,
+            'uraian' => 'Data lama yang belum boleh berubah',
+            'total_sebelum_ppn' => 5000000,
+        ]);
+    }
+
+    public function test_duplicate_check_reports_ppbj_spph_and_sp_sources(): void
+    {
+        $umumUser = User::factory()->create([
+            'department' => 'umum',
+            'role' => 'superadmin',
+        ]);
+        $operasionalUser = User::factory()->create([
+            'department' => 'operasional',
+            'role' => 'user',
+        ]);
+        $nomorPr = 'PKB/PR-26/CON/0411';
+
+        DB::table('ppbj')->insert([
+            'ppbj_no' => $nomorPr,
+            'uraian' => 'PPBJ lama',
+            'total_sebelum_ppn' => 1000000,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        DB::table('spphs')->insert([
+            'nomor_spph' => '801/PKU-X/SPPH/2026',
+            'sequence_number' => 801,
+            'tanggal' => '2026-10-15',
+            'nomor_pr' => $nomorPr,
+            'nama_vendor' => 'Vendor SPPH',
+            'deskripsi_pengadaan' => 'SPPH lama',
+            'pic' => 'Nazar',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        DB::table('sps')->insert([
+            'nomor_sp' => '801/PKU-II/SP/2026',
+            'sequence_number' => 801,
+            'tanggal_sp' => '2026-10-15',
+            'nomor_pr' => $nomorPr,
+            'nama_vendor' => 'Vendor SP',
+            'deskripsi_pengadaan' => 'SP lama',
+            'pic' => 'Nazar',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $torpr = Torpr::create([
+            'nomor_pr' => $nomorPr,
+            'tujuan_pengadaan' => 'PR terbaru',
+            'jumlah_pr' => 12000000,
+            'created_by_user_id' => $operasionalUser->id,
+        ]);
+        $approval = PrReceiptApproval::create([
+            'torpr_id' => $torpr->id,
+            'requested_by_user_id' => $operasionalUser->id,
+            'requested_name' => 'Operasional Test',
+            'requested_at' => now(),
+            'status' => 'PENDING',
+        ]);
+
+        $response = $this->actingAs($umumUser)
+            ->getJson(route('approval.pr.duplicate-check', $approval->id))
+            ->assertOk()
+            ->assertJsonPath('has_conflicts', true)
+            ->assertJsonPath('source_count', 3)
+            ->assertJsonPath('record_count', 3);
+
+        $this->assertSame(
+            ['ppbj', 'spph', 'sp'],
+            collect($response->json('sources'))->pluck('key')->all()
+        );
+    }
+
+    public function test_confirmed_duplicate_updates_pr_fields_without_erasing_process_documents(): void
+    {
+        $umumUser = User::factory()->create([
+            'name' => 'Buyer Konfirmasi',
+            'department' => 'umum',
+            'role' => 'superadmin',
+        ]);
+        $operasionalUser = User::factory()->create([
+            'department' => 'operasional',
+            'role' => 'user',
+        ]);
+        $nomorPr = 'PKB/PR-26/CON/0412';
+
+        DB::table('ppbj')->insert([
+            'ppbj_no' => $nomorPr,
+            'uraian' => 'Uraian lama',
+            'portofolio' => 'LAMA',
+            'buyer' => 'Buyer Lama',
+            'total_sebelum_ppn' => 3000000,
+            'spph_rfq_1' => '700/PKU-X/SPPH/2026',
+            'awarding_sp' => '700/PKU-II/SP/2026',
+            'do_no' => 'DO-700',
+            'no_invoice' => 'INV-700',
+            'progres' => 80,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $torpr = Torpr::create([
+            'nomor_pr' => $nomorPr,
+            'tanggal_pr' => '2026-10-14',
+            'tujuan_pengadaan' => 'Uraian terbaru',
+            'portofolio' => 'CON',
+            'jumlah_pr' => 25000000,
+            'created_by_user_id' => $operasionalUser->id,
+        ]);
+        $approval = PrReceiptApproval::create([
+            'torpr_id' => $torpr->id,
+            'requested_by_user_id' => $operasionalUser->id,
+            'requested_name' => 'Operasional Test',
+            'requested_at' => now(),
+            'status' => 'PENDING',
+        ]);
+
+        $this->actingAs($umumUser)
+            ->post(route('approval.pr.approve', $approval->id), ['confirm_duplicate' => '1'])
+            ->assertRedirect()
+            ->assertSessionHas('warning');
+
+        $this->assertDatabaseHas('pr_receipt_approvals', [
+            'id' => $approval->id,
+            'status' => 'APPROVED',
+        ]);
+        $this->assertDatabaseHas('ppbj', [
+            'ppbj_no' => $nomorPr,
+            'uraian' => 'Uraian terbaru',
+            'portofolio' => 'CON',
+            'buyer' => 'Buyer Konfirmasi',
+            'total_sebelum_ppn' => 25000000,
+            'spph_rfq_1' => '700/PKU-X/SPPH/2026',
+            'awarding_sp' => '700/PKU-II/SP/2026',
+            'do_no' => 'DO-700',
+            'no_invoice' => 'INV-700',
+            'progres' => 80,
         ]);
     }
 }
