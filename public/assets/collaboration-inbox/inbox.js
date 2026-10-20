@@ -85,8 +85,11 @@
                 });
                 if (!response.ok) throw new Error('Pencarian PR tidak tersedia.');
                 const payload = await response.json();
-                renderResults(payload.results || []);
-                hint.textContent = `${payload.meta?.count || 0} PR ditemukan · maksimal 12 hasil`;
+                const items = payload.results || [];
+                renderResults(items);
+                const shown = payload.meta?.shown ?? items.length;
+                const limit = payload.meta?.limit ?? 12;
+                hint.textContent = `${shown} PR ditemukan · maksimal ${limit} hasil`;
             } catch (error) {
                 if (error.name === 'AbortError') return;
                 results.hidden = true;
