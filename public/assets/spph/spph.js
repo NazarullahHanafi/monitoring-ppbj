@@ -12,6 +12,7 @@
         const ITEMS_BASE = '/spph/';
         const PPBJ_OPTIONS_URL = SPPH_PAGE_CONFIG.ppbjOptionsUrl;
         const PPBJ_CHECK_URL = SPPH_PAGE_CONFIG.ppbjCheckUrl;
+        const SPPH_INDEX_URL = SPPH_PAGE_CONFIG.indexUrl || '/spph';
         const SATUANS = SPPH_PAGE_CONFIG.satuans || [];
         const SATUAN_STORE_URL = SPPH_PAGE_CONFIG.satuanStoreUrl;
         const ADD_SATUAN_VALUE = '__add_satuan__';
@@ -700,7 +701,7 @@
                 showConfirmButton: false,
                 customClass: { popup: 'secure-delete-popup' }
             });
-            window.location.reload();
+            window.location.assign(SPPH_INDEX_URL);
         }
 
         // ════════════════════════════════════════════════════════════

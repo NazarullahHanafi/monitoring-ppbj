@@ -3,7 +3,7 @@
 @section('title', 'Penomoran SPPH')
 
 @push('styles')
-    <link rel="stylesheet" href="{{ asset('assets/spph/spph.css') }}?v=20261020a">
+    <link rel="stylesheet" href="{{ asset('assets/spph/spph.css') }}?v=20261020b">
     <style>
         #spphPrintSigner, #spphPrintTitle,
         #spphPrintSigner option, #spphPrintTitle option {
@@ -983,6 +983,7 @@
             'presenceStopUrl' => route('spph.presence.stop'),
             'ppbjOptionsUrl' => route('spph.ppbj-options'),
             'ppbjCheckUrl' => route('spph.check-ppbj'),
+            'indexUrl' => route('spph.index'),
             'satuans' => $satuans,
             'satuanStoreUrl' => route('satuan.store'),
             'vendorUsageStatsUrl' => route('spph.vendor-usage-stats'),
@@ -999,7 +1000,7 @@
     <script>
         window.SPPH_PAGE_CONFIG = @json($spphPageConfig);
     </script>
-    <script src="{{ asset('assets/spph/spph.js') }}?v=20261020a" defer></script>
+    <script src="{{ asset('assets/spph/spph.js') }}?v=20261020b" defer></script>
 @endpush
 
 @include('components.archive-upload-popup')

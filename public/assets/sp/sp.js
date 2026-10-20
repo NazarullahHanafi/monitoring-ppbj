@@ -1039,7 +1039,8 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
                 showConfirmButton: false,
                 customClass: { popup: 'secure-delete-popup' }
             });
-            window.location.reload();
+            const destination = ORACLE_MODE_SP ? SP_ORACLE_URL : SP_AUTO_URL;
+            window.location.assign(destination || '/sp');
         }
 
         document.getElementById('spBody').addEventListener('click', function (e) {
