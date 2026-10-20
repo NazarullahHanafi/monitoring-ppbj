@@ -6,6 +6,7 @@ use App\Http\Controllers\ArchiveAttachmentController;
 use App\Http\Controllers\ArchiveDownloadGatewayController;
 use App\Http\Controllers\ChatController;
 use App\Http\Controllers\CollaborationCalendarController;
+use App\Http\Controllers\CollaborationActionInboxController;
 use App\Http\Controllers\CommandCenterController;
 use App\Http\Controllers\ContactMessageController;
 use App\Http\Controllers\DashboardController;
@@ -165,6 +166,16 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
         Route::delete('/events/{event}', [CollaborationCalendarController::class, 'destroy'])
             ->middleware('throttle:20,1')
             ->name('destroy');
+    });
+
+    Route::prefix('collaboration-inbox')->name('collaboration-inbox.')->group(function () {
+        Route::get('/', [CollaborationActionInboxController::class, 'index'])->name('index');
+        Route::post('/handovers', [CollaborationActionInboxController::class, 'store'])
+            ->middleware('throttle:20,1')->name('store');
+        Route::patch('/handovers/{handover}/status', [CollaborationActionInboxController::class, 'updateStatus'])
+            ->middleware('throttle:30,1')->name('status');
+        Route::patch('/handovers/{handover}/checklist', [CollaborationActionInboxController::class, 'updateChecklist'])
+            ->middleware('throttle:30,1')->name('checklist');
     });
 
     // Catatan PPBJ bersifat lintas departemen. Isi dimuat hanya ketika panel dibuka,
