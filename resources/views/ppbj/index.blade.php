@@ -369,9 +369,9 @@
                                 @php $isMatch = in_array($fieldLabel, $matchedFields); @endphp
                                 <span
                                     class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold
-                                                                                                                                                                                                                            {{ $isMatch
+                                                                                                                                                                                                                             {{ $isMatch
                             ? 'bg-blue-600 text-white ring-1 ring-blue-400'
-                            : 'bg-gray-700 dark:bg-gray-600 text-gray-400 dark:text-gray-300 ring-1 ring-gray-500 dark:ring-gray-500' }}">
+                            : 'bg-gray-100 text-gray-600 ring-1 ring-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:ring-gray-600' }}">
                                     @if($isMatch)
                                         <svg class="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20">
                                             <path fill-rule="evenodd"
@@ -498,29 +498,29 @@
 
                             if ($isCancelled) {
                                 $displayStatusSla = 'CANCELLED';
-                                $statusColor = 'bg-slate-600 text-white dark:bg-slate-500 dark:text-white';
+                                $statusTone = 'cancelled';
                             } elseif ($isSlaComplete) {
                                 $displayStatusSla = 'LENGKAP';
-                                $statusColor = 'bg-blue-700 text-white dark:bg-blue-600 dark:text-white';
+                                $statusTone = 'complete';
                             } else {
                                 $sisaSla = method_exists($row, 'slaCurrentRemainingDays')
                                     ? $row->slaCurrentRemainingDays()
                                     : ($rowLiveRemaining ?? (int) ($row->sisa_target_sla ?? 0));
                                 if ($sisaSla === null) {
                                     $displayStatusSla = 'BELUM DIHITUNG';
-                                    $statusColor = 'bg-slate-600 text-white dark:bg-slate-500 dark:text-white';
+                                    $statusTone = 'neutral';
                                 } elseif ($sisaSla < 0) {
                                     $displayStatusSla = 'OVERDUE';
-                                    $statusColor = 'bg-red-700 text-white dark:bg-red-600 dark:text-white';
+                                    $statusTone = 'overdue';
                                 } elseif ($sisaSla === 0) {
                                     $displayStatusSla = 'JATUH TEMPO';
-                                    $statusColor = 'bg-orange-700 text-white dark:bg-orange-600 dark:text-white';
+                                    $statusTone = 'due';
                                 } elseif ($sisaSla <= 2) {
                                     $displayStatusSla = 'WARNING';
-                                    $statusColor = 'bg-amber-300 text-amber-950 dark:bg-amber-400 dark:text-amber-950';
+                                    $statusTone = 'warning';
                                 } else {
                                     $displayStatusSla = 'ON TRACK';
-                                    $statusColor = 'bg-emerald-700 text-white dark:bg-emerald-600 dark:text-white';
+                                    $statusTone = 'on-track';
                                 }
                             }
 
@@ -632,8 +632,8 @@
                             </td>
 
                             <td class="px-4 py-3 text-center">
-                                <span
-                                    class="status-badge inline-flex items-center justify-center rounded-md px-2 py-1 text-xs font-bold {{ $statusColor }}">
+                                <span data-status-tone="{{ $statusTone }}"
+                                    class="status-badge inline-flex items-center justify-center rounded-md px-2 py-1 text-xs font-bold">
                                     {{ $displayStatusSla }}
                                 </span>
                             </td>
@@ -1281,7 +1281,7 @@
 @endsection
 
 @push('styles')
-    <link rel="stylesheet" href="{{ asset('assets/ppbj/ppbj.css') }}?v=20261009h">
+    <link rel="stylesheet" href="{{ asset('assets/ppbj/ppbj.css') }}?v=20261020a">
 @endpush
 
 @push('scripts')
@@ -1460,7 +1460,7 @@
             });
         };
     </script>
-    <script src="{{ asset('assets/ppbj/ppbj.js') }}?v=20261009h" defer></script>
+    <script src="{{ asset('assets/ppbj/ppbj.js') }}?v=20261020a" defer></script>
 
 @endpush
 

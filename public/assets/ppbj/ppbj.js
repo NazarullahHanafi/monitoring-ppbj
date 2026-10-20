@@ -2165,8 +2165,7 @@
                 const badge = row.querySelector('.status-badge');
                 if (badge) {
                     badge.textContent = 'CANCELLED';
-                    badge.classList.remove('bg-green-600', 'bg-yellow-500', 'bg-red-600');
-                    badge.classList.add('bg-gray-600');
+                    badge.dataset.statusTone = 'cancelled';
                 }
 
                 const actionsWrap = row.querySelector('.row-actions');
