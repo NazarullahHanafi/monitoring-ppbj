@@ -140,8 +140,8 @@
             html: `<div class="space-y-3 text-left text-sm leading-6">
                 <div class="rounded-xl border border-rose-300 bg-rose-50 p-3 text-rose-900 dark:border-rose-800 dark:bg-rose-950 dark:text-rose-100">Tindakan ini tidak dapat dibatalkan. Data PPBJ tidak ikut dihapus dan akan dipulihkan ke sumber dokumen yang masih aktif.</div>
                 ${hasDownstream ? '<label class="flex items-start gap-2 rounded-xl border border-amber-300 bg-amber-50 p-3 text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100"><input id="trashAcknowledge" type="checkbox" class="mt-1"> <span>Saya memahami dokumen ini memiliki proses lanjutan.</span></label>' : ''}
-                <label class="block font-bold">Ketik nomor dokumen</label><input id="trashConfirmation" class="swal2-input" placeholder="${number}">
-                <label class="block font-bold">Password pemilik sistem</label><input id="trashPassword" type="password" class="swal2-input" placeholder="Password">
+                <label class="block font-bold">Ketik nomor dokumen</label><input id="trashConfirmation" name="permanent_delete_document_number" autocomplete="off" data-lpignore="true" data-1p-ignore="true" data-bwignore="true" class="swal2-input" placeholder="Ketik nomor dokumen di atas">
+                <label class="block font-bold">Password pemilik sistem</label><input id="trashPassword" name="permanent_delete_owner_password" type="password" autocomplete="new-password" data-lpignore="true" data-1p-ignore="true" data-bwignore="true" class="swal2-input" placeholder="Password pemilik sistem">
             </div>`,
             showCancelButton: true, confirmButtonText: 'Hapus permanen', cancelButtonText: 'Batal', confirmButtonColor: '#e11d48', ...trashTheme(),
             preConfirm: () => {

@@ -1058,7 +1058,7 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
                 secureDeleteSearchSnapshot = null;
             }
 
-            if (!result.isConfirmed || !result.value) return;
+            if (!result?.isConfirmed || !result.value) return;
 
             if (result.value.locked) {
                 showSecureDeleteLockCountdown(result.value.data.message, result.value.data.retry_after, result.value.data.locked_until);

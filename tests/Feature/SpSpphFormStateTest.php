@@ -65,4 +65,32 @@ class SpSpphFormStateTest extends TestCase
             $this->assertStringContainsString('if (secureDeleteSearchSnapshot !== null)', $script);
         }
     }
+
+    public function test_permanent_delete_dialog_ignores_password_manager_autofill(): void
+    {
+        $template = file_get_contents(resource_path('views/procurement-document-trash.blade.php'));
+
+        $this->assertIsString($template);
+        $this->assertStringContainsString('name="permanent_delete_document_number" autocomplete="off"', $template);
+        $this->assertStringContainsString('name="permanent_delete_owner_password" type="password" autocomplete="new-password"', $template);
+        $this->assertStringNotContainsString('placeholder="${number}"', $template);
+    }
+
+    public function test_document_lifecycle_mutations_are_rate_limited(): void
+    {
+        foreach (['sp.destroy', 'spph.destroy'] as $routeName) {
+            $middleware = app('router')->getRoutes()->getByName($routeName)?->gatherMiddleware() ?? [];
+            $this->assertContains('throttle:10,1', $middleware, $routeName);
+        }
+
+        foreach (['sp.restore', 'spph.restore'] as $routeName) {
+            $middleware = app('router')->getRoutes()->getByName($routeName)?->gatherMiddleware() ?? [];
+            $this->assertContains('throttle:20,1', $middleware, $routeName);
+        }
+
+        foreach (['sp.force-destroy', 'spph.force-destroy'] as $routeName) {
+            $middleware = app('router')->getRoutes()->getByName($routeName)?->gatherMiddleware() ?? [];
+            $this->assertContains('throttle:5,1', $middleware, $routeName);
+        }
+    }
 }
