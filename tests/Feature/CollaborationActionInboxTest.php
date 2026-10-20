@@ -81,6 +81,17 @@ class CollaborationActionInboxTest extends TestCase
                 'assigned_to_user_id' => $wrongAssignee->id,
             ]))
             ->assertSessionHasErrors('assigned_to_user_id');
+
+        $fallbackPpbj = $this->ppbj(['ppbj_no' => 'PKB/PR-26/CON/INBOX-FALLBACK']);
+        $fallbackPayload = array_merge($payload, [
+            'ppbj_id' => null,
+            'ppbj_no' => $fallbackPpbj->ppbj_no,
+            'assigned_to_user_id' => $assignee->id,
+        ]);
+        $this->actingAs($creator)
+            ->post(route('collaboration-inbox.store'), $fallbackPayload)
+            ->assertRedirect();
+        $this->assertDatabaseHas('collaboration_handovers', ['ppbj_id' => $fallbackPpbj->id]);
     }
 
     public function test_receiver_flow_requires_assignee_complete_checklist_and_current_version(): void

@@ -43,7 +43,10 @@
     }));
 
     const selectPr = (item) => {
-        document.getElementById('ciPpbjId').value = item.id;
+        const idInput = document.getElementById('ciPpbjId');
+        const numberInput = document.getElementById('ciPpbjNo');
+        idInput.value = item.id ?? '';
+        numberInput.value = item.ppbj_no || '';
         document.getElementById('ciSelectedPrNumber').textContent = item.ppbj_no || '-';
         document.getElementById('ciSelectedPrDescription').textContent = item.description || 'Tanpa uraian';
         document.getElementById('ciTitle').value ||= `Tindak lanjut ${item.ppbj_no || 'PR'}`;
@@ -68,6 +71,7 @@
         window.clearTimeout(timer);
         const query = searchInput.value.trim();
         document.getElementById('ciPpbjId').value = '';
+        document.getElementById('ciPpbjNo').value = '';
         selected.hidden = true;
         if (query.length < 2) {
             results.hidden = true;

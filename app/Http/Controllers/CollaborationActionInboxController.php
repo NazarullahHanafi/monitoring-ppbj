@@ -94,7 +94,8 @@ class CollaborationActionInboxController extends Controller
         $from = strtolower((string) $user->department);
         $to = $from === 'umum' ? 'operasional' : 'umum';
         $validated = $request->validate([
-            'ppbj_id' => ['required', 'integer', Rule::exists('ppbj', 'id')],
+            'ppbj_id' => ['nullable', 'integer', Rule::exists('ppbj', 'id')],
+            'ppbj_no' => ['required_without:ppbj_id', 'nullable', 'string', 'max:50', Rule::exists('ppbj', 'ppbj_no')],
             'title' => ['required', 'string', 'max:140'],
             'description' => ['required', 'string', 'max:2000'],
             'priority' => ['required', Rule::in(self::PRIORITIES)],
@@ -106,6 +107,11 @@ class CollaborationActionInboxController extends Controller
             'checklist_items' => ['nullable', 'array', 'max:8'],
             'checklist_items.*' => ['string', 'max:120'],
         ]);
+
+        $validated['ppbj_id'] ??= Ppbj::query()
+            ->where('ppbj_no', $validated['ppbj_no'])
+            ->latest('id')
+            ->value('id');
 
         $checklist = collect($validated['checklist_items'] ?? [])
             ->map(fn ($label) => trim((string) $label))
