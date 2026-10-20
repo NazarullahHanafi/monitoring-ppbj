@@ -9,6 +9,17 @@ return new class extends Migration
 {
     public function up(): void
     {
+        // MySQL dapat meninggalkan tabel kosong bila pembuatan foreign key
+        // gagal di tengah DDL. Pulihkan hanya tabel parsial yang benar-benar
+        // kosong; data yang sudah ada tidak pernah dihapus otomatis.
+        if (Schema::hasTable('collaboration_handovers')) {
+            if (DB::table('collaboration_handovers')->exists()) {
+                throw new RuntimeException('Tabel collaboration_handovers sudah berisi data tetapi migration belum tercatat.');
+            }
+
+            Schema::drop('collaboration_handovers');
+        }
+
         $ppbjIdIsUnsigned = true;
 
         // Database production lama memakai BIGINT signed untuk ppbj.id,
