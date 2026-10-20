@@ -231,6 +231,7 @@ class CollaborationActionInboxTest extends TestCase
         $this->assertStringContainsString('420', $script);
         $this->assertStringContainsString('payload.meta?.shown ?? items.length', $script);
         $this->assertStringContainsString('.ci-field-label', $styles);
+        $this->assertStringContainsString('.ci-pr-results[hidden]', $styles);
         $this->assertStringContainsString('html.dark .ci-shell', $styles);
         $this->assertStringContainsString('@media (max-width:520px)', $styles);
         $this->assertStringNotContainsString('animation: infinite', $styles);
