@@ -9,7 +9,7 @@
 @endphp
 
 @push('styles')
-    <link rel="stylesheet" href="{{ asset('assets/sp/sp.css') }}?v=20261020d">
+    <link rel="stylesheet" href="{{ asset('assets/sp/sp.css') }}?v=20261020e">
     <style>
         body.sp-print-modal-open { overflow: hidden; }
         .sp-print-choice-overlay {
@@ -334,7 +334,8 @@
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                             d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                     </svg>
-                    <input type="text" id="searchInput" value="{{ $search ?? '' }}"
+                    <input type="text" id="searchInput" value="{{ $search ?? '' }}" autocomplete="off"
+                        data-lpignore="true" data-1p-ignore="true" data-bwignore="true" spellcheck="false"
                         placeholder="Cari nomor SP, nomor PR, vendor, deskripsi..."
                         class="w-full pl-10 pr-10 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm">
                     <span id="searchSpinner" class="absolute right-3 top-1/2 -translate-y-1/2 hidden"><svg
@@ -1785,7 +1786,7 @@
             if (event.key === 'Escape') window.closeSpPrintPreview();
         });
     </script>
-    <script src="{{ asset('assets/sp/sp.js') }}?v=20261020d" defer></script>
+    <script src="{{ asset('assets/sp/sp.js') }}?v=20261020e" defer></script>
 @endpush
 
 @include('components.archive-upload-popup')

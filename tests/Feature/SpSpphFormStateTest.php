@@ -53,4 +53,16 @@ class SpSpphFormStateTest extends TestCase
         $this->assertStringNotContainsString('window.location.reload();', $spScript);
         $this->assertStringNotContainsString('window.location.reload();', $spphScript);
     }
+
+    public function test_secure_delete_prevents_password_manager_from_triggering_search(): void
+    {
+        foreach (['sp/sp.js', 'spph/spph.js'] as $asset) {
+            $script = file_get_contents(public_path('assets/'.$asset));
+
+            $this->assertIsString($script);
+            $this->assertStringContainsString('secureDeleteSearchSnapshot', $script);
+            $this->assertStringContainsString('autocomplete="new-password"', $script);
+            $this->assertStringContainsString('if (secureDeleteSearchSnapshot !== null)', $script);
+        }
+    }
 }

@@ -3,7 +3,7 @@
 @section('title', 'Penomoran SPPH')
 
 @push('styles')
-    <link rel="stylesheet" href="{{ asset('assets/spph/spph.css') }}?v=20261020c">
+    <link rel="stylesheet" href="{{ asset('assets/spph/spph.css') }}?v=20261020d">
     <style>
         #spphPrintSigner, #spphPrintTitle,
         #spphPrintSigner option, #spphPrintTitle option {
@@ -127,7 +127,8 @@
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                             d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                     </svg>
-                    <input type="text" id="searchInput" value="{{ $search ?? '' }}"
+                    <input type="text" id="searchInput" value="{{ $search ?? '' }}" autocomplete="off"
+                        data-lpignore="true" data-1p-ignore="true" data-bwignore="true" spellcheck="false"
                         placeholder="Cari nomor SPPH, nomor PR, vendor, deskripsi..."
                         class="w-full pl-10 pr-10 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm">
                     <span id="searchSpinner" class="absolute right-3 top-1/2 -translate-y-1/2 hidden">
@@ -1000,7 +1001,7 @@
     <script>
         window.SPPH_PAGE_CONFIG = @json($spphPageConfig);
     </script>
-    <script src="{{ asset('assets/spph/spph.js') }}?v=20261020c" defer></script>
+    <script src="{{ asset('assets/spph/spph.js') }}?v=20261020d" defer></script>
 @endpush
 
 @include('components.archive-upload-popup')

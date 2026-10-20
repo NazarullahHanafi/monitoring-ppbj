@@ -23,6 +23,7 @@
 
         let lastId = Number(SPPH_PAGE_CONFIG.lastId || 0);
         let pollTimer = null, checkTimer = null, searchTimer = null, presTimer = null, hbTimer = null;
+        let secureDeleteSearchSnapshot = null;
         let modalOpen = false, addIdx = 0, editIdx = 5000;
         let currentPrMode = 'ppbj', currentEditPrMode = 'ppbj';
         let editModalLoadSerial = 0;
@@ -605,8 +606,14 @@
 
         async function secureDeleteRecord(label, nomor, url) {
             const csrf = document.querySelector('meta[name="csrf-token"]')?.content || SPPH_PAGE_CONFIG.csrfToken || '';
+            const searchInput = document.getElementById('searchInput');
+            secureDeleteSearchSnapshot = searchInput?.value || '';
+            clearTimeout(searchTimer);
+            document.getElementById('searchSpinner')?.classList.add('hidden');
 
-            const result = await Swal.fire({
+            let result;
+            try {
+                result = await Swal.fire({
                 icon: 'warning',
                 title: `Pindahkan ${label} ke Sampah?`,
                 html: `
@@ -622,12 +629,16 @@
                     <div class="secure-delete-input-wrap">
                     <label class="secure-delete-password-label" for="secureDeletePassword">Password pembuat ${label}</label>
                     <div class="secure-delete-password-field">
-                        <input id="secureDeletePassword" type="password" class="swal2-input" placeholder="Masukkan password pembuat ${label}">
+                        <input id="secureDeletePassword" name="secure_delete_verification_password" type="password"
+                            autocomplete="new-password" data-lpignore="true" data-1p-ignore="true" data-bwignore="true"
+                            class="swal2-input" placeholder="Masukkan password pembuat ${label}">
                         <button type="button" id="secureDeleteToggle" class="secure-delete-toggle">Lihat</button>
                     </div>
                     <div class="secure-delete-input-wrap">
                         <label class="secure-delete-password-label" for="secureDeleteReason">Alasan (opsional)</label>
-                        <input id="secureDeleteReason" type="text" class="swal2-input" maxlength="500" placeholder="Contoh: salah nomor atau dokumen dibatalkan">
+                        <input id="secureDeleteReason" name="secure_delete_reason" type="text" autocomplete="off"
+                            data-lpignore="true" data-1p-ignore="true" data-bwignore="true"
+                            class="swal2-input" maxlength="500" placeholder="Contoh: salah nomor atau dokumen dibatalkan">
                     </div>
                     </div>
                     <div class="secure-delete-lock-preview"><p>Jika salah 3 kali, aksi hapus dikunci 15 menit untuk menjaga keamanan data.</p></div>
@@ -683,8 +694,14 @@
                         return false;
                     }
                 },
-                allowOutsideClick: () => !Swal.isLoading()
-            });
+                    allowOutsideClick: () => !Swal.isLoading()
+                });
+            } finally {
+                clearTimeout(searchTimer);
+                if (searchInput) searchInput.value = secureDeleteSearchSnapshot || '';
+                document.getElementById('searchSpinner')?.classList.add('hidden');
+                secureDeleteSearchSnapshot = null;
+            }
 
             if (!result.isConfirmed || !result.value) return;
 
@@ -1709,6 +1726,12 @@
             });
 
             document.getElementById('searchInput').addEventListener('input', function () {
+                if (secureDeleteSearchSnapshot !== null) {
+                    clearTimeout(searchTimer);
+                    this.value = secureDeleteSearchSnapshot;
+                    document.getElementById('searchSpinner').classList.add('hidden');
+                    return;
+                }
                 document.getElementById('searchSpinner').classList.remove('hidden');
                 clearTimeout(searchTimer);
                 searchTimer = setTimeout(() => { document.getElementById('searchSpinner').classList.add('hidden'); doSearch(); }, 500);
