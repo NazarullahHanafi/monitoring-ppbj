@@ -607,12 +607,12 @@
 
             const result = await Swal.fire({
                 icon: 'warning',
-                title: `Hapus ${label}?`,
+                title: `Pindahkan ${label} ke Sampah?`,
                 html: `
                     <div class="secure-delete-stack">
                     <div class="secure-delete-danger">
                         <div class="secure-delete-danger-title">⚠️ Data: ${secureDeleteEscapeHtml(nomor)}</div>
-                        <p>Data ${label} akan dihapus permanen. Relasi ke PPBJ akan disesuaikan bila data ini terhubung.</p>
+                        <p>Dokumen disembunyikan dari daftar aktif, tetapi SP lanjutan, relasi PR, dan riwayat tetap aman serta dapat dipulihkan.</p>
                     </div>
                     <div class="secure-delete-warning">
                         <div class="secure-delete-warning-title">🔐 Verifikasi password</div>
@@ -624,12 +624,16 @@
                         <input id="secureDeletePassword" type="password" class="swal2-input" placeholder="Masukkan password pembuat ${label}">
                         <button type="button" id="secureDeleteToggle" class="secure-delete-toggle">Lihat</button>
                     </div>
+                    <div class="secure-delete-input-wrap">
+                        <label class="secure-delete-password-label" for="secureDeleteReason">Alasan (opsional)</label>
+                        <input id="secureDeleteReason" type="text" class="swal2-input" maxlength="500" placeholder="Contoh: salah nomor atau dokumen dibatalkan">
+                    </div>
                     </div>
                     <div class="secure-delete-lock-preview"><p>Jika salah 3 kali, aksi hapus dikunci 15 menit untuk menjaga keamanan data.</p></div>
                     </div>
                 `,
                 showCancelButton: true,
-                confirmButtonText: `Ya, Hapus ${label}`,
+                confirmButtonText: `Pindahkan ke Sampah`,
                 cancelButtonText: 'Batal',
                 confirmButtonColor: '#ef4444',
                 cancelButtonColor: '#64748b',
@@ -659,7 +663,7 @@
                                 'Accept': 'application/json',
                                 'Content-Type': 'application/json'
                             },
-                            body: JSON.stringify({ creator_password: password })
+                            body: JSON.stringify({ creator_password: password, archive_reason: document.getElementById('secureDeleteReason')?.value || '' })
                         });
                         const data = await response.json().catch(() => ({}));
 
@@ -690,8 +694,8 @@
 
             await Swal.fire({
                 icon: 'success',
-                title: `${label} dihapus`,
-                text: result.value.data?.message || `Data ${label} berhasil dihapus.`,
+                title: `${label} dipindahkan`,
+                text: result.value.data?.message || `Data ${label} berhasil dipindahkan ke Sampah.`,
                 timer: 1400,
                 showConfirmButton: false,
                 customClass: { popup: 'secure-delete-popup' }

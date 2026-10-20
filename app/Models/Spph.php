@@ -3,25 +3,32 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\DB;
 use App\Models\User;
 
 class Spph extends Model
 {
+    use SoftDeletes;
+
     protected $fillable = [
         'nomor_spph', 'sequence_number', 'created_by_user_id', 'tanggal',
         'nomor_pr', 'nama_vendor', 'vendor_names', 'deskripsi_pengadaan', 'pic',
+        'archived_by_user_id', 'archive_reason',
     ];
 
     protected $casts = [
         'tanggal' => 'date',
         'vendor_names' => 'array',
+        'deleted_at' => 'datetime',
     ];
 
     protected static function booted(): void
     {
         static::deleting(function (Spph $spph) {
-            $spph->ppbjs()->detach();
+            if ($spph->isForceDeleting()) {
+                $spph->ppbjs()->detach();
+            }
         });
     }
 
@@ -55,7 +62,8 @@ class Spph extends Model
 
     private static function nextAvailableSequence(int $year, bool $lock = false): int
     {
-        $query = self::where('nomor_spph', 'like', "%/SPPH/{$year}")
+        $query = self::withTrashed()
+            ->where('nomor_spph', 'like', "%/SPPH/{$year}")
             ->orderBy('sequence_number');
 
         if ($lock) {

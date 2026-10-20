@@ -322,6 +322,9 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
             // ── Halaman Utama ──
             Route::get('/', [SpphController::class, 'index'])->name('index');
             Route::post('/', [SpphController::class, 'store'])->name('store');
+            Route::get('/trash', [SpphController::class, 'trash'])->name('trash');
+            Route::post('/trash/{id}/restore', [SpphController::class, 'restore'])->whereNumber('id')->name('restore');
+            Route::delete('/trash/{id}/force', [SpphController::class, 'forceDestroy'])->whereNumber('id')->name('force-destroy');
 
             // ── Export ──
             Route::get('/export', [SpphController::class, 'export'])->name('export')->middleware('throttle:10,1');
@@ -426,6 +429,9 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
         Route::prefix('sp')->name('sp.')->middleware('auth')->group(function () {
             Route::get('/', [SpController::class, 'index'])->name('index');
             Route::post('/', [SpController::class, 'store'])->name('store');
+            Route::get('/trash', [SpController::class, 'trash'])->name('trash');
+            Route::post('/trash/{id}/restore', [SpController::class, 'restore'])->whereNumber('id')->name('restore');
+            Route::delete('/trash/{id}/force', [SpController::class, 'forceDestroy'])->whereNumber('id')->name('force-destroy');
             Route::put('/{sp}', [SpController::class, 'update'])->name('update');
             Route::delete('/{sp}', [SpController::class, 'destroy'])->name('destroy');
             Route::post('/{sp}/archive-attachment', [ArchiveAttachmentController::class, 'storeSp'])

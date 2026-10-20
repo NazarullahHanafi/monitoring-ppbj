@@ -3,10 +3,13 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use App\Models\User;
 
 class Sp extends Model
 {
+    use SoftDeletes;
+
     protected $fillable = [
         'nomor_sp',
         'sequence_number',
@@ -32,6 +35,8 @@ class Sp extends Model
         'penandatangan_sci',
         'jabatan_sci',
         'jampel_5',
+        'archived_by_user_id',
+        'archive_reason',
     ];
 
     protected $casts = [
@@ -45,6 +50,7 @@ class Sp extends Model
         'nilai_sp' => 'decimal:2',
         'nilai_pr' => 'decimal:2',
         'jampel_5' => 'decimal:2',
+        'deleted_at' => 'datetime',
     ];
 
     protected static function booted(): void
@@ -61,7 +67,9 @@ class Sp extends Model
         });
 
         static::deleting(function (Sp $sp) {
-            $sp->ppbjs()->detach();
+            if ($sp->isForceDeleting()) {
+                $sp->ppbjs()->detach();
+            }
         });
     }
 
@@ -83,7 +91,8 @@ class Sp extends Model
 
     private static function nextAvailableSequence(int $year, bool $lock = false): int
     {
-        $query = self::where('nomor_sp', 'like', "%/SP/{$year}")
+        $query = self::withTrashed()
+            ->where('nomor_sp', 'like', "%/SP/{$year}")
             ->where(function ($query) {
                 $query->whereNull('numbering_mode')
                     ->orWhere('numbering_mode', 'auto');
@@ -170,7 +179,7 @@ class Sp extends Model
     public function ppbjs()
     {
         return $this->belongsToMany(Ppbj::class, 'sp_ppbj')
-            ->withPivot('urutan')
+            ->withPivot(['urutan', 'nilai_alokasi', 'allocation_status'])
             ->withTimestamps()
             ->orderByPivot('urutan');
     }

@@ -209,7 +209,7 @@ class SpphPpbjSyncTest extends TestCase
             ->assertOk()
             ->assertSee('101/PKU-VI/SPPH/2026')
             ->assertSee('"hasFilter":true', false)
-            ->assertSee('/assets/spph/spph.js?v=20261007a', false);
+            ->assertSee('/assets/spph/spph.js?v=20261020a', false);
 
         $numbers = $response->viewData('spphs')->pluck('nomor_spph')->all();
 
@@ -217,7 +217,7 @@ class SpphPpbjSyncTest extends TestCase
         $this->assertNotContains('102/PKU-VI/SPPH/2026', $numbers);
     }
 
-    public function test_deleting_spph_clears_matching_ppbj_penyedia_eksternal(): void
+    public function test_archiving_spph_preserves_ppbj_history_and_vendor(): void
     {
         $user = User::factory()->create([
             'department' => 'umum',
@@ -253,8 +253,9 @@ class SpphPpbjSyncTest extends TestCase
 
         $this->assertDatabaseHas('ppbj', [
             'ppbj_no' => 'PKB/PR-26/CON/0503',
-            'spph_rfq_1' => null,
-            'penyedia_eksternal' => null,
+            'spph_rfq_1' => '003/PKU-VI/SPPH/2026',
+            'penyedia_eksternal' => 'PT Vendor Hapus',
         ]);
+        $this->assertSoftDeleted('spphs', ['id' => $spph->id]);
     }
 }

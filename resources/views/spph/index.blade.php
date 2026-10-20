@@ -3,7 +3,7 @@
 @section('title', 'Penomoran SPPH')
 
 @push('styles')
-    <link rel="stylesheet" href="{{ asset('assets/spph/spph.css') }}?v=20260814a">
+    <link rel="stylesheet" href="{{ asset('assets/spph/spph.css') }}?v=20261020a">
     <style>
         #spphPrintSigner, #spphPrintTitle,
         #spphPrintSigner option, #spphPrintTitle option {
@@ -47,7 +47,7 @@
                                 class="live-dot"></span> Live</span>
                     </div>
                 </div>
-                <div class="flex items-center gap-2.5 shrink-0">
+                <div class="flex flex-wrap items-center gap-2.5 shrink-0">
                     <a href="{{ route('satuan.index') }}"
                         class="flex items-center gap-2 bg-white/20 hover:bg-white/30 text-white font-semibold px-4 py-3 rounded-xl transition-all backdrop-blur-sm border border-white/30 whitespace-nowrap"
                         title="Master Satuan">
@@ -66,6 +66,11 @@
                                 d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
                         </svg>
                         <span class="text-sm">Vendor</span>
+                    </a>
+                    <a href="{{ route('spph.trash') }}"
+                        class="flex items-center gap-2 bg-white/15 hover:bg-white/25 text-white font-semibold px-4 py-3 rounded-xl transition-all backdrop-blur-sm border border-white/30 whitespace-nowrap"
+                        title="Pulihkan SPPH dari tempat sampah">
+                        <span aria-hidden="true">♻</span><span class="text-sm">Sampah</span>
                     </a>
                     <button onclick="openAddModal()"
                         class="flex items-center gap-2 bg-white text-purple-700 font-bold px-5 py-3 rounded-xl hover:bg-purple-50 transition-all shadow-lg shadow-black/20 whitespace-nowrap group">
@@ -352,7 +357,7 @@
                                         <button type="button"
                                             onclick="secureDeleteRecord('SPPH', @js($s->nomor_spph ?? ('SPPH-' . $s->id)), @js(route('spph.destroy', $s)))"
                                             class="p-1.5 rounded-lg text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors"
-                                            title="Hapus SPPH dengan password pembuat">
+                                            title="Pindahkan SPPH ke tempat sampah">
                                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                                     d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -994,7 +999,7 @@
     <script>
         window.SPPH_PAGE_CONFIG = @json($spphPageConfig);
     </script>
-    <script src="{{ asset('assets/spph/spph.js') }}?v=20261007a" defer></script>
+    <script src="{{ asset('assets/spph/spph.js') }}?v=20261020a" defer></script>
 @endpush
 
 @include('components.archive-upload-popup')

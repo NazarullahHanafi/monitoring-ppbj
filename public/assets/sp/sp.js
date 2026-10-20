@@ -20,6 +20,10 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
         let pollTimer = null, checkTimer = null, searchTimer = null, presenceTimer = null, heartbeatTimer = null, modalOpen = false;
         let currentPrMode = 'ppbj', currentEditPrMode = 'ppbj';
         let editModalLoadSerial = 0;
+        const spAllocationState = {
+            add: { items: [], values: {}, mode: 'automatic' },
+            edit: { items: [], values: {}, mode: 'automatic' }
+        };
         const IS_FIRST_PAGE = Boolean(SP_PAGE_CONFIG.firstPage);
         const HAS_FILTER = Boolean(SP_PAGE_CONFIG.hasFilter);
 
@@ -79,6 +83,7 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
                 $('#ppbjSelect').prop('disabled', true).trigger('change.select2');
                 if (reset) $('#nomorPrManual').val('');
                 renderSpphVendorRecommendation('add', [], null);
+                setSpAllocationItems('add', []);
                 updatePrFinalValue();
             }
         }
@@ -122,8 +127,161 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
                 $('#editPpbjSelect').prop('disabled', true).trigger('change.select2');
                 if (reset) $('#editNomorPrManual').val('');
                 renderSpphVendorRecommendation('edit', [], null);
+                setSpAllocationItems('edit', []);
                 updateEditPrFinalValue();
             }
+        }
+
+        function allocationPrefix(mode) {
+            return mode === 'edit' ? 'edit' : 'add';
+        }
+
+        function allocationMoney(value) {
+            if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
+            const cleaned = String(value ?? '').replace(/[^0-9,-]/g, '').replace(/\./g, '').replace(',', '.');
+            const parsed = Number(cleaned);
+            return Number.isFinite(parsed) ? parsed : 0;
+        }
+
+        function allocationSpValue(mode) {
+            return allocationMoney(document.getElementById(mode === 'edit' ? 'editNilaiSp' : 'nilaiSpInput')?.value);
+        }
+
+        function setSpAllocationItems(mode, items, existingValues = null, existingMode = null) {
+            mode = allocationPrefix(mode);
+            const state = spAllocationState[mode];
+            state.items = Array.isArray(items) ? items.map(item => ({
+                ppbj_no: String(item.ppbj_no || ''),
+                uraian: String(item.uraian || ''),
+                nilai: Math.max(0, Number(item.nilai || 0))
+            })).filter(item => item.ppbj_no) : [];
+
+            if (existingValues && typeof existingValues === 'object') {
+                state.values = Object.fromEntries(state.items.map(item => [item.ppbj_no, Math.max(0, Number(existingValues[item.ppbj_no] || 0))]));
+                state.mode = existingMode === 'manual' ? 'manual' : 'automatic';
+                renderSpAllocation(mode);
+            } else {
+                state.values = {};
+                state.mode = 'automatic';
+                autoAllocateSp(mode);
+            }
+        }
+
+        function autoAllocateSp(mode) {
+            mode = allocationPrefix(mode);
+            const state = spAllocationState[mode];
+            const totalSp = Math.max(0, allocationSpValue(mode));
+            const totalPr = state.items.reduce((sum, item) => sum + item.nilai, 0);
+            let allocated = 0;
+
+            state.values = {};
+            state.items.forEach((item, index) => {
+                const weight = totalPr > 0 ? item.nilai / totalPr : (state.items.length ? 1 / state.items.length : 0);
+                const value = index === state.items.length - 1 ? Math.max(0, totalSp - allocated) : Math.round(totalSp * weight);
+                state.values[item.ppbj_no] = value;
+                allocated += value;
+            });
+            state.mode = 'automatic';
+            renderSpAllocation(mode);
+        }
+
+        function matchPrValuesForSp(mode) {
+            mode = allocationPrefix(mode);
+            const state = spAllocationState[mode];
+            const totalPr = state.items.reduce((sum, item) => sum + item.nilai, 0);
+            const input = document.getElementById(mode === 'edit' ? 'editNilaiSp' : 'nilaiSpInput');
+            if (input) input.value = formatRupiahFromNumber(totalPr);
+            state.values = Object.fromEntries(state.items.map(item => [item.ppbj_no, item.nilai]));
+            state.mode = 'automatic';
+            renderSpAllocation(mode);
+            updateJampelPreview(mode);
+            scheduleSpModeGuard(mode, 30);
+        }
+
+        function updateSpAllocationTotals(mode) {
+            mode = allocationPrefix(mode);
+            const state = spAllocationState[mode];
+            const totalSp = Math.max(0, allocationSpValue(mode));
+            const assigned = state.items.reduce((sum, item) => sum + Number(state.values[item.ppbj_no] || 0), 0);
+            const difference = Math.round(totalSp - assigned);
+            const totalPr = state.items.reduce((sum, item) => sum + item.nilai, 0);
+            const totalSpEl = document.getElementById(`${mode}AllocationTotalSp`);
+            const assignedEl = document.getElementById(`${mode}AllocationTotalAssigned`);
+            const differenceEl = document.getElementById(`${mode}AllocationDifference`);
+            const modeEl = document.getElementById(`${mode}AllocationMode`);
+            const stateEl = document.getElementById(`${mode}AllocationState`);
+            const overrideWrap = document.getElementById(`${mode}AllocationOverrideWrap`);
+
+            if (totalSpEl) totalSpEl.textContent = `Rp ${number_format_dots(totalSp)}`;
+            if (assignedEl) assignedEl.textContent = `Rp ${number_format_dots(assigned)}`;
+            if (differenceEl) {
+                differenceEl.textContent = `${difference < 0 ? '- ' : ''}Rp ${number_format_dots(Math.abs(difference))}`;
+                differenceEl.classList.toggle('is-error', Math.abs(difference) > 1);
+                differenceEl.classList.toggle('is-ok', Math.abs(difference) <= 1);
+            }
+            if (modeEl) modeEl.value = state.mode;
+            if (stateEl) stateEl.textContent = state.mode === 'manual' ? 'Disesuaikan manual' : 'Proporsional otomatis';
+            if (overrideWrap) {
+                const needsOverride = totalPr > 0 && totalSp > totalPr + 1;
+                overrideWrap.classList.toggle('hidden', !needsOverride);
+                if (!needsOverride) overrideWrap.querySelector('input').checked = false;
+            }
+            return Math.abs(difference) <= 1;
+        }
+
+        function renderSpAllocation(mode) {
+            mode = allocationPrefix(mode);
+            const state = spAllocationState[mode];
+            const panel = document.getElementById(`${mode}AllocationPanel`);
+            const rows = document.getElementById(`${mode}AllocationRows`);
+            if (!panel || !rows) return;
+
+            panel.classList.toggle('hidden', state.items.length === 0);
+            if (!state.items.length) {
+                rows.innerHTML = '';
+                return;
+            }
+
+            rows.innerHTML = state.items.map((item, index) => `
+                <div class="sp-allocation-row">
+                    <div class="sp-allocation-pr"><strong title="${escapedHtml(item.ppbj_no)}">${escapedHtml(item.ppbj_no)}</strong><span>${escapedHtml(item.uraian || 'Tanpa uraian')}</span></div>
+                    <div class="sp-allocation-estimate"><span>Nilai PR</span><strong>Rp ${number_format_dots(item.nilai)}</strong></div>
+                    <div>
+                        <input type="hidden" name="allocations[${index}][ppbj_no]" value="${escapedHtml(item.ppbj_no)}">
+                        <input class="sp-allocation-input" inputmode="numeric" name="allocations[${index}][value]" data-allocation-mode="${mode}" data-allocation-pr="${escapedHtml(item.ppbj_no)}" value="${number_format_dots(state.values[item.ppbj_no] || 0)}" aria-label="Alokasi ${escapedHtml(item.ppbj_no)}">
+                    </div>
+                </div>`).join('');
+
+            rows.querySelectorAll('.sp-allocation-input').forEach(input => {
+                input.addEventListener('input', () => {
+                    const pr = input.dataset.allocationPr;
+                    state.values[pr] = allocationMoney(input.value);
+                    state.mode = 'manual';
+                    updateSpAllocationTotals(mode);
+                });
+                input.addEventListener('blur', () => { input.value = number_format_dots(allocationMoney(input.value)); });
+            });
+            updateSpAllocationTotals(mode);
+        }
+
+        function validateSpAllocationBeforeSubmit(mode) {
+            mode = allocationPrefix(mode);
+            const state = spAllocationState[mode];
+            if (!state.items.length) return true;
+            if (!updateSpAllocationTotals(mode)) {
+                Swal.fire({
+                    icon: 'warning', title: 'Alokasi nilai belum seimbang',
+                    text: 'Total alokasi seluruh PR harus sama dengan nilai SP. Gunakan hitung proporsional atau sesuaikan nilainya.',
+                    ...swalThemeSp()
+                });
+                return false;
+            }
+            const override = document.querySelector(`#${mode}AllocationOverrideWrap:not(.hidden) input`);
+            if (override && !override.checked) {
+                Swal.fire({ icon: 'warning', title: 'Konfirmasi nilai diperlukan', text: 'Nilai SP lebih besar dari gabungan nilai PR. Centang konfirmasi setelah nilainya diperiksa.', ...swalThemeSp() });
+                return false;
+            }
+            return true;
         }
 
         // ═══════════════════════════════════════
@@ -176,6 +334,7 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
                     if ($npInput2) $npInput2.val('');
                     renderSpphVendorRecommendation(vendorPrefix, [], null);
                     resetSpItemsForPr(vendorPrefix === 'edit' ? 'edit' : 'add');
+                    setSpAllocationItems(vendorPrefix, []);
                     return;
                 }
                 $status.html('<span class="text-gray-400">🔄 Memeriksa...</span>');
@@ -196,6 +355,7 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
                         if (d.warnings && d.warnings.length) html += `<div class="text-amber-600 dark:text-amber-400">⚠️ ${d.warnings.map(warning => escapedHtml(warning)).join(', ')}</div>`;
                         $content.html(html);
                         renderSpphVendorRecommendation(vendorPrefix, d.spph_vendors || [], d.spph_nomor || null);
+                        setSpAllocationItems(vendorPrefix, d.package_items || []);
                         applySpphAutoFill(vendorPrefix, d);
                         applyPpbjDescription($deskripsi, $badge, d);
                         if (d.total_sebelum_ppn) {
@@ -221,6 +381,7 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
                         if (d.spph_items && d.spph_items.length) linkedHtml += `<div><strong>Item SPPH:</strong> ${d.spph_items.length} item siap ditarik otomatis ke SP</div>`;
                         $content.html(linkedHtml);
                         renderSpphVendorRecommendation(vendorPrefix, d.spph_vendors || [], d.spph_nomor || null);
+                        setSpAllocationItems(vendorPrefix, d.package_items || []);
                         applySpphAutoFill(vendorPrefix, d);
                         if (!linkedHtml) $info.addClass('hidden');
                         applyPpbjDescription($deskripsi, $badge, d);
@@ -240,6 +401,7 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
                     } else if (d.status === 'cancelled') {
                         $status.html(`<span class="text-red-600 dark:text-red-400">❌ ${d.message}</span>`); $info.addClass('hidden');
                         renderSpphVendorRecommendation(vendorPrefix, [], null);
+                        setSpAllocationItems(vendorPrefix, []);
                     } else { $status.html('<span class="text-blue-600">📝 Manual</span>'); $info.addClass('hidden'); if ($badge) $badge.addClass('hidden').html(''); renderSpphVendorRecommendation(vendorPrefix, [], null); }
                 }).fail((xhr, status) => {
                     if (status === 'abort' || requestId !== requestSerial) return;
@@ -249,6 +411,7 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
                     $status.html('<span class="text-red-600">❌ Gagal</span>');
                     $info.addClass('hidden');
                     renderSpphVendorRecommendation(vendorPrefix, [], null);
+                    setSpAllocationItems(vendorPrefix, []);
                 });
             });
         }
@@ -783,12 +946,12 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
 
             const result = await Swal.fire({
                 icon: 'warning',
-                title: `Hapus ${label}?`,
+                title: `Pindahkan ${label} ke Sampah?`,
                 html: `
                     <div class="secure-delete-stack">
                     <div class="secure-delete-danger">
                         <div class="secure-delete-danger-title">⚠️ Data: ${secureDeleteEscapeHtml(nomor)}</div>
-                        <p>Data ${label} akan dihapus permanen. Relasi ke PPBJ akan disesuaikan bila data ini terhubung.</p>
+                        <p>Dokumen disembunyikan dari daftar aktif, tetapi relasi PR dan riwayat tetap aman serta dapat dipulihkan.</p>
                     </div>
                     <div class="secure-delete-warning">
                         <div class="secure-delete-warning-title">🔐 Verifikasi password</div>
@@ -800,12 +963,16 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
                         <input id="secureDeletePassword" type="password" class="swal2-input" placeholder="Masukkan password pembuat ${label}">
                         <button type="button" id="secureDeleteToggle" class="secure-delete-toggle">Lihat</button>
                     </div>
+                    <div class="secure-delete-input-wrap">
+                        <label class="secure-delete-password-label" for="secureDeleteReason">Alasan (opsional)</label>
+                        <input id="secureDeleteReason" type="text" class="swal2-input" maxlength="500" placeholder="Contoh: salah nomor atau dokumen dibatalkan">
+                    </div>
                     </div>
                     <div class="secure-delete-lock-preview"><p>Jika salah 3 kali, aksi hapus dikunci 15 menit untuk menjaga keamanan data.</p></div>
                     </div>
                 `,
                 showCancelButton: true,
-                confirmButtonText: `Ya, Hapus ${label}`,
+                confirmButtonText: `Pindahkan ke Sampah`,
                 cancelButtonText: 'Batal',
                 confirmButtonColor: '#ef4444',
                 cancelButtonColor: '#64748b',
@@ -835,7 +1002,7 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
                                 'Accept': 'application/json',
                                 'Content-Type': 'application/json'
                             },
-                            body: JSON.stringify({ creator_password: password })
+                            body: JSON.stringify({ creator_password: password, archive_reason: document.getElementById('secureDeleteReason')?.value || '' })
                         });
                         const data = await response.json().catch(() => ({}));
 
@@ -866,8 +1033,8 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
 
             await Swal.fire({
                 icon: 'success',
-                title: `${label} dihapus`,
-                text: result.value.data?.message || `Data ${label} berhasil dihapus.`,
+                title: `${label} dipindahkan`,
+                text: result.value.data?.message || `Data ${label} berhasil dipindahkan ke Sampah.`,
                 timer: 1400,
                 showConfirmButton: false,
                 customClass: { popup: 'secure-delete-popup' }
@@ -1348,7 +1515,9 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
             bidangIpItu,
             penandatanganSci,
             jabatanSci,
-            linkedPpbjNumbers = []
+            linkedPpbjNumbers = [],
+            existingAllocations = {},
+            existingAllocationMode = 'automatic'
         ) {
             const editLoadId = ++editModalLoadSerial;
             document.getElementById('editFormSp').action = `/sp/${id}`;
@@ -1396,7 +1565,7 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
                 // Toggle UI ke mode PPBJ (tanpa clear field)
                 _switchEditPpbjUiOnly('ppbj');
 
-                $.get(PPBJ_CHECK_URL, { ppbj_no: nomorPr }, function (d) {
+                $.get(PPBJ_CHECK_URL, { ppbj_no: nomorPr, ppbj_nos: editPpbjNumbers }, function (d) {
                     if (editLoadId !== editModalLoadSerial || String(document.getElementById('editIdSp').value) !== String(id)) return;
                     if (d.status === 'available' || d.status === 'already_linked') {
                         const o = new Option(
@@ -1413,11 +1582,13 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
                         updateEditPrFinalValue();
                         $('#editPpbjStatus').html('<span class="text-green-600 dark:text-green-400">✅ Terhubung dengan PPBJ</span>');
                         renderSpphVendorRecommendation('edit', d.spph_vendors || [], d.spph_nomor || null);
+                        setSpAllocationItems('edit', d.package_items || [], existingAllocations, existingAllocationMode);
                     } else {
                         _switchEditPpbjUiOnly('manual');
                         $('#editNomorPrManual').val(nomorPr);
                         updateEditPrFinalValue();
                         renderSpphVendorRecommendation('edit', [], null);
+                        setSpAllocationItems('edit', []);
                     }
                 }).fail(() => {
                     if (editLoadId !== editModalLoadSerial || String(document.getElementById('editIdSp').value) !== String(id)) return;
@@ -1425,11 +1596,13 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
                     $('#editNomorPrManual').val(nomorPr);
                     updateEditPrFinalValue();
                     renderSpphVendorRecommendation('edit', [], null);
+                    setSpAllocationItems('edit', []);
                 });
             } else {
                 _switchEditPpbjUiOnly('ppbj');
                 $('#editNomorPrFinal').val('');
                 renderSpphVendorRecommendation('edit', [], null);
+                setSpAllocationItems('edit', []);
             }
 
             const $ev = $('#editVendorSp'), $ep = $('#editPicSp');
@@ -2298,8 +2471,14 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
             initRupiahInput('editNilaiSp');
             initRupiahInput('editNilaiPr');
 
-            $('#nilaiSpInput').on('input paste', () => setTimeout(() => { syncSingleItemPriceFromNilaiSp('add'); updateJampelPreview('add'); scheduleSpModeGuard('add', 80); }, 0));
-            $('#editNilaiSp').on('input paste', () => setTimeout(() => { syncSingleItemPriceFromNilaiSp('edit'); updateJampelPreview('edit'); scheduleSpModeGuard('edit', 80); }, 0));
+            $('#nilaiSpInput').on('input paste', () => setTimeout(() => {
+                syncSingleItemPriceFromNilaiSp('add'); updateJampelPreview('add'); scheduleSpModeGuard('add', 80);
+                spAllocationState.add.mode === 'automatic' ? autoAllocateSp('add') : updateSpAllocationTotals('add');
+            }, 0));
+            $('#editNilaiSp').on('input paste', () => setTimeout(() => {
+                syncSingleItemPriceFromNilaiSp('edit'); updateJampelPreview('edit'); scheduleSpModeGuard('edit', 80);
+                spAllocationState.edit.mode === 'automatic' ? autoAllocateSp('edit') : updateSpAllocationTotals('edit');
+            }, 0));
             $('#addFormSp').on('input change', 'input, select, textarea', function () {
                 if (this.form) this.form.dataset.itemTotalConfirmed = '0';
                 setTimeout(() => {
@@ -2518,6 +2697,10 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
                 if (validateSpItemsTotalBeforeSubmit('add', this, e)) {
                     return;
                 }
+                if (!validateSpAllocationBeforeSubmit('add')) {
+                    e.preventDefault();
+                    return;
+                }
                 document.getElementById('nilaiSpInput').value = stripRupiah(document.getElementById('nilaiSpInput').value);
                 document.getElementById('nilaiPrInput').value = stripRupiah(document.getElementById('nilaiPrInput').value);
 
@@ -2571,6 +2754,10 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
                     return;
                 }
                 if (validateSpItemsTotalBeforeSubmit('edit', this, e)) {
+                    return;
+                }
+                if (!validateSpAllocationBeforeSubmit('edit')) {
+                    e.preventDefault();
                     return;
                 }
                 document.getElementById('editNilaiSp').value = stripRupiah(document.getElementById('editNilaiSp').value);

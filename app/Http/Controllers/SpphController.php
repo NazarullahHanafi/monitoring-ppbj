@@ -31,6 +31,9 @@ class SpphController extends Controller
 {
     use HasPresence;
 
+    /** @var array<string, string|null> Cache kecil per-request untuk mencegah query vendor SP berulang. */
+    private array $activeSpVendorCache = [];
+
     protected function presenceKey(): string
     {
         return 'spph:presence';
@@ -59,7 +62,8 @@ class SpphController extends Controller
             'satuans:all' => fn () => \App\Models\Satuan::orderBy('nama_satuan')
                 ->pluck('nama_satuan')
                 ->toArray(),
-            'spph:last_nomor' => fn () => Spph::select('nomor_spph', 'sequence_number')
+            'spph:last_nomor' => fn () => Spph::withTrashed()
+                ->select('nomor_spph', 'sequence_number')
                 ->orderBy('sequence_number', 'desc')
                 ->first(),
             'sp_master_options:penandatangan_sci:active_names' => fn () => SpMasterOption::active()
@@ -314,7 +318,8 @@ class SpphController extends Controller
         $cacheKey = 'spph:check:'.md5($originalNomor.':'.$nomor.':'.$excludeId.':'.$tanggal);
 
         return Cache::remember($cacheKey, 30, function () use ($nomor, $originalNomor, $excludeId, $tanggal) {
-            $exists = Spph::where('nomor_spph', $nomor)
+            $exists = Spph::withTrashed()
+                ->where('nomor_spph', $nomor)
                 ->when($excludeId, fn ($q) => $q->where('id', '!=', $excludeId))
                 ->exists();
 
@@ -330,7 +335,8 @@ class SpphController extends Controller
             $warning = null;
 
             if ($seqInput !== null) {
-                $lastNomor = Spph::when($excludeId, fn ($q) => $q->where('id', '!=', $excludeId))
+                $lastNomor = Spph::withTrashed()
+                    ->when($excludeId, fn ($q) => $q->where('id', '!=', $excludeId))
                     ->orderBy('sequence_number', 'desc')->value('nomor_spph');
 
                 if ($lastNomor) {
@@ -367,7 +373,8 @@ class SpphController extends Controller
         [$year, $roman] = $this->periodFromDate($request->query('tanggal'));
 
         $nextSeq = $this->nextAvailableSequence(null, $year);
-        $lastNomor = Spph::where('nomor_spph', 'like', "%/SPPH/{$year}")
+        $lastNomor = Spph::withTrashed()
+            ->where('nomor_spph', 'like', "%/SPPH/{$year}")
             ->orderBy('sequence_number', 'desc')
             ->value('nomor_spph');
 
@@ -601,7 +608,7 @@ class SpphController extends Controller
                     $oldPpbj->spph_rfq_1 = null;
                     $oldPpbj->tgl_spph = null;
                     if (trim((string) $oldPpbj->penyedia_eksternal) === trim((string) $oldVendorName)) {
-                        $oldPpbj->penyedia_eksternal = null;
+                        $oldPpbj->penyedia_eksternal = $this->activeSpVendorForPpbj($oldPpbj);
                     }
                     $oldPpbj->save();
                 }
@@ -636,6 +643,7 @@ class SpphController extends Controller
     {
         $request->validate([
             'creator_password' => ['required', 'string', 'min:1', 'max:255'],
+            'archive_reason' => ['nullable', 'string', 'max:500'],
         ], [
             'creator_password.required' => 'Password pembuat SPPH wajib diisi untuk menghapus data.',
         ]);
@@ -694,13 +702,15 @@ class SpphController extends Controller
         Cache::forget($attemptKey);
         Cache::forget($lockKey);
 
-        DB::transaction(function () use ($spph, $user, $verifier, $request) {
+        $linkedPpbjs = $spph->ppbjs()->select(['ppbj.id', 'ppbj.ppbj_no', 'ppbj.awarding_sp'])->get();
+
+        DB::transaction(function () use ($spph, $user, $verifier, $request, $linkedPpbjs) {
             \App\Models\ActivityLog::create([
                 'user_id' => $user?->id,
                 'model_type' => Spph::class,
                 'model_id' => $spph->id,
-                'action' => 'deleted',
-                'description' => 'SPPH dihapus: '.($spph->nomor_spph ?: 'SPPH-'.$spph->id),
+                'action' => 'archived',
+                'description' => 'SPPH dipindahkan ke tempat sampah: '.($spph->nomor_spph ?: 'SPPH-'.$spph->id),
                 'changes' => [
                     'nomor_spph' => $spph->nomor_spph,
                     'nomor_pr' => $spph->nomor_pr,
@@ -708,18 +718,14 @@ class SpphController extends Controller
                     'deleted_by' => $user?->email,
                     'verifier_email' => $verifier->email,
                     'ip' => $request->ip(),
+                    'linked_ppbj' => $linkedPpbjs->pluck('ppbj_no')->all(),
+                    'snapshot' => $spph->getAttributes(),
                 ],
             ]);
 
-            $linkedPpbjs = Ppbj::where('spph_rfq_1', $spph->nomor_spph)->lockForUpdate()->get();
-            foreach ($linkedPpbjs as $ppbj) {
-                $ppbj->spph_rfq_1 = null;
-                $ppbj->tgl_spph = null;
-                if (trim((string) $ppbj->penyedia_eksternal) === trim((string) $spph->nama_vendor)) {
-                    $ppbj->penyedia_eksternal = null;
-                }
-                $ppbj->save();
-            }
+            $spph->archived_by_user_id = $user?->id;
+            $spph->archive_reason = trim((string) $request->input('archive_reason')) ?: 'Dipindahkan ke tempat sampah oleh user.';
+            $spph->save();
             $spph->delete();
             Cache::forget('spph:last_nomor');
             Cache::forget('spph:suggest');
@@ -728,8 +734,166 @@ class SpphController extends Controller
 
         return response()->json([
             'ok' => true,
-            'message' => 'Data SPPH berhasil dihapus.',
+            'message' => 'SPPH aman dipindahkan ke Tempat Sampah. SP lanjutan dan riwayat PR tetap dipertahankan.',
+            'archived' => true,
+            'affected_ppbj' => $linkedPpbjs->pluck('ppbj_no')->values(),
         ]);
+    }
+
+    public function trash(Request $request)
+    {
+        $user = $request->user();
+        $query = Spph::onlyTrashed()
+            ->with(['ppbjs' => fn ($relation) => $relation->select([
+                'ppbj.id', 'ppbj.ppbj_no', 'ppbj.awarding_sp', 'ppbj.do_no', 'ppbj.bpg_no', 'ppbj.no_invoice',
+            ])])
+            ->orderByDesc('deleted_at');
+
+        if (! $user?->canAccessOwnerCenter()) {
+            $ownerLabels = array_values(array_filter([
+                $user?->name,
+                $user?->buyer_name,
+                $user?->email ? strtok((string) $user->email, '@') : null,
+            ]));
+            $query->where(function ($scope) use ($user, $ownerLabels): void {
+                $scope->where('created_by_user_id', $user?->id);
+                if ($ownerLabels !== []) {
+                    $scope->orWhereIn('pic', $ownerLabels);
+                }
+            });
+        }
+
+        return view('procurement-document-trash', [
+            'documentType' => 'SPPH',
+            'documents' => $query->paginate(15),
+            'indexRoute' => route('spph.index'),
+            'restoreRouteName' => 'spph.restore',
+            'forceDeleteRouteName' => 'spph.force-destroy',
+            'canForceDelete' => (bool) $user?->canAccessOwnerCenter(),
+        ]);
+    }
+
+    public function restore(Request $request, int $id)
+    {
+        $spph = Spph::onlyTrashed()->with('ppbjs:id,ppbj_no,spph_rfq_1')->findOrFail($id);
+        $user = $request->user();
+
+        if (! $this->canRecoverSpph($user, $spph)) {
+            abort(403, 'Anda tidak memiliki akses untuk memulihkan SPPH ini.');
+        }
+
+        $conflict = $spph->ppbjs->first(fn (Ppbj $ppbj) => filled($ppbj->spph_rfq_1) && $ppbj->spph_rfq_1 !== $spph->nomor_spph);
+        if ($conflict) {
+            return response()->json([
+                'message' => "SPPH belum dapat dipulihkan karena PR {$conflict->ppbj_no} sudah terhubung ke SPPH {$conflict->spph_rfq_1}.",
+            ], 409);
+        }
+
+        DB::transaction(function () use ($spph, $user, $request): void {
+            $spph->restore();
+            $spph->forceFill(['archived_by_user_id' => null, 'archive_reason' => null])->save();
+            \App\Models\ActivityLog::create([
+                'user_id' => $user?->id,
+                'model_type' => Spph::class,
+                'model_id' => $spph->id,
+                'action' => 'restored',
+                'description' => 'SPPH dipulihkan: '.$spph->nomor_spph,
+                'changes' => ['ip' => $request->ip()],
+            ]);
+            Cache::forget('spph:last_nomor');
+            Cache::forget('spph:suggest');
+            Cache::forget('vendor:usage-stats:spph-sp:v1');
+        }, 3);
+
+        return response()->json(['ok' => true, 'message' => 'SPPH berhasil dipulihkan beserta seluruh relasi PR-nya.']);
+    }
+
+    public function forceDestroy(Request $request, int $id)
+    {
+        $user = $request->user();
+        abort_unless($user?->canAccessOwnerCenter(), 403, 'Penghapusan permanen hanya tersedia untuk pemilik sistem.');
+
+        $spph = Spph::onlyTrashed()->with('ppbjs')->findOrFail($id);
+        $request->validate([
+            'password' => ['required', 'string'],
+            'confirmation' => ['required', 'string'],
+            'acknowledge_downstream' => ['nullable', 'boolean'],
+        ]);
+
+        if (! Hash::check((string) $request->input('password'), (string) $user->password)) {
+            return response()->json(['message' => 'Password pemilik sistem tidak sesuai.'], 422);
+        }
+        if (trim((string) $request->input('confirmation')) !== trim((string) $spph->nomor_spph)) {
+            return response()->json(['message' => 'Konfirmasi harus sama persis dengan nomor SPPH.'], 422);
+        }
+
+        $downstream = $spph->ppbjs->filter(fn (Ppbj $ppbj) => filled($ppbj->awarding_sp));
+        if ($downstream->isNotEmpty() && ! $request->boolean('acknowledge_downstream')) {
+            return response()->json([
+                'message' => 'SPPH sudah memiliki SP lanjutan. Centang konfirmasi dampak sebelum menghapus permanen.',
+                'requires_acknowledgement' => true,
+                'downstream_ppbj' => $downstream->pluck('ppbj_no')->values(),
+            ], 409);
+        }
+
+        DB::transaction(function () use ($spph, $user, $request): void {
+            $lockedPpbjs = Ppbj::where('spph_rfq_1', $spph->nomor_spph)->lockForUpdate()->get();
+            foreach ($lockedPpbjs as $ppbj) {
+                $ppbj->spph_rfq_1 = null;
+                $ppbj->tgl_spph = null;
+                if (trim((string) $ppbj->penyedia_eksternal) === trim((string) $spph->nama_vendor)) {
+                    $ppbj->penyedia_eksternal = $this->activeSpVendorForPpbj($ppbj);
+                }
+                $ppbj->save();
+            }
+
+            \App\Models\ActivityLog::create([
+                'user_id' => $user->id,
+                'model_type' => Spph::class,
+                'model_id' => $spph->id,
+                'action' => 'force_deleted',
+                'description' => 'SPPH dihapus permanen oleh pemilik sistem: '.$spph->nomor_spph,
+                'changes' => [
+                    'ip' => $request->ip(),
+                    'snapshot' => $spph->getAttributes(),
+                    'linked_ppbj' => $lockedPpbjs->pluck('ppbj_no')->all(),
+                ],
+            ]);
+
+            $spph->forceDelete();
+            Cache::forget('spph:last_nomor');
+            Cache::forget('spph:suggest');
+            Cache::forget('vendor:usage-stats:spph-sp:v1');
+        }, 3);
+
+        return response()->json(['ok' => true, 'message' => 'SPPH telah dihapus permanen tanpa menghapus SP lanjutan.']);
+    }
+
+    private function canRecoverSpph(?User $user, Spph $spph): bool
+    {
+        return (bool) ($user && (
+            $user->canAccessOwnerCenter()
+            || (int) $spph->created_by_user_id === (int) $user->id
+            || $user->matchesOwnerLabel($spph->pic)
+        ));
+    }
+
+    private function activeSpVendorForPpbj(Ppbj $ppbj): ?string
+    {
+        $spNo = trim((string) ($ppbj->awarding_sp ?? ''));
+
+        if ($spNo === '') {
+            return null;
+        }
+
+        $cacheKey = mb_strtolower($spNo);
+        if (! array_key_exists($cacheKey, $this->activeSpVendorCache)) {
+            $this->activeSpVendorCache[$cacheKey] = Sp::query()
+                ->where('nomor_sp', $spNo)
+                ->value('nama_vendor');
+        }
+
+        return $this->activeSpVendorCache[$cacheKey];
     }
 
     private function normalizePpbjSelection(Request $request): void
@@ -810,7 +974,9 @@ class SpphController extends Controller
         foreach ($records->values() as $index => $ppbj) {
             $ppbj->spph_rfq_1 = $spph->nomor_spph;
             $ppbj->tgl_spph = $spph->tanggal;
-            $ppbj->penyedia_eksternal = $vendorName;
+            $ppbj->penyedia_eksternal = filled($ppbj->awarding_sp)
+                ? ($this->activeSpVendorForPpbj($ppbj) ?: $vendorName)
+                : $vendorName;
             $ppbj->save();
 
             $pivot[$ppbj->id] = ['urutan' => $index + 1];
@@ -2387,7 +2553,8 @@ XML;
     {
         $year ??= now()->year;
 
-        $usedSequences = Spph::when($excludeId, fn ($q) => $q->where('id', '!=', $excludeId))
+        $usedSequences = Spph::withTrashed()
+            ->when($excludeId, fn ($q) => $q->where('id', '!=', $excludeId))
             ->where('nomor_spph', 'like', "%/SPPH/{$year}")
             ->orderBy('sequence_number')
             ->pluck('sequence_number')

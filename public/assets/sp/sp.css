@@ -251,6 +251,24 @@
             margin-top: .1rem;
         }
 
+        .secure-delete-input-wrap > input.swal2-input {
+            width: 100% !important;
+            height: 3rem !important;
+            margin: 0 !important;
+            border: 1px solid #cbd5e1 !important;
+            border-radius: .85rem !important;
+            background: #fff !important;
+            color: #0f172a !important;
+            box-shadow: none !important;
+            font-size: .85rem !important;
+        }
+
+        .dark .secure-delete-input-wrap > input.swal2-input {
+            border-color: #475569 !important;
+            background: #1e293b !important;
+            color: #f8fafc !important;
+        }
+
         .secure-delete-password-label {
             margin: 0;
             font-size: .82rem;
@@ -276,6 +294,93 @@
 
         .dark .secure-delete-popup {
             background: linear-gradient(180deg, #0f172a 0%, #111827 100%) !important;
+        }
+
+        .sp-allocation-panel {
+            position: relative;
+            overflow: hidden;
+            border: 1px solid #bfdbfe;
+            border-radius: 1.1rem;
+            padding: 1rem;
+            background: linear-gradient(145deg, #f8fbff 0%, #eef2ff 100%);
+            box-shadow: 0 12px 30px rgba(37, 99, 235, .08);
+        }
+
+        .sp-allocation-panel::after {
+            content: "";
+            position: absolute;
+            width: 9rem;
+            height: 9rem;
+            right: -5rem;
+            top: -5rem;
+            border-radius: 999px;
+            background: rgba(99, 102, 241, .1);
+            pointer-events: none;
+        }
+
+        .sp-allocation-head {
+            position: relative;
+            z-index: 1;
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: .8rem;
+        }
+
+        .sp-allocation-kicker {
+            color: #2563eb;
+            font-size: .62rem;
+            font-weight: 950;
+            letter-spacing: .14em;
+            text-transform: uppercase;
+        }
+
+        .sp-allocation-head h3 { margin: .15rem 0 0; color: #0f172a; font-size: .95rem; font-weight: 950; }
+        .sp-allocation-head p { margin: .2rem 0 0; color: #64748b; font-size: .7rem; line-height: 1.5; }
+        .sp-allocation-state { flex: 0 0 auto; border: 1px solid #a5b4fc; border-radius: 999px; padding: .35rem .6rem; background: #fff; color: #4338ca; font-size: .62rem; font-weight: 950; }
+        .sp-allocation-rows { position: relative; z-index: 1; display: grid; gap: .55rem; margin-top: .85rem; }
+        .sp-allocation-row { display: grid; grid-template-columns: minmax(0,1.4fr) minmax(7rem,.8fr) minmax(8rem,1fr); align-items: center; gap: .65rem; border: 1px solid #dbeafe; border-radius: .9rem; padding: .7rem; background: rgba(255,255,255,.85); }
+        .sp-allocation-pr strong { display: block; overflow: hidden; color: #0f172a; font-family: ui-monospace,monospace; font-size: .72rem; text-overflow: ellipsis; white-space: nowrap; }
+        .sp-allocation-pr span,.sp-allocation-estimate span { color: #64748b; font-size: .62rem; }
+        .sp-allocation-estimate strong { display: block; color: #334155; font-size: .72rem; }
+        .sp-allocation-input { width: 100%; min-width: 0; border: 1px solid #c7d2fe; border-radius: .7rem; background: #fff; color: #0f172a; padding: .55rem .65rem; text-align: right; font-size: .75rem; font-weight: 900; outline: none; }
+        .sp-allocation-input:focus { border-color: #4f46e5; box-shadow: 0 0 0 3px rgba(99,102,241,.14); }
+        .sp-allocation-footer { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: .55rem; margin-top: .75rem; }
+        .sp-allocation-footer div { border-radius: .8rem; padding: .55rem .65rem; background: rgba(219,234,254,.65); }
+        .sp-allocation-footer span { display: block; color: #64748b; font-size: .58rem; font-weight: 800; text-transform: uppercase; }
+        .sp-allocation-footer strong { display: block; margin-top: .15rem; color: #0f172a; font-size: .72rem; }
+        .sp-allocation-footer strong.is-error { color: #be123c; }
+        .sp-allocation-footer strong.is-ok { color: #047857; }
+        .sp-allocation-actions { display: flex; flex-wrap: wrap; gap: .45rem; margin-top: .7rem; }
+        .sp-allocation-actions button { border: 1px solid #c7d2fe; border-radius: .7rem; background: #fff; color: #3730a3; cursor: pointer; padding: .5rem .7rem; font-size: .65rem; font-weight: 900; }
+        .sp-allocation-actions button:hover { background: #eef2ff; }
+        .sp-allocation-override { display: flex; align-items: flex-start; gap: .55rem; margin-top: .7rem; border: 1px solid #fbbf24; border-radius: .8rem; padding: .65rem .75rem; background: #fffbeb; color: #92400e; font-size: .68rem; font-weight: 800; line-height: 1.45; }
+        .sp-allocation-override input { margin-top: .15rem; accent-color: #d97706; }
+
+        .dark .sp-allocation-panel { border-color: #334155; background: linear-gradient(145deg,#111827 0%,#172033 100%); box-shadow: 0 14px 35px rgba(0,0,0,.24); }
+        .dark .sp-allocation-kicker { color: #67e8f9; }
+        .dark .sp-allocation-head h3 { color: #f8fafc; }
+        .dark .sp-allocation-head p { color: #94a3b8; }
+        .dark .sp-allocation-state { border-color: #4338ca; background: #1e1b4b; color: #c7d2fe; }
+        .dark .sp-allocation-row { border-color: #334155; background: rgba(30,41,59,.86); }
+        .dark .sp-allocation-pr strong,.dark .sp-allocation-estimate strong { color: #f8fafc; }
+        .dark .sp-allocation-pr span,.dark .sp-allocation-estimate span { color: #94a3b8; }
+        .dark .sp-allocation-input { border-color: #475569; background: #0f172a; color: #f8fafc; }
+        .dark .sp-allocation-footer div { background: rgba(30,41,59,.9); }
+        .dark .sp-allocation-footer strong { color: #f8fafc; }
+        .dark .sp-allocation-footer strong.is-error { color: #fda4af; }
+        .dark .sp-allocation-footer strong.is-ok { color: #6ee7b7; }
+        .dark .sp-allocation-actions button { border-color: #475569; background: #1e293b; color: #c7d2fe; }
+        .dark .sp-allocation-actions button:hover { background: #334155; }
+        .dark .sp-allocation-override { border-color: #b45309; background: #451a03; color: #fde68a; }
+
+        @media (max-width: 640px) {
+            .sp-allocation-row { grid-template-columns: 1fr; }
+            .sp-allocation-footer { grid-template-columns: 1fr; }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .sp-allocation-panel *, .secure-delete-popup * { animation: none !important; transition: none !important; }
         }
 
         /* ════════════════════════════════════════════════════════════

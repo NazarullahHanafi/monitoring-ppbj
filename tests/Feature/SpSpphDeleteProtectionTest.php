@@ -47,11 +47,11 @@ class SpSpphDeleteProtectionTest extends TestCase
             ->assertOk()
             ->assertJsonPath('ok', true);
 
-        $this->assertDatabaseMissing('sps', ['id' => $sp->id]);
+        $this->assertSoftDeleted('sps', ['id' => $sp->id]);
         $this->assertDatabaseHas('activity_logs', [
             'model_type' => Sp::class,
             'model_id' => $sp->id,
-            'action' => 'deleted',
+            'action' => 'archived',
         ]);
     }
 
@@ -137,11 +137,11 @@ class SpSpphDeleteProtectionTest extends TestCase
             ->assertOk()
             ->assertJsonPath('ok', true);
 
-        $this->assertDatabaseMissing('spphs', ['id' => $spph->id]);
+        $this->assertSoftDeleted('spphs', ['id' => $spph->id]);
         $this->assertDatabaseHas('activity_logs', [
             'model_type' => Spph::class,
             'model_id' => $spph->id,
-            'action' => 'deleted',
+            'action' => 'archived',
         ]);
     }
 

@@ -32,6 +32,9 @@ class SpController extends Controller
 {
     use HasPresence;
 
+    /** @var array<string, string|null> Cache kecil per-request untuk mencegah query vendor SPPH berulang. */
+    private array $activeSpphVendorCache = [];
+
     protected function presenceKey(): string
     {
         return 'sp:presence';
@@ -158,6 +161,7 @@ class SpController extends Controller
             'pics:umum' => fn () => User::where('department', 'umum')->orderBy('name')->pluck('name'),
             'satuans:all' => fn () => Satuan::orderBy('nama_satuan')->pluck('nama_satuan')->toArray(),
             $lastNumberCacheKey => fn () => $this->spModeQuery($oracleMode)
+                ->withTrashed()
                 ->orderBy('sequence_number', 'desc')
                 ->value('nomor_sp'),
             'sp_master_options:bidang_ip_itu:active_names' => fn () => $this->queryActiveSpMasterOptionNames('bidang_ip_itu'),
@@ -174,7 +178,7 @@ class SpController extends Controller
         $penandatanganScis = $referenceData['sp_master_options:penandatangan_sci:active_names'];
         $jabatanScis = $referenceData['sp_master_options:jabatan_sci:active_names'];
 
-        $baseQuery = $this->spModeQuery($oracleMode)->with(['ppbjs:id,ppbj_no'])->when($search, fn ($q) => $q->where(function ($q2) use ($search) {
+        $baseQuery = $this->spModeQuery($oracleMode)->with(['ppbjs:id,ppbj_no,total_sebelum_ppn'])->when($search, fn ($q) => $q->where(function ($q2) use ($search) {
             $q2->where('nomor_sp', 'like', "%{$search}%")
                 ->orWhere('nomor_pr', 'like', "%{$search}%")
                 ->orWhereHas('ppbjs', fn ($ppbjQuery) => $ppbjQuery->where('ppbj_no', 'like', "%{$search}%"))
@@ -894,7 +898,8 @@ class SpController extends Controller
         $cacheKey = 'sp:check:'.md5($originalNomor.':'.$nomor.':'.$excludeId.':'.$tanggal.':'.(int) $oracleMode);
 
         return Cache::remember($cacheKey, 30, function () use ($nomor, $originalNomor, $excludeId, $oracleMode, $tanggal) {
-            $exists = Sp::where('nomor_sp', $nomor)
+            $exists = Sp::withTrashed()
+                ->where('nomor_sp', $nomor)
                 ->when($excludeId, fn ($q) => $q->where('id', '!=', $excludeId))
                 ->exists();
 
@@ -911,6 +916,7 @@ class SpController extends Controller
 
             if ($seqInput !== null) {
                 $lastNomor = $this->spModeQuery(false)
+                    ->withTrashed()
                     ->when($excludeId, fn ($q) => $q->where('id', '!=', $excludeId))
                     ->orderBy('sequence_number', 'desc')->value('nomor_sp');
 
@@ -960,6 +966,7 @@ class SpController extends Controller
 
         $nextSeq = $this->nextAvailableAutoSequence(null, $year);
         $lastNomor = $this->spModeQuery(false)
+            ->withTrashed()
             ->where('nomor_sp', 'like', "%/SP/{$year}")
             ->orderBy('sequence_number', 'desc')
             ->value('nomor_sp');
@@ -1043,6 +1050,7 @@ class SpController extends Controller
         $oracleMode = $this->isOracleMode($request);
 
         $this->normalizePpbjSelection($request);
+        $this->normalizeSpAllocationInput($request);
 
         $request->merge([
             'nomor_sp' => $oracleMode
@@ -1059,6 +1067,11 @@ class SpController extends Controller
             'nomor_pr' => ['nullable', 'string', 'max:100', Rule::unique('sps', 'nomor_pr')],
             'nomor_prs' => 'nullable|array|max:20',
             'nomor_prs.*' => 'required|string|max:100|distinct|exists:ppbj,ppbj_no',
+            'allocations' => 'nullable|array|max:20',
+            'allocations.*.ppbj_no' => 'required_with:allocations|string|max:100|distinct',
+            'allocations.*.value' => 'required_with:allocations|numeric|min:0',
+            'allocation_mode' => ['nullable', Rule::in(['automatic', 'manual'])],
+            'allocation_override_confirmed' => 'nullable|boolean',
             'nilai_pr' => 'nullable|numeric|min:0',
             'nama_vendor' => 'required|string|max:255',
             'deskripsi_pengadaan' => 'required|string',
@@ -1119,13 +1132,14 @@ class SpController extends Controller
                 }
 
                 $seq = $oracleMode
-                    ? ((int) $this->spModeQuery(true)->lockForUpdate()->max('sequence_number') + 1)
+                    ? ((int) $this->spModeQuery(true)->withTrashed()->lockForUpdate()->max('sequence_number') + 1)
                     : ($this->extractSeq($request->nomor_sp) ?? $this->nextAvailableAutoSequence(null, (int) ($this->numberPeriodFromNomor($request->nomor_sp, 'SP')['year'] ?? now()->year)));
 
                 // Hitung total dari items jika ada
                 $items = $request->input('items', []);
                 $calculatedTotal = $this->calculateItemsTotal($items);
                 $nilaiSp = $request->nilai_sp ?: ($calculatedTotal > 0 ? $calculatedTotal : null);
+                $allocationPlan = $this->resolveSpAllocations($request, $ppbjRecords, $nilaiSp);
 
                 $ppbjAuto = $ppbjRecord;
 
@@ -1163,7 +1177,7 @@ class SpController extends Controller
 
                 // Link ke PPBJ
                 if ($ppbjRecords->isNotEmpty()) {
-                    $this->syncSpPpbjs($sp, $ppbjRecords);
+                    $this->syncSpPpbjs($sp, $ppbjRecords, $allocationPlan);
 
                     foreach ($ppbjNumbers as $linkedNumber) {
                         app(ProcurementJourneyService::class)->notifyByPrNumber(
@@ -1224,6 +1238,7 @@ class SpController extends Controller
     {
         $oracleMode = $this->isOracleMode($request);
         $this->normalizePpbjSelection($request);
+        $this->normalizeSpAllocationInput($request);
         $currentUser = $request->user();
         $currentUserId = $currentUser?->id;
 
@@ -1252,6 +1267,11 @@ class SpController extends Controller
             'nomor_pr' => ['nullable', 'string', 'max:100', Rule::unique('sps', 'nomor_pr')->ignore($sp->id)],
             'nomor_prs' => 'nullable|array|max:20',
             'nomor_prs.*' => 'required|string|max:100|distinct|exists:ppbj,ppbj_no',
+            'allocations' => 'nullable|array|max:20',
+            'allocations.*.ppbj_no' => 'required_with:allocations|string|max:100|distinct',
+            'allocations.*.value' => 'required_with:allocations|numeric|min:0',
+            'allocation_mode' => ['nullable', Rule::in(['automatic', 'manual'])],
+            'allocation_override_confirmed' => 'nullable|boolean',
             'nilai_pr' => 'nullable|numeric|min:0',
             'nama_vendor' => 'required|string|max:255',
             'deskripsi_pengadaan' => 'required|string',
@@ -1305,6 +1325,7 @@ class SpController extends Controller
                 $items = $request->input('items', []);
                 $calculatedTotal = $this->calculateItemsTotal($items);
                 $nilaiSp = $request->nilai_sp ?: ($calculatedTotal > 0 ? $calculatedTotal : null);
+                $allocationPlan = $this->resolveSpAllocations($request, $newPpbjs, $nilaiSp);
 
                 $ppbjAuto = $newPpbj;
 
@@ -1350,7 +1371,7 @@ class SpController extends Controller
 
                 // Set link baru ke PPBJ
                 if ($newPpbjs->isNotEmpty()) {
-                    $this->syncSpPpbjs($sp, $newPpbjs);
+                    $this->syncSpPpbjs($sp, $newPpbjs, $allocationPlan);
                     foreach ($ppbjNumbers as $linkedNumber) {
                         app(ProcurementJourneyService::class)->notifyByPrNumber(
                             $linkedNumber,
@@ -1414,6 +1435,7 @@ class SpController extends Controller
     {
         $request->validate([
             'creator_password' => ['required', 'string', 'min:1', 'max:255'],
+            'archive_reason' => ['nullable', 'string', 'max:500'],
         ], [
             'creator_password.required' => 'Password pembuat SP wajib diisi untuk menghapus data.',
         ]);
@@ -1472,13 +1494,15 @@ class SpController extends Controller
         Cache::forget($attemptKey);
         Cache::forget($lockKey);
 
-        DB::transaction(function () use ($sp, $user, $verifier, $request) {
+        $linkedPpbjs = $sp->ppbjs()->select(['ppbj.id', 'ppbj.ppbj_no', 'ppbj.do_no', 'ppbj.bpg_no', 'ppbj.no_invoice'])->get();
+
+        DB::transaction(function () use ($sp, $user, $verifier, $request, $linkedPpbjs) {
             \App\Models\ActivityLog::create([
                 'user_id' => $user?->id,
                 'model_type' => Sp::class,
                 'model_id' => $sp->id,
-                'action' => 'deleted',
-                'description' => 'SP dihapus: '.($sp->nomor_sp ?: 'SP-'.$sp->id),
+                'action' => 'archived',
+                'description' => 'SP dipindahkan ke tempat sampah: '.($sp->nomor_sp ?: 'SP-'.$sp->id),
                 'changes' => [
                     'nomor_sp' => $sp->nomor_sp,
                     'nomor_pr' => $sp->nomor_pr,
@@ -1486,21 +1510,153 @@ class SpController extends Controller
                     'deleted_by' => $user?->email,
                     'verifier_email' => $verifier->email,
                     'ip' => $request->ip(),
+                    'linked_ppbj' => $linkedPpbjs->pluck('ppbj_no')->all(),
+                    'snapshot' => $sp->getAttributes(),
                 ],
             ]);
 
-            foreach (Ppbj::where('awarding_sp', $sp->nomor_sp)->lockForUpdate()->get() as $ppbj) {
-                $this->clearSpPpbj($ppbj);
-            }
-
+            $sp->archived_by_user_id = $user?->id;
+            $sp->archive_reason = trim((string) $request->input('archive_reason')) ?: 'Dipindahkan ke tempat sampah oleh user.';
+            $sp->save();
             $sp->delete();
             $this->invalidateSpIndexCaches();
         }, 3);
 
         return response()->json([
             'ok' => true,
-            'message' => 'Data SP berhasil dihapus.',
+            'message' => 'SP aman dipindahkan ke Tempat Sampah. Relasi PR dan riwayat pengadaan tetap dipertahankan.',
+            'archived' => true,
+            'affected_ppbj' => $linkedPpbjs->pluck('ppbj_no')->values(),
         ]);
+    }
+
+    public function trash(Request $request)
+    {
+        $user = $request->user();
+        $query = Sp::onlyTrashed()
+            ->with(['ppbjs' => fn ($relation) => $relation->select([
+                'ppbj.id', 'ppbj.ppbj_no', 'ppbj.do_no', 'ppbj.bpg_no', 'ppbj.no_invoice',
+            ])])
+            ->orderByDesc('deleted_at');
+
+        if (! $user?->canAccessOwnerCenter()) {
+            $ownerLabels = array_values(array_filter([
+                $user?->name,
+                $user?->buyer_name,
+                $user?->email ? strtok((string) $user->email, '@') : null,
+            ]));
+            $query->where(function ($scope) use ($user, $ownerLabels): void {
+                $scope->where('created_by_user_id', $user?->id);
+                if ($ownerLabels !== []) {
+                    $scope->orWhereIn('pic', $ownerLabels);
+                }
+            });
+        }
+
+        return view('procurement-document-trash', [
+            'documentType' => 'SP',
+            'documents' => $query->paginate(15),
+            'indexRoute' => route('sp.index'),
+            'restoreRouteName' => 'sp.restore',
+            'forceDeleteRouteName' => 'sp.force-destroy',
+            'canForceDelete' => (bool) $user?->canAccessOwnerCenter(),
+        ]);
+    }
+
+    public function restore(Request $request, int $id)
+    {
+        $sp = Sp::onlyTrashed()->with('ppbjs:id,ppbj_no,awarding_sp')->findOrFail($id);
+        $user = $request->user();
+
+        if (! $this->canRecoverSp($user, $sp)) {
+            abort(403, 'Anda tidak memiliki akses untuk memulihkan SP ini.');
+        }
+
+        $conflict = $sp->ppbjs->first(fn (Ppbj $ppbj) => filled($ppbj->awarding_sp) && $ppbj->awarding_sp !== $sp->nomor_sp);
+        if ($conflict) {
+            return response()->json([
+                'message' => "SP belum dapat dipulihkan karena PR {$conflict->ppbj_no} sudah terhubung ke SP {$conflict->awarding_sp}.",
+            ], 409);
+        }
+
+        DB::transaction(function () use ($sp, $user, $request): void {
+            $sp->restore();
+            $sp->forceFill(['archived_by_user_id' => null, 'archive_reason' => null])->save();
+            \App\Models\ActivityLog::create([
+                'user_id' => $user?->id,
+                'model_type' => Sp::class,
+                'model_id' => $sp->id,
+                'action' => 'restored',
+                'description' => 'SP dipulihkan: '.$sp->nomor_sp,
+                'changes' => ['ip' => $request->ip()],
+            ]);
+            $this->invalidateSpIndexCaches();
+        }, 3);
+
+        return response()->json(['ok' => true, 'message' => 'SP berhasil dipulihkan beserta seluruh relasi PR-nya.']);
+    }
+
+    public function forceDestroy(Request $request, int $id)
+    {
+        $user = $request->user();
+        abort_unless($user?->canAccessOwnerCenter(), 403, 'Penghapusan permanen hanya tersedia untuk pemilik sistem.');
+
+        $sp = Sp::onlyTrashed()->with('ppbjs')->findOrFail($id);
+        $request->validate([
+            'password' => ['required', 'string'],
+            'confirmation' => ['required', 'string'],
+            'acknowledge_downstream' => ['nullable', 'boolean'],
+        ]);
+
+        if (! Hash::check((string) $request->input('password'), (string) $user->password)) {
+            return response()->json(['message' => 'Password pemilik sistem tidak sesuai.'], 422);
+        }
+        if (trim((string) $request->input('confirmation')) !== trim((string) $sp->nomor_sp)) {
+            return response()->json(['message' => 'Konfirmasi harus sama persis dengan nomor SP.'], 422);
+        }
+
+        $downstream = $sp->ppbjs->filter(fn (Ppbj $ppbj) => filled($ppbj->do_no) || filled($ppbj->bpg_no) || filled($ppbj->no_invoice));
+        if ($downstream->isNotEmpty() && ! $request->boolean('acknowledge_downstream')) {
+            return response()->json([
+                'message' => 'SP memiliki dokumen lanjutan. Centang konfirmasi dampak sebelum menghapus permanen.',
+                'requires_acknowledgement' => true,
+                'downstream_ppbj' => $downstream->pluck('ppbj_no')->values(),
+            ], 409);
+        }
+
+        DB::transaction(function () use ($sp, $user, $request): void {
+            $lockedPpbjs = Ppbj::where('awarding_sp', $sp->nomor_sp)->lockForUpdate()->get();
+            foreach ($lockedPpbjs as $ppbj) {
+                $this->clearSpPpbj($ppbj);
+            }
+
+            \App\Models\ActivityLog::create([
+                'user_id' => $user->id,
+                'model_type' => Sp::class,
+                'model_id' => $sp->id,
+                'action' => 'force_deleted',
+                'description' => 'SP dihapus permanen oleh pemilik sistem: '.$sp->nomor_sp,
+                'changes' => [
+                    'ip' => $request->ip(),
+                    'snapshot' => $sp->getAttributes(),
+                    'linked_ppbj' => $lockedPpbjs->pluck('ppbj_no')->all(),
+                ],
+            ]);
+
+            $sp->forceDelete();
+            $this->invalidateSpIndexCaches();
+        }, 3);
+
+        return response()->json(['ok' => true, 'message' => 'SP telah dihapus permanen dan PPBJ dikembalikan ke kondisi aman.']);
+    }
+
+    private function canRecoverSp(?User $user, Sp $sp): bool
+    {
+        return (bool) ($user && (
+            $user->canAccessOwnerCenter()
+            || (int) $sp->created_by_user_id === (int) $user->id
+            || $user->matchesOwnerLabel($sp->pic)
+        ));
     }
 
     private function normalizePpbjSelection(Request $request): void
@@ -1515,6 +1671,83 @@ class SpController extends Controller
         if ($request->input('nomor_pr_type', 'ppbj') === 'ppbj') {
             $request->merge(['nomor_prs' => $numbers->all(), 'nomor_pr' => $numbers->first()]);
         }
+    }
+
+    private function normalizeSpAllocationInput(Request $request): void
+    {
+        $allocations = collect($request->input('allocations', []))
+            ->map(fn ($allocation) => [
+                'ppbj_no' => trim((string) data_get($allocation, 'ppbj_no')),
+                'value' => $this->moneyToNullableFloat(data_get($allocation, 'value')) ?? 0,
+            ])
+            ->filter(fn ($allocation) => $allocation['ppbj_no'] !== '')
+            ->values()
+            ->all();
+
+        $request->merge(['allocations' => $allocations]);
+    }
+
+    /**
+     * Menentukan porsi nilai SP untuk setiap PR. Input user dipertahankan jika
+     * lengkap; bila belum ada, server membuat pembagian proporsional yang stabil.
+     */
+    private function resolveSpAllocations(Request $request, $records, mixed $nilaiSp): array
+    {
+        if ($records->isEmpty()) {
+            return [];
+        }
+
+        $totalSp = round(max(0, (float) ($nilaiSp ?? 0)), 2);
+        $totalPr = (float) $records->sum(fn (Ppbj $ppbj) => max(0, (float) ($ppbj->total_sebelum_ppn ?? 0)));
+
+        if ($totalPr > 0 && $totalSp > $totalPr + 1 && ! $request->boolean('allocation_override_confirmed')) {
+            throw ValidationException::withMessages([
+                'nilai_sp' => 'Nilai SP lebih besar daripada gabungan nilai PR. Periksa kembali nilainya, lalu centang konfirmasi pada panel alokasi jika memang benar.',
+            ]);
+        }
+
+        $submitted = collect($request->input('allocations', []))
+            ->keyBy(fn ($allocation) => trim((string) data_get($allocation, 'ppbj_no')));
+        $numbers = $records->pluck('ppbj_no');
+        $hasCompleteInput = $submitted->count() === $records->count()
+            && $numbers->every(fn ($number) => $submitted->has($number));
+
+        if ($hasCompleteInput) {
+            $values = $records->mapWithKeys(fn (Ppbj $ppbj) => [
+                $ppbj->ppbj_no => round(max(0, (float) data_get($submitted->get($ppbj->ppbj_no), 'value', 0)), 2),
+            ])->all();
+            $difference = round($totalSp - array_sum($values), 2);
+
+            if (abs($difference) > 1) {
+                throw ValidationException::withMessages([
+                    'allocations' => 'Total alokasi PR harus sama dengan nilai SP. Selisih saat ini Rp '.number_format(abs($difference), 0, ',', '.').'.',
+                ]);
+            }
+
+            if ($difference !== 0.0) {
+                $lastNumber = (string) $numbers->last();
+                $values[$lastNumber] = round($values[$lastNumber] + $difference, 2);
+            }
+
+            return [
+                'values' => $values,
+                'status' => $request->input('allocation_mode') === 'manual' ? 'manual' : 'automatic',
+            ];
+        }
+
+        $values = [];
+        $allocated = 0.0;
+        foreach ($records->values() as $index => $ppbj) {
+            $isLast = $index === $records->count() - 1;
+            $weight = $totalPr > 0
+                ? max(0, (float) ($ppbj->total_sebelum_ppn ?? 0)) / $totalPr
+                : 1 / $records->count();
+            $value = $isLast ? round($totalSp - $allocated, 2) : round($totalSp * $weight, 2);
+            $allocated += $value;
+            $values[$ppbj->ppbj_no] = $value;
+        }
+
+        return ['values' => $values, 'status' => 'automatic'];
     }
 
     private function selectedPpbjNumbers(Request $request): array
@@ -1559,19 +1792,25 @@ class SpController extends Controller
         return null;
     }
 
-    private function syncSpPpbjs(Sp $sp, $records): void
+    private function syncSpPpbjs(Sp $sp, $records, array $allocationPlan): void
     {
         $pivot = [];
         foreach ($records->values() as $index => $ppbj) {
+            $allocatedValue = (float) ($allocationPlan['values'][$ppbj->ppbj_no] ?? 0);
             $ppbj->awarding_sp = $sp->nomor_sp;
             $ppbj->tgl_awarding_sp = $sp->tanggal_sp;
             $ppbj->tgl_spk = $sp->tanggal_sp;
-            $ppbj->nilai_sp_spk = $sp->nilai_sp;
+            $ppbj->nilai_sp_spk = $allocatedValue;
             $ppbj->sph = $sp->sph;
             $ppbj->tgl_sph = $sp->tgl_sph;
             $ppbj->promised_date = $sp->promised_date;
+            $ppbj->penyedia_eksternal = $sp->nama_vendor;
             $ppbj->save();
-            $pivot[$ppbj->id] = ['urutan' => $index + 1];
+            $pivot[$ppbj->id] = [
+                'urutan' => $index + 1,
+                'nilai_alokasi' => $allocatedValue,
+                'allocation_status' => (string) ($allocationPlan['status'] ?? 'automatic'),
+            ];
         }
         $sp->ppbjs()->sync($pivot);
     }
@@ -1585,7 +1824,26 @@ class SpController extends Controller
         $ppbj->sph = null;
         $ppbj->tgl_sph = null;
         $ppbj->promised_date = null;
+        $ppbj->penyedia_eksternal = $this->activeSpphVendorForPpbj($ppbj);
         $ppbj->save();
+    }
+
+    private function activeSpphVendorForPpbj(Ppbj $ppbj): ?string
+    {
+        $spphNo = trim((string) ($ppbj->spph_rfq_1 ?? ''));
+
+        if ($spphNo === '') {
+            return null;
+        }
+
+        $cacheKey = mb_strtolower($spphNo);
+        if (! array_key_exists($cacheKey, $this->activeSpphVendorCache)) {
+            $this->activeSpphVendorCache[$cacheKey] = Spph::query()
+                ->where('nomor_spph', $spphNo)
+                ->value('nama_vendor');
+        }
+
+        return $this->activeSpphVendorCache[$cacheKey];
     }
 
     /**
@@ -5877,6 +6135,7 @@ class SpController extends Controller
         $year ??= now()->year;
 
         $usedSequences = $this->spModeQuery(false)
+            ->withTrashed()
             ->when($excludeId, fn ($q) => $q->where('id', '!=', $excludeId))
             ->where('nomor_sp', 'like', "%/SP/{$year}")
             ->orderBy('sequence_number')

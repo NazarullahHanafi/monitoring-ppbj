@@ -355,6 +355,24 @@
             margin-top: .1rem;
         }
 
+        .secure-delete-input-wrap > input.swal2-input {
+            width: 100% !important;
+            height: 3rem !important;
+            margin: 0 !important;
+            border: 1px solid #cbd5e1 !important;
+            border-radius: .85rem !important;
+            background: #fff !important;
+            color: #0f172a !important;
+            box-shadow: none !important;
+            font-size: .85rem !important;
+        }
+
+        .dark .secure-delete-input-wrap > input.swal2-input {
+            border-color: #475569 !important;
+            background: #1e293b !important;
+            color: #f8fafc !important;
+        }
+
         .secure-delete-password-label {
             margin: 0;
             font-size: .82rem;

@@ -9,7 +9,7 @@
 @endphp
 
 @push('styles')
-    <link rel="stylesheet" href="{{ asset('assets/sp/sp.css') }}?v=20260814a">
+    <link rel="stylesheet" href="{{ asset('assets/sp/sp.css') }}?v=20261020a">
     <style>
         body.sp-print-modal-open { overflow: hidden; }
         .sp-print-choice-overlay {
@@ -165,7 +165,7 @@
                             @endif
                         </div>
                     </div>
-                    <div class="flex items-center gap-2.5 shrink-0">
+                    <div class="flex flex-wrap items-center gap-2.5 shrink-0">
                         @if($oracleMode)
                             <a href="{{ $normalSpUrl }}"
                                 class="flex items-center gap-2 bg-white/15 hover:bg-white/25 text-white font-semibold px-4 py-3 rounded-xl transition-all backdrop-blur-sm border border-white/30 whitespace-nowrap"
@@ -199,6 +199,11 @@
                                     d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
                             </svg>
                             <span class="text-sm">Vendor</span>
+                        </a>
+                        <a href="{{ route('sp.trash') }}"
+                            class="flex items-center gap-2 bg-white/15 hover:bg-white/25 text-white font-semibold px-4 py-3 rounded-xl transition-all backdrop-blur-sm border border-white/30 whitespace-nowrap"
+                            title="Pulihkan SP dari tempat sampah">
+                            <span aria-hidden="true">♻</span><span class="text-sm">Sampah</span>
                         </a>
                         <button type="button" id="openAddSpModalButton" onclick="openAddSpCreateModal()"
                             class="flex items-center gap-2 bg-white text-blue-700 font-bold px-5 py-3 rounded-xl hover:bg-blue-50 transition-all shadow-lg shadow-black/20 whitespace-nowrap group">
@@ -425,6 +430,8 @@
                             @php
                                 $linkedPpbjNumbers = $s->linkedPpbjNumbers();
                                 $linkedPpbjText = implode(' ', $linkedPpbjNumbers);
+                                $allocationMap = $s->ppbjs->mapWithKeys(fn($ppbj) => [$ppbj->ppbj_no => (float) ($ppbj->pivot->nilai_alokasi ?? 0)])->all();
+                                $allocationMode = $s->ppbjs->contains(fn($ppbj) => ($ppbj->pivot->allocation_status ?? '') === 'manual') ? 'manual' : 'automatic';
                                 $canEditSp = (filled($s->created_by_user_id) && (int) $s->created_by_user_id === (int) auth()->id())
                                     || auth()->user()?->matchesOwnerLabel($s->pic);
                             @endphp
@@ -558,7 +565,9 @@
                                                     {{ Js::from($s->bidang_ip_itu ?? '') }},
                                                     {{ Js::from($s->penandatangan_sci ?? '') }},
                                                     {{ Js::from($s->jabatan_sci ?? '') }},
-                                                    {{ Js::from($linkedPpbjNumbers) }}
+                                                    {{ Js::from($linkedPpbjNumbers) }},
+                                                    {{ Js::from($allocationMap) }},
+                                                    {{ Js::from($allocationMode) }}
                                                 )"
                                                 class="p-1.5 rounded-lg text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/30 transition-colors"
                                                 title="Edit"><svg class="w-4 h-4" fill="none" stroke="currentColor"
@@ -578,7 +587,7 @@
                                         <button type="button"
                                             onclick="secureDeleteRecord('SP', @js($s->nomor_sp ?? ('SP-' . $s->id)), @js(route('sp.destroy', $s)))"
                                             class="p-1.5 rounded-lg text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors"
-                                            title="Hapus SP dengan password pembuat"><svg class="w-4 h-4" fill="none" stroke="currentColor"
+                                            title="Pindahkan SP ke tempat sampah"><svg class="w-4 h-4" fill="none" stroke="currentColor"
                                                 viewBox="0 0 24 24">
                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                                     d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -705,6 +714,32 @@
                     </div>
                     <div id="ppbjStatus" class="mt-0.5 text-xs min-h-[14px] flex items-center gap-1"></div>
                 </div>
+
+                <section id="addAllocationPanel" class="sp-allocation-panel hidden" aria-live="polite">
+                    <div class="sp-allocation-head">
+                        <div>
+                            <span class="sp-allocation-kicker">Distribusi nilai SP</span>
+                            <h3>Alokasi per Nomor PR</h3>
+                            <p>Nilai dibagi proporsional dan dapat disesuaikan sesuai kontrak.</p>
+                        </div>
+                        <span id="addAllocationState" class="sp-allocation-state">Otomatis</span>
+                    </div>
+                    <div id="addAllocationRows" class="sp-allocation-rows"></div>
+                    <div class="sp-allocation-footer">
+                        <div><span>Total SP</span><strong id="addAllocationTotalSp">Rp 0</strong></div>
+                        <div><span>Total alokasi</span><strong id="addAllocationTotalAssigned">Rp 0</strong></div>
+                        <div><span>Selisih</span><strong id="addAllocationDifference">Rp 0</strong></div>
+                    </div>
+                    <div class="sp-allocation-actions">
+                        <button type="button" onclick="autoAllocateSp('add')">Hitung proporsional</button>
+                        <button type="button" onclick="matchPrValuesForSp('add')">Samakan dengan nilai PR</button>
+                    </div>
+                    <label id="addAllocationOverrideWrap" class="sp-allocation-override hidden">
+                        <input type="checkbox" name="allocation_override_confirmed" value="1">
+                        <span>Saya sudah memeriksa bahwa nilai SP memang lebih besar dari gabungan nilai PR.</span>
+                    </label>
+                    <input type="hidden" name="allocation_mode" id="addAllocationMode" value="automatic">
+                </section>
 
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
@@ -1028,6 +1063,31 @@
                     </div>
                     <div id="editPpbjStatus" class="mt-0.5 text-xs min-h-[14px] flex items-center gap-1"></div>
                 </div>
+                <section id="editAllocationPanel" class="sp-allocation-panel hidden" aria-live="polite">
+                    <div class="sp-allocation-head">
+                        <div>
+                            <span class="sp-allocation-kicker">Distribusi nilai SP</span>
+                            <h3>Alokasi per Nomor PR</h3>
+                            <p>Ubah hanya bila pembagian pada kontrak berbeda dari proporsi PR.</p>
+                        </div>
+                        <span id="editAllocationState" class="sp-allocation-state">Otomatis</span>
+                    </div>
+                    <div id="editAllocationRows" class="sp-allocation-rows"></div>
+                    <div class="sp-allocation-footer">
+                        <div><span>Total SP</span><strong id="editAllocationTotalSp">Rp 0</strong></div>
+                        <div><span>Total alokasi</span><strong id="editAllocationTotalAssigned">Rp 0</strong></div>
+                        <div><span>Selisih</span><strong id="editAllocationDifference">Rp 0</strong></div>
+                    </div>
+                    <div class="sp-allocation-actions">
+                        <button type="button" onclick="autoAllocateSp('edit')">Hitung proporsional</button>
+                        <button type="button" onclick="matchPrValuesForSp('edit')">Samakan dengan nilai PR</button>
+                    </div>
+                    <label id="editAllocationOverrideWrap" class="sp-allocation-override hidden">
+                        <input type="checkbox" name="allocation_override_confirmed" value="1">
+                        <span>Saya sudah memeriksa bahwa nilai SP memang lebih besar dari gabungan nilai PR.</span>
+                    </label>
+                    <input type="hidden" name="allocation_mode" id="editAllocationMode" value="automatic">
+                </section>
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div><label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Nilai PR
                             (Rp)</label>
@@ -1725,7 +1785,7 @@
             if (event.key === 'Escape') window.closeSpPrintPreview();
         });
     </script>
-    <script src="{{ asset('assets/sp/sp.js') }}?v=20261005a" defer></script>
+    <script src="{{ asset('assets/sp/sp.js') }}?v=20261020a" defer></script>
 @endpush
 
 @include('components.archive-upload-popup')
