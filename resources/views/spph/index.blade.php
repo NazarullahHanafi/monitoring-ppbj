@@ -3,7 +3,7 @@
 @section('title', 'Penomoran SPPH')
 
 @push('styles')
-    <link rel="stylesheet" href="{{ asset('assets/spph/spph.css') }}?v=20261020b">
+    <link rel="stylesheet" href="{{ asset('assets/spph/spph.css') }}?v=20261020c">
     <style>
         #spphPrintSigner, #spphPrintTitle,
         #spphPrintSigner option, #spphPrintTitle option {
@@ -1000,7 +1000,7 @@
     <script>
         window.SPPH_PAGE_CONFIG = @json($spphPageConfig);
     </script>
-    <script src="{{ asset('assets/spph/spph.js') }}?v=20261020b" defer></script>
+    <script src="{{ asset('assets/spph/spph.js') }}?v=20261020c" defer></script>
 @endpush
 
 @include('components.archive-upload-popup')

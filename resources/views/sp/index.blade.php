@@ -9,7 +9,7 @@
 @endphp
 
 @push('styles')
-    <link rel="stylesheet" href="{{ asset('assets/sp/sp.css') }}?v=20261020c">
+    <link rel="stylesheet" href="{{ asset('assets/sp/sp.css') }}?v=20261020d">
     <style>
         body.sp-print-modal-open { overflow: hidden; }
         .sp-print-choice-overlay {
@@ -1785,7 +1785,7 @@
             if (event.key === 'Escape') window.closeSpPrintPreview();
         });
     </script>
-    <script src="{{ asset('assets/sp/sp.js') }}?v=20261020c" defer></script>
+    <script src="{{ asset('assets/sp/sp.js') }}?v=20261020d" defer></script>
 @endpush
 
 @include('components.archive-upload-popup')
