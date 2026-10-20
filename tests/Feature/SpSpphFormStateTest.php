@@ -15,6 +15,8 @@ class SpSpphFormStateTest extends TestCase
         $this->assertStringContainsString("$('#ppbjSelect').prop('disabled', true).trigger('change.select2')", $script);
         $this->assertStringContainsString('if (activeRequest && activeRequest.readyState !== 4) activeRequest.abort();', $script);
         $this->assertStringContainsString('JSON.stringify(latestValues) !== selectionKey', $script);
+        $this->assertStringContainsString('function syncSpAllocationItemsAfterAutofill', $script);
+        $this->assertStringContainsString('JSON.stringify(currentSelection) === selectionKey', $script);
         $this->assertStringContainsString("setPrMode('ppbj', true)", $script);
     }
 

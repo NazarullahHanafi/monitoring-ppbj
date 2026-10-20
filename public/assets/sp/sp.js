@@ -167,6 +167,23 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
             }
         }
 
+        function syncSpAllocationItemsAfterAutofill(mode, items, $select, selectionKey) {
+            setSpAllocationItems(mode, items);
+
+            // Select2 dan auto-fill vendor/item dapat memicu perubahan DOM pada frame yang sama.
+            // Render ulang sekali sesudah frame selesai, tetapi hanya jika pilihan PR masih sama.
+            window.requestAnimationFrame(() => {
+                const currentValue = $select.val();
+                const currentSelection = Array.isArray(currentValue)
+                    ? currentValue.filter(Boolean)
+                    : (currentValue ? [currentValue] : []);
+
+                if (JSON.stringify(currentSelection) === selectionKey) {
+                    setSpAllocationItems(mode, items);
+                }
+            });
+        }
+
         function autoAllocateSp(mode) {
             mode = allocationPrefix(mode);
             const state = spAllocationState[mode];
@@ -355,7 +372,7 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
                         if (d.warnings && d.warnings.length) html += `<div class="text-amber-600 dark:text-amber-400">⚠️ ${d.warnings.map(warning => escapedHtml(warning)).join(', ')}</div>`;
                         $content.html(html);
                         renderSpphVendorRecommendation(vendorPrefix, d.spph_vendors || [], d.spph_nomor || null);
-                        setSpAllocationItems(vendorPrefix, d.package_items || []);
+                        syncSpAllocationItemsAfterAutofill(vendorPrefix, d.package_items || [], $sel, selectionKey);
                         applySpphAutoFill(vendorPrefix, d);
                         applyPpbjDescription($deskripsi, $badge, d);
                         if (d.total_sebelum_ppn) {
@@ -381,7 +398,7 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
                         if (d.spph_items && d.spph_items.length) linkedHtml += `<div><strong>Item SPPH:</strong> ${d.spph_items.length} item siap ditarik otomatis ke SP</div>`;
                         $content.html(linkedHtml);
                         renderSpphVendorRecommendation(vendorPrefix, d.spph_vendors || [], d.spph_nomor || null);
-                        setSpAllocationItems(vendorPrefix, d.package_items || []);
+                        syncSpAllocationItemsAfterAutofill(vendorPrefix, d.package_items || [], $sel, selectionKey);
                         applySpphAutoFill(vendorPrefix, d);
                         if (!linkedHtml) $info.addClass('hidden');
                         applyPpbjDescription($deskripsi, $badge, d);
