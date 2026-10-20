@@ -2,13 +2,27 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('collaboration_handovers', function (Blueprint $table) {
+        $ppbjIdIsUnsigned = true;
+
+        // Database production lama memakai BIGINT signed untuk ppbj.id,
+        // sementara instalasi baru Laravel memakai BIGINT unsigned. Foreign
+        // key MySQL wajib memiliki signedness yang sama persis.
+        if (DB::getDriverName() === 'mysql') {
+            $column = DB::selectOne(
+                "SELECT COLUMN_TYPE FROM information_schema.COLUMNS
+                 WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ppbj' AND COLUMN_NAME = 'id'"
+            );
+            $ppbjIdIsUnsigned = str_contains(strtolower((string) ($column->COLUMN_TYPE ?? '')), 'unsigned');
+        }
+
+        Schema::create('collaboration_handovers', function (Blueprint $table) use ($ppbjIdIsUnsigned) {
             $table->id();
             $table->uuid('public_id')->unique();
             $table->string('title', 140);
@@ -28,7 +42,9 @@ return new class extends Migration
             $table->foreignId('acknowledged_by_user_id')->nullable()->constrained('users')->nullOnDelete();
             $table->foreignId('completed_by_user_id')->nullable()->constrained('users')->nullOnDelete();
 
-            $table->unsignedBigInteger('ppbj_id')->nullable();
+            $ppbjIdIsUnsigned
+                ? $table->unsignedBigInteger('ppbj_id')->nullable()
+                : $table->bigInteger('ppbj_id')->nullable();
             $table->foreign('ppbj_id')->references('id')->on('ppbj')->nullOnDelete();
             $table->unsignedBigInteger('torpr_id')->nullable();
             $table->foreign('torpr_id')->references('id')->on('torprs')->nullOnDelete();
