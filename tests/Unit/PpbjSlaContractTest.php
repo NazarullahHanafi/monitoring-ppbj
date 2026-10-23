@@ -199,4 +199,34 @@ class PpbjSlaContractTest extends TestCase
         $this->assertNull($ppbj->contractDurationDays());
         $this->assertSame('BATAS BELUM DIATUR', $ppbj->contractStatusLabel());
     }
+
+    public function test_list_snapshot_uses_model_rules_without_queries_or_stale_cross_request_cache(): void
+    {
+        Carbon::setTestNow('2026-10-23 09:00:00');
+        $ppbj = new Ppbj([
+            'ppbj_no' => 'PERF/PR/001', 'total_sebelum_ppn' => 25000000,
+            'tgl_terima_pr' => '2026-10-20', 'tgl_spk' => '2026-10-22',
+            'awarding_sp' => 'PERF/SP/001', 'tgl_awarding_sp' => '2026-10-22',
+            'promised_date' => '2026-11-20', 'general_registered_at' => '2026-10-20 08:30:00',
+        ]);
+        \Illuminate\Support\Facades\DB::enableQueryLog();
+        \Illuminate\Support\Facades\DB::flushQueryLog();
+        $data = \App\Support\PpbjListPresentation::make($ppbj);
+
+        $this->assertSame([], \Illuminate\Support\Facades\DB::getQueryLog());
+        $this->assertSame($ppbj->slaFinalLabel(), $data['sla_final_label']);
+        $this->assertSame($ppbj->slaExplanation(), $data['sla_explanation']);
+        $this->assertSame($ppbj->contractStatusLabel(), $data['contract_status_label']);
+        $this->assertSame($ppbj->contractExplanation(), $data['contract_explanation']);
+        $this->assertSame('2026-11-20', $data['promised_date']);
+        $this->assertSame('complete', $data['status_tone']);
+
+        $ppbj->awarding_sp = null;
+        Carbon::setTestNow('2026-11-23 09:00:00');
+        $updated = \App\Support\PpbjListPresentation::make($ppbj);
+        $this->assertSame('overdue', $updated['status_tone']);
+        $this->assertFalse($updated['sla_is_complete']);
+        $this->assertNotSame($data['sla_current_remaining_days'], $updated['sla_current_remaining_days']);
+        \Illuminate\Support\Facades\DB::disableQueryLog();
+    }
 }

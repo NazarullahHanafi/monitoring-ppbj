@@ -2,9 +2,9 @@
 
 namespace Tests\Feature;
 
+use App\Models\Ppbj;
 use App\Models\Sp;
 use App\Models\Spph;
-use App\Models\Ppbj;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
@@ -311,7 +311,7 @@ class ArchiveAttachmentUploadTest extends TestCase
         $this->assertStringContainsString('openArchiveAttachmentList', $spphView);
         $this->assertStringContainsString('route(\'spph.archive\'', $spphView);
 
-        $archivePopup = file_get_contents(resource_path('views/components/archive-upload-popup.blade.php'));
+        $archivePopup = file_get_contents(public_path('assets/app/archive-popup.js'));
         $this->assertStringContainsString('window.openArchiveAttachmentList', $archivePopup);
         $this->assertStringContainsString('renderArchiveAttachmentList', $archivePopup);
         $this->assertStringContainsString('archiveDropZone', $archivePopup);
@@ -347,7 +347,8 @@ class ArchiveAttachmentUploadTest extends TestCase
             ->assertOk()
             ->assertSee('openPpbjArchiveUpload', false)
             ->assertSee('openArchiveAttachmentUpload', false)
-            ->assertSee('archiveDropZone', false)
+            ->assertSee('assets/app/archive-popup.js', false)
+            ->assertSee('assets/app/archive-popup.css', false)
             ->assertSee('Simpan &amp; Upload', false);
     }
 }

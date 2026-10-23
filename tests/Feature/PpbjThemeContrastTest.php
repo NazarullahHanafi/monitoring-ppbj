@@ -10,13 +10,13 @@ class PpbjThemeContrastTest extends TestCase
     {
         $view = file_get_contents(resource_path('views/ppbj/index.blade.php'));
         $script = file_get_contents(public_path('assets/ppbj/ppbj.js'));
+        $presentation = file_get_contents(app_path('Support/PpbjListPresentation.php'));
 
         $this->assertStringContainsString('data-status-tone="{{ $statusTone }}"', $view);
-        $this->assertStringContainsString("\$statusTone = 'on-track'", $view);
-        $this->assertStringContainsString("\$statusTone = 'complete'", $view);
-        $this->assertStringContainsString("\$statusTone = 'warning'", $view);
-        $this->assertStringContainsString("\$statusTone = 'due'", $view);
-        $this->assertStringContainsString("\$statusTone = 'overdue'", $view);
+        foreach (['on-track', 'complete', 'warning', 'due', 'overdue'] as $tone) {
+            $this->assertStringContainsString("=> '{$tone}'", $presentation);
+        }
+        $this->assertStringContainsString("\$rowView['status_tone']", $view);
         $this->assertStringContainsString("badge.dataset.statusTone = 'cancelled'", $script);
         $this->assertStringNotContainsString('{{ $statusColor }}', $view);
     }

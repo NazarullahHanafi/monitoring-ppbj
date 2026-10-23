@@ -178,7 +178,7 @@ class SpController extends Controller
         $penandatanganScis = $referenceData['sp_master_options:penandatangan_sci:active_names'];
         $jabatanScis = $referenceData['sp_master_options:jabatan_sci:active_names'];
 
-        $baseQuery = $this->spModeQuery($oracleMode)->with(['ppbjs:id,ppbj_no,total_sebelum_ppn'])->when($search, fn ($q) => $q->where(function ($q2) use ($search) {
+        $baseQuery = $this->spModeQuery($oracleMode)->when($search, fn ($q) => $q->where(function ($q2) use ($search) {
             $q2->where('nomor_sp', 'like', "%{$search}%")
                 ->orWhere('nomor_pr', 'like', "%{$search}%")
                 ->orWhereHas('ppbjs', fn ($ppbjQuery) => $ppbjQuery->where('ppbj_no', 'like', "%{$search}%"))
@@ -210,6 +210,7 @@ class SpController extends Controller
             ->first());
 
         $sps = (clone $baseQuery)
+            ->with(['ppbjs:id,ppbj_no,total_sebelum_ppn'])
             ->select([
                 'id', 'nomor_sp', 'sequence_number', 'numbering_mode',
                 'created_by_user_id', 'tanggal_sp', 'nilai_sp', 'nomor_pr',

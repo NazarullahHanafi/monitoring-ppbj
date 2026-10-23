@@ -51,11 +51,7 @@ class TorprController extends Controller
                 'p.general_registration_number',
                 'p.general_registered_at',
                 'gu.name as general_registered_by_name',
-            ])
-            ->leftJoin('users as u2', 'torprs.received_by_umum_user_id', '=', 'u2.id')
-            ->leftJoin('users as u3', 'torprs.created_by_user_id', '=', 'u3.id')
-            ->leftJoin('ppbj as p', 'p.ppbj_no', '=', 'torprs.nomor_pr')
-            ->leftJoin('users as gu', 'p.general_registered_by_user_id', '=', 'gu.id');
+            ]);
 
         // ✅ SEARCH
         if ($search = trim((string) $request->get('q', ''))) {
@@ -65,7 +61,11 @@ class TorprController extends Controller
                 $q->where('torprs.nomor_pr', 'like', '%'.$search.'%')
                     ->orWhere('torprs.tujuan_pengadaan', 'like', '%'.$search.'%')
                     ->orWhere('torprs.portofolio', 'like', '%'.$search.'%')
-                    ->orWhere('p.general_registration_number', 'like', '%'.$search.'%');
+                    ->orWhereExists(function ($registration) use ($search) {
+                        $registration->selectRaw('1')->from('ppbj as registration')
+                            ->whereColumn('registration.ppbj_no', 'torprs.nomor_pr')
+                            ->where('registration.general_registration_number', 'like', '%'.$search.'%');
+                    });
             });
         }
 
@@ -194,9 +194,16 @@ class TorprController extends Controller
         $perPage = (int) $request->get('per_page', 10);
         $perPage = in_array($perPage, [10, 25, 50, 100]) ? $perPage : 10;
 
-        $query->orderBy('torprs.id', 'desc');
+        // COUNT hanya memakai filter, bukan empat JOIN yang khusus untuk tampilan.
+        // Relasi pencarian registrasi memakai EXISTS agar total tidak ikut berlipat.
+        $countQuery = clone $query;
+        $query->leftJoin('users as u2', 'torprs.received_by_umum_user_id', '=', 'u2.id')
+            ->leftJoin('users as u3', 'torprs.created_by_user_id', '=', 'u3.id')
+            ->leftJoin('ppbj as p', 'p.ppbj_no', '=', 'torprs.nomor_pr')
+            ->leftJoin('users as gu', 'p.general_registered_by_user_id', '=', 'gu.id')
+            ->orderBy('torprs.id', 'desc');
 
-        $rows = $query->paginate($perPage)->withQueryString();
+        $rows = $query->paginate($perPage, total: fn () => $countQuery->count())->withQueryString();
         $isHeavy = $rows->count() > 40;
         $rowIds = collect($rows->items())->pluck('id')->filter()->values();
 

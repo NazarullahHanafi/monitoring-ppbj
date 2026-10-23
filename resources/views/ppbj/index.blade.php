@@ -340,6 +340,13 @@
         };
     @endphp
 
+    @php
+        // Reuse one snapshot for the table and popup; no second SLA calculation in Blade.
+        $ppbjJsonData = $ppbj->getCollection()->keyBy('id')->map(
+            fn (\App\Models\Ppbj $item) => \App\Support\PpbjListPresentation::make($item)
+        );
+    @endphp
+
     {{-- ================= TABLE (RESPONSIVE) ================= --}}
     <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
         <div class="overflow-x-auto">
@@ -362,98 +369,21 @@
                 <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
                     @forelse($ppbj as $row)
                         @php
-                            $progress = (int) ($row->progres ?? 0);
-                            $progress = max(0, min(100, $progress));
-                            $isCancelled = (strtoupper((string) ($row->status ?? 'ACTIVE')) === 'CANCELLED');
-                            $isSlaComplete = method_exists($row, 'isSlaComplete')
-                                ? $row->isSlaComplete()
-                                : (!empty($row->awarding_sp) && !empty($row->tgl_awarding_sp) && !empty($row->tgl_spk));
-                            $parseRowSlaDate = function ($date) {
-                                if (! $date) return null;
-                                try {
-                                    return \Carbon\Carbon::parse($date)->startOfDay();
-                                } catch (\Throwable) {
-                                    return null;
-                                }
-                            };
-                            $rowSlaStart = $parseRowSlaDate($row->tgl_diserahkan ?? null)
-                                ?: ($parseRowSlaDate($row->tgl_terima_pr ?? null)
-                                    ?: $parseRowSlaDate($row->tgl_ppbj ?? null));
-                            $rowTargetDays = method_exists($row, 'slaTargetDays')
-                                ? $row->slaTargetDays()
-                                : App\Models\Ppbj::hitungTargetSla($row->total_sebelum_ppn ?? 0);
-                            $rowRunningDays = ($rowSlaStart && $rowTargetDays > 0)
-                                ? max(0, (int) $rowSlaStart->diffInDays(now()->startOfDay()))
-                                : null;
-                            $rowLiveRemaining = ($rowRunningDays !== null && $rowTargetDays > 0)
-                                ? $rowTargetDays - $rowRunningDays
-                                : null;
-                            $slaMainLabel = method_exists($row, 'slaFinalLabel')
-                                ? $row->slaFinalLabel()
-                                : (($isSlaComplete || $isCancelled)
-                                    ? ($isCancelled ? 'Dibatalkan' : 'Selesai')
-                                    : (($rowLiveRemaining ?? (int) ($row->sisa_target_sla ?? 0)) . ' hari'));
-                            $slaOutcomeLabel = method_exists($row, 'slaOutcomeLabel') ? $row->slaOutcomeLabel() : null;
-                            $slaOutcomeRemaining = method_exists($row, 'slaFinalRemainingDays')
-                                ? $row->slaFinalRemainingDays()
-                                : null;
-                            $slaOutcomeTone = match (true) {
-                                $slaOutcomeRemaining === null => 'neutral',
-                                $slaOutcomeRemaining < 0 => 'late',
-                                default => 'ahead',
-                            };
-                            $slaExplanation = method_exists($row, 'slaExplanation')
-                                ? $row->slaExplanation()
-                                : ($isSlaComplete
-                                    ? 'Pekerjaan sudah lengkap. Perhitungan SLA berhenti.'
-                                    : 'SLA masih berjalan sampai hari ini.');
-
-                            if ($isCancelled) {
-                                $displayStatusSla = 'CANCELLED';
-                                $statusTone = 'cancelled';
-                            } elseif ($isSlaComplete) {
-                                $displayStatusSla = 'LENGKAP';
-                                $statusTone = 'complete';
-                            } else {
-                                $sisaSla = method_exists($row, 'slaCurrentRemainingDays')
-                                    ? $row->slaCurrentRemainingDays()
-                                    : ($rowLiveRemaining ?? (int) ($row->sisa_target_sla ?? 0));
-                                if ($sisaSla === null) {
-                                    $displayStatusSla = 'BELUM DIHITUNG';
-                                    $statusTone = 'neutral';
-                                } elseif ($sisaSla < 0) {
-                                    $displayStatusSla = 'OVERDUE';
-                                    $statusTone = 'overdue';
-                                } elseif ($sisaSla === 0) {
-                                    $displayStatusSla = 'JATUH TEMPO';
-                                    $statusTone = 'due';
-                                } elseif ($sisaSla <= 2) {
-                                    $displayStatusSla = 'WARNING';
-                                    $statusTone = 'warning';
-                                } else {
-                                    $displayStatusSla = 'ON TRACK';
-                                    $statusTone = 'on-track';
-                                }
-                            }
-
-                            $contractStatus = method_exists($row, 'contractStatusLabel')
-                                ? $row->contractStatusLabel()
-                                : (empty($row->tgl_spk) ? 'BELUM AKTIF' : (empty($row->promised_date) ? 'BATAS BELUM DIATUR' : 'AKTIF'));
-                            $contractStatusTone = match ($contractStatus) {
-                                'SANGAT KRITIS', 'BERAKHIR HARI INI' => 'very-critical',
-                                'KRITIS' => 'critical',
-                                'MELEWATI BATAS', 'TANGGAL TIDAK VALID', 'SERAH TERIMA TERLAMBAT' => 'danger',
-                                'DOKUMEN SERAH TERIMA BELUM LENGKAP', 'SEGERA BERAKHIR', 'BATAS BELUM DIATUR' => 'warning',
-                                'SERAH TERIMA SELESAI' => 'success',
-                                'AKTIF' => 'active',
-                                default => 'neutral',
-                            };
-                            $contractExplanation = method_exists($row, 'contractExplanation')
-                                ? $row->contractExplanation()
-                                : 'Informasi masa pemenuhan belum tersedia.';
-                            $contractRemaining = method_exists($row, 'contractRemainingDays') ? $row->contractRemainingDays() : null;
-                            $contractEndDate = method_exists($row, 'contractEndDate') ? $row->contractEndDate() : null;
-                            $contractEndSource = method_exists($row, 'contractEndDateSourceLabel') ? $row->contractEndDateSourceLabel() : null;
+                            $rowView = $ppbjJsonData[$row->id];
+                            $progress = max(0, min(100, (int) ($row->progres ?? 0)));
+                            $isCancelled = $row->is_cancelled;
+                            $slaMainLabel = $rowView['sla_final_label'];
+                            $slaOutcomeLabel = $rowView['sla_outcome_label'];
+                            $slaOutcomeTone = $rowView['sla_outcome_tone'];
+                            $slaExplanation = $rowView['sla_explanation'];
+                            $displayStatusSla = $rowView['status_sla'];
+                            $statusTone = $rowView['status_tone'];
+                            $contractStatus = $rowView['contract_status_label'];
+                            $contractStatusTone = $rowView['contract_status_tone'];
+                            $contractExplanation = $rowView['contract_explanation'];
+                            $contractRemaining = $rowView['contract_remaining_days'];
+                            $contractEndDate = $rowView['contract_end_short_label'];
+                            $contractEndSource = $rowView['contract_end_date_source_label'];
                         @endphp
 
                         <tr id="row_{{ $row->id }}"
@@ -527,7 +457,7 @@
                                     </span>
                                     @if($contractEndDate)
                                         <span class="text-[10px] font-semibold text-slate-500 dark:text-slate-300">
-                                            {{ $contractEndDate->translatedFormat('d M Y') }}
+                                            {{ $contractEndDate }}
                                             @if($contractRemaining !== null)
                                                 · {{ $contractRemaining >= 0 ? $contractRemaining . ' hari lagi' : 'lewat ' . abs($contractRemaining) . ' hari' }}
                                             @endif
@@ -1197,140 +1127,7 @@
 @endpush
 
 @push('scripts')
-    @php
-                $ppbjJsonData = collect($ppbj->items())->keyBy('id')->map(function ($item) {
-                    $data = method_exists($item, 'toArray') ? $item->toArray() : (array) $item;
-                    $isSlaComplete = method_exists($item, 'isSlaComplete') ? $item->isSlaComplete() : false;
-                    if (! method_exists($item, 'isSlaComplete')) {
-                        $isCancelled = strtoupper((string) ($data['status'] ?? 'ACTIVE')) === 'CANCELLED';
-                        $isSlaComplete = ! $isCancelled
-                            && ! empty($data['awarding_sp'])
-                            && ! empty($data['tgl_awarding_sp'])
-                            && ! empty($data['tgl_spk']);
-                    }
 
-                    $parseDate = function ($date) {
-                        if (! $date) {
-                            return null;
-                        }
-
-                        try {
-                            return \Carbon\Carbon::parse($date);
-                        } catch (\Throwable) {
-                            return null;
-                        }
-                    };
-
-                    $startRaw = $data['tgl_diserahkan'] ?: ($data['tgl_terima_pr'] ?: ($data['tgl_ppbj'] ?? null));
-                    $startLabel = ! empty($data['tgl_diserahkan'])
-                        ? 'Tanggal diserahkan ke Umum'
-                        : (! empty($data['tgl_terima_pr'])
-                            ? 'Tanggal terima PR'
-                            : (! empty($data['tgl_ppbj']) ? 'Tanggal PPBJ / PR' : 'Tanggal awal belum tersedia'));
-                    $finishRaw = $data['tgl_spk'] ?? null;
-                    $finishLabel = ! empty($data['tgl_spk']) ? 'Tanggal SPK / kontrak' : 'Tanggal SPK / kontrak belum tersedia';
-                    $startDate = $parseDate($startRaw);
-                    $finishDate = $parseDate($finishRaw);
-                    $targetDays = method_exists($item, 'slaTargetDays')
-                        ? $item->slaTargetDays()
-                        : \App\Models\Ppbj::hitungTargetSla($data['total_sebelum_ppn'] ?? 0);
-                    $data['target_sla_hari'] = $targetDays;
-                    $targetDate = ($startDate && $targetDays > 0) ? $startDate->copy()->addDays($targetDays) : null;
-                    $runningDays = $startDate ? max(0, (int) $startDate->copy()->startOfDay()->diffInDays(now()->startOfDay())) : null;
-                    $usedDays = ($startDate && $finishDate) ? max(0, (int) $startDate->diffInDays($finishDate)) : null;
-                    $finalRemainingDays = $usedDays !== null ? $targetDays - $usedDays : null;
-                    $currentRemainingDays = (! $isSlaComplete && $runningDays !== null && $targetDays > 0)
-                        ? $targetDays - $runningDays
-                        : $finalRemainingDays;
-                    $outcomeLabel = null;
-
-                    if ($isSlaComplete) {
-                        if ($finalRemainingDays === null) {
-                            $outcomeLabel = 'SLA berhenti';
-                        } elseif ($finalRemainingDays < 0) {
-                            $outcomeLabel = 'Terlambat ' . abs($finalRemainingDays) . ' hari';
-                        } elseif ($finalRemainingDays > 0) {
-                            $outcomeLabel = 'Lebih cepat ' . $finalRemainingDays . ' hari';
-                        } else {
-                            $outcomeLabel = 'Tepat SLA';
-                        }
-                    }
-
-                    $slaExplanation = $isSlaComplete
-                        ? 'Pekerjaan sudah lengkap. Perhitungan SLA berhenti.'
-                        : 'SLA masih berjalan sampai hari ini.';
-
-                    if ($startDate && $targetDays > 0) {
-                        $targetText = $targetDate ? ' Target selesai maksimal ' . $targetDate->translatedFormat('d F Y') . '.' : '';
-
-                        if ($isSlaComplete && $finishDate && $usedDays !== null && $finalRemainingDays !== null) {
-                            $result = $finalRemainingDays > 0
-                                ? 'selesai lebih awal ' . $finalRemainingDays . ' hari dari target'
-                                : ($finalRemainingDays < 0
-                                    ? 'selesai terlambat ' . abs($finalRemainingDays) . ' hari dari target'
-                                    : 'selesai tepat sesuai target SLA');
-                            $slaExplanation = 'SLA dihitung dari ' . $startLabel . ' (' . $startDate->translatedFormat('d F Y') . ') sampai ' . $finishLabel . ' (' . $finishDate->translatedFormat('d F Y') . '). Target ' . $targetDays . ' hari.' . $targetText . ' Realisasi ' . $usedDays . ' hari, sehingga ' . $result . '.';
-                        } elseif (! $isSlaComplete) {
-                            $remaining = $currentRemainingDays ?? (int) ($data['sisa_target_sla'] ?? 0);
-                            $slaExplanation = 'SLA masih berjalan dari ' . $startLabel . ' (' . $startDate->translatedFormat('d F Y') . ') sampai hari ini. Target ' . $targetDays . ' hari.' . $targetText . ' Sudah berjalan ' . ($runningDays ?? 0) . ' hari, ' . ($remaining < 0 ? 'sehingga terlambat ' . abs($remaining) . ' hari.' : 'sisa ' . $remaining . ' hari.');
-                        }
-                    }
-
-                    $data['status_sla'] = $data['status_sla'] ?? ($isSlaComplete ? 'LENGKAP' : null);
-                    $data['sla_is_complete'] = $isSlaComplete;
-                    $data['sla_final_label'] = method_exists($item, 'slaFinalLabel')
-                        ? $item->slaFinalLabel()
-                        : ($isSlaComplete ? 'Selesai' : (($currentRemainingDays ?? (int) ($data['sisa_target_sla'] ?? 0)) . ' hari'));
-                    $data['sla_outcome_label'] = method_exists($item, 'slaOutcomeLabel')
-                        ? $item->slaOutcomeLabel()
-                        : $outcomeLabel;
-                    $data['sla_used_days'] = method_exists($item, 'slaUsedDays') ? $item->slaUsedDays() : $usedDays;
-                    $data['sla_final_remaining_days'] = method_exists($item, 'slaFinalRemainingDays') ? $item->slaFinalRemainingDays() : $finalRemainingDays;
-                    $data['sla_current_remaining_days'] = method_exists($item, 'slaCurrentRemainingDays') ? $item->slaCurrentRemainingDays() : $currentRemainingDays;
-                    $data['sla_start_source_label'] = method_exists($item, 'slaStartSourceLabel') ? $item->slaStartSourceLabel() : $startLabel;
-                    $data['sla_finish_source_label'] = method_exists($item, 'slaFinishSourceLabel') ? $item->slaFinishSourceLabel() : $finishLabel;
-                    $data['sla_running_days'] = method_exists($item, 'slaRunningDays') ? $item->slaRunningDays() : $runningDays;
-                    $data['sla_target_date_label'] = method_exists($item, 'slaTargetDateLabel') ? $item->slaTargetDateLabel() : ($targetDate ? $targetDate->translatedFormat('d F Y') : null);
-                    $data['sla_explanation'] = method_exists($item, 'slaExplanation')
-                        ? $item->slaExplanation()
-                        : $slaExplanation;
-                    $data['contract_status_label'] = method_exists($item, 'contractStatusLabel') ? $item->contractStatusLabel() : 'BELUM AKTIF';
-                    $data['contract_remaining_days'] = method_exists($item, 'contractRemainingDays') ? $item->contractRemainingDays() : null;
-                    $data['contract_duration_days'] = method_exists($item, 'contractDurationDays') ? $item->contractDurationDays() : null;
-                    $data['contract_start_date_label'] = method_exists($item, 'contractStartDate') && $item->contractStartDate()
-                        ? $item->contractStartDate()->translatedFormat('d F Y')
-                        : null;
-                    $data['contract_end_date_label'] = method_exists($item, 'contractEndDate') && $item->contractEndDate()
-                        ? $item->contractEndDate()->translatedFormat('d F Y')
-                        : null;
-                    $data['contract_end_date_source_label'] = method_exists($item, 'contractEndDateSourceLabel')
-                        ? $item->contractEndDateSourceLabel()
-                        : null;
-                    $data['contract_explanation'] = method_exists($item, 'contractExplanation')
-                        ? $item->contractExplanation()
-                        : 'Informasi masa pemenuhan belum tersedia.';
-                    $data['handover_is_complete'] = method_exists($item, 'isHandoverComplete') ? $item->isHandoverComplete() : false;
-                    $data['handover_date_label'] = method_exists($item, 'handoverDate') && $item->handoverDate()
-                        ? $item->handoverDate()->translatedFormat('d F Y')
-                        : null;
-                    $data['handover_deviation_days'] = method_exists($item, 'handoverDeviationDays') ? $item->handoverDeviationDays() : null;
-                    $data['handover_performance_label'] = method_exists($item, 'handoverPerformanceLabel')
-                        ? $item->handoverPerformanceLabel()
-                        : 'BELUM SERAH TERIMA';
-
-                    if (! empty($data['general_registered_at'])) {
-                        try {
-                            $data['general_registered_at'] = \Carbon\Carbon::parse($data['general_registered_at'])
-                                ->locale('id')
-                                ->translatedFormat('d F Y H:i');
-                        } catch (\Throwable) {
-                            // Biarkan apa adanya jika format tanggal dari database tidak bisa dibaca.
-                        }
-                    }
-
-                    return $data;
-                });
-            @endphp
     @php
         $ppbjPageConfig = [
             'csrfToken' => csrf_token(),
@@ -1339,7 +1136,10 @@
             'preflightUrl' => route('ppbj.preflight'),
             'collaborationBaseUrl' => url('/ppbj-collaboration'),
             'currentUserId' => auth()->id(),
-            'ppbjData' => $ppbjJsonData,
+            // Internal presentation keys are not document fields for the detail/edit popup.
+            'ppbjData' => $ppbjJsonData->map(fn (array $data) => \Illuminate\Support\Arr::except($data, [
+                'sla_outcome_tone', 'status_tone', 'contract_status_tone', 'contract_end_short_label',
+            ])),
         ];
     @endphp
     <script>

@@ -27,6 +27,7 @@
     <link rel="icon" href="{{ asset('images/logo4.png') }}" type="image/x-icon">
     <link href="{{ asset('assets/vendor/ui/select2.min.css') }}" rel="stylesheet">
     <link href="{{ asset('assets/app/activity-broadcast.css') }}?v={{ filemtime(public_path('assets/app/activity-broadcast.css')) }}" rel="stylesheet">
+    <link href="{{ asset('assets/app/chatbot.css') }}?v={{ filemtime(public_path('assets/app/chatbot.css')) }}" rel="stylesheet">
     <script>
         (function () {
             var root = document.documentElement;
@@ -81,7 +82,7 @@
     <div class="min-h-screen flex">
         {{-- SIDEBAR DESKTOP --}}
         <aside id="sidebarDesktop"
-            class="hidden md:flex md:flex-col bg-white/80 dark:bg-gray-900/80 backdrop-blur-xl border-r border-gray-200/50 dark:border-gray-800/50 transition-all duration-300 w-64 shadow-xl shadow-gray-200/20 dark:shadow-black/20">
+            class="hidden md:flex md:flex-col bg-white dark:bg-gray-900 border-r border-gray-200/50 dark:border-gray-800/50 transition-all duration-300 w-64 shadow-xl shadow-gray-200/20 dark:shadow-black/20">
             <div
                 class="px-5 py-4 flex items-center justify-between border-b border-gray-200/50 dark:border-gray-800/50">
                 <div
@@ -354,7 +355,7 @@
         {{-- MAIN --}}
         <main id="mainContent" class="flex-1 min-w-0">
             <div
-                class="bg-white dark:bg-gray-800 md:bg-white/80 dark:md:bg-gray-900/80 backdrop-blur-xl border-b border-gray-200 dark:border-gray-700 md:border-gray-200/50 dark:md:border-gray-800/50 px-4 sm:px-6 py-3 flex items-center justify-between gap-2 sticky top-0 z-40">
+                class="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 md:border-gray-200/50 dark:md:border-gray-800/50 px-4 sm:px-6 py-3 flex items-center justify-between gap-2 sticky top-0 z-40">
                 <div class="flex items-center gap-2 md:gap-3">
                     <button type="button" id="btnOpenMobile" title="Menu"
                         class="md:hidden p-2 rounded-xl bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600 shadow-sm transition-all"><svg
@@ -448,7 +449,7 @@
                 </div>
             </div>
             @include('components.activity-broadcast')
-            <div class="p-4 sm:p-6 animate-fade-in">@yield('content')</div>
+            <div class="p-4 sm:p-6">@yield('content')</div>
         </main>
     </div>
 

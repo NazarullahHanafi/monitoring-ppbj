@@ -37,8 +37,12 @@ class PollingPerformanceTest extends TestCase
         $this->assertStringContainsString('window.setTimeout(load, 5000)', file_get_contents(public_path('assets/app/activity-broadcast.js')));
         $this->assertStringContainsString("typeof window._chatHideContext === 'function'", $appShell);
         $this->assertStringNotContainsString(' } hideCtx() }', $appShell);
-        $this->assertStringContainsString('type="text/plain" id="chatbot-runtime-source"', $chatbot);
-        $this->assertStringContainsString('}, 4200);', $chatbot);
+        $this->assertStringContainsString('assets/app/chatbot-loader.js', $chatbot);
+        $this->assertStringContainsString('data-runtime-url=', $chatbot);
+        $this->assertStringNotContainsString('chatbot-runtime-source', $chatbot);
+        $this->assertStringContainsString('}, 4200);', file_get_contents(public_path('assets/app/chatbot-loader.js')));
+        $this->assertStringContainsString('assets/app/chatbot.css', $layout);
+        $this->assertStringNotContainsString('p-4 sm:p-6 animate-fade-in', $layout);
         $this->assertStringNotContainsString('https://code.jquery.com', $layout);
         $this->assertStringNotContainsString('https://cdn.jsdelivr.net/npm/sweetalert2', $layout);
         $this->assertStringNotContainsString('https://cdn.jsdelivr.net/npm/select2', $layout);
@@ -318,6 +322,8 @@ class PollingPerformanceTest extends TestCase
 
         $response->assertOk();
         $this->assertCount(25, $response->viewData('ppbj')->items());
+        $this->assertStringNotContainsString('"status_tone":', $response->getContent());
+        $this->assertStringNotContainsString('"contract_end_short_label":', $response->getContent());
         $this->assertCount(
             3,
             $ppbjSelects,
@@ -363,6 +369,30 @@ class PollingPerformanceTest extends TestCase
             count($torprSelects),
             'Daftar TORPR tidak boleh memuat seluruh record ketika tabel membesar.'
         );
+        $countSql = collect($torprSelects)->first(fn ($sql) => str_contains($sql, 'count(*)'));
+        $this->assertNotNull($countSql);
+        $this->assertStringNotContainsString('join', $countSql, 'COUNT TORPR tidak memuat JOIN khusus tampilan.');
+    }
+
+    public function test_torpr_search_still_matches_general_registration_without_count_display_joins(): void
+    {
+        $user = User::factory()->create(['department' => 'operasional', 'role' => 'user']);
+        $torpr = Torpr::create([
+            'nomor_pr' => 'PERF/TORPR/001', 'tujuan_pengadaan' => 'Uji registrasi',
+            'tanggal_pr' => now()->toDateString(), 'jumlah_pr' => 1000000,
+            'created_by_user_id' => $user->id,
+        ]);
+        DB::table('ppbj')->insert([
+            'ppbj_no' => $torpr->nomor_pr,
+            'general_registration_number' => 'REG-PERFORMANCE-7654',
+            'general_registered_by_user_id' => $user->id,
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $response = $this->actingAs($user)->get(route('torpr.index', ['q' => 'PERFORMANCE-7654']));
+        $response->assertOk()->assertSee('REG-PERFORMANCE-7654');
+        $this->assertSame(1, $response->viewData('rows')->total());
+        $this->assertSame($torpr->id, $response->viewData('rows')->first()->id);
     }
 
     public function test_torpr_index_hydrates_only_the_latest_receipt_approval(): void

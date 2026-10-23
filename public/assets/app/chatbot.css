@@ -1,0 +1,199 @@
+@keyframes fadeIn {
+        from {
+            opacity: 0;
+        }
+
+        to {
+            opacity: 1;
+        }
+    }
+
+    .dark #chatbot-input {
+        background-color: #374151 !important;
+        /* Set background jadi gelap (gray-700) */
+        color: white !important;
+        /* Paksa teks jadi putih */
+        border-color: #4b5563 !important;
+        /* Warna border */
+    }
+
+    /* Placeholder di Dark Mode */
+    .dark #chatbot-input::placeholder {
+        color: #9ca3af !important;
+        /* Warna placeholder abu-abu */
+        opacity: 1;
+    }
+
+    /* Mode Terang (opsional, untuk konsistensi) */
+    #chatbot-input {
+        background-color: #f3f4f6 !important;
+        color: #1f2937 !important;
+    }
+
+    @keyframes slideUp {
+        from {
+            opacity: 0;
+            transform: translateY(20px);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    @keyframes bounce {
+
+        0%,
+        100% {
+            transform: translateY(0);
+        }
+
+        50% {
+            transform: translateY(-5px);
+        }
+    }
+
+    @keyframes pulseBadge {
+
+        0%,
+        100% {
+            transform: scale(1);
+        }
+
+        50% {
+            transform: scale(1.2);
+        }
+    }
+
+    #chatbot-toggle-btn.dragging {
+        cursor: grabbing !important;
+        transform: scale(1.1);
+        box-shadow: 0 15px 35px -5px rgba(0, 0, 0, 0.4);
+        transition: none;
+        /* Agar gerakan mengikuti mouse langsung */
+    }
+
+    #chatbot-msg-container::-webkit-scrollbar {
+        width: 6px;
+    }
+
+    #chatbot-msg-container::-webkit-scrollbar-track {
+        background: #f1f1f1;
+    }
+
+    #chatbot-msg-container::-webkit-scrollbar-thumb {
+        background: #c1c1c1;
+        border-radius: 10px;
+    }
+
+    .starter-btn {
+        padding: 12px 16px;
+        background: linear-gradient(90deg, #f0f9ff, #e0f2fe);
+        border: 1px solid #bae6fd;
+        border-radius: 12px;
+        color: #0369a1;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        text-align: left;
+        transition: all 0.2s;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    }
+
+    .starter-btn:hover {
+        background: linear-gradient(90deg, #e0f2fe, #bae6fd);
+        transform: translateY(-2px);
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+
+    /* ✅ NEW: Header themes per waktu */
+    .header-morning {
+        background: linear-gradient(90deg, #f59e0b, #fbbf24, #fcd34d) !important;
+    }
+
+    .header-noon {
+        background: linear-gradient(90deg, #0ea5e9, #38bdf8, #7dd3fc) !important;
+    }
+
+    .header-afternoon {
+        background: linear-gradient(90deg, #ea580c, #f97316, #fb923c) !important;
+    }
+
+    .header-evening {
+        background: linear-gradient(90deg, #7c3aed, #8b5cf6, #a78bfa) !important;
+    }
+
+    .header-night {
+        background: linear-gradient(90deg, #1e1b4b, #312e81, #4338ca) !important;
+    }
+
+    @media (max-width: 640px) {
+        #ppbj-chatbot-widget {
+            /* Ukuran harus pas dengan tombol agar tidak memakan tempat */
+            width: 65px;
+            height: 65px;
+            /* Posisi awal standby di mobile */
+            bottom: 20px;
+            right: 20px;
+            left: auto;
+            /* Penting: reset left agar tidak konflik */
+        }
+
+        #chatbot-toggle-btn {
+            position: absolute;
+            right: 0;
+            bottom: 0;
+        }
+
+        #chatbot-toggle-btn {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* Ganti bagian @media max-width: 640px yang lama dengan ini */
+        @media (max-width: 640px) {
+            #ppbj-chatbot-widget {
+                /* Ukuran harus pas dengan tombol agar tidak memakan tempat */
+                width: 65px;
+                height: 65px;
+                /* Posisi awal standby di mobile */
+                bottom: 20px;
+                right: 20px;
+                left: auto;
+                /* Penting: reset left agar tidak konflik */
+            }
+
+            /* Pastikan tombol mengisi penuh widget */
+            #chatbot-toggle-btn {
+                position: absolute;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                width: 100%;
+                height: 100%;
+            }
+
+            #chatbot-window-panel {
+                position: fixed;
+                bottom: 0;
+                right: 0;
+                left: 0;
+                width: 100%;
+                max-height: 80vh;
+                border-radius: 20px 20px 0 0;
+                transform: translateY(100%);
+                /* Awal tersembunyi */
+                transition: transform 0.3s ease-in-out;
+            }
+
+            #chatbot-window-panel.show {
+                transform: translateY(0);
+            }
+        }

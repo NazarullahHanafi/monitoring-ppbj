@@ -10,6 +10,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="icon" href="{{ asset('images/logo4.png') }}" type="image/x-icon">
+    <link rel="stylesheet" href="{{ asset('assets/app/chatbot.css') }}?v={{ filemtime(public_path('assets/app/chatbot.css')) }}">
     <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
 
     {{-- Set theme BEFORE paint — prevents flash --}}
