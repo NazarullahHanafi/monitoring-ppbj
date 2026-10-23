@@ -1,3 +1,24 @@
+.ppbj-filter-label {font-size:11px;font-weight:700;color:#475569;letter-spacing:.03em}
+.ppbj-money-panel,.ppbj-filter-footer,.ppbj-money-result {grid-column:1/-1}
+.ppbj-filter-help {font-size:11px;color:#64748b;line-height:1.5}
+.ppbj-filter-input {width:100%;min-height:42px;border:1px solid #cbd5e1;border-radius:10px;background:#fff;color:#0f172a;padding:9px 12px;font-size:13px}
+.ppbj-money-panel {display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:18px;padding:18px;border:1px solid #c7d2fe;border-radius:14px;background:linear-gradient(120deg,#eef2ff,#f0fdfa)}
+.ppbj-money-panel>div {display:flex;flex-direction:column;gap:7px}
+.ppbj-filter-footer {display:flex;align-items:center;justify-content:space-between;gap:14px}
+.ppbj-filter-submit,.ppbj-filter-reset {border-radius:10px;padding:10px 18px;font-size:13px;font-weight:700;white-space:nowrap}
+.ppbj-filter-submit {background:#2563eb;color:#fff}.ppbj-filter-reset {border:1px solid #cbd5e1;color:#334155;background:#fff}
+.ppbj-money-result {padding:12px 16px;border:1px solid #a7f3d0;background:#ecfdf5;color:#065f46;border-radius:10px;display:flex;gap:12px;flex-wrap:wrap;font-size:12px}
+.ppbj-filter-error {color:#be123c;font-size:12px}
+.dark .ppbj-filter-label {color:#e2e8f0}.dark .ppbj-filter-help {color:#cbd5e1}.dark .ppbj-filter-input {background:#111827;border-color:#475569;color:#f8fafc}
+.dark .ppbj-money-panel {background:linear-gradient(120deg,#172554,#113333);border-color:#475569}.dark .ppbj-money-result {background:#052e2b;border-color:#047857;color:#a7f3d0}.dark .ppbj-filter-reset {background:#1e293b;border-color:#475569;color:#f1f5f9}.dark .ppbj-filter-error {color:#fda4af}
+#ulala .select2-selection--multiple {min-height:42px;border:1px solid #cbd5e1;border-radius:10px;padding:4px;background:#fff}
+#ulala .select2-selection--multiple .select2-selection__choice {background:#e0e7ff;color:#312e81;border:1px solid #a5b4fc;border-radius:6px;font-size:12px}
+#ulala .select2-selection--multiple .select2-selection__choice__remove {color:#4338ca;border-color:#a5b4fc}
+.dark #ulala .select2-selection--multiple {background:#111827;border-color:#475569;color:#f1f5f9}
+.dark #ulala .select2-selection--multiple .select2-selection__choice {background:#312e81;color:#e0e7ff;border-color:#6366f1}
+.dark #ulala .select2-selection--multiple .select2-selection__choice__remove {color:#e0e7ff;border-color:#6366f1}
+.dark #ulala .select2-search__field {color:#f8fafc}
+@media(max-width:640px){.ppbj-money-panel{grid-template-columns:1fr}.ppbj-filter-footer{align-items:stretch;flex-direction:column}.ppbj-filter-footer>div{justify-content:flex-end}}
 mark.search-hl {
             background-color: #fef08a;
             color: #713f12;

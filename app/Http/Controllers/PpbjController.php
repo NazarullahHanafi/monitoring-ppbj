@@ -120,89 +120,11 @@ class PpbjController extends Controller
         // Search tetap mencakup semua field bisnis, tanpa scan kedua untuk label hasil.
         $searchContext = null;
 
+        $request->validate(['search' => 'nullable|string|max:255', 'amount' => 'nullable|string|max:150']);
+        $moneyCriteria = \App\Support\PpbjListFilters::money($request);
+        \App\Support\PpbjListFilters::apply($query, $request, fn ($part, $status) => $this->applyLiveSlaStatusFilter($part, $status));
         if ($request->filled('search')) {
-            $keyword = trim($request->search);
-            $likeKeyword = '%'.$keyword.'%';
-
-            $query->where(function ($q) use ($likeKeyword) {
-                $q->where('uraian', 'like', $likeKeyword)
-                    ->orWhere('ppbj_no', 'like', $likeKeyword)
-                    ->orWhere('awarding_sp', 'like', $likeKeyword)
-                    ->orWhere('sph', 'like', $likeKeyword)
-                    ->orWhere('spph_rfq_1', 'like', $likeKeyword)
-                    ->orWhere('do_no', 'like', $likeKeyword)  // No. DO / Delivery Order
-                    ->orWhere('bpg_no', 'like', $likeKeyword)  // No. BPG (Bukti Penerimaan Gudang)
-                    ->orWhere('bpb_no', 'like', $likeKeyword)  // No. BPB (Bukti Pengeluaran Barang)
-                    ->orWhere('no_invoice', 'like', $likeKeyword) // No. Invoice
-                    ->orWhere('general_registration_number', 'like', $likeKeyword); // No. Registrasi Umum
-            });
-
-            $searchContext = [
-                'keyword' => $keyword,
-                'matched_fields' => [],
-                'all_fields' => array_values($searchFieldMap),
-            ];
-        }
-
-        // ── Filter lain (tidak berubah) ────────────────────────────────────────
-        if ($request->filled('portofolio')) {
-            $query->where('portofolio', $request->portofolio);
-        }
-        if ($request->filled('buyer')) {
-            $query->where('buyer', $request->buyer);
-        }
-        if ($request->filled('penyedia_eksternal')) {
-            \App\Support\PpbjVendorFilter::apply($query, (string) $request->penyedia_eksternal);
-        }
-
-        if ($request->filled('general_registration')) {
-            match ($request->general_registration) {
-                'registered' => $query->whereNotNull('general_registration_number')
-                    ->where('general_registration_number', '!=', ''),
-                'unregistered' => $query->where(function ($q) {
-                    $q->whereNull('general_registration_number')
-                        ->orWhere('general_registration_number', '');
-                }),
-                default => null,
-            };
-        }
-
-        if ($request->filled('status_sla')) {
-            $this->applyLiveSlaStatusFilter($query, (string) $request->status_sla);
-        }
-
-        if ($request->filled('progress')) {
-            $progress = $request->progress;
-
-            switch ($progress) {
-                case '0':
-                    $query->where('progres', 0);
-                    break;
-
-                case '1-20':
-                    $query->whereBetween('progres', [1, 20]);
-                    break;
-
-                case '21-40':
-                    $query->whereBetween('progres', [21, 40]);
-                    break;
-
-                case '41-60':
-                    $query->whereBetween('progres', [41, 60]);
-                    break;
-
-                case '61-80':
-                    $query->whereBetween('progres', [61, 80]);
-                    break;
-
-                case '81-99':
-                    $query->whereBetween('progres', [81, 99]);
-                    break;
-
-                case '100':
-                    $query->where('progres', 100);  // ✅ DIPERBAIKI: dari where('100') ke where('progres', 100)
-                    break;
-            }
+            $searchContext = ['keyword' => trim($request->search), 'matched_fields' => [], 'all_fields' => array_values($searchFieldMap)];
         }
 
         if ($request->filled('date_type')) {
@@ -341,6 +263,7 @@ class PpbjController extends Controller
             'metodePengadaans',
             'penyediaEksternals',
             'filterPenyediaEksternals',
+            'moneyCriteria',
             'collaborationMentionCount',
             'searchContext'   // ← TAMBAHAN
         ));
@@ -1144,6 +1067,9 @@ class PpbjController extends Controller
     // =====================
     public function export(Request $request)
     {
+        $request->validate(['search' => 'nullable|string|max:255', 'amount' => 'nullable|string|max:150']);
+        // Validasi sebelum stream dimulai agar kesalahan input tidak merusak CSV.
+        \App\Support\PpbjListFilters::apply(DB::table('ppbj'), $request, fn ($part, $status) => $this->applyLiveSlaStatusFilter($part, $status));
         $filename = 'PPBJ_Export_'.now()->format('Ymd_His').'.csv';
 
         return response()->streamDownload(function () use ($request) {
@@ -1200,50 +1126,7 @@ class PpbjController extends Controller
             ]);
 
             $query = Ppbj::query();
-
-            if ($request->filled('uraian')) {
-                $keyword = trim($request->uraian);
-                $query->whereRaw('MATCH(ppbj_no, uraian) AGAINST(? IN BOOLEAN MODE)', ['*'.$keyword.'*']);
-            }
-            if ($request->filled('portofolio')) {
-                $query->where('portofolio', $request->portofolio);
-            }
-            if ($request->filled('buyer')) {
-                $query->where('buyer', $request->buyer);
-            }
-            if ($request->filled('penyedia_eksternal')) {
-                \App\Support\PpbjVendorFilter::apply($query, (string) $request->penyedia_eksternal);
-            }
-
-            if ($request->filled('status_sla')) {
-                $this->applyLiveSlaStatusFilter($query, (string) $request->status_sla);
-            }
-
-            if ($request->filled('progress')) {
-                switch ($request->progress) {
-                    case '0':
-                        $query->where('progres', 0);
-                        break;
-                    case '1-20':
-                        $query->whereBetween('progres', [1, 20]);
-                        break;
-                    case '21-40':
-                        $query->whereBetween('progres', [21, 40]);
-                        break;
-                    case '41-60':
-                        $query->whereBetween('progres', [41, 60]);
-                        break;
-                    case '61-80':
-                        $query->whereBetween('progres', [61, 80]);
-                        break;
-                    case '81-99':
-                        $query->whereBetween('progres', [81, 99]);
-                        break;
-                    case '100':
-                        $query->where('progres', 100);  // ✅ DIPERBAIKI
-                        break;
-                }
-            }
+            \App\Support\PpbjListFilters::apply($query, $request, fn ($part, $status) => $this->applyLiveSlaStatusFilter($part, $status));
 
             if ($request->filled('date_type')) {
                 $dateType = $request->date_type;
@@ -2410,6 +2293,9 @@ class PpbjController extends Controller
         $startDateSql = 'COALESCE(tgl_diserahkan, tgl_terima_pr, tgl_ppbj)';
         $targetSql = 'CASE WHEN COALESCE(total_sebelum_ppn, 0) <= 0 THEN 0 WHEN total_sebelum_ppn <= 50000000 THEN 10 ELSE 14 END';
         $remainingSql = "(($targetSql) - GREATEST(DATEDIFF(CURDATE(), $startDateSql), 0))";
+        if (DB::getDriverName() === 'sqlite') {
+            $remainingSql = "(($targetSql) - MAX(CAST(julianday(date('now')) - julianday($startDateSql) AS INTEGER), 0))";
+        }
 
         $applyIncomplete = static function ($builder) {
             $builder->where(function ($q) {

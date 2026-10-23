@@ -38,27 +38,22 @@
         </div>
     </div>
 
-    {{-- ================= FILTER (RESPONSIVE & MODERN) ================= --}}
-    <form method="GET" id="ulala"
-        class="bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 mb-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-4 items-start">
-
-        {{-- 1. Search --}}
+    @php
+        $filterGroups = [
+            'portofolio' => ['Portofolio', $portofolios->mapWithKeys(fn ($name) => [$name => $name])->all()],
+            'buyer' => ['Buyer', $buyers->mapWithKeys(fn ($name) => [$name => $name])->all()],
+            'penyedia_eksternal' => ['Penyedia', $filterPenyediaEksternals->mapWithKeys(fn ($name) => [$name => $name])->all()],
+            'status_sla' => ['Status SLA', array_combine(['ON TRACK', 'WARNING', 'JATUH TEMPO', 'OVERDUE', 'LENGKAP', 'BELUM DIHITUNG', 'CANCELLED'], ['ON TRACK', 'WARNING', 'JATUH TEMPO', 'OVERDUE', 'LENGKAP', 'BELUM DIHITUNG', 'CANCELLED'])],
+            'progress' => ['Progress', ['0' => '0%', '1-20' => '1–20%', '21-40' => '21–40%', '41-60' => '41–60%', '61-80' => '61–80%', '81-99' => '81–99%', '100' => '100%']],
+            'general_registration' => ['Registrasi Umum', ['registered' => 'Sudah Registrasi', 'unregistered' => 'Belum Registrasi']],
+        ];
+    @endphp
+    <form method="GET" id="ulala" class="ppbj-smart-filters bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 mb-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-4 items-start">
         <div class="lg:col-span-2 sm:col-span-2 flex flex-col gap-1">
-            <label class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Pencarian</label>
-            <div class="relative">
-                <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">🔍</div>
-                <input type="text" name="search" placeholder="Cari uraian, No. PPBJ, registrasi, SPH, DO, BPG, invoice..."
-                    value="{{ request('search') }}"
-                    class="pl-10 px-3 py-2 w-full border border-gray-300 dark:border-gray-600 rounded-lg
-                                           bg-white dark:bg-gray-700 text-gray-900 dark:text-white
-                                           placeholder-gray-400 dark:placeholder-gray-500
-                                           focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm transition-all">
-            </div>
-            <p class="text-[10px] text-gray-400 dark:text-gray-500 leading-tight">
-                Mencari di: Uraian · No. PPBJ · Registrasi Umum · SPH · Awarding/SP · SPPH/RFQ 1 · No. DO · No. BPG · No. BPB · No. Invoice
-            </p>
+            <label for="ppbjSearch" class="ppbj-filter-label">Pencarian</label>
+            <input id="ppbjSearch" name="search" value="{{ request('search') }}" maxlength="255" placeholder="Nomor PR, uraian, SP, invoice, atau 8 juta..." class="ppbj-filter-input">
+            <small class="ppbj-filter-help">Cari dokumen atau ketik nominal langsung, contoh: nilai SP 8,375 juta.</small>
         </div>
-
         {{-- 2. Filter Tanggal: Tipe --}}
         <div class="lg:col-span-1 sm:col-span-1 flex flex-col gap-1">
             <label class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Filter
@@ -115,153 +110,69 @@
             </div>
         </div>
 
-        {{-- 4. Portofolio (tetap pakai Select2) --}}
-        <div class="lg:col-span-1 sm:col-span-1 flex flex-col gap-1">
-            <label class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Portofolio</label>
-            <select name="portofolio"
-                class="select2-filter px-3 py-2 w-full border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm">
-                <option value="">Semua</option>
-                @foreach($portofolios as $p)
-                    <option value="{{ $p }}" @selected(request('portofolio') == $p)>{{ $p }}</option>
-                @endforeach
-            </select>
-        </div>
 
-        {{-- 5. Buyer (tetap pakai Select2) --}}
-        <div class="lg:col-span-1 sm:col-span-1 flex flex-col gap-1">
-            <label class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Buyer</label>
-            <select name="buyer"
-                class="select2-filter px-3 py-2 w-full border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm">
-                <option value="">Semua</option>
-                @foreach($buyers as $b)
-                    <option value="{{ $b }}" @selected(request('buyer') == $b)>{{ $b }}</option>
-                @endforeach
-            </select>
+        @foreach($filterGroups as $key => [$label, $options])
+            @php
+                $selected = \App\Support\PpbjListFilters::values(request(), $key);
+            @endphp
+            <div class="lg:col-span-2 flex flex-col gap-1">
+                <label for="filter_{{ $key }}" class="ppbj-filter-label">{{ $label }}</label>
+                <select id="filter_{{ $key }}" name="{{ $key }}[]" multiple data-placeholder="Semua {{ $label }}" class="select2-filter ppbj-filter-input">
+                    @foreach($options as $value => $text)
+                        <option value="{{ $value }}" @selected(in_array((string) $value, $selected, true))>{{ $text }}</option>
+                    @endforeach
+                </select>
+            </div>
+        @endforeach
+        <div class="ppbj-money-panel lg:col-span-7 sm:col-span-2">
+            <div>
+                <label for="ppbjAmount" class="ppbj-filter-label">Pencarian nominal cerdas</label>
+                <input id="ppbjAmount" name="amount" list="ppbjMoneySuggestions" value="{{ request('amount') }}" maxlength="150" autocomplete="off" placeholder="8 juta · 8,375 juta · minimal 8 miliar · 8–10 juta" class="ppbj-filter-input">
+                <datalist id="ppbjMoneySuggestions">
+                    @foreach(['8 juta', '8,375 juta', '8 miliar', '8 milyar', '800 ribu', 'minimal 8 juta', 'maksimal 8 miliar', 'sekitar 8 juta', '8–10 juta'] as $example)
+                        <option value="{{ $example }}"></option>
+                    @endforeach
+                </datalist>
+                <p id="ppbjMoneyPreview" class="ppbj-filter-help" aria-live="polite">Koma desimal: 8,375 juta = Rp8.375.000. Kosongkan untuk mencari semua nominal.</p>
+                @error('amount')<p class="ppbj-filter-error">{{ $message }}</p>@enderror
+            </div>
+            <div>
+                <label for="ppbjAmountFields" class="ppbj-filter-label">Cari pada nilai</label>
+                <select id="ppbjAmountFields" name="amount_fields[]" multiple class="select2-filter ppbj-filter-input" data-placeholder="Semua: PR, SP dan BPG">
+                    @foreach(['pr' => 'Nilai PR (sebelum PPN)', 'sp' => 'Nilai SP/SPK (alokasi per PR)', 'bpg' => 'Nilai BPG'] as $value => $label)
+                        <option value="{{ $value }}" @selected(in_array($value, \App\Support\PpbjListFilters::values(request(), 'amount_fields'), true))>{{ $label }}</option>
+                    @endforeach
+                </select>
+                <small class="ppbj-filter-help">Pilih satu atau beberapa kolom. Data invoice saat ini memiliki nomor dan tanggal, belum memiliki kolom nominal tersendiri.</small>
+            </div>
         </div>
-
-        {{-- 6. Status SLA --}}
-        <div class="lg:col-span-1 sm:col-span-1 flex flex-col gap-1">
-            <label class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Status</label>
-            <select name="status_sla" class="px-3 py-2 w-full border border-gray-300 dark:border-gray-600 rounded-lg 
-                       bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 
-                       focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm cursor-pointer
-                       appearance-none"
-                style="background-image:url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%236b7280%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E');background-position:right .7rem top 50%;background-size:.65rem;background-repeat:no-repeat">
-                <option value="">Semua</option>
-                <option value="ON TRACK" {{ request('status_sla') === 'ON TRACK' ? 'selected' : '' }}>ON TRACK</option>
-                <option value="WARNING" {{ request('status_sla') === 'WARNING' ? 'selected' : '' }}>WARNING</option>
-                <option value="JATUH TEMPO" {{ request('status_sla') === 'JATUH TEMPO' ? 'selected' : '' }}>JATUH TEMPO</option>
-                <option value="OVERDUE" {{ request('status_sla') === 'OVERDUE' ? 'selected' : '' }}>OVERDUE</option>
-                <option value="LENGKAP" {{ request('status_sla') === 'LENGKAP' ? 'selected' : '' }}>LENGKAP</option>
-                <option value="BELUM DIHITUNG" {{ request('status_sla') === 'BELUM DIHITUNG' ? 'selected' : '' }}>BELUM DIHITUNG</option>
-                <option value="CANCELLED" {{ request('status_sla') === 'CANCELLED' ? 'selected' : '' }}>CANCELLED</option>
-            </select>
+        <div class="lg:col-span-7 sm:col-span-2 ppbj-filter-footer">
+            <small class="ppbj-filter-help">Bisa pilih banyak. Dalam satu dropdown: salah satu cocok. Antar-dropdown: semua filter harus cocok.</small>
+            <div class="flex gap-2">
+                <a href="{{ route('ppbj.index') }}" class="ppbj-filter-reset">Reset</a>
+                <button type="submit" class="ppbj-filter-submit">Terapkan Filter</button>
+            </div>
         </div>
-
-        {{-- 7. Progress --}}
-        <div class="lg:col-span-2 sm:col-span-1 flex flex-col gap-1">
-            <label class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Progress</label>
-            <select name="progress" class="px-3 py-2 w-full border border-gray-300 dark:border-gray-600 rounded-lg 
-                   bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 
-                   focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm cursor-pointer
-                   appearance-none"
-                style="background-image:url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%236b7280%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E');background-position:right .7rem top 50%;background-size:.65rem;background-repeat:no-repeat">
-                <option value="">Semua Progress</option>
-                <option value="0" {{ request('progress') === '0' ? 'selected' : '' }}>0%</option>
-                <option value="1-20" {{ request('progress') === '1-20' ? 'selected' : '' }}>1% – 20%</option>
-                <option value="21-40" {{ request('progress') === '21-40' ? 'selected' : '' }}>21% – 40%</option>
-                <option value="41-60" {{ request('progress') === '41-60' ? 'selected' : '' }}>41% – 60%</option>
-                <option value="61-80" {{ request('progress') === '61-80' ? 'selected' : '' }}>61% – 80%</option>
-                <option value="81-99" {{ request('progress') === '81-99' ? 'selected' : '' }}>81% – 99%</option>
-                <option value="100" {{ request('progress') === '100' ? 'selected' : '' }}>100%</option>
-            </select>
-        </div>
-
-        {{-- 8. Penyedia (tetap pakai Select2 karena datanya banyak) --}}
-        <div class="lg:col-span-2 sm:col-span-1 flex flex-col gap-1">
-            <label class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Penyedia</label>
-            <select name="penyedia_eksternal"
-                class="select2-filter px-3 py-2 w-full border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm">
-                <option value="">Semua</option>
-                @foreach($filterPenyediaEksternals as $pe)
-                    <option value="{{ $pe }}" @selected(request('penyedia_eksternal') == $pe)>{{ $pe }}</option>
-                @endforeach
-            </select>
-        </div>
-
-        {{-- 9. Registrasi Umum --}}
-        <div class="lg:col-span-2 sm:col-span-1 flex flex-col gap-1">
-            <label class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Registrasi Umum</label>
-            <select name="general_registration" class="px-3 py-2 w-full border border-gray-300 dark:border-gray-600 rounded-lg
-                   bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100
-                   focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm cursor-pointer">
-                <option value="">Semua Registrasi</option>
-                <option value="registered" {{ request('general_registration') === 'registered' ? 'selected' : '' }}>Sudah Registrasi</option>
-                <option value="unregistered" {{ request('general_registration') === 'unregistered' ? 'selected' : '' }}>Belum Registrasi</option>
-            </select>
-            <p class="text-[10px] text-gray-400 dark:text-gray-500 leading-tight">
-                Data lama tanpa nomor tetap tampil sebagai strip.
-            </p>
-        </div>
-
-        {{-- 10. Tombol --}}
-        <div class="lg:col-span-1 sm:col-span-2 flex items-end gap-2 mt-1">
-            <button type="submit"
-                class="flex-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 font-semibold shadow-sm transition-all active:scale-95 flex items-center justify-center gap-2">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
-                </svg>
-                Terapkan Filter
-            </button>
-            <a href="{{ route('ppbj.index') }}"
-                class="px-4 py-2.5 rounded-lg bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600
-                                       text-gray-700 dark:text-gray-300 font-semibold hover:bg-gray-50 dark:hover:bg-gray-600 transition-all shadow-sm">
-                Reset
-            </a>
-        </div>
-
+        @if($moneyCriteria)
+            <div class="ppbj-money-result lg:col-span-7 sm:col-span-2" role="status">
+                <strong>{{ $moneyCriteria['label'] }}</strong>
+                <span>Dicari pada {{ implode(', ', array_map(fn ($field) => ['pr' => 'nilai PR', 'sp' => 'nilai SP/SPK', 'bpg' => 'nilai BPG'][$field], $moneyCriteria['fields'])) }}.</span>
+            </div>
+        @endif
     </form>
 
     @php
-        $progressLabels = [
-            '0' => '0%',
-            '1-20' => '1% – 20%',
-            '21-40' => '21% – 40%',
-            '41-60' => '41% – 60%',
-            '61-80' => '61% – 80%',
-            '81-99' => '81% – 99%',
-            '100' => '100%',
-        ];
-
         $activeFilters = [];
-
-        if (request('search'))
-            $activeFilters[] = ['label' => 'Cari', 'value' => '"' . request('search') . '"', 'param' => 'search'];
-        if (request('portofolio'))
-            $activeFilters[] = ['label' => 'Portofolio', 'value' => request('portofolio'), 'param' => 'portofolio'];
-        if (request('buyer'))
-            $activeFilters[] = ['label' => 'Buyer', 'value' => request('buyer'), 'param' => 'buyer'];
-        if (request('status_sla'))
-            $activeFilters[] = ['label' => 'Status', 'value' => request('status_sla'), 'param' => 'status_sla'];
-        if (request('progress'))
-            $activeFilters[] = ['label' => 'Progress', 'value' => $progressLabels[request('progress')] ?? request('progress'), 'param' => 'progress'];
-        if (request('penyedia_eksternal'))
-            $activeFilters[] = ['label' => 'Penyedia', 'value' => request('penyedia_eksternal'), 'param' => 'penyedia_eksternal'];
-        if (request('general_registration')) {
-            $activeFilters[] = [
-                'label' => 'Registrasi',
-                'value' => request('general_registration') === 'registered' ? 'Sudah Registrasi' : 'Belum Registrasi',
-                'param' => 'general_registration',
-            ];
+        if (request()->filled('search')) $activeFilters[] = ['label' => 'Cari', 'value' => request('search'), 'param' => 'search'];
+        foreach ($filterGroups as $key => [$label, $options]) {
+            $values = \App\Support\PpbjListFilters::values(request(), $key);
+            if ($values !== []) $activeFilters[] = ['label' => $label, 'value' => implode(', ', array_map(fn ($value) => $options[$value] ?? $value, $values)), 'param' => $key];
         }
+        if (request()->filled('amount')) $activeFilters[] = ['label' => 'Nominal', 'value' => request('amount'), 'param' => 'amount'];
         if (request('date_type') && (request('date_day') || request('date_month') || request('date_year') || request('date_start'))) {
             $dateVal = match (request('date_type')) {
-                'daily' => request('date_day'),
-                'monthly' => request('date_month'),
-                'yearly' => request('date_year'),
-                'range' => request('date_start') . ' s/d ' . request('date_end'),
-                default => '',
+                'daily' => request('date_day'), 'monthly' => request('date_month'), 'yearly' => request('date_year'),
+                'range' => request('date_start') . ' s/d ' . request('date_end'), default => '',
             };
             $activeFilters[] = ['label' => 'Tanggal', 'value' => $dateVal, 'param' => 'date_type'];
         }
@@ -283,6 +194,7 @@
                     $removeParams = request()->except(
                         match ($f['param']) {
                             'search' => ['search'],
+                            'amount' => ['amount', 'amount_fields'],
                             'portofolio' => ['portofolio'],
                             'buyer' => ['buyer'],
                             'status_sla' => ['status_sla'],
@@ -1281,7 +1193,7 @@
 @endsection
 
 @push('styles')
-    <link rel="stylesheet" href="{{ asset('assets/ppbj/ppbj.css') }}?v=20261020a">
+    <link rel="stylesheet" href="{{ asset('assets/ppbj/ppbj.css') }}?v=20261023b">
 @endpush
 
 @push('scripts')
@@ -1460,7 +1372,7 @@
             });
         };
     </script>
-    <script src="{{ asset('assets/ppbj/ppbj.js') }}?v=20261023a" defer></script>
+    <script src="{{ asset('assets/ppbj/ppbj.js') }}?v=20261023b" defer></script>
 
 @endpush
 

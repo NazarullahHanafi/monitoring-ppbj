@@ -1035,7 +1035,7 @@
                 const savedValues = {};
                 document.querySelectorAll('select.select2-filter').forEach(function (el) {
                     if (el.name) {
-                        savedValues[el.name] = el.value;
+                        savedValues[el.name] = el.multiple ? Array.from(el.selectedOptions, option => option.value) : el.value;
                     }
                 });
 
@@ -1049,15 +1049,17 @@
                 });
 
                 // ✅ STEP 3: Init Select2
-                jQuery('.select2-filter').select2({
+                jQuery('.select2-filter').each(function () { jQuery(this).select2({
                     width: '100%',
                     allowClear: true,
                     minimumResultsForSearch: 0,
+                    closeOnSelect: false,
+                    placeholder: this.getAttribute('data-placeholder') || 'Semua',
                     language: {
                         noResults: function () { return "Tidak ada hasil"; },
                         searching: function () { return "Mencari..."; }
                     }
-                });
+                }); });
 
                 // ✅ STEP 4: Restore value SETELAH init
                 Object.keys(savedValues).forEach(function (name) {
@@ -1143,6 +1145,27 @@
             document.addEventListener('DOMContentLoaded', () => {
                 toggleDateInputs();
                 initSelect2Filter();
+                const moneyInput = document.getElementById('ppbjAmount');
+                const suggestions = document.getElementById('ppbjMoneySuggestions');
+                const preview = document.getElementById('ppbjMoneyPreview');
+                moneyInput?.addEventListener('input', () => {
+                    const text = moneyInput.value.trim();
+                    const number = text.match(/^(\d+(?:[.,]\d+)?)\s*$/)?.[1];
+                    if (number && suggestions) {
+                        const values = [`${number} juta`, `${number} miliar`, `${number} milyar`, `${number} ribu`, `minimal ${number} juta`, `maksimal ${number} juta`, `sekitar ${number} juta`];
+                        suggestions.replaceChildren(...values.map(value => new Option(value, value)));
+                    }
+                    const match = text.toLowerCase().match(/^(?:rp\s*)?(\d+(?:[.,]\d+)?)\s*(juta|jt|miliar|milyar|ribu|rb|triliun)$/);
+                    if (preview) {
+                        if (match) {
+                            const unit = {juta:1e6,jt:1e6,miliar:1e9,milyar:1e9,ribu:1e3,rb:1e3,triliun:1e12}[match[2]];
+                            const value = Number(match[1].replace(',', '.')) * unit;
+                            preview.textContent = `Nominal: ${new Intl.NumberFormat('id-ID', {style:'currency',currency:'IDR',maximumFractionDigits:2}).format(value)}`;
+                        } else {
+                            preview.textContent = 'Contoh: 8,375 juta = Rp8.375.000; minimal 8 juta; sekitar 8 juta; 8–10 juta.';
+                        }
+                    }
+                });
 
                 // Cleanup: hapus parameter _t dari URL setelah reload
                 const url = new URL(window.location.href);
