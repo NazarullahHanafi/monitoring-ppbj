@@ -25,6 +25,9 @@ class Spph extends Model
 
     protected static function booted(): void
     {
+        static::saved(fn () => \App\Support\PpbjVendorFilter::forget());
+        static::deleted(fn () => \App\Support\PpbjVendorFilter::forget());
+        static::restored(fn () => \App\Support\PpbjVendorFilter::forget());
         static::deleting(function (Spph $spph) {
             if ($spph->isForceDeleting()) {
                 $spph->ppbjs()->detach();

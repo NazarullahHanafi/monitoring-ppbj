@@ -10,4 +10,10 @@ class MasterPenyediaEksternal extends Model
     public $timestamps = false;
 
     protected $fillable = ['nama'];
+
+    protected static function booted(): void
+    {
+        static::saved(fn () => \App\Support\PpbjVendorFilter::forget());
+        static::deleted(fn () => \App\Support\PpbjVendorFilter::forget());
+    }
 }

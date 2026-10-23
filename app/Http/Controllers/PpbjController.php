@@ -152,7 +152,7 @@ class PpbjController extends Controller
             $query->where('buyer', $request->buyer);
         }
         if ($request->filled('penyedia_eksternal')) {
-            $query->where('penyedia_eksternal', $request->penyedia_eksternal);
+            \App\Support\PpbjVendorFilter::apply($query, (string) $request->penyedia_eksternal);
         }
 
         if ($request->filled('general_registration')) {
@@ -332,6 +332,7 @@ class PpbjController extends Controller
         $buyers = $masterData['master_buyers'];
         $metodePengadaans = $masterData['master_metode_pengadaan'];
         $penyediaEksternals = $masterData['master_penyedia_eksternal'];
+        $filterPenyediaEksternals = \App\Support\PpbjVendorFilter::options();
 
         return view('ppbj.index', compact(
             'ppbj',
@@ -339,6 +340,7 @@ class PpbjController extends Controller
             'buyers',
             'metodePengadaans',
             'penyediaEksternals',
+            'filterPenyediaEksternals',
             'collaborationMentionCount',
             'searchContext'   // ← TAMBAHAN
         ));
@@ -1210,7 +1212,7 @@ class PpbjController extends Controller
                 $query->where('buyer', $request->buyer);
             }
             if ($request->filled('penyedia_eksternal')) {
-                $query->where('penyedia_eksternal', $request->penyedia_eksternal);
+                \App\Support\PpbjVendorFilter::apply($query, (string) $request->penyedia_eksternal);
             }
 
             if ($request->filled('status_sla')) {

@@ -55,6 +55,9 @@ class Sp extends Model
 
     protected static function booted(): void
     {
+        static::saved(fn () => \App\Support\PpbjVendorFilter::forget());
+        static::deleted(fn () => \App\Support\PpbjVendorFilter::forget());
+        static::restored(fn () => \App\Support\PpbjVendorFilter::forget());
         static::saving(function (Sp $sp) {
             $nilaiSp = (float) ($sp->nilai_sp ?? 0);
 

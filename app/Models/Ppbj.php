@@ -15,6 +15,13 @@ class Ppbj extends Model
 
     protected static function booted()
     {
+        static::saved(function (Ppbj $ppbj) {
+            if ($ppbj->wasChanged('penyedia_eksternal') || $ppbj->wasRecentlyCreated) {
+                \App\Support\PpbjVendorFilter::forget();
+            }
+        });
+        static::deleted(fn () => \App\Support\PpbjVendorFilter::forget());
+
         static::creating(function ($ppbj) {
             $ppbj->applySlaCalculation();
             $ppbj->prepareDoAudit(null, null);

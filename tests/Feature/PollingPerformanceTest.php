@@ -195,7 +195,7 @@ class PollingPerformanceTest extends TestCase
             ->assertOk()
             ->assertSee('Management PPBJ');
 
-        $this->assertCount(2, $ppbjSelects, 'Pencarian cukup memakai query count dan data pagination.');
+        $this->assertCount(3, $ppbjSelects, 'Cache dingin: count, halaman, dan satu query daftar penyedia yang di-cache.');
         $this->assertFalse(
             collect($ppbjSelects)->contains(fn ($sql) => str_contains($sql, 'max(case when')),
             'Pencarian tidak boleh menjalankan aggregate full-table scan tambahan.'
@@ -319,10 +319,13 @@ class PollingPerformanceTest extends TestCase
         $response->assertOk();
         $this->assertCount(25, $response->viewData('ppbj')->items());
         $this->assertCount(
-            2,
+            3,
             $ppbjSelects,
-            'Dua ribu data tetap cukup memakai query count dan satu query halaman.'
+            'Dua ribu data tetap memakai count, halaman, dan satu query opsi penyedia yang di-cache.'
         );
+        $ppbjSelects = [];
+        $this->get(route('ppbj.index', ['per_page' => 25]))->assertOk();
+        $this->assertCount(2, $ppbjSelects, 'Cache hangat hanya menjalankan count dan halaman PPBJ.');
     }
 
     public function test_torpr_index_only_hydrates_current_page_with_thousands_of_rows(): void

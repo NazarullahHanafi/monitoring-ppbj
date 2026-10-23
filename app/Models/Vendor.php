@@ -33,6 +33,7 @@ class Vendor extends Model
     protected static function booted(): void
     {
         $forget = function () {
+            \App\Support\PpbjVendorFilter::forget();
             Cache::forget('vendors:active');
             Cache::forget('vendor:stats');
         };
