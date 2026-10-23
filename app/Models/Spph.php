@@ -42,6 +42,11 @@ class Spph extends Model
             ->all();
     }
 
+    public function getVendorSummaryAttribute(): string
+    {
+        return implode('; ', $this->print_vendor_names);
+    }
+
     /**
      * Generate next SPPH number atomically inside a transaction.
      * Format: NNN/PKU-{ROMAN}/{YEAR}

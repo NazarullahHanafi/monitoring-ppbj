@@ -1840,7 +1840,7 @@ class SpController extends Controller
         if (! array_key_exists($cacheKey, $this->activeSpphVendorCache)) {
             $this->activeSpphVendorCache[$cacheKey] = Spph::query()
                 ->where('nomor_spph', $spphNo)
-                ->value('nama_vendor');
+                ->first(['nama_vendor', 'vendor_names'])?->vendor_summary;
         }
 
         return $this->activeSpphVendorCache[$cacheKey];

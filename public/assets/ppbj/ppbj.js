@@ -1843,7 +1843,12 @@
                 setTimeout(() => {
                     initSelect2Modal();
                     ['portofolio', 'buyer', 'metode_pengadaan', 'penyedia_eksternal'].forEach(f => {
-                        $(`#${f}`).val(d[f] ?? '').trigger('change');
+                        const select = document.getElementById(f);
+                        const value = String(d[f] ?? '');
+                        if (select && value && !Array.from(select.options).some(option => option.value === value)) {
+                            select.add(new Option(value, value));
+                        }
+                        $(select).val(value).trigger('change');
                     });
                 }, 50);
             };

@@ -242,6 +242,51 @@ class SpLifecycleAndAllocationTest extends TestCase
         ]);
     }
 
+    public function test_multi_vendor_spph_becomes_final_sp_vendor_and_survives_later_edits(): void
+    {
+        $user = User::factory()->create(['department' => 'umum', 'role' => 'superadmin']);
+        $first = $this->ppbj('PKB/PR-26/CON/9141', 10_000_000);
+        $second = $this->ppbj('PKB/PR-26/CON/9142', 10_000_000);
+        $numbers = [$first->ppbj_no, $second->ppbj_no];
+        // Daftar panjang harus disimpan utuh, tidak dipotong batas VARCHAR lama.
+        $vendors = ['PT '.str_repeat('A', 100), 'PT '.str_repeat('B', 100), 'Vendor Final'];
+        $spphPayload = [
+            'nomor_spph' => '301/PKU-X/SPPH/2026', 'tanggal' => '2026-10-20',
+            'nomor_pr_type' => 'ppbj', 'nomor_prs' => $numbers,
+            'vendor_names' => $vendors, 'deskripsi_pengadaan' => 'Calon vendor gabungan', 'pic' => $user->name,
+        ];
+        $this->actingAs($user)->post(route('spph.store'), $spphPayload)->assertRedirect(route('spph.index'));
+        foreach ([$first, $second] as $ppbj) {
+            $this->assertSame(implode('; ', $vendors), $ppbj->fresh()->penyedia_eksternal);
+        }
+        $spPayload = [
+            'nomor_sp' => '301/PKU-X/SP/2026', 'tanggal_sp' => '2026-10-20', 'nilai_sp' => 18_000_000,
+            'nomor_pr_type' => 'ppbj', 'nomor_prs' => $numbers, 'nama_vendor' => 'Vendor Final',
+            'deskripsi_pengadaan' => 'Pemenang dipilih', 'pic' => $user->name,
+        ];
+        $this->actingAs($user)->post(route('sp.store'), $spPayload)->assertRedirect(route('sp.index'));
+        foreach ([$first, $second] as $ppbj) {
+            $this->assertSame('Vendor Final', $ppbj->fresh()->penyedia_eksternal);
+        }
+        $spph = Spph::where('nomor_spph', $spphPayload['nomor_spph'])->firstOrFail();
+        $spphPayload['vendor_names'][] = 'Vendor Tambahan';
+        $this->actingAs($user)->put(route('spph.update', $spph), $spphPayload)->assertRedirect(route('spph.index'));
+        foreach ([$first, $second] as $ppbj) {
+            $this->assertSame('Vendor Final', $ppbj->fresh()->penyedia_eksternal);
+        }
+        // Form PPBJ yang dibuka sebelum SP tersimpan dapat mengirim vendor kosong.
+        $this->actingAs($user)->putJson(route('ppbj.update', $first->id), [
+            'ppbj_no' => $first->ppbj_no, 'uraian' => $first->uraian, 'penyedia_eksternal' => null,
+        ])->assertOk();
+        $this->assertSame('Vendor Final', $first->fresh()->penyedia_eksternal);
+        $sp = Sp::where('nomor_sp', $spPayload['nomor_sp'])->firstOrFail();
+        $spPayload['nama_vendor'] = 'Vendor Tambahan';
+        $this->actingAs($user)->put(route('sp.update', $sp), $spPayload)->assertRedirect(route('sp.index'));
+        foreach ([$first, $second] as $ppbj) {
+            $this->assertSame('Vendor Tambahan', $ppbj->fresh()->penyedia_eksternal);
+        }
+    }
+
     private function ppbj(string $number, float $value): Ppbj
     {
         return Ppbj::create([

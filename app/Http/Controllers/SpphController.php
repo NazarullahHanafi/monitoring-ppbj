@@ -481,7 +481,7 @@ class SpphController extends Controller
                 $this->syncItems($spph, $request->input('items', []));
 
                 if ($nomorPrType === 'ppbj' && $ppbjRecords->isNotEmpty()) {
-                    $this->syncSpphPpbjs($spph, $ppbjRecords, $vendorName);
+                    $this->syncSpphPpbjs($spph, $ppbjRecords);
 
                     $journeyMessage = count($ppbjNumbers) > 1
                         ? "Umum membuat SPPH gabungan {$spph->nomor_spph} untuk ".count($ppbjNumbers).' PR/PPBJ.'
@@ -571,9 +571,10 @@ class SpphController extends Controller
         $nomorPrType = $request->nomor_pr_type;
         $oldNomorPr = $spph->nomor_pr;
         $oldVendorName = $spph->nama_vendor;
+        $oldVendorSummary = $spph->vendor_summary;
 
         try {
-            return DB::transaction(function () use ($request, $spph, $nomorPr, $nomorPrType, $oldVendorName, $ppbjNumbers) {
+            return DB::transaction(function () use ($request, $spph, $nomorPr, $nomorPrType, $oldVendorName, $oldVendorSummary, $ppbjNumbers) {
                 $newPpbjs = collect();
                 $oldDocumentNumber = $spph->nomor_spph;
                 $oldPpbjs = Ppbj::where('spph_rfq_1', $oldDocumentNumber)->lockForUpdate()->get();
@@ -607,14 +608,14 @@ class SpphController extends Controller
                 foreach ($oldPpbjs->whereNotIn('id', $newIds) as $oldPpbj) {
                     $oldPpbj->spph_rfq_1 = null;
                     $oldPpbj->tgl_spph = null;
-                    if (trim((string) $oldPpbj->penyedia_eksternal) === trim((string) $oldVendorName)) {
+                    if (in_array(trim((string) $oldPpbj->penyedia_eksternal), [$oldVendorName, $oldVendorSummary], true)) {
                         $oldPpbj->penyedia_eksternal = $this->activeSpVendorForPpbj($oldPpbj);
                     }
                     $oldPpbj->save();
                 }
 
                 if ($nomorPrType === 'ppbj' && $newPpbjs->isNotEmpty()) {
-                    $this->syncSpphPpbjs($spph, $newPpbjs, $vendorName);
+                    $this->syncSpphPpbjs($spph, $newPpbjs);
                 } else {
                     $spph->ppbjs()->sync([]);
                 }
@@ -841,7 +842,7 @@ class SpphController extends Controller
             foreach ($lockedPpbjs as $ppbj) {
                 $ppbj->spph_rfq_1 = null;
                 $ppbj->tgl_spph = null;
-                if (trim((string) $ppbj->penyedia_eksternal) === trim((string) $spph->nama_vendor)) {
+                if (in_array(trim((string) $ppbj->penyedia_eksternal), [$spph->nama_vendor, $spph->vendor_summary], true)) {
                     $ppbj->penyedia_eksternal = $this->activeSpVendorForPpbj($ppbj);
                 }
                 $ppbj->save();
@@ -967,9 +968,10 @@ class SpphController extends Controller
         return null;
     }
 
-    private function syncSpphPpbjs(Spph $spph, $records, string $vendorName): void
+    private function syncSpphPpbjs(Spph $spph, $records): void
     {
         $pivot = [];
+        $vendorName = $spph->vendor_summary;
 
         foreach ($records->values() as $index => $ppbj) {
             $ppbj->spph_rfq_1 = $spph->nomor_spph;

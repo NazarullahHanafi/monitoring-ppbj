@@ -832,7 +832,22 @@ class PpbjController extends Controller
 
         try {
             $data = $request->only(Ppbj::manualFields());
-            $ppbj->update($data);
+            DB::transaction(function () use ($id, $data): void {
+                $record = Ppbj::whereKey($id)->lockForUpdate()->firstOrFail();
+                // Dokumen pengadaan menjadi sumber vendor; form lama tidak boleh
+                // mengosongkan vendor yang baru disinkronkan oleh SP/SPPH.
+                $vendor = filled($record->awarding_sp)
+                    ? \App\Models\Sp::where('nomor_sp', $record->awarding_sp)->value('nama_vendor')
+                    : null;
+                if (blank($vendor) && filled($record->spph_rfq_1)) {
+                    $vendor = \App\Models\Spph::where('nomor_spph', $record->spph_rfq_1)
+                        ->first(['nama_vendor', 'vendor_names'])?->vendor_summary;
+                }
+                if (filled($vendor)) {
+                    $data['penyedia_eksternal'] = $vendor;
+                }
+                $record->update($data);
+            }, 3);
         } catch (QueryException $e) {
             return response()->json([
                 'message' => 'No PPBJ sudah dipakai oleh data lain. Silakan refresh halaman dan cek data terbaru.',
@@ -1881,7 +1896,7 @@ class PpbjController extends Controller
             'tgl_sph' => ['nullable', 'max:60'],
             'awarding_sp' => ['nullable', 'string', 'max:255'],
             'tgl_awarding_sp' => ['nullable', 'max:60'],
-            'penyedia_eksternal' => ['nullable', 'string', 'max:255'],
+            'penyedia_eksternal' => ['nullable', 'string', 'max:5200'],
             'tgl_spk' => ['nullable', 'max:60'],
             'nilai_sp_spk' => ['nullable', 'max:60'],
             'promised_date' => ['nullable', 'max:60'],

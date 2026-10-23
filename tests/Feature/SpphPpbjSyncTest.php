@@ -121,7 +121,7 @@ class SpphPpbjSyncTest extends TestCase
         $this->assertDatabaseHas('ppbj', [
             'ppbj_no' => 'PKB/PR-26/CON/0901',
             'spph_rfq_1' => '090/PKU-VI/SPPH/2026',
-            'penyedia_eksternal' => 'Vendor Audit A',
+            'penyedia_eksternal' => 'Vendor Audit A; Vendor Audit B',
         ]);
     }
 
