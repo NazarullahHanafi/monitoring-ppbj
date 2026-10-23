@@ -14,10 +14,12 @@
 #ulala .select2-selection--multiple {min-height:42px;border:1px solid #cbd5e1;border-radius:10px;padding:4px;background:#fff}
 #ulala .select2-selection--multiple .select2-selection__choice {background:#e0e7ff;color:#312e81;border:1px solid #a5b4fc;border-radius:6px;font-size:12px}
 #ulala .select2-selection--multiple .select2-selection__choice__remove {color:#4338ca;border-color:#a5b4fc}
-.dark #ulala .select2-selection--multiple {background:#111827;border-color:#475569;color:#f1f5f9}
+.dark #ulala .select2-selection--multiple {background:#111827!important;border-color:#475569!important;color:#f1f5f9!important}
 .dark #ulala .select2-selection--multiple .select2-selection__choice {background:#312e81;color:#e0e7ff;border-color:#6366f1}
 .dark #ulala .select2-selection--multiple .select2-selection__choice__remove {color:#e0e7ff;border-color:#6366f1}
-.dark #ulala .select2-search__field {color:#f8fafc}
+.dark #ulala .select2-search__field {color:#f8fafc!important}
+.dark #ulala .select2-search__field::placeholder {color:#94a3b8!important;opacity:1}
+.dark #ulala .select2-selection__clear {color:#e2e8f0!important}
 @media(max-width:640px){.ppbj-money-panel{grid-template-columns:1fr}.ppbj-filter-footer{align-items:stretch;flex-direction:column}.ppbj-filter-footer>div{justify-content:flex-end}}
 mark.search-hl {
             background-color: #fef08a;
