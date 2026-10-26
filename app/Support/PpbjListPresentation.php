@@ -3,13 +3,49 @@
 namespace App\Support;
 
 use App\Models\Ppbj;
+use Carbon\Carbon;
+use Illuminate\Support\Arr;
+use Illuminate\Support\Collection;
 
-/** A request-local snapshot shared by the list and its detail/edit popup. */
+/** Calculated labels only are cached; transaction data stays fresh on every request. */
 final class PpbjListPresentation
 {
+    /** @return Collection<int, array<string, mixed>> */
+    public static function forPage(Collection $rows): Collection
+    {
+        $keys = [];
+        $loaders = [];
+        $context = [now()->toDateString(), config('app.timezone'), Carbon::getLocale()];
+
+        foreach ($rows as $row) {
+            // Names and mention counts are request/user-specific, never shared in cache.
+            $attributes = Arr::except($row->getAttributes(), [
+                'cancelled_by_name', 'cancel_verified_by_name', 'goods_arrived_by_name',
+                'goods_confirmed_by_name', 'general_registered_by_name', 'do_updated_by_name',
+                'collaboration_note_count', 'collaboration_unread_count',
+            ]);
+            ksort($attributes);
+            $key = 'ppbj:list-labels:v1:'.hash('sha256', serialize([$context, $attributes]));
+            $keys[$row->id] = $key;
+            $loaders[$key] = fn () => self::calculated($row);
+        }
+
+        // One batch read for the active page; untouched rows reuse their own snapshot.
+        // The fingerprint also detects bulk SQL imports that bypass model events.
+        $labels = CacheBatch::remember($loaders, 300);
+
+        return $rows->keyBy('id')->map(
+            fn (Ppbj $row) => array_replace($row->toArray(), $labels[$keys[$row->id]])
+        );
+    }
+
     public static function make(Ppbj $ppbj): array
     {
-        $data = $ppbj->toArray();
+        return array_replace($ppbj->toArray(), self::calculated($ppbj));
+    }
+
+    private static function calculated(Ppbj $ppbj): array
+    {
         $start = $ppbj->contractStartDate();
         $end = $ppbj->contractEndDate();
         $handover = $ppbj->handoverDate();
@@ -17,7 +53,7 @@ final class PpbjListPresentation
         $status = $ppbj->status_sla;
         $contractStatus = $ppbj->contractStatusLabel();
 
-        return array_replace($data, [
+        return [
             'target_sla_hari' => $ppbj->slaTargetDays(),
             'status_sla' => $status,
             'sla_is_complete' => $ppbj->isSlaComplete(),
@@ -59,6 +95,6 @@ final class PpbjListPresentation
             'handover_deviation_days' => $ppbj->handoverDeviationDays(),
             'handover_performance_label' => $ppbj->handoverPerformanceLabel(),
             'general_registered_at' => $ppbj->general_registered_at?->locale('id')->translatedFormat('d F Y H:i'),
-        ]);
+        ];
     }
 }

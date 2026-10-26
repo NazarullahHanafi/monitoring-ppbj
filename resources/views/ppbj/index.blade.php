@@ -341,10 +341,8 @@
     @endphp
 
     @php
-        // Reuse one snapshot for the table and popup; no second SLA calculation in Blade.
-        $ppbjJsonData = $ppbj->getCollection()->keyBy('id')->map(
-            fn (\App\Models\Ppbj $item) => \App\Support\PpbjListPresentation::make($item)
-        );
+        // Reuse batched cached labels for the table and popup, with fresh row data.
+        $ppbjJsonData = \App\Support\PpbjListPresentation::forPage($ppbj->getCollection());
     @endphp
 
     {{-- ================= TABLE (RESPONSIVE) ================= --}}

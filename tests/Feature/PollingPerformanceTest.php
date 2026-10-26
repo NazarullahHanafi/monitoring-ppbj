@@ -18,6 +18,18 @@ class PollingPerformanceTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_torpr_and_ppbj_can_share_warm_portfolio_cache_between_roles(): void
+    {
+        \App\Models\MasterPortofolio::create(['nama' => 'Shared Portfolio']);
+        $operational = User::factory()->create(['department' => 'operasional', 'role' => 'user']);
+        $general = User::factory()->create(['department' => 'umum', 'role' => 'user']);
+
+        $this->actingAs($operational)->get(route('torpr.index'))->assertOk()->assertSee('Shared Portfolio');
+        $this->assertIsArray(Cache::get('master_portofolios'));
+        $this->actingAs($general)->get(route('ppbj.index'))->assertOk()->assertSee('Shared Portfolio');
+        $this->actingAs($operational)->get(route('torpr.index'))->assertOk();
+    }
+
     public function test_ppbj_opens_with_shared_master_caches_populated_as_arrays(): void
     {
         $user = User::factory()->create(['department' => 'umum', 'role' => 'user']);
