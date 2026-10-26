@@ -10,12 +10,36 @@ use App\Models\TorprEditRequest;
 use App\Models\User;
 use App\Models\Vendor;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 class PollingPerformanceTest extends TestCase
 {
     use RefreshDatabase;
+
+    public function test_ppbj_opens_with_shared_master_caches_populated_as_arrays(): void
+    {
+        $user = User::factory()->create(['department' => 'umum', 'role' => 'user']);
+        foreach ([
+            'master_portofolios' => ['Portfolio cached by TORPR'],
+            'master_buyers' => ['Buyer cached'],
+            'master_metode_pengadaan' => ['Metode cached'],
+            'master_penyedia_eksternal' => ['Penyedia cached'],
+        ] as $key => $names) {
+            Cache::put($key, $names, 3600);
+        }
+
+        $queries = [];
+        DB::listen(function ($query) use (&$queries) {
+            $queries[] = strtolower($query->sql);
+        });
+
+        $response = $this->actingAs($user)->get(route('ppbj.index'));
+        $response->assertOk()->assertSee('Portfolio cached by TORPR')->assertSee('Buyer cached');
+        $this->assertInstanceOf(\Illuminate\Support\Collection::class, $response->viewData('portofolios'));
+        $this->assertFalse(collect($queries)->contains(fn ($sql) => str_contains($sql, 'from "master_portofolio"')));
+    }
 
     public function test_shared_assets_are_loaded_once_and_layout_css_is_browser_cacheable(): void
     {

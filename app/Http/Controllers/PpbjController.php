@@ -250,10 +250,12 @@ class PpbjController extends Controller
             'master_penyedia_eksternal' => fn () => MasterPenyediaEksternal::orderBy('nama')->pluck('nama'),
         ], 3600);
 
-        $portofolios = $masterData['master_portofolios'];
-        $buyers = $masterData['master_buyers'];
-        $metodePengadaans = $masterData['master_metode_pengadaan'];
-        $penyediaEksternals = $masterData['master_penyedia_eksternal'];
+        // TORPR shares these cache keys and can populate them as plain arrays.
+        // Normalize at the consumer boundary, including already-warm legacy caches.
+        $portofolios = collect($masterData['master_portofolios']);
+        $buyers = collect($masterData['master_buyers']);
+        $metodePengadaans = collect($masterData['master_metode_pengadaan']);
+        $penyediaEksternals = collect($masterData['master_penyedia_eksternal']);
         $filterPenyediaEksternals = \App\Support\PpbjVendorFilter::options();
 
         return view('ppbj.index', compact(
