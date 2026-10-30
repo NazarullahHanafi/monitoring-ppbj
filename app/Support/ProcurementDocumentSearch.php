@@ -119,12 +119,20 @@ class ProcurementDocumentSearch
             })->select($key)->selectRaw('MIN(nama_barang) AS matched_item')->groupBy($key)->get();
         $hints = [];
         foreach ($rows as $row) {
-            $plain = preg_replace('/\s+/u', ' ', html_entity_decode(strip_tags($row->matched_item), ENT_QUOTES | ENT_HTML5, 'UTF-8')) ?? '';
+            // Keep paragraph/list/line boundaries readable after removing rich-text tags.
+            $markup = preg_replace('/<\/?(?:p|div|li|tr|td|h[1-6]|br)\b[^>]*>/iu', ' ', $row->matched_item) ?? '';
+            $plain = trim(preg_replace('/\s+/u', ' ', html_entity_decode(strip_tags($markup), ENT_QUOTES | ENT_HTML5, 'UTF-8')) ?? '');
             $start = 0;
             foreach ($tokens as $token) {
                 $position = mb_stripos($plain, $token);
                 if ($position !== false) {
                     $start = max(0, $position - 45);
+                    if ($start > 0) {
+                        $wordBoundary = mb_strpos($plain, ' ', $start);
+                        if ($wordBoundary !== false && $wordBoundary < $position) {
+                            $start = $wordBoundary + 1;
+                        }
+                    }
                     break;
                 }
             }

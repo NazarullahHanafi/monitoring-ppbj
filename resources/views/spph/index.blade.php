@@ -1002,7 +1002,7 @@
             'printMasterUrl' => route('sp-master-options.index', ['type' => 'penandatangan_sci']),
             'lastId' => $spphs->count() > 0 ? $spphs->max('id') : 0,
             'firstPage' => $spphs->onFirstPage(),
-            'hasFilter' => (bool) (($search ?? '') || ($pic ?? '') || ($vendorFilter ?? '') || ($dari ?? '') || ($sampai ?? '')),
+            'hasFilter' => (bool) ((($search ?? '') !== '') || ($pic ?? '') || ($vendorFilter ?? '') || ($dari ?? '') || ($sampai ?? '')),
             'csrfToken' => csrf_token(),
         ];
     @endphp

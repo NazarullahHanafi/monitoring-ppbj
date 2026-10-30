@@ -1697,7 +1697,7 @@
             'oracleUrl' => $oracleSpUrl,
             'lastId' => $sps->count() > 0 ? $sps->max('id') : 0,
             'firstPage' => $sps->onFirstPage(),
-            'hasFilter' => (bool) (($search ?? '') || ($pic ?? '') || ($dari ?? '') || ($sampai ?? '') || $oracleMode),
+            'hasFilter' => (bool) ((($search ?? '') !== '') || ($pic ?? '') || ($dari ?? '') || ($sampai ?? '') || $oracleMode),
             'csrfToken' => csrf_token(),
         ];
     @endphp

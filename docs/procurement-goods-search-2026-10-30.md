@@ -15,3 +15,7 @@
 `ProcurementDocumentSearchTest`: nama item bertag HTML, kata terbalik, PR gabungan kedua, referensi lama, filter/mode/Sampah, kesamaan ekspor dan daftar, wildcard literal, injeksi SQL, kueri cuplikan terbatas, serta input invalid.
 
 Production QA menggunakan query baca-saja dan filter browser; tidak membuat/mengubah transaksi atau mengunduh lampiran bisnis untuk pengujian.
+
+Hasil: 341 tes aplikasi dan 25 tes JavaScript lulus; delapan tes pencarian (54 assertions) mencakup perapian cuplikan rich-text dan filter `0` yang tetap menghentikan polling daftar. Pencarian `kursi` pada database production menemukan enam SP dan enam SPPH. Sampel query hangat: SP sekitar 7 ms, SPPH sekitar 12–13 ms; ini waktu query contoh, bukan jaminan waktu muat halaman/jaringan. Kondisi cold-start pada sampel sekitar 70–86 ms. MySQL dapat memilih materialisasi/full scan pada tabel kecil untuk pencarian substring; indeks relasi tetap tersedia.
+
+Browser production: Enter pada SP dan Terapkan Filter pada SPPH berhasil, cuplikan dan nomor PR/dokumen muncul, serta tema terang/gelap diperiksa. Mengetik tidak menavigasi sebelum diterapkan. Pemisah paragraf/baris rich-text dipertahankan sebagai spasi pada cuplikan agar kata tidak menempel.

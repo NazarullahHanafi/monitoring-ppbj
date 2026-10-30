@@ -149,8 +149,26 @@ class ProcurementDocumentSearchTest extends TestCase
         $this->document('sp', 862, 'Lainnya');
         // Both numbers have zeroes in their year/month; assert literal filtering via item hints too.
         $this->item($match, 'Kursi tipe 0');
-        $this->assertArrayHasKey($match->id, $this->get(route('sp.index', ['search' => '0']))->assertOk()->viewData('itemSearchHints'));
+        $response = $this->get(route('sp.index', ['search' => '0']))->assertOk();
+        $this->assertArrayHasKey($match->id, $response->viewData('itemSearchHints'));
+        $this->assertMatchesRegularExpression('/"hasFilter":\s*true/', $response->getContent());
+        $spph = $this->get(route('spph.index', ['search' => '0']))->assertOk();
+        $this->assertMatchesRegularExpression('/"hasFilter":\s*true/', $spph->getContent());
         $this->getJson(route('sp.index', ['search' => str_repeat('x', 161)]))->assertStatus(422)->assertJsonValidationErrors('search');
         $this->getJson(route('spph.index', ['search' => ['kursi']]))->assertStatus(422)->assertJsonValidationErrors('search');
+    }
+
+    public function test_rich_text_snippet_preserves_line_breaks_and_stays_bounded(): void
+    {
+        $document = $this->document('sp', 870);
+        $this->item($document, '<p>Kursi kantor</p><div>Merk: Homedoki<br>Warna: putih</div>');
+        $hints = ProcurementDocumentSearch::itemHints(Sp::whereKey($document->id)->get(), 'kursi', true);
+        $this->assertSame('Kursi kantor Merk: Homedoki Warna: putih', $hints[$document->id]);
+        $long = $this->document('sp', 871);
+        $this->item($long, str_repeat('penjelasan ', 100).'kursi '.str_repeat('rincian ', 100));
+        $hint = ProcurementDocumentSearch::itemHints(Sp::whereKey($long->id)->get(), 'kursi', true)[$long->id];
+        $this->assertStringContainsString('kursi', $hint);
+        $this->assertLessThanOrEqual(182, mb_strlen($hint));
+        $this->assertStringStartsWith('…penjelasan ', $hint);
     }
 }
