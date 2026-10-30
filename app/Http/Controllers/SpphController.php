@@ -12,6 +12,7 @@ use App\Models\Vendor;
 use App\Services\ProcurementJourneyService;
 use App\Support\CacheBatch;
 use App\Support\PrintPreviewFile;
+use App\Support\ProcurementDocumentSearch;
 use App\Traits\HasPresence;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
@@ -44,7 +45,7 @@ class SpphController extends Controller
     // =========================================================
     public function index(Request $request)
     {
-        $search = $request->get('search', '');
+        $search = ProcurementDocumentSearch::term($request);
         $pic = $request->get('pic', '');
         $vendorFilter = $request->get('vendor', '');
         $dari = $request->get('dari', '');
@@ -90,7 +91,7 @@ class SpphController extends Controller
             ->values()
             ->all();
 
-        $spphs = Spph::select([
+        $spphs = ProcurementDocumentSearch::apply(Spph::query(), $search)->select([
             'id',
             'nomor_spph',
             'tanggal',
@@ -101,14 +102,6 @@ class SpphController extends Controller
             'pic',
             'sequence_number',
         ])->with(['ppbjs:id,ppbj_no'])
-            ->when($search, fn ($q) => $q->where(function ($q2) use ($search) {
-                $q2->where('nomor_spph', 'LIKE', "%{$search}%")
-                    ->orWhere('nomor_pr', 'LIKE', "%{$search}%")
-                    ->orWhereHas('ppbjs', fn ($linked) => $linked->where('ppbj_no', 'LIKE', "%{$search}%"))
-                    ->orWhere('nama_vendor', 'LIKE', "%{$search}%")
-                    ->orWhere('vendor_names', 'LIKE', "%{$search}%")
-                    ->orWhere('deskripsi_pengadaan', 'LIKE', "%{$search}%");
-            }))
             ->when($pic, fn ($q) => $q->where('pic', $pic))
             ->when($vendorFilter, fn ($q) => $this->applyVendorFilter($q, $vendorFilter))
             ->when($dari, fn ($q) => $q->where('tanggal', '>=', $dari))
@@ -118,6 +111,7 @@ class SpphController extends Controller
             ->withQueryString();
 
         $onboardingSeen = Cache::has('spph_onboarding_'.auth()->id());
+        $itemSearchHints = ProcurementDocumentSearch::itemHints($spphs->getCollection(), $search, false);
 
         return view('spph.index', compact(
             'vendors',
@@ -132,7 +126,8 @@ class SpphController extends Controller
             'sampai',
             'spphSigners',
             'spphSignerTitles',
-            'onboardingSeen'
+            'onboardingSeen',
+            'itemSearchHints'
         ));
     }
 
@@ -254,19 +249,13 @@ class SpphController extends Controller
     // =========================================================
     public function export(Request $request)
     {
-        $search = $request->get('search', '');
+        $search = ProcurementDocumentSearch::term($request);
         $pic = $request->get('pic', '');
         $vendorFilter = $request->get('vendor', '');
         $dari = $request->get('dari', '');
         $sampai = $request->get('sampai', '');
 
-        $data = Spph::when($search, fn ($q) => $q->where(function ($q2) use ($search) {
-            $q2->where('nomor_spph', 'like', "%{$search}%")
-                ->orWhere('nomor_pr', 'like', "%{$search}%")
-                ->orWhere('nama_vendor', 'like', "%{$search}%")
-                ->orWhere('vendor_names', 'like', "%{$search}%")
-                ->orWhere('deskripsi_pengadaan', 'like', "%{$search}%");
-        }))
+        $data = ProcurementDocumentSearch::apply(Spph::query(), $search)
             ->when($pic, fn ($q) => $q->where('pic', $pic))
             ->when($vendorFilter, fn ($q) => $this->applyVendorFilter($q, $vendorFilter))
             ->when($dari, fn ($q) => $q->where('tanggal', '>=', $dari))

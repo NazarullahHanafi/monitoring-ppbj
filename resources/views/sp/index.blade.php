@@ -338,7 +338,7 @@
                     </svg>
                     <input type="text" id="searchInput" value="{{ $search ?? '' }}" autocomplete="off"
                         data-lpignore="true" data-1p-ignore="true" data-bwignore="true" spellcheck="false"
-                        placeholder="Cari nomor SP, nomor PR, vendor, deskripsi..."
+                        placeholder="Cari barang/jasa, nomor SP, PR, vendor..." maxlength="160"
                         class="w-full pl-10 pr-10 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm">
                     <span id="searchSpinner" class="absolute right-3 top-1/2 -translate-y-1/2 hidden"><svg
                             class="w-4 h-4 animate-spin text-blue-500" fill="none" viewBox="0 0 24 24">
@@ -366,6 +366,7 @@
                     </svg>Export</button>
             </div>
             <p id="filterPendingHint" role="status" aria-live="polite" class="text-xs text-gray-600 dark:text-gray-300">Pencarian tidak otomatis. Tekan Enter atau klik Terapkan Filter.</p>
+            <p class="text-xs text-gray-600 dark:text-gray-300">Contoh: kursi atau kursi rapat. Mencakup rincian barang/jasa SP dan uraian semua PR terkait.</p>
             <div class="flex flex-col sm:flex-row sm:items-center gap-2">
                 <div class="flex items-center gap-1.5 flex-wrap">
                     <span class="text-xs text-gray-400 mr-1">Quick:</span>
@@ -497,8 +498,12 @@
                                         @endif
                                     </div>
                                 </td>
-                                <td class="px-3 py-3 text-gray-600 dark:text-gray-300 text-xs max-w-xs truncate"
-                                    title="{{ $s->deskripsi_pengadaan }}">{{ $s->deskripsi_pengadaan }}</td>
+                                <td class="px-3 py-3 text-gray-600 dark:text-gray-300 text-xs max-w-xs">
+                                    <div class="truncate" title="{{ $s->deskripsi_pengadaan }}">{{ $s->deskripsi_pengadaan }}</div>
+                                    @if(!empty($itemSearchHints[$s->id]))
+                                        <div class="pr-search-match"><strong>Barang/jasa cocok:</strong> {{ $itemSearchHints[$s->id] }}</div>
+                                    @endif
+                                </td>
                                 <td class="px-3 py-3"><span
                                         class="inline-block bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 text-xs font-semibold px-2 py-0.5 rounded-full">{{ $s->pic }}</span>
                                 </td>

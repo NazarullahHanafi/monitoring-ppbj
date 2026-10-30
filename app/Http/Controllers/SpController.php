@@ -13,6 +13,7 @@ use App\Models\Vendor;
 use App\Services\ProcurementJourneyService;
 use App\Support\CacheBatch;
 use App\Support\PrintPreviewFile;
+use App\Support\ProcurementDocumentSearch;
 use App\Traits\HasPresence;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
@@ -150,7 +151,7 @@ class SpController extends Controller
     // =========================================================
     public function index(Request $request)
     {
-        $search = $request->get('search', '');
+        $search = ProcurementDocumentSearch::term($request);
         $pic = $request->get('pic', '');
         $dari = $request->get('dari', '');
         $sampai = $request->get('sampai', '');
@@ -178,13 +179,7 @@ class SpController extends Controller
         $penandatanganScis = $referenceData['sp_master_options:penandatangan_sci:active_names'];
         $jabatanScis = $referenceData['sp_master_options:jabatan_sci:active_names'];
 
-        $baseQuery = $this->spModeQuery($oracleMode)->when($search, fn ($q) => $q->where(function ($q2) use ($search) {
-            $q2->where('nomor_sp', 'like', "%{$search}%")
-                ->orWhere('nomor_pr', 'like', "%{$search}%")
-                ->orWhereHas('ppbjs', fn ($ppbjQuery) => $ppbjQuery->where('ppbj_no', 'like', "%{$search}%"))
-                ->orWhere('nama_vendor', 'like', "%{$search}%")
-                ->orWhere('deskripsi_pengadaan', 'like', "%{$search}%");
-        }))
+        $baseQuery = ProcurementDocumentSearch::apply($this->spModeQuery($oracleMode), $search)
             ->when($pic, fn ($q) => $q->where('pic', $pic))
             ->when($dari, fn ($q) => $q->where('tanggal_sp', '>=', $dari))
             ->when($sampai, fn ($q) => $q->where('tanggal_sp', '<=', $sampai));
@@ -192,7 +187,7 @@ class SpController extends Controller
         // Nilai ringkasan tidak perlu dihitung ulang pada setiap refresh halaman.
         // Versi cache diputar sesudah create/update/delete sehingga angka tetap akurat.
         $statsVersion = Cache::get('sp:index-stats:version', '1');
-        $statsCacheKey = 'sp:index-stats:'.sha1(json_encode([
+        $statsCacheKey = 'sp:index-stats:goods-v1:'.sha1(json_encode([
             'version' => $statsVersion,
             'mode' => $oracleMode ? 'oracle' : 'auto',
             'search' => mb_strtolower(trim((string) $search)),
@@ -224,8 +219,9 @@ class SpController extends Controller
             ->withQueryString();
 
         $spVendorAuditMap = $this->buildSpVendorAuditMap($sps->getCollection());
+        $itemSearchHints = ProcurementDocumentSearch::itemHints($sps->getCollection(), $search, true);
 
-        return view('sp.index', compact('pics', 'satuans', 'sps', 'lastNomor', 'search', 'pic', 'dari', 'sampai', 'stats', 'bidangIpItus', 'bidangPrs', 'penandatanganScis', 'jabatanScis', 'oracleMode', 'spVendorAuditMap'));
+        return view('sp.index', compact('pics', 'satuans', 'sps', 'lastNomor', 'search', 'pic', 'dari', 'sampai', 'stats', 'bidangIpItus', 'bidangPrs', 'penandatanganScis', 'jabatanScis', 'oracleMode', 'spVendorAuditMap', 'itemSearchHints'));
     }
 
     // =========================================================
@@ -739,18 +735,13 @@ class SpController extends Controller
     // =========================================================
     public function export(Request $request)
     {
-        $search = $request->get('search', '');
+        $search = ProcurementDocumentSearch::term($request);
         $pic = $request->get('pic', '');
         $dari = $request->get('dari', '');
         $sampai = $request->get('sampai', '');
         $oracleMode = $this->isOracleMode($request);
 
-        $data = $this->spModeQuery($oracleMode)->when($search, fn ($q) => $q->where(function ($q2) use ($search) {
-            $q2->where('nomor_sp', 'like', "%{$search}%")
-                ->orWhere('nomor_pr', 'like', "%{$search}%")
-                ->orWhere('nama_vendor', 'like', "%{$search}%")
-                ->orWhere('deskripsi_pengadaan', 'like', "%{$search}%");
-        }))
+        $data = ProcurementDocumentSearch::apply($this->spModeQuery($oracleMode), $search)->with('items')
             ->when($pic, fn ($q) => $q->where('pic', $pic))
             ->when($dari, fn ($q) => $q->where('tanggal_sp', '>=', $dari))
             ->when($sampai, fn ($q) => $q->where('tanggal_sp', '<=', $sampai))
