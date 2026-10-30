@@ -116,6 +116,10 @@ class PollingPerformanceTest extends TestCase
         $this->assertStringContainsString("window.addEventListener('pagehide'", $spph);
         $this->assertStringContainsString('AddOutputFilterByType DEFLATE', $htaccess);
         $this->assertStringContainsString('stale-while-revalidate=86400', $htaccess);
+        foreach (['sp', 'spph'] as $module) {
+            $view = file_get_contents(resource_path('views/'.$module.'/index.blade.php'));
+            $this->assertStringContainsString("filemtime(public_path('assets/{$module}/{$module}.js'))", $view, 'Deploys must invalidate the browser\'s cached polling code.');
+        }
     }
 
     public function test_sp_polling_is_limited_to_prevent_large_payloads(): void

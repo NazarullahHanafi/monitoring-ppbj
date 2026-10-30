@@ -209,7 +209,7 @@ class SpphPpbjSyncTest extends TestCase
             ->assertOk()
             ->assertSee('101/PKU-VI/SPPH/2026')
             ->assertSee('"hasFilter":true', false)
-            ->assertSee('/assets/spph/spph.js?v=20261020e', false);
+            ->assertSee('/assets/spph/spph.js?v='.filemtime(public_path('assets/spph/spph.js')), false);
 
         $numbers = $response->viewData('spphs')->pluck('nomor_spph')->all();
 

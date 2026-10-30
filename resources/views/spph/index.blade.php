@@ -1001,7 +1001,7 @@
     <script>
         window.SPPH_PAGE_CONFIG = @json($spphPageConfig);
     </script>
-    <script src="{{ asset('assets/spph/spph.js') }}?v=20261020e" defer></script>
+    <script src="{{ asset('assets/spph/spph.js') }}?v={{ filemtime(public_path('assets/spph/spph.js')) }}" defer></script>
 @endpush
 
 @include('components.archive-upload-popup')

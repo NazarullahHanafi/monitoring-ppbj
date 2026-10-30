@@ -1786,7 +1786,7 @@
             if (event.key === 'Escape') window.closeSpPrintPreview();
         });
     </script>
-    <script src="{{ asset('assets/sp/sp.js') }}?v=20261020f" defer></script>
+    <script src="{{ asset('assets/sp/sp.js') }}?v={{ filemtime(public_path('assets/sp/sp.js')) }}" defer></script>
 @endpush
 
 @include('components.archive-upload-popup')
