@@ -243,7 +243,6 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
             if (overrideWrap) {
                 const needsOverride = totalPr > 0 && totalSp > totalPr + 1;
                 overrideWrap.classList.toggle('hidden', !needsOverride);
-                if (!needsOverride) overrideWrap.querySelector('input').checked = false;
             }
             return Math.abs(difference) <= 1;
         }
@@ -293,11 +292,6 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
                     text: 'Total alokasi seluruh PR harus sama dengan nilai SP. Gunakan hitung proporsional atau sesuaikan nilainya.',
                     ...swalThemeSp()
                 });
-                return false;
-            }
-            const override = document.querySelector(`#${mode}AllocationOverrideWrap:not(.hidden) input`);
-            if (override && !override.checked) {
-                Swal.fire({ icon: 'warning', title: 'Konfirmasi nilai diperlukan', text: 'Nilai SP lebih besar dari gabungan nilai PR. Centang konfirmasi setelah nilainya diperiksa.', ...swalThemeSp() });
                 return false;
             }
             return true;
@@ -713,10 +707,10 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
         function getFilterParams() { const p = new URLSearchParams(); const q = document.getElementById('searchInput').value.trim(); const pic = document.getElementById('filterPic').value; const d = document.getElementById('dariInput').value; const s = document.getElementById('sampaiInput').value; if (q) p.set('search', q); if (pic) p.set('pic', pic); if (d) p.set('dari', d); if (s) p.set('sampai', s); if (ORACLE_MODE_SP) p.set('mode', 'oracle'); return p.toString(); }
         function doSearch() { const qs = getFilterParams(); window.location.href = qs ? `/sp?${qs}` : '/sp'; }
         function doExport() { const qs = getFilterParams(); window.location.href = qs ? `/sp/export?${qs}` : '/sp/export'; }
-        function clearSearch() { document.getElementById('searchInput').value = ''; doSearch(); }
-        function clearPic() { document.getElementById('filterPic').value = ''; doSearch(); }
-        function clearDate() { document.getElementById('dariInput').value = ''; document.getElementById('sampaiInput').value = ''; doSearch(); }
-        function setQuickDate(t) { const dr = document.getElementById('dariInput'), sp = document.getElementById('sampaiInput'), n = new Date(), y = n.getFullYear(), m = String(n.getMonth() + 1).padStart(2, '0'), d = String(n.getDate()).padStart(2, '0'); if (t === 'today') { dr.value = `${y}-${m}-${d}`; sp.value = `${y}-${m}-${d}`; } else if (t === 'month') { dr.value = `${y}-${m}-01`; sp.value = `${y}-${m}-${new Date(y, n.getMonth() + 1, 0).getDate()}`; } else if (t === 'year') { dr.value = `${y}-01-01`; sp.value = `${y}-12-31`; } doSearch(); }
+        function clearSearch() { document.getElementById('searchInput').value = ''; window.ProcurementFilters.markDirty(); }
+        function clearPic() { document.getElementById('filterPic').value = ''; window.ProcurementFilters.markDirty(); }
+        function clearDate() { document.getElementById('dariInput').value = ''; document.getElementById('sampaiInput').value = ''; window.ProcurementFilters.markDirty(); }
+        function setQuickDate(t) { const dr = document.getElementById('dariInput'), sp = document.getElementById('sampaiInput'), n = new Date(), y = n.getFullYear(), m = String(n.getMonth() + 1).padStart(2, '0'), d = String(n.getDate()).padStart(2, '0'); if (t === 'today') { dr.value = `${y}-${m}-${d}`; sp.value = `${y}-${m}-${d}`; } else if (t === 'month') { dr.value = `${y}-${m}-01`; sp.value = `${y}-${m}-${new Date(y, n.getMonth() + 1, 0).getDate()}`; } else if (t === 'year') { dr.value = `${y}-01-01`; sp.value = `${y}-12-31`; } window.ProcurementFilters.markDirty(); }
         function resetDate() { clearDate(); }
 
         // ═══════════════════════════════════════
@@ -961,6 +955,7 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
         }
 
         async function secureDeleteRecord(label, nomor, url) {
+            if (!await window.ProcurementReview.confirmDelete('sp', url)) return;
             const csrf = document.querySelector('meta[name="csrf-token"]')?.content || SP_PAGE_CONFIG.csrfToken || '';
             const searchInput = document.getElementById('searchInput');
             secureDeleteSearchSnapshot = searchInput?.value || '';
@@ -2637,6 +2632,7 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
                 }
 
                 try {
+                    if (!await window.ProcurementReview.confirm(form, 'sp', isEdit)) return;
                     const response = await fetch(form.action, {
                         method: 'POST',
                         body: new FormData(form),
@@ -2826,21 +2822,7 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
             });
 
             // Search
-            document.getElementById('searchInput').addEventListener('input', function () {
-                if (secureDeleteSearchSnapshot !== null) {
-                    clearTimeout(searchTimer);
-                    this.value = secureDeleteSearchSnapshot;
-                    document.getElementById('searchSpinner').classList.add('hidden');
-                    return;
-                }
-                document.getElementById('searchSpinner').classList.remove('hidden');
-                clearTimeout(searchTimer);
-                searchTimer = setTimeout(() => { document.getElementById('searchSpinner').classList.add('hidden'); doSearch(); }, 500);
-            });
-            document.getElementById('searchInput').addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); clearTimeout(searchTimer); document.getElementById('searchSpinner').classList.add('hidden'); doSearch(); } });
-            document.getElementById('filterPic').addEventListener('change', doSearch);
-            document.getElementById('dariInput').addEventListener('change', doSearch);
-            document.getElementById('sampaiInput').addEventListener('change', doSearch);
+            window.ProcurementFilters.bind({ apply: doSearch, lockedSearch: () => secureDeleteSearchSnapshot });
 
             // Data hasil render sudah mutakhir. Poll pertama cukup dijalankan
             // setelah interval agar request awal tidak berebut dengan aset UI.

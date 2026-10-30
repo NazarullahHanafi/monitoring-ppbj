@@ -9,6 +9,7 @@
 @endphp
 
 @push('styles')
+    <link rel="stylesheet" href="{{ asset('assets/app/procurement-review.css') }}?v={{ filemtime(public_path('assets/app/procurement-review.css')) }}">
     <link rel="stylesheet" href="{{ asset('assets/sp/sp.css') }}?v=20261020f">
     <style>
         body.sp-print-modal-open { overflow: hidden; }
@@ -200,6 +201,7 @@
                             </svg>
                             <span class="text-sm">Vendor</span>
                         </a>
+                        <a href="{{ route('sp.value-approvals') }}" target="_blank" rel="noopener" class="flex items-center gap-2 bg-white/15 hover:bg-white/25 text-white font-semibold px-4 py-3 rounded-xl border border-white/30 whitespace-nowrap">Persetujuan Selisih</a>
                         <a href="{{ route('sp.trash') }}"
                             class="flex items-center gap-2 bg-white/15 hover:bg-white/25 text-white font-semibold px-4 py-3 rounded-xl transition-all backdrop-blur-sm border border-white/30 whitespace-nowrap"
                             title="Pulihkan SP dari tempat sampah">
@@ -325,7 +327,7 @@
         @endif
 
         {{-- FILTER BAR --}}
-        <div
+        <div id="procurementFilters"
             class="bg-white dark:bg-gray-800 rounded-2xl p-4 shadow-sm border border-gray-100 dark:border-gray-700 space-y-3">
             <div class="flex flex-col lg:flex-row gap-3">
                 <div class="relative flex-1">
@@ -355,13 +357,15 @@
                     class="px-3 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm">
                 <input type="date" id="sampaiInput" value="{{ $sampai ?? '' }}"
                     class="px-3 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm">
-                <button onclick="doExport()"
+                <button type="button" id="applyProcurementFilters" class="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm whitespace-nowrap">Terapkan Filter</button>
+                <button type="button" onclick="doExport()"
                     class="flex items-center gap-1.5 px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 font-semibold text-sm whitespace-nowrap"><svg
                         class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                             d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                     </svg>Export</button>
             </div>
+            <p id="filterPendingHint" role="status" aria-live="polite" class="text-xs text-gray-600 dark:text-gray-300">Pencarian tidak otomatis. Tekan Enter atau klik Terapkan Filter.</p>
             <div class="flex flex-col sm:flex-row sm:items-center gap-2">
                 <div class="flex items-center gap-1.5 flex-wrap">
                     <span class="text-xs text-gray-400 mr-1">Quick:</span>
@@ -735,10 +739,7 @@
                         <button type="button" onclick="autoAllocateSp('add')">Hitung proporsional</button>
                         <button type="button" onclick="matchPrValuesForSp('add')">Samakan dengan nilai PR</button>
                     </div>
-                    <label id="addAllocationOverrideWrap" class="sp-allocation-override hidden">
-                        <input type="checkbox" name="allocation_override_confirmed" value="1">
-                        <span>Saya sudah memeriksa bahwa nilai SP memang lebih besar dari gabungan nilai PR.</span>
-                    </label>
+                    <div id="addAllocationOverrideWrap" class="sp-allocation-override hidden">Nilai SP melebihi gabungan PR. Saat simpan, sistem akan meminta persetujuan selisih dari akun Umum lain.</div>
                     <input type="hidden" name="allocation_mode" id="addAllocationMode" value="automatic">
                 </section>
 
@@ -1083,10 +1084,7 @@
                         <button type="button" onclick="autoAllocateSp('edit')">Hitung proporsional</button>
                         <button type="button" onclick="matchPrValuesForSp('edit')">Samakan dengan nilai PR</button>
                     </div>
-                    <label id="editAllocationOverrideWrap" class="sp-allocation-override hidden">
-                        <input type="checkbox" name="allocation_override_confirmed" value="1">
-                        <span>Saya sudah memeriksa bahwa nilai SP memang lebih besar dari gabungan nilai PR.</span>
-                    </label>
+                    <div id="editAllocationOverrideWrap" class="sp-allocation-override hidden">Nilai SP melebihi gabungan PR. Perubahan rincian memerlukan persetujuan selisih yang baru dari akun Umum lain.</div>
                     <input type="hidden" name="allocation_mode" id="editAllocationMode" value="automatic">
                 </section>
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1786,6 +1784,8 @@
             if (event.key === 'Escape') window.closeSpPrintPreview();
         });
     </script>
+    <script src="{{ asset('assets/app/procurement-review.js') }}?v={{ filemtime(public_path('assets/app/procurement-review.js')) }}" defer></script>
+    <script src="{{ asset('assets/app/procurement-filters.js') }}?v={{ filemtime(public_path('assets/app/procurement-filters.js')) }}" defer></script>
     <script src="{{ asset('assets/sp/sp.js') }}?v={{ filemtime(public_path('assets/sp/sp.js')) }}" defer></script>
 @endpush
 

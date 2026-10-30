@@ -1072,7 +1072,6 @@ class SpController extends Controller
             'allocations.*.ppbj_no' => 'required_with:allocations|string|max:100|distinct',
             'allocations.*.value' => 'required_with:allocations|numeric|min:0',
             'allocation_mode' => ['nullable', Rule::in(['automatic', 'manual'])],
-            'allocation_override_confirmed' => 'nullable|boolean',
             'nilai_pr' => 'nullable|numeric|min:0',
             'nama_vendor' => 'required|string|max:255',
             'deskripsi_pengadaan' => 'required|string',
@@ -1126,12 +1125,6 @@ class SpController extends Controller
                     return $vendorMismatchResponse;
                 }
 
-                if ($request->filled('vendor_baru')) {
-                    $v = Vendor::firstOrCreate(['nama_vendor' => trim($request->vendor_baru)]);
-                    $vendorName = $v->nama_vendor;
-                    Cache::forget('vendors:active');
-                }
-
                 $seq = $oracleMode
                     ? ((int) $this->spModeQuery(true)->withTrashed()->lockForUpdate()->max('sequence_number') + 1)
                     : ($this->extractSeq($request->nomor_sp) ?? $this->nextAvailableAutoSequence(null, (int) ($this->numberPeriodFromNomor($request->nomor_sp, 'SP')['year'] ?? now()->year)));
@@ -1141,6 +1134,14 @@ class SpController extends Controller
                 $calculatedTotal = $this->calculateItemsTotal($items);
                 $nilaiSp = $request->nilai_sp ?: ($calculatedTotal > 0 ? $calculatedTotal : null);
                 $allocationPlan = $this->resolveSpAllocations($request, $ppbjRecords, $nilaiSp);
+                $approvalService = app(\App\Services\SpValueApprovalService::class);
+                $approvalService->consume($request, $approvalService->snapshot($request, $ppbjRecords, $nilaiSp, $allocationPlan));
+
+                if ($request->filled('vendor_baru')) {
+                    $v = Vendor::firstOrCreate(['nama_vendor' => trim($request->vendor_baru)]);
+                    $vendorName = $v->nama_vendor;
+                    Cache::forget('vendors:active');
+                }
 
                 $ppbjAuto = $ppbjRecord;
 
@@ -1272,7 +1273,6 @@ class SpController extends Controller
             'allocations.*.ppbj_no' => 'required_with:allocations|string|max:100|distinct',
             'allocations.*.value' => 'required_with:allocations|numeric|min:0',
             'allocation_mode' => ['nullable', Rule::in(['automatic', 'manual'])],
-            'allocation_override_confirmed' => 'nullable|boolean',
             'nilai_pr' => 'nullable|numeric|min:0',
             'nama_vendor' => 'required|string|max:255',
             'deskripsi_pengadaan' => 'required|string',
@@ -1308,6 +1308,7 @@ class SpController extends Controller
 
         try {
             return DB::transaction(function () use ($request, $sp, $nomorPr, $ppbjNumbers, $oracleMode) {
+                $sp = Sp::query()->lockForUpdate()->findOrFail($sp->id);
                 $oldPpbjs = Ppbj::where('awarding_sp', $sp->nomor_sp)->lockForUpdate()->get();
                 $newPpbjs = $this->lockSpPpbjs($ppbjNumbers);
                 if ($conflict = $this->spPpbjConflict($request, $ppbjNumbers, $newPpbjs, $sp->nomor_sp)) {
@@ -1336,6 +1337,9 @@ class SpController extends Controller
                 if ($vendorMismatchResponse = $this->ensureSpVendorMatchesSpph($request, $nomorPr, $request->nama_vendor)) {
                     return $vendorMismatchResponse;
                 }
+
+                $approvalService = app(\App\Services\SpValueApprovalService::class);
+                $approvalService->consume($request, $approvalService->snapshot($request, $newPpbjs, $nilaiSp, $allocationPlan, $sp));
 
                 $sp->update([
                     'nomor_sp' => $request->nomor_sp,
@@ -1660,8 +1664,56 @@ class SpController extends Controller
         ));
     }
 
+    /** Read-only, bounded preparation shared by simulation and approval requests. */
+    public function reviewData(Request $request, ?Sp $sp = null): array
+    {
+        $request->validate([
+            'nomor_prs' => 'nullable|array|max:20',
+            'nomor_prs.*' => 'required|string|max:100|distinct',
+            'nomor_pr' => 'nullable|string|max:100',
+            'nomor_sp' => 'required|string|max:60',
+            'tanggal_sp' => 'nullable|date',
+            'nilai_sp' => 'nullable', 'nilai_pr' => 'nullable',
+            'nama_vendor' => 'required|string|max:255',
+            'vendor_baru' => 'nullable|string|max:255',
+            'items' => 'nullable|array|max:50',
+            'items.*' => 'array',
+            'items.*.jumlah' => 'nullable|string|max:50',
+            'items.*.harga_satuan' => 'nullable|string|max:50',
+            'items.*.nama_barang' => 'nullable|string|max:60000',
+            'allocations' => 'nullable|array|max:20',
+            'allocations.*.ppbj_no' => 'required|string|max:100|distinct',
+            'allocations.*.value' => 'required',
+            'deskripsi_pengadaan' => 'nullable|string|max:60000',
+        ]);
+        $this->normalizePpbjSelection($request);
+        $this->normalizeSpAllocationInput($request);
+        $request->merge([
+            'nomor_sp' => $this->isOracleMode($request) ? trim($request->nomor_sp)
+                : $this->normalizeNumberPeriod($request->nomor_sp, $request->tanggal_sp, 'SP'),
+            'nilai_sp' => $this->moneyToNullableFloat($request->nilai_sp),
+            'nilai_pr' => $this->moneyToNullableFloat($request->nilai_pr),
+        ]);
+        $request->validate(['nilai_sp' => 'nullable|numeric|min:0', 'nilai_pr' => 'nullable|numeric|min:0']);
+        $numbers = $this->selectedPpbjNumbers($request);
+        $positions = array_flip($numbers);
+        $records = Ppbj::query()->whereIn('ppbj_no', $numbers)->get()
+            ->sortBy(fn ($row) => $positions[$row->ppbj_no])->values();
+        if ($conflict = $this->spPpbjConflict($request, $numbers, $records, $sp?->nomor_sp)) {
+            throw new \Illuminate\Http\Exceptions\HttpResponseException($conflict);
+        }
+        $value = $request->nilai_sp ?: $this->calculateItemsTotal($request->input('items', []));
+        $plan = $this->resolveSpAllocations($request, $records, $value);
+
+        return app(\App\Services\SpValueApprovalService::class)->snapshot($request, $records, $value, $plan, $sp);
+    }
+
     private function normalizePpbjSelection(Request $request): void
     {
+        if ($request->input('nomor_pr_type', 'ppbj') !== 'ppbj' && $request->filled('nomor_pr')
+            && Ppbj::query()->where('ppbj_no', trim((string) $request->nomor_pr))->exists()) {
+            throw ValidationException::withMessages(['nomor_pr' => 'Nomor PR tersedia di PPBJ. Gunakan Pilih PPBJ agar nilai acuan dan sinkronisasi diperiksa dari database.']);
+        }
         $numbers = collect($request->input('nomor_prs', []))
             ->map(fn ($number) => trim((string) $number))->filter()->unique()->values();
 
@@ -1700,12 +1752,6 @@ class SpController extends Controller
 
         $totalSp = round(max(0, (float) ($nilaiSp ?? 0)), 2);
         $totalPr = (float) $records->sum(fn (Ppbj $ppbj) => max(0, (float) ($ppbj->total_sebelum_ppn ?? 0)));
-
-        if ($totalPr > 0 && $totalSp > $totalPr + 1 && ! $request->boolean('allocation_override_confirmed')) {
-            throw ValidationException::withMessages([
-                'nilai_sp' => 'Nilai SP lebih besar daripada gabungan nilai PR. Periksa kembali nilainya, lalu centang konfirmasi pada panel alokasi jika memang benar.',
-            ]);
-        }
 
         $submitted = collect($request->input('allocations', []))
             ->keyBy(fn ($allocation) => trim((string) data_get($allocation, 'ppbj_no')));

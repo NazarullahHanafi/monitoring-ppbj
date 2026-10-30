@@ -73,6 +73,7 @@ class SpVendorSpphRecommendationTest extends TestCase
             'tgl_terima_pr' => '2026-07-20',
             'uraian' => 'Pengadaan vendor beda dikonfirmasi',
             'status' => 'ACTIVE',
+            'total_sebelum_ppn' => 1000000,
             'spph_rfq_1' => '778/PKU-VII/SPPH/2026',
         ]);
 

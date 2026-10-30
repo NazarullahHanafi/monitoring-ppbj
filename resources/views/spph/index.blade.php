@@ -3,6 +3,7 @@
 @section('title', 'Penomoran SPPH')
 
 @push('styles')
+    <link rel="stylesheet" href="{{ asset('assets/app/procurement-review.css') }}?v={{ filemtime(public_path('assets/app/procurement-review.css')) }}">
     <link rel="stylesheet" href="{{ asset('assets/spph/spph.css') }}?v=20261020e">
     <style>
         #spphPrintSigner, #spphPrintTitle,
@@ -119,7 +120,7 @@
 
         {{-- ── FILTER BAR ──────────────────────────────────────────── --}}
         <div
-            class="bg-white dark:bg-gray-800 rounded-2xl p-4 shadow-sm border border-gray-100 dark:border-gray-700 space-y-3">
+            id="procurementFilters" class="bg-white dark:bg-gray-800 rounded-2xl p-4 shadow-sm border border-gray-100 dark:border-gray-700 space-y-3">
             <div class="flex flex-col lg:flex-row gap-3">
                 <div class="relative flex-1">
                     <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none"
@@ -158,7 +159,8 @@
                     class="px-3 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm">
                 <input type="date" id="sampaiInput" value="{{ $sampai ?? '' }}"
                     class="px-3 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm">
-                <button onclick="doExport()"
+                <button type="button" id="applyProcurementFilters" class="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm whitespace-nowrap">Terapkan Filter</button>
+                <button type="button" onclick="doExport()"
                     class="flex items-center gap-1.5 px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 font-semibold text-sm whitespace-nowrap"
                     title="Export CSV">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -167,6 +169,7 @@
                     </svg>Export
                 </button>
             </div>
+            <p id="filterPendingHint" role="status" aria-live="polite" class="text-xs text-gray-600 dark:text-gray-300">Pencarian tidak otomatis. Tekan Enter atau klik Terapkan Filter.</p>
             <div class="flex flex-col sm:flex-row sm:items-center gap-2">
                 <div class="flex items-center gap-1.5 flex-wrap">
                     <span class="text-xs text-gray-400 mr-1">Quick:</span>
@@ -1001,6 +1004,8 @@
     <script>
         window.SPPH_PAGE_CONFIG = @json($spphPageConfig);
     </script>
+    <script src="{{ asset('assets/app/procurement-review.js') }}?v={{ filemtime(public_path('assets/app/procurement-review.js')) }}" defer></script>
+    <script src="{{ asset('assets/app/procurement-filters.js') }}?v={{ filemtime(public_path('assets/app/procurement-filters.js')) }}" defer></script>
     <script src="{{ asset('assets/spph/spph.js') }}?v={{ filemtime(public_path('assets/spph/spph.js')) }}" defer></script>
 @endpush
 

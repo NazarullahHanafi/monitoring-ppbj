@@ -62,7 +62,9 @@ class SpSpphFormStateTest extends TestCase
             $this->assertIsString($script);
             $this->assertStringContainsString('secureDeleteSearchSnapshot', $script);
             $this->assertStringContainsString('autocomplete="new-password"', $script);
-            $this->assertStringContainsString('if (secureDeleteSearchSnapshot !== null)', $script);
+            $this->assertStringContainsString('lockedSearch: () => secureDeleteSearchSnapshot', $script);
+            $filters = file_get_contents(public_path('assets/app/procurement-filters.js'));
+            $this->assertStringContainsString('if (options.lockedSearch() !== null) return;', $filters);
         }
     }
 

@@ -209,6 +209,14 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
     // ========================
     Route::middleware(['dept:umum'])->group(function () {
 
+        Route::post('/procurement-review/{kind}/{id?}', [\App\Http\Controllers\ProcurementReviewController::class, 'preview'])
+            ->whereIn('kind', ['sp', 'spph'])->whereNumber('id')->middleware('throttle:30,1')->name('procurement.review');
+        Route::get('/sp/value-approvals', [\App\Http\Controllers\ProcurementReviewController::class, 'index'])->name('sp.value-approvals');
+        Route::post('/sp/value-approvals/request/{id?}', [\App\Http\Controllers\ProcurementReviewController::class, 'requestApproval'])
+            ->whereNumber('id')->middleware('throttle:10,1')->name('sp.value-approvals.request');
+        Route::post('/sp/value-approvals/{approval}/decision', [\App\Http\Controllers\ProcurementReviewController::class, 'decide'])
+            ->whereNumber('approval')->middleware('throttle:20,1')->name('sp.value-approvals.decide');
+
         Route::prefix('satuan')->name('satuan.')->group(function () {
             Route::get('/', [SatuanController::class, 'index'])->name('index');
             Route::post('/', [SatuanController::class, 'store'])->name('store');

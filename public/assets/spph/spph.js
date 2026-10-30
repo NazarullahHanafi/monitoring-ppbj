@@ -338,16 +338,16 @@
         }
         function doSearch() { const qs = getQS(); window.location.href = qs ? `/spph?${qs}` : '/spph'; }
         function doExport() { const qs = getQS(); window.location.href = qs ? `/spph/export?${qs}` : '/spph/export'; }
-        function clearSearch() { document.getElementById('searchInput').value = ''; doSearch(); }
-        function clearPic() { document.getElementById('filterPic').value = ''; doSearch(); }
-        function clearVendor() { document.getElementById('filterVendor').value = ''; doSearch(); }
-        function clearDate() { document.getElementById('dariInput').value = ''; document.getElementById('sampaiInput').value = ''; doSearch(); }
+        function clearSearch() { document.getElementById('searchInput').value = ''; window.ProcurementFilters.markDirty(); }
+        function clearPic() { document.getElementById('filterPic').value = ''; window.ProcurementFilters.markDirty(); }
+        function clearVendor() { document.getElementById('filterVendor').value = ''; window.ProcurementFilters.markDirty(); }
+        function clearDate() { document.getElementById('dariInput').value = ''; document.getElementById('sampaiInput').value = ''; window.ProcurementFilters.markDirty(); }
         function setQuickDate(t) {
             const d = document.getElementById('dariInput'), s = document.getElementById('sampaiInput'), n = new Date(), y = n.getFullYear(), m = String(n.getMonth() + 1).padStart(2, '0'), dd = String(n.getDate()).padStart(2, '0');
             if (t === 'today') { d.value = `${y}-${m}-${dd}`; s.value = `${y}-${m}-${dd}`; }
             else if (t === 'month') { d.value = `${y}-${m}-01`; s.value = `${y}-${m}-${new Date(y, n.getMonth() + 1, 0).getDate()}`; }
             else if (t === 'year') { d.value = `${y}-01-01`; s.value = `${y}-12-31`; }
-            doSearch();
+            window.ProcurementFilters.markDirty();
         }
         function resetDate() { clearDate(); }
 
@@ -606,6 +606,7 @@
         }
 
         async function secureDeleteRecord(label, nomor, url) {
+            if (!await window.ProcurementReview.confirmDelete('spph', url)) return;
             const csrf = document.querySelector('meta[name="csrf-token"]')?.content || SPPH_PAGE_CONFIG.csrfToken || '';
             const searchInput = document.getElementById('searchInput');
             secureDeleteSearchSnapshot = searchInput?.value || '';
@@ -1615,6 +1616,7 @@
                 }
 
                 try {
+                    if (!await window.ProcurementReview.confirm(form, 'spph', isEdit)) return;
                     const response = await fetch(form.action, {
                         method: 'POST',
                         body: new FormData(form),
@@ -1727,25 +1729,7 @@
                 }
             });
 
-            document.getElementById('searchInput').addEventListener('input', function () {
-                if (secureDeleteSearchSnapshot !== null) {
-                    clearTimeout(searchTimer);
-                    this.value = secureDeleteSearchSnapshot;
-                    document.getElementById('searchSpinner').classList.add('hidden');
-                    return;
-                }
-                document.getElementById('searchSpinner').classList.remove('hidden');
-                clearTimeout(searchTimer);
-                searchTimer = setTimeout(() => { document.getElementById('searchSpinner').classList.add('hidden'); doSearch(); }, 500);
-            });
-            document.getElementById('searchInput').addEventListener('keydown', function (e) {
-                if (e.key === 'Enter') { e.preventDefault(); clearTimeout(searchTimer); document.getElementById('searchSpinner').classList.add('hidden'); doSearch(); }
-            });
-
-            document.getElementById('filterPic').addEventListener('change', doSearch);
-            document.getElementById('filterVendor').addEventListener('change', doSearch);
-            document.getElementById('dariInput').addEventListener('change', doSearch);
-            document.getElementById('sampaiInput').addEventListener('change', doSearch);
+            window.ProcurementFilters.bind({ apply: doSearch, lockedSearch: () => secureDeleteSearchSnapshot });
 
             const BACKGROUND_POLL_INTERVAL = 45000;
 

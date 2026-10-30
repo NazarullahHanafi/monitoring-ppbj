@@ -121,7 +121,7 @@ class SpLifecycleAndAllocationTest extends TestCase
         $this->assertSame('002/PKU-X/SPPH/2026', Spph::previewNextNomor('2026-10-20'));
     }
 
-    public function test_sp_above_combined_pr_value_requires_explicit_confirmation(): void
+    public function test_sp_above_combined_pr_value_cannot_bypass_approval_with_legacy_checkbox(): void
     {
         $user = User::factory()->create(['department' => 'umum', 'role' => 'superadmin']);
         $ppbj = $this->ppbj('PKB/PR-26/CON/9119', 10_000_000);
@@ -141,8 +141,8 @@ class SpLifecycleAndAllocationTest extends TestCase
             ->assertJsonValidationErrors('nilai_sp');
 
         $payload['allocation_override_confirmed'] = true;
-        $this->actingAs($user)->post(route('sp.store'), $payload)
-            ->assertRedirect(route('sp.index'));
+        $this->actingAs($user)->postJson(route('sp.store'), $payload)
+            ->assertStatus(422)->assertJsonPath('approval_required', true);
     }
 
     public function test_archiving_and_restoring_sp_keeps_ppbj_chain_intact(): void
