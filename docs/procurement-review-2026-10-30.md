@@ -20,7 +20,8 @@
 
 ## Verifikasi
 
-- Full suite lokal: **333 tests, 1890 assertions**; JavaScript **24 tests** lulus pada 30 Oktober 2026.
+- Full suite lokal: **333 tests, 1890 assertions**; JavaScript **25 tests** lulus pada 30 Oktober 2026. Setelah perbaikan CSS, 27 tes PHP terkait (189 assertions) juga dijalankan ulang dan lulus.
 - Mencakup gabungan PR, perubahan alokasi/vendor/item/nilai database, tanpa persetujuan/checkbox lama, pengaju lain, Viewer/Operasional, self-approval, kedaluwarsa, replay, rollback gagal insert, preview tanpa mutasi dan kata sandi penghapusan.
 - Pengujian browser production hanya baca dan pembatalan preview. Tidak membuat/menyetujui SP atau memindahkan dokumen produksi ke Sampah untuk QA.
+- Production: Enter SP dan Apply SPPH memuat hasil yang sesuai; mengetik/PIC/vendor tidak menavigasi sebelum diterapkan. Dialog edit dan Sampah SP/SPPH, serta daftar persetujuan kosong diperiksa pada tema terang/gelap. Satu benturan CSS peringatan alokasi ditemukan dan diperbaiki agar tidak muncul saat SP di bawah nilai PR. Label tombol kini membedakan menyiapkan simulasi dari menyimpan transaksi.
 - Migrasi baru bersifat aditif: `2026_10_30_000002_create_sp_value_approvals_table.php`. Tidak perlu menghapus cache Redis global atau mengubah tabel transaksi lama.

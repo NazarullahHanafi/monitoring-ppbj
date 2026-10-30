@@ -1,4 +1,5 @@
 .pr-review { --pr-bg:#fff; --pr-panel:#f5f7fc; --pr-text:#172033; --pr-muted:#526079; --pr-border:#d8e0ee; color:var(--pr-text); }
+.sp-allocation-override.hidden { display:none; }
 .dark .pr-review { --pr-bg:#172033; --pr-panel:#101827; --pr-text:#f1f5fb; --pr-muted:#b4c1d8; --pr-border:#3d4d68; color-scheme:dark; }
 .pr-review.swal2-popup { background:var(--pr-bg)!important; color:var(--pr-text)!important; border:1px solid var(--pr-border); border-radius:22px; padding:24px; }
 .pr-review .swal2-title,.pr-review .swal2-html-container { color:var(--pr-text)!important; }

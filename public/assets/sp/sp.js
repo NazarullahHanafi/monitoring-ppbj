@@ -241,7 +241,7 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
             if (modeEl) modeEl.value = state.mode;
             if (stateEl) stateEl.textContent = state.mode === 'manual' ? 'Disesuaikan manual' : 'Proporsional otomatis';
             if (overrideWrap) {
-                const needsOverride = totalPr > 0 && totalSp > totalPr + 1;
+                const needsOverride = totalSp > totalPr;
                 overrideWrap.classList.toggle('hidden', !needsOverride);
             }
             return Math.abs(difference) <= 1;
@@ -2628,11 +2628,12 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
                 const originalHtml = submitBtn ? submitBtn.innerHTML : '';
                 if (submitBtn) {
                     submitBtn.disabled = true;
-                    submitBtn.innerHTML = '⏳ Menyimpan...';
+                    submitBtn.innerHTML = 'Menyiapkan simulasi...';
                 }
 
                 try {
                     if (!await window.ProcurementReview.confirm(form, 'sp', isEdit)) return;
+                    if (submitBtn) submitBtn.innerHTML = 'Menyimpan...';
                     const response = await fetch(form.action, {
                         method: 'POST',
                         body: new FormData(form),

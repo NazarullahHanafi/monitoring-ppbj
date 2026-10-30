@@ -54,3 +54,9 @@ for (const kind of ['sp', 'spph']) {
         assert.doesNotMatch(source, /setTimeout\(doSearch/);
     });
 }
+test('allocation warning stays hidden below PR budget and includes zero-budget overruns', () => {
+    const css = fs.readFileSync(path.join(__dirname, '../../public/assets/app/procurement-review.css'), 'utf8');
+    const js = fs.readFileSync(path.join(__dirname, '../../public/assets/sp/sp.js'), 'utf8');
+    assert.match(css, /\.sp-allocation-override\.hidden\s*\{\s*display:\s*none/);
+    assert.ok(js.includes('const needsOverride = totalSp > totalPr;'));
+});

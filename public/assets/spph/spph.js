@@ -1612,11 +1612,12 @@
                 const originalHtml = submitBtn ? submitBtn.innerHTML : '';
                 if (submitBtn) {
                     submitBtn.disabled = true;
-                    submitBtn.innerHTML = '⏳ Menyimpan...';
+                    submitBtn.innerHTML = 'Menyiapkan simulasi...';
                 }
 
                 try {
                     if (!await window.ProcurementReview.confirm(form, 'spph', isEdit)) return;
+                    if (submitBtn) submitBtn.innerHTML = 'Menyimpan...';
                     const response = await fetch(form.action, {
                         method: 'POST',
                         body: new FormData(form),
