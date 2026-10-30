@@ -71,7 +71,16 @@
         }
         function renderDetail(data) {
             let html = `<div class="ws-hero"><h3>${escape(data.number)}</h3><p>${escape(data.title)}</p><div class="ws-buttons">${history.length?'<button type="button" data-ws-back>← Rincian sebelumnya</button>':''}<button type="button" data-ws-refresh>↻ Muat terbaru</button>${data.archive_url ? '<button type="button" data-ws-archive>Muat lampiran PR</button>' : ''}</div></div><div class="ws-note">Panel baca-saja. Cache rincian maksimal ${escape(data.cache_seconds)} detik; gunakan Muat terbaru bila diperlukan. Pengaturan kolom tidak mengubah hak akses atau isi data.</div>`;
-            html += fieldsHtml(data.fields);
+            if (data.provenance?.length) html += `<h4>Pembuat, tanda tangan & penerimaan TOR/PR</h4>${data.provenance.map(origin=>`
+                <details class="ws-card ws-provenance" ${data.provenance.length===1?'open':''}>
+                    <summary>${escape(origin.number)}<span class="ws-origin-creator">${escape(origin.creator)}</span></summary>
+                    <div class="ws-note">${escape(origin.notice)}</div>
+                    ${origin.found ? `<h4>Identitas TOR/PR asal</h4>${fieldsHtml(origin.source_fields)}
+                        <h4>Penandatangan PR</h4><div class="ws-grid">${origin.signatures.map(signature=>`<div class="ws-field"><dt>${escape(signature.role)}</dt><dd><strong>${escape(signature.name)}</strong></dd><dd>${escape(signature.status)}<br>${escape(signature.date)}</dd></div>`).join('')}</div>
+                        <h4>Pengajuan & penerimaan di Umum</h4>${fieldsHtml(origin.receipt_fields)}` : ''}
+                    ${origin.management_fields?.length ? `<h4>Pencatatan & tindak lanjut PPBJ</h4>${fieldsHtml(origin.management_fields)}` : ''}
+                </details>`).join('')}`;
+            html += '<h4>Rincian dokumen</h4>' + fieldsHtml(data.fields);
             if (data.items?.length) html += `<h4>Barang / jasa · ${data.items.length} item ditampilkan</h4>${data.items.map((item,index)=>`<details class="ws-card" ${index===0?'open':''}><summary>${escape(item.number || index+1)}. ${escape(item.name.slice(0,100))}</summary><p>${escape(item.name)}</p><p>Jumlah: ${escape(item.quantity ?? '—')} ${escape(item.unit)}${item.due ? ` · Pemenuhan: ${escape(item.due)}`:''}</p>${item.price!=null ? `<p>Harga satuan: ${money(item.price)} · Subtotal: ${money(item.subtotal)}</p>`:''}</details>`).join('')}`;
             else if (data.kind !== 'ppbj') html += '<div class="ws-note">Belum ada rincian barang/jasa pada dokumen ini.</div>';
             if (data.items_truncated) html += '<p>Ditampilkan 50 item pertama. Buka dokumen lengkap untuk sisanya.</p>';

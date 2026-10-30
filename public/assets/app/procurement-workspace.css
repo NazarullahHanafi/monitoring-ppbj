@@ -28,6 +28,8 @@
 .ws-field dd { font-size:13px;margin-top:6px;color:var(--ws-text);overflow-wrap:anywhere;white-space:pre-wrap; }
 .ws-card { border:1px solid var(--ws-line);border-radius:14px;padding:14px;margin:10px 0;background:var(--ws-bg);overflow-wrap:anywhere; }
 .ws-card summary { font-size:13px;font-weight:700;cursor:pointer;color:var(--ws-text); }
+.ws-origin-creator { display:block;margin:6px 0 0 16px;color:var(--ws-muted);font-size:12px;font-weight:500; }
+.ws-provenance[open]>summary { padding-bottom:12px;border-bottom:1px solid var(--ws-line); }
 .ws-card p { margin:7px 0; }
 .ws-note { border-left:3px solid var(--ws-blue);background:var(--ws-soft);padding:11px 14px;border-radius:8px;font-size:12px;line-height:1.6;color:var(--ws-muted);margin:14px 0; }
 .ws-dialog .ws-primary { background:#3157d9;color:#fff;border-color:#3157d9; }

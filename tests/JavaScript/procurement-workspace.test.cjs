@@ -91,6 +91,29 @@ test('new detail aborts old request and stale response never overwrites the new 
     h.requests[0].resolve(response(detail('SP-1')));await new Promise(setImmediate);
     assert.match(h.body.innerHTML,/SP-2/);assert.doesNotMatch(h.body.innerHTML,/SP-1/);
 });
+
+test('TOR provenance renders creator, signers and receipt fields safely without extra fetches',async()=>{
+    const h=runtime();await h.click({wsDetail:'1',wsKind:'sp'});
+    const data=detail('SP-ORIGIN');
+    data.provenance=[{number:'PR-1',creator:'Maker <img src=x>',found:true,notice:'Catatan sistem',
+        source_fields:[{label:'Pembuat TOR/PR',value:'Maker <script>bad()</script>'}],
+        signatures:[{role:'Kepala Bidang',name:'Signer <img src=x>',status:'Tercatat',date:'30 Oct 2026'}],
+        receipt_fields:[{label:'Penerima',value:'Umum & Operasional'}],management_fields:[]}];
+    h.requests[0].resolve(response(data));await new Promise(setImmediate);
+    assert.match(h.body.innerHTML,/Pembuat TOR\/PR/);assert.match(h.body.innerHTML,/Signer &lt;img/);
+    assert.match(h.body.innerHTML,/Umum &amp; Operasional/);assert.doesNotMatch(h.body.innerHTML,/<script>|<img/);
+    assert.equal(h.requests.length,1);
+});
+
+test('missing TOR displays explicit provenance notice instead of guessed creator or signatures',async()=>{
+    const h=runtime();await h.click({wsDetail:'1',wsKind:'sp'});
+    const data=detail('SP-MISSING');
+    data.provenance=[{number:'PR-LEGACY',creator:'Belum ditelusuri',found:false,notice:'TOR/PR asal belum ditemukan',
+        source_fields:[],signatures:[],receipt_fields:[],management_fields:[{label:'Pencatat PPBJ',value:'Umum'}]}];
+    h.requests[0].resolve(response(data));await new Promise(setImmediate);
+    assert.match(h.body.innerHTML,/TOR\/PR asal belum ditemukan/);assert.match(h.body.innerHTML,/Pencatat PPBJ/);
+    assert.doesNotMatch(h.body.innerHTML,/<h4>Penandatangan PR<\/h4>/);
+});
 test('closing panel aborts fetch and no longer renders the response',async()=>{
     const h=runtime();await h.click({wsDetail:'1',wsKind:'sp'});h.dialog.close();
     assert.equal(h.requests[0].options.signal.aborted,true);

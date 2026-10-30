@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Ppbj;
 use App\Models\Sp;
 use App\Models\Spph;
+use App\Services\ProcurementProvenanceService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 
@@ -18,7 +19,7 @@ class ProcurementQuickDetailController extends Controller
         };
         // Always check existence/soft-delete and authorization BEFORE reading cache.
         $record = $class::findOrFail($id);
-        $key = 'workspace:detail:v2:'.$request->user()->id.':'.$kind.':'.$id.':'.sha1((string) $record->getRawOriginal('updated_at'));
+        $key = 'workspace:detail:v3:'.$request->user()->id.':'.$kind.':'.$id.':'.sha1((string) $record->getRawOriginal('updated_at'));
         $build = fn () => $this->present($record, $kind);
         if ($request->boolean('fresh')) {
             $data = $build();
@@ -75,6 +76,7 @@ class ProcurementQuickDetailController extends Controller
 
             return ['kind' => $kind, 'id' => $record->id, 'number' => $record->ppbj_no, 'title' => $this->plain($record->uraian),
                 'fields' => $fields, 'items' => [], 'prs' => [], 'documents' => $documents,
+                'provenance' => app(ProcurementProvenanceService::class)->forPrs(collect([$record])),
                 'stages' => $journey['stages'], 'audit' => $journey['audit'], 'tracking' => $journey['real_tracking'],
                 'archive_url' => route('ppbj.archive', $record->id), 'loaded_at' => now()->toIso8601String(), 'cache_seconds' => 20];
         }
@@ -97,9 +99,10 @@ class ProcurementQuickDetailController extends Controller
             $itemColumns = [...$itemColumns, 'harga_satuan', 'subtotal'];
         }
         $items = $record->items()->select($itemColumns)->limit(51)->get();
-        $prs = $record->ppbjs()->select(['ppbj.id', 'ppbj.ppbj_no', 'ppbj.uraian', 'ppbj.total_sebelum_ppn', 'ppbj.portofolio', 'ppbj.buyer'])->limit(21)->get();
+        $prColumns = array_map(fn ($column) => 'ppbj.'.$column, ProcurementProvenanceService::PPBJ_COLUMNS);
+        $prs = $record->ppbjs()->select($prColumns)->limit(21)->get();
         if ($prs->isEmpty() && $record->nomor_pr) {
-            $prs = Ppbj::where('ppbj_no', $record->nomor_pr)->get(['id', 'ppbj_no', 'uraian', 'total_sebelum_ppn', 'portofolio', 'buyer']);
+            $prs = Ppbj::where('ppbj_no', $record->nomor_pr)->limit(21)->get($prColumns);
         }
 
         return ['kind' => $kind, 'id' => $record->id, 'number' => $sp ? $record->nomor_sp : $record->nomor_spph,
@@ -110,6 +113,7 @@ class ProcurementQuickDetailController extends Controller
             'prs' => $prs->take(20)->map(fn ($pr) => ['id' => $pr->id, 'number' => $pr->ppbj_no, 'title' => $this->plain($pr->uraian, 300),
                 'amount' => $pr->total_sebelum_ppn, 'portfolio' => $pr->portofolio, 'buyer' => $pr->buyer])->values()->all(),
             'prs_truncated' => $prs->count() > 20, 'manual_pr' => $prs->isEmpty() ? $record->nomor_pr : null,
+            'provenance' => app(ProcurementProvenanceService::class)->forPrs($prs, $record->nomor_pr),
             'documents' => [], 'loaded_at' => now()->toIso8601String(), 'cache_seconds' => 20];
     }
 }
