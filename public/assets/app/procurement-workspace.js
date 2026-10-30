@@ -83,6 +83,7 @@
             if (data.tracking) html += `<h4>Tracking lapangan</h4>${data.tracking.length ? data.tracking.map(item=>`<div class="ws-card"><strong>${escape(item.title)}</strong><p>${escape(item.description)}</p><p>${escape(item.date)}</p></div>`).join('') : '<p>Belum ada catatan tracking.</p>'}`;
             if (data.audit) html += `<h4>Riwayat aktivitas terbaru</h4>${data.audit.length ? data.audit.map(item=>`<div class="ws-card"><strong>${escape(item.title)}</strong><p>${escape(item.actor)} · ${escape(item.date)}</p></div>`).join('') : '<p>Belum ada riwayat aktivitas.</p>'}`;
             body.innerHTML = html + '<div id="wsArchiveResult" aria-live="polite"></div>';
+            body.scrollTop=0;
         }
         async function detail(kind,id,fresh=false,back=false) {
             if (!['ppbj','sp','spph'].includes(kind) || !/^\d+$/.test(String(id))) return;

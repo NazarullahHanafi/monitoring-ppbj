@@ -18,7 +18,7 @@ class ProcurementQuickDetailController extends Controller
         };
         // Always check existence/soft-delete and authorization BEFORE reading cache.
         $record = $class::findOrFail($id);
-        $key = 'workspace:detail:v1:'.$request->user()->id.':'.$kind.':'.$id.':'.sha1((string) $record->getRawOriginal('updated_at'));
+        $key = 'workspace:detail:v2:'.$request->user()->id.':'.$kind.':'.$id.':'.sha1((string) $record->getRawOriginal('updated_at'));
         $build = fn () => $this->present($record, $kind);
         if ($request->boolean('fresh')) {
             $data = $build();
@@ -42,6 +42,30 @@ class ProcurementQuickDetailController extends Controller
         if ($record instanceof Ppbj) {
             // Reuse the established journey logic instead of another calculation engine.
             $journey = app(CommandCenterController::class)->journey($record)->getData(true);
+            // A legacy stored remaining-days column can keep declining after SP
+            // completion. Use the same live SLA/contract rules as the PPBJ table.
+            $labels = \App\Support\PpbjListPresentation::make($record);
+            $currentFields = [
+                'Sisa SLA' => $labels['sla_is_complete'] ? trim($labels['sla_final_label'].' · '.$labels['sla_outcome_label']) : $labels['sla_final_label'],
+                'Target SLA' => $labels['target_sla_hari'].' hari',
+                'Realisasi SLA' => $labels['sla_used_days'] !== null ? $labels['sla_used_days'].' hari' : 'Belum selesai',
+                'Sisa Waktu' => $labels['contract_remaining_days'] !== null ? $labels['contract_remaining_days'].' hari' : $labels['contract_status_label'],
+            ];
+            $fields = collect($journey['record']['details'])->map(fn ($field) => [
+                'label' => $field['label'], 'value' => $this->plain($currentFields[$field['label']] ?? $field['value']),
+            ])->values()->all();
+            $fields[] = ['label' => 'Penjelasan SLA', 'value' => $labels['sla_explanation']];
+            $fields[] = ['label' => 'Status pemenuhan', 'value' => $labels['contract_explanation']];
+            foreach (['finance' => $record->tgl_bpg ?: $record->tgl_bpb, 'invoice' => $record->tgl_invoice] as $key => $date) {
+                if ($date) {
+                    foreach ($journey['stages'] as &$stage) {
+                        if ($stage['key'] === $key) {
+                            $stage['date_label'] = \Illuminate\Support\Carbon::parse($date)->format('d M Y');
+                        }
+                    }
+                    unset($stage);
+                }
+            }
             $documents = [];
             foreach (['sps' => 'sp', 'spphs' => 'spph'] as $relation => $documentKind) {
                 foreach ($record->$relation->take(10) as $document) {
@@ -50,7 +74,7 @@ class ProcurementQuickDetailController extends Controller
             }
 
             return ['kind' => $kind, 'id' => $record->id, 'number' => $record->ppbj_no, 'title' => $this->plain($record->uraian),
-                'fields' => $journey['record']['details'], 'items' => [], 'prs' => [], 'documents' => $documents,
+                'fields' => $fields, 'items' => [], 'prs' => [], 'documents' => $documents,
                 'stages' => $journey['stages'], 'audit' => $journey['audit'], 'tracking' => $journey['real_tracking'],
                 'archive_url' => route('ppbj.archive', $record->id), 'loaded_at' => now()->toIso8601String(), 'cache_seconds' => 20];
         }

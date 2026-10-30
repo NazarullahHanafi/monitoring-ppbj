@@ -26,9 +26,11 @@
 
 ## Verifikasi
 
-- Full suite lokal: **353 tes PHP / 2051 assertions** dan **31 tes JavaScript** lulus pada 30 Oktober 2026. Template Blade juga berhasil dikompilasi.
+- Full suite lokal: **354 tes PHP / 2058 assertions** dan **31 tes JavaScript** lulus pada 30 Oktober 2026 setelah QA. Template Blade juga berhasil dikompilasi.
 
 - Tes PHP: isolasi akun/menu/cache, konflik versi, limit/hapus favorit, Viewer vs transaksi, filter multi-pilihan/tanggal, input berbahaya, akun nonaktif, rincian/cache/soft-delete/legacy PR/item limit/journey, tidak ada HTTP arsip otomatis, markup tiga menu.
 - Tes JavaScript: URL allowlist dan encoding, pengaturan kolom stabil setelah polling, kolom penting tidak tersembunyi, tidak ada request awal, escaping, abort/stale-response dan pembatalan panel, tanpa polling/storage persisten.
 - Pengujian menemukan jalur akun nonaktif pada middleware global yang mencoba mengakses request session sebelum tersedia. Jalur tersebut diperbaiki agar tetap menolak dengan 423 alih-alih error 500; hak akses tidak dilonggarkan.
 - Migrasi aditif: `2026_10_30_000003_create_user_table_preferences_table.php`. Tidak mengubah schema transaksi lama atau konfigurasi queue/cache global.
+- QA browser production: rincian SP/SPPH dan PR, navigasi dalam panel, lampiran dengan empty-state, simpan favorit/Gunakan/hapus, perubahan urutan dan kolom tersembunyi, kepadatan serta persistensi setelah reload diuji. Preferensi sementara QA dikembalikan ke bawaan dan favorit uji dihapus. Tidak mengubah transaksi bisnis.
+- QA menemukan margin utility halaman menggeser dialog native, serta angka sisa SLA tersimpan yang tidak sesuai untuk dokumen selesai. Margin dialog diisolasi; rincian SLA kini memakai `PpbjListPresentation` yang sama dengan tabel dan tanggal invoice/keuangan dilengkapi pada timeline. Cache panel dinaikkan namespace-nya agar data tampilan lama tidak tertinggal.

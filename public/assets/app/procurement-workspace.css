@@ -8,10 +8,10 @@
 .ws-toolbar button:hover,.ws-dialog button:hover { border-color:var(--ws-blue); }
 .ws-toolbar button:focus-visible,.ws-dialog :is(button,a,input,select):focus-visible,.ws-peek:focus-visible { outline:3px solid #829dff;outline-offset:3px; }
 .ws-toolbar span#wsFavoriteCount { font-size:10px;padding:1px 6px;border-radius:10px;background:#dbe7ff;color:#2345a0; }
-.ws-dialog { background:var(--ws-bg);border:1px solid var(--ws-line);padding:0;border-radius:20px;width:min(720px,calc(100vw - 24px));max-height:calc(100dvh - 32px);box-shadow:0 24px 100px #050d2366;margin:auto;overflow:hidden; }
+.ws-dialog { background:var(--ws-bg);border:1px solid var(--ws-line);padding:0;border-radius:20px;width:min(720px,calc(100vw - 24px));max-height:calc(100dvh - 32px);box-shadow:0 24px 100px #050d2366;margin:auto!important;overflow:hidden; }
 .ws-dialog[open] { display:flex;flex-direction:column; }
 .ws-dialog::backdrop { background:rgba(7,15,34,.64); }
-.ws-dialog[data-mode="detail"] { margin:0 0 0 auto;height:100dvh;max-height:100dvh;border-radius:22px 0 0 22px;width:min(800px,100vw); }
+.ws-dialog[data-mode="detail"] { margin:0 0 0 auto!important;inset:0;height:100dvh;max-height:100dvh;border-radius:22px 0 0 22px;width:min(800px,100vw); }
 .ws-header { display:flex;justify-content:space-between;align-items:flex-start;gap:16px;padding:22px 24px;background:var(--ws-soft);border-bottom:1px solid var(--ws-line);flex-shrink:0; }
 .ws-header h2 { font-size:20px;font-weight:800;margin-top:5px;color:var(--ws-text); }
 .ws-header>button { padding:7px 11px; }

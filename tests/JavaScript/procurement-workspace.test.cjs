@@ -100,4 +100,6 @@ test('closing panel aborts fetch and no longer renders the response',async()=>{
 test('observer watches row inserts only; new feature never polls or uses persistent browser storage',()=>{
     assert.ok(source.includes('.observe(table.tBodies[0],{childList:true})'));
     assert.doesNotMatch(source,/setInterval|localStorage|sessionStorage/);
+    const css=fs.readFileSync(path.join(__dirname,'../../public/assets/app/procurement-workspace.css'),'utf8');
+    assert.match(css,/margin:0 0 0 auto!important;inset:0/);
 });

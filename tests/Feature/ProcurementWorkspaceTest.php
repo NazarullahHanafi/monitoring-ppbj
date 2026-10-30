@@ -195,8 +195,21 @@ class ProcurementWorkspaceTest extends TestCase
         $sp = $this->document();
         $sp->ppbjs()->sync([$pr->id => ['urutan' => 1]]);
         $this->getJson(route('procurement.quick-detail', ['kind' => 'ppbj', 'id' => $pr->id]))->assertOk()->assertJsonCount(7, 'stages')
-            ->assertJsonPath('documents.0.kind', 'sp')->assertJsonPath('stages.6.done', true)->assertJsonFragment(['label' => 'No. Invoice', 'value' => 'INV-QUICK']);
+            ->assertJsonPath('documents.0.kind', 'sp')->assertJsonPath('stages.6.done', true)->assertJsonPath('stages.6.date_label', '30 Oct 2026')
+            ->assertJsonFragment(['label' => 'No. Invoice', 'value' => 'INV-QUICK']);
         Http::assertNothingSent();
+    }
+
+    public function test_completed_sla_uses_live_rules_not_legacy_remaining_days(): void
+    {
+        $this->actingAs($this->user());
+        $pr = Ppbj::create(['ppbj_no' => 'PR/QUICK/SLA', 'tgl_ppbj' => '2026-10-01', 'tgl_terima_pr' => '2026-10-01',
+            'awarding_sp' => '900/PKU-X/SP/2026', 'tgl_awarding_sp' => '2026-10-06', 'tgl_spk' => '2026-10-06', 'total_sebelum_ppn' => 2000000]);
+        DB::table('ppbj')->where('id', $pr->id)->update(['sisa_target_sla' => -300]);
+        $this->getJson(route('procurement.quick-detail', ['kind' => 'ppbj', 'id' => $pr->id]))->assertOk()
+            ->assertJsonFragment(['label' => 'Sisa SLA', 'value' => 'Selesai · Lebih cepat 5 hari'])
+            ->assertJsonFragment(['label' => 'Realisasi SLA', 'value' => '5 hari']);
+        $this->assertDatabaseHas('ppbj', ['id' => $pr->id, 'sisa_target_sla' => -300]);
     }
 
     public function test_workspace_markup_is_present_on_each_list_with_no_polling_added(): void
