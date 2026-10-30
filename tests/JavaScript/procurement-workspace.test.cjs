@@ -52,10 +52,11 @@ test('table layout is local DOM work, stable on repeat, protects key columns and
 });
 
 function runtime() {
-    const requests=[],handlers={},window={};
+    const requests=[],handlers={},window={},copies=[];
     const config={page:'sp',columns:{number:'Nomor',description:'Uraian',actions:'Aksi'},filterKeys:['search'],saveUrl:'/procurement-workspace/sp',
         state:{version:0,settings:{layout:{visible:['number','description','actions'],order:['number','description','actions'],density:'comfortable'},favorites:[]}}};
     const status=element(),body=element(),title=element(),close=element();
+    const stages=element();body.querySelector=selector=>selector==='.ws-stages'?stages:undefined;
     const dialog={...element(),open:false,querySelector:()=>close,querySelectorAll:()=>[],showModal(){this.open=true;},
         addEventListener:(type,fn)=>handlers[type]=fn,close(){this.open=false;handlers.close?.();}};
     const nodes={wsConfig:{textContent:JSON.stringify(config)},wsDialog:dialog,wsStatus:status,wsBody:body,wsDialogTitle:title};
@@ -63,15 +64,16 @@ function runtime() {
     const document={activeElement:{isConnected:true,focus(){}},getElementById:id=>nodes[id],querySelector:()=>null,
         createElement:()=>element(),addEventListener:(type,fn)=>{(events[type] ||= []).push(fn);}};
     vm.runInNewContext(source,{window,document,URL,URLSearchParams,Intl,AbortController,
+        navigator:{clipboard:{writeText:async text=>copies.push(text)}},
         location:{origin:'https://simon.example',search:'?search=kursi'},
         fetch:(url,options)=>new Promise(resolve=>requests.push({url,options,resolve})),
     });
     events.DOMContentLoaded[0]();
     const click=dataset=>{
-        const button={dataset,hasAttribute:name=>name==='data-ws-detail' && !!dataset.wsDetail};
+        const button={dataset,hasAttribute:name=>Object.hasOwn(dataset,name.slice(5).replace(/-([a-z])/g,(_,letter)=>letter.toUpperCase()))};
         return events.click[0]({target:{closest:()=>button},preventDefault(){}});
     };
-    return {requests,dialog,body,status,click};
+    return {requests,dialog,body,status,click,copies,stages,change:target=>events.change[0]({target})};
 }
 const response=data=>({ok:true,json:async()=>data});
 const detail=number=>({kind:'sp',number,title:'<img src=x onerror=alert(1)>',cache_seconds:20,fields:[{label:'Uraian',value:'<script>bad()</script>'}],items:[],prs:[]});
@@ -119,6 +121,30 @@ test('closing panel aborts fetch and no longer renders the response',async()=>{
     assert.equal(h.requests[0].options.signal.aborted,true);
     h.requests[0].resolve(response(detail('SHOULD-NOT-RENDER')));await new Promise(setImmediate);
     assert.doesNotMatch(h.body.innerHTML,/SHOULD-NOT-RENDER/);
+});
+
+test('TOR quick detail uses the Operational endpoint; checklist and copy work locally without extra requests',async()=>{
+    const h=runtime();await h.click({wsDetail:'12',wsKind:'torpr'});
+    assert.equal(h.requests[0].url,'/torpr/12/quick-detail');
+    const data={...detail('PR/12'),kind:'torpr',copy_summary:'Status PR/12: menunggu Umum',tracking_url:'https://simon.example/tracking-pr?q=PR12',
+        summary_fields:[{label:'Tindak lanjut',value:'Periksa data'}],stages:[{label:'Dibuat',done:true},{label:'Umum',done:false}]};
+    h.requests[0].resolve(response(data));await new Promise(setImmediate);
+    assert.match(h.body.innerHTML,/Ringkasan & tindak lanjut/);assert.match(h.body.innerHTML,/Buka Tracking PR lengkap/);
+    assert.doesNotMatch(h.body.innerHTML,/Belum ada rincian barang\/jasa/);
+    h.change({checked:true,hasAttribute:name=>name==='data-ws-pending',dataset:{}});
+    assert.ok(h.stages.classes.has('ws-pending-only'));
+    h.change({checked:false,hasAttribute:name=>name==='data-ws-pending',dataset:{}});
+    assert.equal(h.stages.classes.has('ws-pending-only'),false);
+    await h.click({wsCopySummary:''});assert.deepEqual(h.copies,[data.copy_summary]);
+    assert.match(h.status.textContent,/disalin/);assert.equal(h.requests.length,1);
+});
+
+test('TOR panel never renders missing, external or javascript tracking links',async()=>{
+    for(const url of [null,'','https://evil.example/','javascript:alert(1)']) {
+        const h=runtime();await h.click({wsDetail:'12',wsKind:'torpr'});
+        h.requests[0].resolve(response({...detail('DRAFT'),kind:'torpr',tracking_url:url}));await new Promise(setImmediate);
+        assert.doesNotMatch(h.body.innerHTML,/href=|Buka Tracking PR lengkap/);
+    }
 });
 test('observer watches row inserts only; new feature never polls or uses persistent browser storage',()=>{
     assert.ok(source.includes('.observe(table.tBodies[0],{childList:true})'));

@@ -556,6 +556,8 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
 
         // ==== TORPR CRUD ====
         Route::get('/torpr', [TorprController::class, 'index'])->name('torpr.index');
+        Route::get('/torpr/{id}/quick-detail', [\App\Http\Controllers\TorprQuickDetailController::class, 'show'])
+            ->whereNumber('id')->middleware('throttle:40,1')->name('torpr.quick-detail');
         Route::get('/torpr/my-progress', [TorprController::class, 'myProgress'])
             ->name('torpr.myProgress')
             ->middleware('throttle:30,1');

@@ -2289,51 +2289,35 @@
                             data-date-kacab="{{ $r->tgl_ttd_kacab_pr ? \Carbon\Carbon::parse($r->tgl_ttd_kacab_pr)->format('d M Y H:i') : '' }}"
                             style="{{ isset($isHeavy) && !$isHeavy ? 'animation-delay: ' . ($loop->index * 0.03) . 's' : '' }}">
 
-                            {{-- Nomor PR + Tombol Info --}}
+                            {{-- Nomor PR, registrasi ringkas, dan rincian baca-saja --}}
                             <td class="px-4 py-3 text-gray-900 dark:text-white">
-                                <div class="flex items-start gap-2">
-                                    <button type="button" onclick="openInfoPrModal({{ $r->id }})"
-                                        title="Lihat informasi PR {{ $r->nomor_pr ?? '' }}"
-                                        class="group relative mt-0.5 inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-lg
-                                                       border border-blue-700 bg-blue-600 px-2.5 text-xs font-bold text-white
-                                                       shadow-md shadow-blue-500/30 transition-all duration-300
-                                                       hover:-translate-y-0.5 hover:bg-blue-700 hover:shadow-lg hover:shadow-blue-500/40
-                                                       active:scale-95 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2
-                                                       dark:border-blue-400/40 dark:bg-blue-500 dark:text-white dark:hover:bg-blue-400 dark:focus:ring-offset-gray-900">
-                                        <span
-                                            class="absolute inset-0 rounded-lg bg-white/20 opacity-0 transition-opacity group-hover:opacity-100"></span>
-                                        <svg class="relative h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                                        </svg>
-                                        <!-- <span class="relative leading-none">Info</span> -->
-                                    </button>
-
-                                    <div class="flex min-w-0 flex-col gap-1">
-                                        <span class="font-mono font-semibold text-gray-900 dark:text-white">
-                                            {{ $r->nomor_pr ?? '—' }}
+                                <div class="torpr-number-stack">
+                                    <span class="torpr-pr-number font-mono font-semibold text-gray-900 dark:text-white">
+                                        {{ $r->nomor_pr ?? '—' }}
+                                    </span>
+                                    @if($hasGeneralRegistration)
+                                        <button type="button"
+                                            onclick="copyTorprText(@js($generalRegistrationNumber), 'Nomor registrasi umum disalin')"
+                                            title="{{ $generalRegistrationTitle }}"
+                                            aria-label="Salin registrasi Umum {{ $generalRegistrationNumber }}"
+                                            class="torpr-reg-badge">
+                                            <span class="torpr-reg-label">Reg</span>
+                                            <span class="torpr-reg-number">{{ $generalRegistrationNumber }}</span>
+                                        </button>
+                                    @else
+                                        <span title="{{ $generalRegistrationTitle }}"
+                                            class="torpr-reg-badge torpr-reg-empty">
+                                            Belum diregistrasi
                                         </span>
-                                        @if($hasGeneralRegistration)
-                                            <button type="button"
-                                                onclick="copyTorprText(@js($generalRegistrationNumber), 'Nomor registrasi umum disalin')"
-                                                title="{{ $generalRegistrationTitle }}"
-                                                class="inline-flex w-fit max-w-[210px] cursor-pointer items-center gap-1 rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-black text-indigo-700 ring-1 ring-indigo-200 transition hover:-translate-y-0.5 hover:bg-indigo-600 hover:text-white hover:shadow-md hover:shadow-indigo-500/20 dark:bg-indigo-950/60 dark:text-indigo-100 dark:ring-indigo-600/70 dark:hover:bg-indigo-500 dark:hover:text-white">
-                                                <span>Reg Umum</span>
-                                                <span class="truncate">{{ $generalRegistrationNumber }}</span>
-                                            </button>
-                                        @else
-                                            <span title="{{ $generalRegistrationTitle }}"
-                                                class="inline-flex w-fit items-center gap-1 rounded-full bg-slate-50 px-2 py-0.5 text-[10px] font-bold text-slate-500 ring-1 ring-slate-200 dark:bg-slate-900/70 dark:text-slate-300 dark:ring-slate-700">
-                                                Belum Reg
-                                            </span>
-                                        @endif
-                                        @if($editPermissionLog)
-                                            <span title="{{ $editPermissionTitle }}"
-                                                class="inline-flex w-fit items-center gap-1 rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-black text-violet-700 ring-1 ring-violet-200 dark:bg-violet-950/70 dark:text-violet-100 dark:ring-violet-500/60">
-                                                🔓 Diedit dengan izin
-                                            </span>
-                                        @endif
-                                    </div>
+                                    @endif
+                                    @if($editPermissionLog)
+                                        <span title="{{ $editPermissionTitle }}"
+                                            class="inline-flex w-fit items-center gap-1 rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-black text-violet-700 ring-1 ring-violet-200 dark:bg-violet-950/70 dark:text-violet-100 dark:ring-violet-500/60">
+                                            🔓 Diedit dengan izin
+                                        </span>
+                                    @endif
+                                    <button type="button" class="ws-peek" data-ws-kind="torpr" data-ws-detail="{{ $r->id }}"
+                                        aria-label="Rincian cepat {{ $safeNomorPr }}">Rincian cepat</button>
                                 </div>
                             </td>
 
@@ -3438,6 +3422,7 @@
         </div>
     </div>
 </div>
+@include('components.procurement-detail-panel', ['workspaceConfig' => ['page' => 'torpr', 'detailOnly' => true]])
 @endsection
 
 @push('scripts')

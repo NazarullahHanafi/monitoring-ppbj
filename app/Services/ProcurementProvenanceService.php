@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Ppbj;
 use App\Models\Torpr;
 use App\Models\User;
 use Illuminate\Support\Carbon;
@@ -42,11 +43,34 @@ class ProcurementProvenanceService
             'id', 'nomor_pr', 'tujuan_pengadaan', 'portofolio', 'tanggal_pr', 'jumlah_pr',
             'created_by_user_id', 'created_at', 'tgl_ttd_kabid_pr', 'tgl_ttd_kacab_pr',
             'signed_by_kabid_name', 'signed_by_kacab_name', 'received_by_umum_user_id', 'received_at',
-        ])->with(['latestReceiptApproval' => fn ($query) => $query->select(array_map(fn ($column) => 'pr_receipt_approvals.'.$column, [
+        ])->with(['latestReceiptApproval' => fn ($query) => $query->select($this->approvalColumns())])->get()
+            ->keyBy(fn ($tor) => $this->key($tor->nomor_pr));
+
+        return $this->present($prs, $tors, $numbers);
+    }
+
+    public function forTor(Torpr $tor, ?Ppbj $pr): array
+    {
+        $tor->loadMissing(['latestReceiptApproval' => fn ($query) => $query->select($this->approvalColumns())]);
+
+        return $this->present(
+            $pr ? collect([$this->key($pr->ppbj_no) => $pr]) : collect(),
+            collect([$this->key((string) $tor->nomor_pr) => $tor]),
+            collect([(string) $tor->nomor_pr]),
+        );
+    }
+
+    private function approvalColumns(): array
+    {
+        return array_map(fn ($column) => 'pr_receipt_approvals.'.$column, [
             'id', 'torpr_id', 'requested_by_user_id', 'requested_name', 'requested_at', 'status',
             'approved_by_user_id', 'approved_at', 'rejected_by_user_id', 'rejected_at',
             'rejected_reason', 'resubmit_notes',
-        ]))])->get()->keyBy(fn ($tor) => $this->key($tor->nomor_pr));
+        ]);
+    }
+
+    private function present(Collection $prs, Collection $tors, Collection $numbers): array
+    {
 
         $userIds = [];
         foreach ($tors as $tor) {

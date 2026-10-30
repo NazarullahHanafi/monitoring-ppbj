@@ -8,9 +8,6 @@
             'pic'=>'PIC','vendor'=>'Vendor','dari'=>'Tanggal mulai','sampai'=>'Tanggal akhir','mode'=>'Mode penomoran'],
         'saveUrl'=>route('procurement.workspace.save',['page'=>$workspacePage])];
 @endphp
-@push('styles')
-<link rel="stylesheet" href="{{ asset('assets/app/procurement-workspace.css') }}?v={{ filemtime(public_path('assets/app/procurement-workspace.css')) }}">
-@endpush
 <section class="ws-toolbar" aria-label="Ruang kerja tabel pribadi">
     <div><span class="ws-eyebrow">RUANG KERJA ANDA</span><p>Rincian cepat, filter favorit, dan tabel sesuai kebutuhan.</p></div>
     <div class="ws-buttons">
@@ -18,12 +15,4 @@
         <button type="button" data-ws-open="layout">☷ Atur tampilan</button>
     </div>
 </section>
-<dialog id="wsDialog" class="ws-dialog" aria-labelledby="wsDialogTitle">
-    <header class="ws-header"><div><span class="ws-eyebrow">RUANG KERJA PERSONAL</span><h2 id="wsDialogTitle">Rincian cepat</h2></div><button type="button" data-ws-close aria-label="Tutup panel" autofocus>✕</button></header>
-    <div id="wsStatus" class="ws-status" role="status" aria-live="polite"></div>
-    <div id="wsBody" class="ws-body"></div>
-</dialog>
-@push('scripts')
-<script type="application/json" id="wsConfig">@json($workspaceConfig)</script>
-<script src="{{ asset('assets/app/procurement-workspace.js') }}?v={{ filemtime(public_path('assets/app/procurement-workspace.js')) }}" defer></script>
-@endpush
+@include('components.procurement-detail-panel')

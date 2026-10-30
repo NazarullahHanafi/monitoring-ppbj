@@ -51,6 +51,9 @@
 [data-workspace-table][data-ws-custom="true"] { min-width:680px; }
 .ws-stage { border-left:3px solid var(--ws-line);padding:7px 12px;margin:0 0 7px;font-size:12px; }
 .ws-stage[data-done="true"] { border-color:#10b981; }
+.ws-pending-only .ws-stage[data-done="true"] { display:none; }
+.ws-dialog .ws-check { display:flex;align-items:center;gap:9px;color:var(--ws-text); }
+.ws-check input { accent-color:var(--ws-blue);width:16px;height:16px;flex-shrink:0; }
 .ws-stage span { display:block;color:var(--ws-muted);font-size:11px;margin-top:3px; }
 @media(max-width:540px) { .ws-grid { grid-template-columns:1fr; } .ws-body,.ws-header { padding:18px; } .ws-favorite { flex-direction:column; } .ws-dialog[data-mode="detail"] { border-radius:0; } }
 @media(prefers-reduced-motion:no-preference) { .ws-dialog[open] { animation:ws-enter .16s ease-out; } @keyframes ws-enter { from{opacity:0;transform:translateY(7px)} to{opacity:1;transform:translateY(0)} } }

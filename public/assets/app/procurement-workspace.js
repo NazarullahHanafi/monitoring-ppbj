@@ -4,6 +4,7 @@
     const money = value => new Intl.NumberFormat('id-ID',{style:'currency',currency:'IDR',maximumFractionDigits:2}).format(Number(value || 0));
     const clone = value => JSON.parse(JSON.stringify(value));
     const allowedUrl = value => {
+        if (typeof value!=='string' || !value.trim()) return null;
         try { const url = new URL(value,location.origin); return url.origin === location.origin && ['https:','http:'].includes(url.protocol) ? url.href : null; }
         catch { return null; }
     };
@@ -69,8 +70,16 @@
         function fieldsHtml(fields) {
             return `<dl class="ws-grid">${(fields || []).map(field=>`<div class="ws-field"><dt>${escape(field.label)}</dt><dd>${field.type==='money' ? money(field.value) : escape(field.value)}</dd></div>`).join('')}</dl>`;
         }
+        function stagesHtml(data) {
+            return `<section class="ws-stages"><h4>Perjalanan PR · sesuai catatan sistem</h4>${data.kind==='torpr' ? '<label class="ws-check"><input type="checkbox" data-ws-pending> Tampilkan hanya tahap yang belum lengkap tercatat</label><p>Urutan ini adalah alur proses, bukan urutan waktu. Tanda centang menunjukkan data tercatat, bukan bukti pembayaran atau persetujuan baru.</p>':''}${data.stages.map(stage=>`<div class="ws-stage" data-done="${Boolean(stage.done)}">${stage.done?'✓':'○'} ${escape(stage.label)}<span>${escape(stage.date_label || 'Tanggal belum tercatat')}${stage.reference?` · ${escape(stage.reference)}`:''}</span></div>`).join('')}</section>`;
+        }
         function renderDetail(data) {
-            let html = `<div class="ws-hero"><h3>${escape(data.number)}</h3><p>${escape(data.title)}</p><div class="ws-buttons">${history.length?'<button type="button" data-ws-back>← Rincian sebelumnya</button>':''}<button type="button" data-ws-refresh>↻ Muat terbaru</button>${data.archive_url ? '<button type="button" data-ws-archive>Muat lampiran PR</button>' : ''}</div></div><div class="ws-note">Panel baca-saja. Cache rincian maksimal ${escape(data.cache_seconds)} detik; gunakan Muat terbaru bila diperlukan. Pengaturan kolom tidak mengubah hak akses atau isi data.</div>`;
+            let html = `<div class="ws-hero"><h3>${escape(data.number)}</h3><p>${escape(data.title)}</p><div class="ws-buttons">${history.length?'<button type="button" data-ws-back>← Rincian sebelumnya</button>':''}<button type="button" data-ws-refresh>↻ Muat terbaru</button>${data.archive_url ? '<button type="button" data-ws-archive>Muat lampiran PR</button>' : ''}</div></div><div class="ws-note">Panel baca-saja. Cache rincian maksimal ${escape(data.cache_seconds)} detik; gunakan Muat terbaru bila diperlukan. ${data.kind==='torpr'?'Lampiran tidak diunduh otomatis. Tahap yang belum tercatat tidak selalu berarti pekerjaan belum dilakukan.':'Pengaturan kolom tidak mengubah hak akses atau isi data.'}</div>`;
+            if (data.kind==='torpr') {
+                const tracking=allowedUrl(data.tracking_url);
+                html += `<div class="ws-buttons"><button type="button" data-ws-copy-summary>Salin ringkasan progres</button>${tracking?`<a class="ws-link" href="${escape(tracking)}" target="_blank" rel="noopener">Buka Tracking PR lengkap</a>`:''}</div><h4>Ringkasan & tindak lanjut</h4>${fieldsHtml(data.summary_fields)}`;
+                if(data.stages) html+=stagesHtml(data);
+            }
             if (data.provenance?.length) html += `<h4>Pembuat, tanda tangan & penerimaan TOR/PR</h4>${data.provenance.map(origin=>`
                 <details class="ws-card ws-provenance" ${data.provenance.length===1?'open':''}>
                     <summary>${escape(origin.number)}<span class="ws-origin-creator">${escape(origin.creator)}</span></summary>
@@ -82,24 +91,24 @@
                 </details>`).join('')}`;
             html += '<h4>Rincian dokumen</h4>' + fieldsHtml(data.fields);
             if (data.items?.length) html += `<h4>Barang / jasa · ${data.items.length} item ditampilkan</h4>${data.items.map((item,index)=>`<details class="ws-card" ${index===0?'open':''}><summary>${escape(item.number || index+1)}. ${escape(item.name.slice(0,100))}</summary><p>${escape(item.name)}</p><p>Jumlah: ${escape(item.quantity ?? '—')} ${escape(item.unit)}${item.due ? ` · Pemenuhan: ${escape(item.due)}`:''}</p>${item.price!=null ? `<p>Harga satuan: ${money(item.price)} · Subtotal: ${money(item.subtotal)}</p>`:''}</details>`).join('')}`;
-            else if (data.kind !== 'ppbj') html += '<div class="ws-note">Belum ada rincian barang/jasa pada dokumen ini.</div>';
+            else if (['sp','spph'].includes(data.kind)) html += '<div class="ws-note">Belum ada rincian barang/jasa pada dokumen ini.</div>';
             if (data.items_truncated) html += '<p>Ditampilkan 50 item pertama. Buka dokumen lengkap untuk sisanya.</p>';
             if (data.prs?.length) html += `<h4>PR terkait · buka untuk perjalanan dan lampiran</h4>${data.prs.map(pr=>`<div class="ws-card"><strong>${escape(pr.number)}</strong><p>${escape(pr.title)}</p><p>${money(pr.amount)} · ${escape(pr.portfolio || 'Tanpa portofolio')} · ${escape(pr.buyer || 'Buyer belum diisi')}</p><button type="button" data-ws-detail="${Number(pr.id)}" data-ws-kind="ppbj">Rincian & perjalanan PR</button></div>`).join('')}`;
             if (data.prs_truncated) html += '<p>Ditampilkan 20 PR pertama.</p>';
             if (data.manual_pr) html += `<div class="ws-note">PR manual: ${escape(data.manual_pr)}. Belum terhubung ke PPBJ, sehingga perjalanan dan lampiran PR belum dapat ditampilkan.</div>`;
             if (data.documents?.length) html += `<h4>Dokumen terkait</h4><div class="ws-buttons">${data.documents.map(document=>`<button type="button" data-ws-detail="${Number(document.id)}" data-ws-kind="${escape(document.kind)}">${escape(document.number)}</button>`).join('')}</div>`;
-            if (data.stages) html += `<h4>Perjalanan PR</h4>${data.stages.map(stage=>`<div class="ws-stage" data-done="${Boolean(stage.done)}">${stage.done?'✓':'○'} ${escape(stage.label)}<span>${escape(stage.date_label || 'Belum tercatat')}</span></div>`).join('')}`;
+            if (data.stages && data.kind!=='torpr') html += stagesHtml(data);
             if (data.tracking) html += `<h4>Tracking lapangan</h4>${data.tracking.length ? data.tracking.map(item=>`<div class="ws-card"><strong>${escape(item.title)}</strong><p>${escape(item.description)}</p><p>${escape(item.date)}</p></div>`).join('') : '<p>Belum ada catatan tracking.</p>'}`;
             if (data.audit) html += `<h4>Riwayat aktivitas terbaru</h4>${data.audit.length ? data.audit.map(item=>`<div class="ws-card"><strong>${escape(item.title)}</strong><p>${escape(item.actor)} · ${escape(item.date)}</p></div>`).join('') : '<p>Belum ada riwayat aktivitas.</p>'}`;
             body.innerHTML = html + '<div id="wsArchiveResult" aria-live="polite"></div>';
             body.scrollTop=0;
         }
         async function detail(kind,id,fresh=false,back=false) {
-            if (!['ppbj','sp','spph'].includes(kind) || !/^\d+$/.test(String(id))) return;
+            if (!['ppbj','sp','spph','torpr'].includes(kind) || !/^\d+$/.test(String(id))) return;
             if (!fresh && !back && activeDetail && dialog.open && mode==='detail') history.push({kind:activeDetail.kind,id:activeDetail.id});
             const requestSerial = ++serial;
             activeDetail = {kind,id}; open('detail','Rincian cepat'); body.innerHTML = '<p>Memuat rincian dokumen…</p>';
-            try { const data = await get(`/procurement-quick-detail/${kind}/${id}${fresh?'?fresh=1':''}`); if (!dialog.open || requestSerial!==serial) return; activeDetail.data = data; renderDetail(data); }
+            try { const data = await get(`${kind==='torpr'?`/torpr/${id}/quick-detail`:`/procurement-quick-detail/${kind}/${id}`}${fresh?'?fresh=1':''}`); if (!dialog.open || requestSerial!==serial) return; activeDetail.data = data; renderDetail(data); }
             catch(error) { if(error.name!=='AbortError' && requestSerial===serial && dialog.open) { body.innerHTML = '<div class="ws-note">Rincian belum tersedia. Tutup panel atau coba muat kembali.</div><button type="button" data-ws-refresh>Coba lagi</button>'; setStatus(error.message); } }
         }
         function appliedFilters() {
@@ -155,6 +164,11 @@
         }
         function renderLayoutButtons() { renderLayout(false); }
         document.addEventListener('change',event=>{
+            if (event.target.hasAttribute('data-ws-pending')) {
+                body.querySelector('.ws-stages')?.classList.toggle('ws-pending-only',event.target.checked);
+                const remaining=(activeDetail?.data?.stages || []).filter(stage=>!stage.done).length;
+                setStatus(event.target.checked ? (remaining ? `${remaining} tahap belum lengkap tercatat.` : 'Semua tahap sudah tercatat.') : 'Semua tahap ditampilkan.');
+            }
             if (event.target.dataset.wsColumn) {
                 const key=event.target.dataset.wsColumn;
                 draftLayout.visible=event.target.checked?[...new Set([...draftLayout.visible,key])]:draftLayout.visible.filter(column=>column!==key);
@@ -181,6 +195,11 @@
             }
             if(button.hasAttribute('data-ws-reset')) { draftLayout={visible:Object.keys(config.columns),order:Object.keys(config.columns),density:'comfortable'}; renderLayout(false); setStatus('Pilihan bawaan disiapkan. Klik Simpan & terapkan untuk menyimpan.'); }
             if(button.hasAttribute('data-ws-refresh') && activeDetail) detail(activeDetail.kind,activeDetail.id,true);
+            if(button.hasAttribute('data-ws-copy-summary') && activeDetail?.data?.copy_summary) {
+                const copySerial=serial;
+                try { await navigator.clipboard.writeText(activeDetail.data.copy_summary); if(dialog.open && serial===copySerial) setStatus('Ringkasan progres disalin. Data tidak diubah.'); }
+                catch { if(dialog.open && serial===copySerial) setStatus('Browser belum mengizinkan penyalinan. Pilih dan salin teks ringkasan secara manual.'); }
+            }
             if(button.hasAttribute('data-ws-back') && history.length) { const previous=history.pop();detail(previous.kind,previous.id,false,true); }
             if(button.hasAttribute('data-ws-archive') && activeDetail?.data?.archive_url) {
                 const requestSerial=serial;
