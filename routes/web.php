@@ -81,6 +81,11 @@ Route::get('/home', function () {
     return redirect(AppServiceProvider::homeFor(auth()->user()));
 })->middleware(['auth'])->name('dashboard');
 
+// Personal presentation only: Viewer may personalize their own table without
+// granting any permission to mutate procurement records or other users.
+Route::post('/procurement-workspace/{page}', [\App\Http\Controllers\ProcurementWorkspaceController::class, 'save'])
+    ->whereIn('page', ['ppbj', 'sp', 'spph'])->middleware(['auth', 'dept:umum', 'throttle:20,1'])->name('procurement.workspace.save');
+
 Route::middleware(['auth', 'readonly.block'])->group(function () {
     Route::get('/archive-gateway', ArchiveDownloadGatewayController::class)
         ->name('archive.gateway')
@@ -208,6 +213,9 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
     // UMUM (Dept: umum)
     // ========================
     Route::middleware(['dept:umum'])->group(function () {
+
+        Route::get('/procurement-quick-detail/{kind}/{id}', [\App\Http\Controllers\ProcurementQuickDetailController::class, 'show'])
+            ->whereIn('kind', ['ppbj', 'sp', 'spph'])->whereNumber('id')->middleware('throttle:40,1')->name('procurement.quick-detail');
 
         Route::post('/procurement-review/{kind}/{id?}', [\App\Http\Controllers\ProcurementReviewController::class, 'preview'])
             ->whereIn('kind', ['sp', 'spph'])->whereNumber('id')->middleware('throttle:30,1')->name('procurement.review');

@@ -202,7 +202,8 @@
         <div
             class="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
             <div class="overflow-x-auto">
-                <table class="w-full text-sm">
+                @include('components.procurement-workspace', ['workspacePage' => 'spph'])
+                <table data-workspace-table="spph" class="w-full text-sm">
                     <thead>
                         <tr
                             class="bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-700 dark:to-gray-750 border-b border-gray-200 dark:border-gray-600">

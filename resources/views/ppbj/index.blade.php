@@ -346,9 +346,10 @@
     @endphp
 
     {{-- ================= TABLE (RESPONSIVE) ================= --}}
+    @include('components.procurement-workspace', ['workspacePage' => 'ppbj'])
     <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
         <div class="overflow-x-auto">
-            <table class="min-w-[1180px] w-full text-sm text-left">
+            <table data-workspace-table="ppbj" class="min-w-[1180px] w-full text-sm text-left">
                 <thead class="bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
                     <tr class="text-gray-600 dark:text-gray-300">
                         <th class="px-4 py-3 text-left">PPBJ</th>
@@ -384,7 +385,7 @@
                             $contractEndSource = $rowView['contract_end_date_source_label'];
                         @endphp
 
-                        <tr id="row_{{ $row->id }}"
+                        <tr id="row_{{ $row->id }}" data-workspace-id="{{ $row->id }}"
                             class="bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition">
                             <td class="px-4 py-3 font-semibold text-gray-900 dark:text-white">
                                 <span class="ppbj-no">{!! $hlText($row->ppbj_no, $hlKw) !!}</span>
