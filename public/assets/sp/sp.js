@@ -19,6 +19,7 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
         let lastIdSp = Number(SP_PAGE_CONFIG.lastId || 0);
         let pollTimer = null, checkTimer = null, searchTimer = null, presenceTimer = null, heartbeatTimer = null, modalOpen = false;
         let secureDeleteSearchSnapshot = null;
+        let pollInFlight = false, presenceInFlight = false, presenceStartTimer = null;
         let currentPrMode = 'ppbj', currentEditPrMode = 'ppbj';
         let editModalLoadSerial = 0;
         const spAllocationState = {
@@ -721,8 +722,8 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
         // ═══════════════════════════════════════
         // PRESENCE
         // ═══════════════════════════════════════
-        async function sendPresence(a) { try { await fetch(a, { method: 'POST', headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content } }); } catch { } }
-        async function pollPresence() { try { const r = await fetch(PRESENCE_URL); if (!r.ok) return; const d = await r.json(); const b = document.getElementById('presenceBar'), t = document.getElementById('presenceText'); if (d.users.length > 0) { t.innerHTML = d.users.map(u => `<strong>${escapedHtml(u.name)}</strong>`).join(', ') + ' sedang menambahkan SP<span class="animate-pulse">...</span>'; b.classList.remove('hidden'); } else b.classList.add('hidden'); } catch { } }
+        async function sendPresence(a) { if (document.hidden && a === PRESENCE_START) return; try { await fetch(a, { method: 'POST', headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content } }); } catch { } }
+        async function pollPresence() { if (document.hidden || presenceInFlight) return; presenceInFlight = true; try { const r = await fetch(PRESENCE_URL); if (!r.ok) return; const d = await r.json(); const b = document.getElementById('presenceBar'), t = document.getElementById('presenceText'); if (d.users.length > 0) { t.innerHTML = d.users.map(u => `<strong>${escapedHtml(u.name)}</strong>`).join(', ') + ' sedang menambahkan SP<span class="animate-pulse">...</span>'; b.classList.remove('hidden'); } else b.classList.add('hidden'); } catch { } finally { presenceInFlight = false; } }
         function startHeartbeat() { if (heartbeatTimer) return; sendPresence(PRESENCE_START); heartbeatTimer = setInterval(() => sendPresence(PRESENCE_START), 15000); }
         function stopHeartbeat() { if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null; } sendPresence(PRESENCE_STOP); }
 
@@ -1685,7 +1686,8 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
         // POLLING
         // ═══════════════════════════════════════
         async function pollNow() {
-            if (!IS_FIRST_PAGE || HAS_FILTER) return;
+            if (!IS_FIRST_PAGE || HAS_FILTER || document.hidden || pollInFlight) return;
+            pollInFlight = true;
             try {
                 const r = await fetch(`${POLL_URL_SP}?last_id=${lastIdSp}`, { headers: { 'Accept': 'application/json' } });
                 if (!r.ok) return;
@@ -1719,7 +1721,7 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
                     const c = document.getElementById('totalCount');
                     if (c) c.textContent = parseInt(c.textContent) + data.rows.length;
                 }
-            } catch { }
+            } catch { } finally { pollInFlight = false; }
         }
 
         // ═══════════════════════════════════════
@@ -2849,8 +2851,9 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
             // Presence kolaboratif bukan data utama halaman, jadi beri ruang
             // untuk render dan interaksi pertama pengguna.
             if (!document.hidden) {
-                setTimeout(() => {
-                    if (!document.hidden) {
+                presenceStartTimer = setTimeout(() => {
+                    presenceStartTimer = null;
+                    if (!document.hidden && !presenceTimer) {
                         pollPresence();
                         presenceTimer = setInterval(pollPresence, 60000);
                     }
@@ -2858,6 +2861,10 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
             }
             document.addEventListener('visibilitychange', () => {
                 if (document.hidden) {
+                    clearTimeout(presenceStartTimer);
+                    presenceStartTimer = null;
+                    clearInterval(heartbeatTimer);
+                    heartbeatTimer = null;
                     clearInterval(pollTimer);
                     clearInterval(presenceTimer);
                     pollTimer = null;
@@ -2866,10 +2873,22 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
                 else {
                     if (IS_FIRST_PAGE && !HAS_FILTER && !pollTimer) pollTimer = setInterval(pollNow, 45000);
                     if (!presenceTimer) presenceTimer = setInterval(pollPresence, 60000);
+                    if (modalOpen) startHeartbeat();
                 }
             });
             window.addEventListener('pagehide', () => {
+                clearTimeout(presenceStartTimer);
+                clearInterval(pollTimer);
+                clearInterval(presenceTimer);
+                clearInterval(heartbeatTimer);
+                presenceStartTimer = pollTimer = presenceTimer = heartbeatTimer = null;
                 if (modalOpen) { const fd = new FormData(); fd.append('_token', document.querySelector('meta[name="csrf-token"]').content); navigator.sendBeacon(PRESENCE_STOP, fd); }
+            });
+            window.addEventListener('pageshow', (event) => {
+                if (!event.persisted || document.hidden) return;
+                if (IS_FIRST_PAGE && !HAS_FILTER && !pollTimer) pollTimer = setInterval(pollNow, 45000);
+                if (!presenceTimer) presenceTimer = setInterval(pollPresence, 60000);
+                if (modalOpen) startHeartbeat();
             });
             if ('requestIdleCallback' in window) {
                 requestIdleCallback(checkOnboardingStatus, { timeout: 6000 });

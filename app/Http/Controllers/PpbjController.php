@@ -2120,7 +2120,10 @@ class PpbjController extends Controller
 
     public function reportData(Request $request)
     {
-        $query = $this->applyReportFilters(Ppbj::query(), $request);
+        // Reports use the same stored SLA snapshot for rows and aggregate cards.
+        // Eloquent's live accessor lacks its dates in this projection and would
+        // recalculate an incorrect status hundreds of times during JSON encoding.
+        $query = $this->applyReportFilters(DB::table('ppbj'), $request);
 
         $statsRow = (clone $query)
             ->selectRaw(<<<'SQL'

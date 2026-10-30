@@ -63,10 +63,13 @@ class ContactMessageController extends Controller
 
         $messages = $query->paginate(12)->withQueryString();
 
+        $summary = ContactMessage::query()
+            ->selectRaw('COUNT(*) as total, SUM(CASE WHEN read_at IS NULL THEN 1 ELSE 0 END) as unread')
+            ->first();
         $stats = [
-            'total' => ContactMessage::count(),
-            'unread' => ContactMessage::whereNull('read_at')->count(),
-            'read' => ContactMessage::whereNotNull('read_at')->count(),
+            'total' => (int) $summary->total,
+            'unread' => (int) $summary->unread,
+            'read' => (int) $summary->total - (int) $summary->unread,
         ];
 
         return view('contact_messages.index', compact('messages', 'stats'));

@@ -24,6 +24,7 @@
         let lastId = Number(SPPH_PAGE_CONFIG.lastId || 0);
         let pollTimer = null, checkTimer = null, searchTimer = null, presTimer = null, hbTimer = null;
         let secureDeleteSearchSnapshot = null;
+        let pollInFlight = false, presenceInFlight = false, presenceStartTimer = null;
         let modalOpen = false, addIdx = 0, editIdx = 5000;
         let currentPrMode = 'ppbj', currentEditPrMode = 'ppbj';
         let editModalLoadSerial = 0;
@@ -910,8 +911,8 @@
         // ════════════════════════════════════════════════════════════
         // PRESENCE & HEARTBEAT
         // ════════════════════════════════════════════════════════════
-        async function sendPres(url) { try { await fetch(url, { method: 'POST', headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content } }); } catch { } }
-        async function pollPres() { try { const r = await fetch(PRESENCE_URL); if (!r.ok) return; const data = await r.json(), bar = document.getElementById('presenceBar'), txt = document.getElementById('presenceText'); if (data.users.length > 0) { txt.innerHTML = data.users.map(u => `<strong>${escapedHtml(u.name)}</strong>`).join(', ') + ' sedang menambahkan SPPH<span class="animate-pulse">...</span>'; bar.classList.remove('hidden'); } else { bar.classList.add('hidden'); } } catch { } }
+        async function sendPres(url) { if (document.hidden && url === PRES_START) return; try { await fetch(url, { method: 'POST', headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content } }); } catch { } }
+        async function pollPres() { if (document.hidden || presenceInFlight) return; presenceInFlight = true; try { const r = await fetch(PRESENCE_URL); if (!r.ok) return; const data = await r.json(), bar = document.getElementById('presenceBar'), txt = document.getElementById('presenceText'); if (data.users.length > 0) { txt.innerHTML = data.users.map(u => `<strong>${escapedHtml(u.name)}</strong>`).join(', ') + ' sedang menambahkan SPPH<span class="animate-pulse">...</span>'; bar.classList.remove('hidden'); } else { bar.classList.add('hidden'); } } catch { } finally { presenceInFlight = false; } }
         function startHb() { if (hbTimer) return; sendPres(PRES_START); hbTimer = setInterval(() => sendPres(PRES_START), 15000); }
         function stopHb() { if (hbTimer) { clearInterval(hbTimer); hbTimer = null; } sendPres(PRES_STOP); }
 
@@ -919,7 +920,8 @@
         // POLLING
         // ════════════════════════════════════════════════════════════
         async function pollNow() {
-            if (!IS_FIRST || HAS_FILTER) return;
+            if (!IS_FIRST || HAS_FILTER || document.hidden || pollInFlight) return;
+            pollInFlight = true;
             try {
                 const r = await fetch(`${POLL_URL}?last_id=${lastId}`, { headers: { 'Accept': 'application/json' } });
                 if (!r.ok) return;
@@ -946,7 +948,7 @@
                 });
                 const c = document.getElementById('totalCount');
                 if (c) c.textContent = parseInt(c.textContent) + data.rows.length;
-            } catch { }
+            } catch { } finally { pollInFlight = false; }
         }
 
         // ════════════════════════════════════════════════════════════
@@ -1748,6 +1750,8 @@
             const BACKGROUND_POLL_INTERVAL = 45000;
 
             function stopBackgroundPolling() {
+                clearTimeout(presenceStartTimer);
+                presenceStartTimer = null;
                 clearInterval(pollTimer);
                 clearInterval(presTimer);
                 pollTimer = null;
@@ -1761,8 +1765,9 @@
                     pollTimer = setInterval(pollNow, BACKGROUND_POLL_INTERVAL);
                 }
 
-                if (!presTimer) {
-                    setTimeout(() => {
+                if (!presTimer && !presenceStartTimer) {
+                    presenceStartTimer = setTimeout(() => {
+                        presenceStartTimer = null;
                         if (!document.hidden && !presTimer) {
                             pollPres();
                             presTimer = setInterval(pollPres, 60000);
@@ -1773,15 +1778,29 @@
 
             startBackgroundPolling();
             document.addEventListener('visibilitychange', () => {
-                if (document.hidden) stopBackgroundPolling();
-                else startBackgroundPolling();
+                if (document.hidden) {
+                    stopBackgroundPolling();
+                    clearInterval(hbTimer);
+                    hbTimer = null;
+                } else {
+                    startBackgroundPolling();
+                    if (modalOpen) startHb();
+                }
             });
             window.addEventListener('pagehide', () => {
+                stopBackgroundPolling();
+                clearInterval(hbTimer);
+                hbTimer = null;
                 if (modalOpen) {
                     const fd = new FormData();
                     fd.append('_token', document.querySelector('meta[name="csrf-token"]').content);
                     navigator.sendBeacon(PRES_STOP, fd);
                 }
+            });
+            window.addEventListener('pageshow', (event) => {
+                if (!event.persisted || document.hidden) return;
+                startBackgroundPolling();
+                if (modalOpen) startHb();
             });
 
             if ('requestIdleCallback' in window) {

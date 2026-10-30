@@ -294,11 +294,11 @@ class OwnerController extends Controller
             ];
         }
 
-        $lastActivity = ActivityLog::query()->latest()->first()?->created_at;
+        $lastActivity = ActivityLog::query()->latest()->value('created_at');
 
         return [
             'total' => ActivityLog::query()->count(),
-            'today' => ActivityLog::query()->whereDate('created_at', today())->count(),
+            'today' => ActivityLog::query()->whereBetween('created_at', [today()->startOfDay(), today()->endOfDay()])->count(),
             'this_week' => ActivityLog::query()->where('created_at', '>=', now()->subDays(7))->count(),
             'backup_sent' => ActivityLog::query()->where('action', 'owner_backup_email_sent')->count(),
             'last_activity' => $lastActivity ? $lastActivity->format('d M Y H:i') : 'Belum ada',

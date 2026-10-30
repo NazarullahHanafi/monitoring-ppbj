@@ -91,8 +91,8 @@ class CollaborationCalendarController extends Controller
             })
             ->when(filled($validated['portfolio'] ?? null), fn (Builder $query) => $query->where('portofolio', $validated['portfolio']))
             ->when(filled($validated['receiver_id'] ?? null), fn (Builder $query) => $query->where('general_registered_by_user_id', $validated['receiver_id']))
-            ->when(filled($validated['date_from'] ?? null), fn (Builder $query) => $query->whereDate('tgl_ppbj', '>=', $validated['date_from']))
-            ->when(filled($validated['date_to'] ?? null), fn (Builder $query) => $query->whereDate('tgl_ppbj', '<=', $validated['date_to']))
+            ->when(filled($validated['date_from'] ?? null), fn (Builder $query) => $query->where('tgl_ppbj', '>=', $validated['date_from']))
+            ->when(filled($validated['date_to'] ?? null), fn (Builder $query) => $query->where('tgl_ppbj', '<=', $validated['date_to']))
             ->when(
                 $term !== '',
                 fn (Builder $query) => $query
@@ -473,19 +473,42 @@ class CollaborationCalendarController extends Controller
                 'tgl_spk', 'promised_date', 'closed_date', 'do_no', 'do_date', 'progres',
             ])
             ->where('status', '!=', 'CANCELLED')
-            ->where(function (Builder $query) use ($start, $end, $slaStart) {
-                $query->whereBetween('promised_date', [$start, $end])
-                    ->orWhereBetween('closed_date', [$start, $end])
-                    ->orWhereBetween('tgl_spk', [$start, $end])
-                    ->orWhereBetween('do_date', [$start, $end])
-                    ->orWhereBetween('tgl_diserahkan', [$slaStart, $end])
-                    ->orWhereBetween('tgl_terima_pr', [$slaStart, $end])
-                    ->orWhereBetween('tgl_ppbj', [$slaStart, $end]);
+            ->where(function (Builder $query) use ($start, $end, $slaStart, $source) {
+                if (in_array($source, ['all', 'contract'], true)) {
+                    $query->orWhereBetween('promised_date', [$start, $end])
+                        ->orWhereBetween('closed_date', [$start, $end]);
+                }
+                if (in_array($source, ['all', 'milestone'], true)) {
+                    $query->orWhereBetween('tgl_spk', [$start, $end])
+                        ->orWhereBetween('do_date', [$start, $end]);
+                }
+                if (in_array($source, ['all', 'sla'], true)) {
+                    $query->orWhereBetween('tgl_diserahkan', [$slaStart, $end])
+                        ->orWhereBetween('tgl_terima_pr', [$slaStart, $end])
+                        ->orWhereBetween('tgl_ppbj', [$slaStart, $end]);
+                }
             })
             ->orderBy('id')
             ->limit(1500)
             ->get();
 
+        // Read current rows on every request, cache only expensive derived events.
+        // Fingerprints also notice bulk SQL imports without relying on updated_at.
+        // Custom/private agendas and their permissions are deliberately not cached.
+        $fingerprint = hash('sha256', serialize([
+            $rows->map(fn (Ppbj $row) => $row->getRawOriginal())->all(),
+            $start->toDateString(), $end->toDateString(), $source,
+            strtolower((string) $user->department), now()->toDateString(),
+            Carbon::getLocale(), config('app.timezone'), url('/'),
+        ]));
+
+        return collect(Cache::remember('calendar:system-events:v1:'.$fingerprint, 300,
+            fn () => $this->buildSystemEvents($rows, $start, $end, $source, $user)->all()
+        ));
+    }
+
+    private function buildSystemEvents($rows, Carbon $start, Carbon $end, string $source, User $user)
+    {
         return $rows->flatMap(function (Ppbj $ppbj) use ($start, $end, $source, $user) {
             $events = [];
             $url = $this->ppbjUrl($ppbj, $user);

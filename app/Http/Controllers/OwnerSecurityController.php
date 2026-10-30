@@ -18,15 +18,16 @@ class OwnerSecurityController extends Controller
     public function index(Request $request): View
     {
         $sessions = $this->activeSessions($request);
-        $honeypotEvents = Schema::hasTable('security_honeypot_events')
+        $hasHoneypot = Schema::hasTable('security_honeypot_events');
+        $honeypotEvents = $hasHoneypot
             ? SecurityHoneypotEvent::query()->latest('last_seen_at')->limit(30)->get()
             : collect();
 
         $honeypotStats = [
-            'today' => Schema::hasTable('security_honeypot_events')
-                ? (int) SecurityHoneypotEvent::query()->whereDate('event_date', today())->sum('hit_count')
+            'today' => $hasHoneypot
+                ? (int) SecurityHoneypotEvent::query()->where('event_date', today()->toDateString())->sum('hit_count')
                 : 0,
-            'sources_30d' => Schema::hasTable('security_honeypot_events')
+            'sources_30d' => $hasHoneypot
                 ? SecurityHoneypotEvent::query()->where('event_date', '>=', now()->subDays(30)->toDateString())->distinct()->count('ip_address')
                 : 0,
             'last_seen' => $honeypotEvents->first()?->last_seen_at,
