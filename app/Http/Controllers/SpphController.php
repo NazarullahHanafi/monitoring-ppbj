@@ -35,19 +35,33 @@ class SpphController extends Controller
     /** @var array<string, string|null> Cache kecil per-request untuk mencegah query vendor SP berulang. */
     private array $activeSpVendorCache = [];
 
-    public function printContext(Spph $spph)
+    public function printContext(Request $request, Spph $spph)
     {
-        return response()->json(app(SpphPrintPolicy::class)->context($spph))
+        $context = app(SpphPrintPolicy::class)->context($spph);
+        $context['can_manage'] = ! $request->user()->isReadOnly();
+        if ($request->query('signing_mode') !== null) {
+            $context['selection'] = app(SpphPrintPolicy::class)->validate($request, $context)['query'];
+        }
+        return response()->json($context)
             ->header('Cache-Control', 'private, no-store');
     }
 
     private function automaticPrintSigner(Request $request, Spph $spph): array
     {
-        $key = 'spph_print_context:'.$spph->id;
-        $context = $request->attributes->get($key) ?? app(SpphPrintPolicy::class)->context($spph);
-        $request->attributes->set($key, $context);
-
-        return app(SpphPrintPolicy::class)->validate($request, $context);
+        $key = 'spph_print_selection:'.$spph->id;
+        if ($selection = $request->attributes->get($key)) {
+            return $selection;
+        }
+        $selection = app(SpphPrintPolicy::class)->validate($request, app(SpphPrintPolicy::class)->context($spph));
+        $request->attributes->set($key, $selection);
+        if ($selection['signing_mode'] === 'manual') {
+            \App\Models\ActivityLog::create(['user_id' => $request->user()->id, 'model_type' => Spph::class,
+                'model_id' => $spph->id, 'action' => 'manual_print_signer',
+                'description' => 'Permintaan cetak SPPH dengan pilihan penandatangan manual',
+                'changes' => ['number' => $spph->nomor_spph, 'name' => $selection['name'], 'title' => $selection['title'],
+                    'reason' => $selection['manual_reason'], 'amount' => $selection['amount'], 'rule' => $selection['rule']]]);
+        }
+        return $selection;
     }
 
     protected function presenceKey(): string
@@ -1025,7 +1039,7 @@ class SpphController extends Controller
             'penandatangan' => $signer['name'],
             'jabatan' => $signer['title'],
         ]);
-        $printRequest->attributes->set('spph_print_context:'.$spph->id, $signer);
+        $printRequest->attributes->set('spph_print_selection:'.$spph->id, $signer);
         $preview = PrintPreviewFile::store(
             // Reuse the checked snapshot only within this one print operation.
             $this->cetakSpph($printRequest, $spph),
@@ -1048,6 +1062,7 @@ class SpphController extends Controller
                 'Vendor' => $vendorName ?: '-',
                 'Dasar penandatangan' => 'Total '.$signer['pr_count'].' PR/PPBJ: Rp '.number_format((float) $signer['amount'], 2, ',', '.').' — '.$signer['rule'],
                 'Penandatangan' => ($signer['name'] ?? '-').' - '.($signer['title'] ?? '-'),
+                'Mode pilihan' => $signer['signing_mode'] === 'manual' ? 'Manual — '.$signer['manual_reason'] : 'Otomatis sesuai nilai PR/PPBJ',
                 'PIC' => $spph->pic ?: '-',
                 'Link berlaku sampai' => $preview['expiresText'],
             ],
@@ -1060,8 +1075,7 @@ class SpphController extends Controller
         $signer = $this->automaticPrintSigner($request, $spph);
         $downloadUrl = route('spph.cetak-semua-vendor', [
             'spph' => $spph,
-            'penandatangan' => $signer['name'],
-            'jabatan' => $signer['title'],
+            ...$signer['query'],
         ]);
         $preview = null;
 
@@ -1070,7 +1084,7 @@ class SpphController extends Controller
                 'penandatangan' => $signer['name'],
                 'jabatan' => $signer['title'],
             ]);
-            $printRequest->attributes->set('spph_print_context:'.$spph->id, $signer);
+            $printRequest->attributes->set('spph_print_selection:'.$spph->id, $signer);
             $preview = PrintPreviewFile::store(
                 $this->cetakSemuaVendor($printRequest, $spph),
                 $this->safeDownloadName('SPPH '.($spph->nomor_spph ?: $spph->id).' - Semua Vendor.docx')
@@ -1094,6 +1108,7 @@ class SpphController extends Controller
                 'Nomor SPPH' => $spph->nomor_spph ?: '-',
                 'Nomor PR/PPBJ' => $spph->linkedPpbjLabel(),
                 'Jumlah Vendor' => $vendorCount.' vendor',
+                'Mode pilihan' => $signer['signing_mode'] === 'manual' ? 'Manual — '.$signer['manual_reason'] : 'Otomatis sesuai nilai PR/PPBJ',
                 'Dasar penandatangan' => 'Total '.$signer['pr_count'].' PR/PPBJ: Rp '.number_format((float) $signer['amount'], 2, ',', '.').' — '.$signer['rule'],
                 'Penandatangan' => ($signer['name'] ?? '-').' - '.($signer['title'] ?? '-'),
                 'PIC' => $spph->pic ?: '-',
@@ -1358,7 +1373,7 @@ class SpphController extends Controller
                 'penandatangan' => $request->query('penandatangan'),
                 'jabatan' => $request->query('jabatan'),
             ]);
-            $vendorRequest->attributes->set('spph_print_context:'.$spph->id, $signer);
+            $vendorRequest->attributes->set('spph_print_selection:'.$spph->id, $signer);
             $response = $this->cetakSpph($vendorRequest, $spph);
             $filePath = $response->getFile()->getPathname();
             $entryName = $this->safeDownloadName('SPPH '.$spph->nomor_spph.' - '.$vendorName.'.docx');

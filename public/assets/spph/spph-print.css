@@ -23,3 +23,40 @@
 .spph-signing-links { display:flex;gap:12px;flex-wrap:wrap;margin:14px 0; }
 .spph-signing-links a { color:var(--sg-accent);text-decoration:underline;text-underline-offset:3px;font-weight:600;font-size:12px; }
 @media(max-width:540px) { .spph-signing-grid { grid-template-columns:1fr; } .spph-signing-breakdown>div { flex-wrap:wrap; } }
+.spph-signing-popup .swal2-html-container { max-height:calc(100dvh - 210px);overflow:auto;overscroll-behavior:contain; }
+.sg-eyebrow { display:block;font-size:10px;letter-spacing:.14em;color:var(--sg-accent);font-weight:800;margin-bottom:7px; }
+.spph-signing-links a.sg-navigation-card { display:flex;align-items:center;gap:12px;width:100%;padding:13px 15px;border:1px solid var(--sg-line);border-radius:12px;background:var(--sg-soft);color:var(--sg-text);text-decoration:none;font-size:13px; }
+.sg-navigation-card>span:nth-child(2) { flex:1; }
+.sg-navigation-card strong,.sg-navigation-card small { display:block; }
+.sg-navigation-card small { color:var(--sg-muted);font-size:11px;font-weight:400;margin-top:2px; }
+.sg-navigation-icon { display:grid;place-items:center;width:34px;height:34px;border-radius:10px;background:var(--sg-accent);color:#fff;font-size:24px; }
+.dark .sg-navigation-icon { color:#172033; }
+.sg-navigation-card:hover { border-color:var(--sg-accent)!important; }
+.sg-modes { display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:14px 0; }
+.sg-modes button,.sg-soft-button { border:1px solid var(--sg-line);border-radius:10px;background:var(--sg-soft);color:var(--sg-text);padding:10px 12px;font-size:12px;font-weight:700;cursor:pointer; }
+.sg-modes button { text-align:left; }
+.sg-modes button span { display:block;font-size:10px;font-weight:400;color:var(--sg-muted);margin-top:3px; }
+.sg-modes button[aria-pressed="true"] { border-color:var(--sg-accent);box-shadow:inset 0 0 0 1px var(--sg-accent); }
+.spph-signing-content :is(button,a,input,select,textarea):focus-visible { outline:3px solid #829dff;outline-offset:3px; }
+.sg-manual,.sg-master-form { padding:15px;border:1px solid var(--sg-line);border-radius:12px;background:var(--sg-soft);margin:12px 0; }
+.spph-signing-content label { display:block;font-size:12px;font-weight:700;color:var(--sg-text); }
+.spph-signing-content label small { font-weight:400;color:var(--sg-muted); }
+.spph-signing-content :is(select,input:not([type="checkbox"]),textarea) { display:block;width:100%;padding:10px 12px;margin-top:6px;border:1px solid var(--sg-line);border-radius:9px;color:var(--sg-text);background:var(--sg-soft);font-size:13px;box-sizing:border-box; }
+.spph-signing-content select option { color:var(--sg-text);background:var(--sg-soft); }
+.sg-manual .spph-signing-grid { margin:0 0 12px; }
+.sg-manage-button { margin-bottom:12px; }
+.sg-manager-heading p,.sg-master-form p,.sg-manual p { font-size:11px; }
+.sg-search { display:grid;grid-template-columns:150px 1fr auto;align-items:end;gap:8px; }
+.sg-inline-actions { display:flex;gap:7px;flex-wrap:wrap; }
+.sg-check { display:flex!important;align-items:center;gap:8px;margin:12px 0; }
+.sg-check input { accent-color:var(--sg-accent);width:16px;height:16px; }
+.sg-primary { background:#3157d9;color:#fff;border:1px solid #3157d9;border-radius:9px;padding:10px 12px;font-size:12px;font-weight:700;cursor:pointer; }
+.sg-master-row { padding:12px 0;border-bottom:1px solid var(--sg-line); }
+.sg-master-row>div:first-child { display:flex;justify-content:space-between;gap:10px;margin-bottom:8px; }
+.sg-master-row strong { overflow-wrap:anywhere; }
+.sg-active { font-size:10px;border:1px solid var(--sg-line);border-radius:6px;padding:1px 6px;flex-shrink:0;align-self:flex-start;color:var(--sg-muted); }
+.sg-active[data-active="true"] { border-color:var(--sg-accent);color:var(--sg-accent); }
+.sg-status { font-size:12px;font-weight:600;color:var(--sg-accent)!important;overflow-wrap:anywhere; }
+.sg-pagination { display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:15px;font-size:11px; }
+.spph-signing-content button:disabled { opacity:.5;cursor:not-allowed; }
+@media(max-width:540px) { .sg-search { grid-template-columns:1fr auto; } .sg-search select { grid-column:1/-1; } .sg-modes { grid-template-columns:1fr; } }

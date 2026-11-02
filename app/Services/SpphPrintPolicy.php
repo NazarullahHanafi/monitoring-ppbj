@@ -31,7 +31,7 @@ class SpphPrintPolicy
         // Read the four small master entries fresh when printing, so a disabled
         // official cannot remain printable because of a cached dropdown list.
         $masters = SpMasterOption::active()->whereIn('type', ['penandatangan_sci', 'jabatan_sci'])
-            ->whereIn('nama', [$pair['name'], $pair['title']])->get(['type', 'nama']);
+            ->whereIn('nama', [$pair['name'], $pair['title']])->get(['id', 'type', 'nama']);
         $find = fn ($type, $name) => $masters->first(fn ($row) => $row->type === $type && strcasecmp(trim($row->nama), $name) === 0)?->nama;
         $name = $find('penandatangan_sci', $pair['name']);
         $title = $find('jabatan_sci', $pair['title']);
@@ -55,6 +55,8 @@ class SpphPrintPolicy
             'basis' => 'Total nilai PR/PPBJ sebelum PPN; bukan nilai penawaran vendor atau nilai SP.',
             'rule' => $bucket === 'below' ? 'Di bawah Rp'.number_format($threshold, 0, ',', '.') : 'Rp'.number_format($threshold, 0, ',', '.').' ke atas (termasuk nilai tepat batas)',
             'name' => $name ?: $pair['name'], 'title' => $title ?: $pair['title'],
+            'name_id' => $masters->first(fn ($row) => $row->type === 'penandatangan_sci' && $row->nama === $name)?->id,
+            'title_id' => $masters->first(fn ($row) => $row->type === 'jabatan_sci' && $row->nama === $title)?->id,
             'rules' => [
                 ['label' => 'Di bawah', 'name' => config('spph.signing.below.name'), 'title' => config('spph.signing.below.title')],
                 ['label' => 'Mulai dari', 'name' => config('spph.signing.at_or_above.name'), 'title' => config('spph.signing.at_or_above.title')],
@@ -69,12 +71,43 @@ class SpphPrintPolicy
 
     public function validate(Request $request, array $context): array
     {
-        if (! $context['ready']) {
+        $mode = $request->query('signing_mode', 'auto');
+        if (! in_array($mode, ['auto', 'manual'], true)) {
+            throw ValidationException::withMessages(['signing_mode' => 'Mode penandatangan tidak dikenali.']);
+        }
+        if (($mode === 'auto' && ! $context['ready']) || ! $context['amount_valid']) {
             throw ValidationException::withMessages(['penandatangan' => implode(' ', $context['errors'])]);
         }
         $fingerprint = $request->query('print_basis');
         if ($fingerprint !== null && (! is_string($fingerprint) || ! hash_equals($context['fingerprint'], $fingerprint))) {
             throw ValidationException::withMessages(['print_basis' => 'Data nilai/master berubah. Buka kembali konfirmasi cetak agar rekomendasi diperbarui.']);
+        }
+        if ($mode === 'manual') {
+            abort_unless($request->user()?->department === 'umum', 403);
+            $data = validator(array_replace($request->query(), ['manual_reason' => is_string($request->query('manual_reason')) ? trim($request->query('manual_reason')) : $request->query('manual_reason')]), [
+                'signer_id' => ['required', 'integer', 'min:1'],
+                'title_id' => ['required', 'integer', 'min:1'],
+                'manual_reason' => ['required', 'string', 'min:10', 'max:500'],
+            ])->validate();
+            $chosen = SpMasterOption::active()->whereIn('id', [$data['signer_id'], $data['title_id']])->get(['id', 'type', 'nama']);
+            $signer = $chosen->first(fn ($row) => $row->id == $data['signer_id'] && $row->type === 'penandatangan_sci');
+            $title = $chosen->first(fn ($row) => $row->id == $data['title_id'] && $row->type === 'jabatan_sci');
+            if (! $signer || ! $title) {
+                throw ValidationException::withMessages(['penandatangan' => 'Nama atau jabatan sudah tidak aktif. Pilih ulang dari master aktif.']);
+            }
+            foreach (['penandatangan' => $signer->nama, 'jabatan' => $title->nama] as $key => $value) {
+                if ($request->query($key) !== null && $request->query($key) !== $value) {
+                    throw ValidationException::withMessages([$key => 'Master pilihan berubah. Muat ulang pilihan nama/jabatan sebelum melanjutkan.']);
+                }
+            }
+
+            return array_replace($context, [
+                'name' => $signer->nama, 'title' => $title->nama, 'signing_mode' => 'manual',
+                'manual_reason' => trim($data['manual_reason']),
+                'query' => ['signing_mode' => 'manual', 'signer_id' => $signer->id, 'title_id' => $title->id,
+                    'manual_reason' => trim($data['manual_reason']), 'penandatangan' => $signer->nama, 'jabatan' => $title->nama,
+                    'print_basis' => $context['fingerprint']],
+            ]);
         }
         foreach (['penandatangan' => 'name', 'jabatan' => 'title'] as $parameter => $key) {
             $value = $request->query($parameter);
@@ -86,6 +119,7 @@ class SpphPrintPolicy
             }
         }
 
-        return $context;
+        return $context + ['signing_mode' => 'auto', 'query' => ['signing_mode' => 'auto',
+            'penandatangan' => $context['name'], 'jabatan' => $context['title'], 'print_basis' => $context['fingerprint']]];
     }
 }

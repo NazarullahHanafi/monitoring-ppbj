@@ -343,6 +343,8 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
         // ==== Master Kontrak SP ====
         Route::resource('sp-master-options', SpMasterOptionController::class)
             ->except(['show', 'create', 'edit']);
+        Route::get('/spph/print-masters', [SpMasterOptionController::class, 'printOptions'])
+            ->middleware('throttle:60,1')->name('spph.print-masters');
 
         Route::prefix('spph')->name('spph.')->middleware('auth')->group(function () {
 

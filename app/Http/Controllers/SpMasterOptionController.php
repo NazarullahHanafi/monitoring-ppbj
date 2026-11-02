@@ -2,16 +2,42 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\ActivityLog;
 use App\Models\SpMasterOption;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
 
 class SpMasterOptionController extends Controller
 {
+    public function printOptions(Request $request)
+    {
+        $data = $request->validate(['type' => ['required', Rule::in(['penandatangan_sci', 'jabatan_sci'])],
+            'q' => ['nullable', 'string', 'max:100'], 'active_only' => ['nullable', 'boolean'],
+            'include_id' => ['nullable', 'integer', 'min:1'],
+            'per_page' => ['nullable', 'integer', 'min:1', 'max:50'], 'page' => ['nullable', 'integer', 'min:1']]);
+        $q = trim($data['q'] ?? '');
+        $options = SpMasterOption::where('type', $data['type'])
+            ->when($request->boolean('active_only'), fn ($query) => $query->active())
+            ->when($q !== '', fn ($query) => $query->where('nama', 'like', '%'.addcslashes($q, '%_\\').'%'))
+            ->when(! empty($data['include_id']), fn ($query) => $query->orderByRaw('CASE WHEN id = ? THEN 0 ELSE 1 END', [$data['include_id']]))
+            ->orderBy('nama')->paginate($data['per_page'] ?? 12, ['id', 'type', 'nama', 'is_active', 'updated_at']);
+
+        return response()->json(['options' => $options->getCollection()->map(fn ($row) => $this->printOption($row)),
+            'page' => $options->currentPage(), 'last_page' => $options->lastPage(), 'total' => $options->total()])
+            ->header('Cache-Control', 'private, no-store');
+    }
+
+    private function printOption(SpMasterOption $option): array
+    {
+        return ['id' => $option->id, 'type' => $option->type, 'nama' => $option->nama, 'is_active' => $option->is_active,
+            'version' => hash('sha256', json_encode([$option->nama, $option->type, $option->is_active, $option->getRawOriginal('updated_at')]))];
+    }
+
     private const TYPES = [
         'bidang_ip_itu' => 'Bidang IP / ITU',
         'bidang_pr' => 'Bidang PR',
@@ -49,6 +75,14 @@ class SpMasterOptionController extends Controller
 
     public function store(Request $request)
     {
+        return DB::transaction(fn () => $this->storeOption($request));
+    }
+
+    private function storeOption(Request $request)
+    {
+        if (is_string($request->input('nama'))) {
+            $request->merge(['nama' => trim($request->input('nama'))]);
+        }
         $validated = $request->validate([
             'type' => ['required', Rule::in(array_keys(self::TYPES))],
             'nama' => [
@@ -65,11 +99,19 @@ class SpMasterOptionController extends Controller
             'nama.unique' => 'Data master tersebut sudah ada pada jenis yang sama.',
         ]);
 
-        SpMasterOption::create([
+        $option = SpMasterOption::create([
             'type' => $validated['type'],
             'nama' => trim($validated['nama']),
             'is_active' => $request->boolean('is_active', true),
         ]);
+
+        if ($request->expectsJson()) {
+            ActivityLog::create(['user_id' => $request->user()->id, 'model_type' => SpMasterOption::class,
+                'model_id' => $option->id, 'action' => 'created', 'description' => 'Master penandatangan/jabatan ditambahkan dari popup cetak',
+                'changes' => $this->printOption($option)]);
+
+            return response()->json(['message' => 'Master berhasil ditambahkan.', 'option' => $this->printOption($option)], 201);
+        }
 
         return redirect()
             ->route('sp-master-options.index', ['type' => $validated['type']])
@@ -78,6 +120,21 @@ class SpMasterOptionController extends Controller
 
     public function update(Request $request, SpMasterOption $spMasterOption)
     {
+        return DB::transaction(fn () => $this->updateOption($request, $spMasterOption));
+    }
+
+    private function updateOption(Request $request, SpMasterOption $spMasterOption)
+    {
+        if (is_string($request->input('nama'))) {
+            $request->merge(['nama' => trim($request->input('nama'))]);
+        }
+        if ($request->expectsJson()) {
+            $spMasterOption = SpMasterOption::whereKey($spMasterOption->id)->lockForUpdate()->firstOrFail();
+            $request->validate(['version' => ['required', 'string', 'size:64']]);
+            if (! hash_equals($this->printOption($spMasterOption)['version'], $request->input('version'))) {
+                return response()->json(['message' => 'Master sudah diubah pengguna lain. Muat ulang daftar sebelum mengedit.'], 409);
+            }
+        }
         $validated = $request->validate([
             'type' => ['required', Rule::in(array_keys(self::TYPES))],
             'nama' => [
@@ -100,6 +157,14 @@ class SpMasterOptionController extends Controller
             'nama' => trim($validated['nama']),
             'is_active' => $request->boolean('is_active'),
         ]);
+
+        if ($request->expectsJson()) {
+            ActivityLog::create(['user_id' => $request->user()->id, 'model_type' => SpMasterOption::class,
+                'model_id' => $spMasterOption->id, 'action' => 'updated', 'description' => 'Master penandatangan/jabatan diperbarui dari popup cetak',
+                'changes' => $this->printOption($spMasterOption)]);
+
+            return response()->json(['message' => 'Master berhasil diperbarui.', 'option' => $this->printOption($spMasterOption)]);
+        }
 
         return redirect()
             ->route('sp-master-options.index', ['type' => $validated['type']])
@@ -125,7 +190,7 @@ class SpMasterOptionController extends Controller
             $retryAfter = (int) ceil(max(1, now()->diffInSeconds($lockedUntilAt, false)));
 
             return response()->json([
-                'message' => 'Terlalu banyak percobaan password salah. Silakan coba lagi sekitar ' . ceil($retryAfter / 60) . ' menit lagi.',
+                'message' => 'Terlalu banyak percobaan password salah. Silakan coba lagi sekitar '.ceil($retryAfter / 60).' menit lagi.',
                 'locked' => true,
                 'retry_after' => $retryAfter,
                 'locked_until' => $lockedUntilAt->toIso8601String(),
@@ -152,7 +217,7 @@ class SpMasterOptionController extends Controller
             fn (User $admin) => Hash::check((string) $request->admin_password, (string) $admin->password)
         );
 
-        if (!$passwordMatches) {
+        if (! $passwordMatches) {
             $attempts = ((int) Cache::get($attemptKey, 0)) + 1;
             $remainingAttempts = max(0, 3 - $attempts);
             Cache::put($attemptKey, $attempts, now()->addMinutes(15));
@@ -171,7 +236,7 @@ class SpMasterOptionController extends Controller
             }
 
             return response()->json([
-                'message' => 'Password superadmin umum tidak sesuai. Sisa percobaan: ' . $remainingAttempts . '.',
+                'message' => 'Password superadmin umum tidak sesuai. Sisa percobaan: '.$remainingAttempts.'.',
                 'attempts_remaining' => $remainingAttempts,
             ], 422);
         }
@@ -195,7 +260,7 @@ class SpMasterOptionController extends Controller
             'model_type' => SpMasterOption::class,
             'model_id' => $spMasterOption->id,
             'action' => 'deleted',
-            'description' => 'Master kontrak SP dihapus: ' . ($deletedData['nama'] ?? '-'),
+            'description' => 'Master kontrak SP dihapus: '.($deletedData['nama'] ?? '-'),
             'changes' => $deletedData,
         ]);
 
