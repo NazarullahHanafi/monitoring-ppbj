@@ -3,7 +3,10 @@
 namespace App\Http\Controllers;
 
 use App\Models\ActivityLog;
+use App\Models\MasterPortofolio;
+use App\Models\Ppbj;
 use App\Models\SpPortfolioFieldMap;
+use App\Models\Torpr;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -13,13 +16,37 @@ class SpPortfolioFieldMapController extends Controller
 {
     public function index(Request $request)
     {
-        $data = $request->validate(['q' => ['nullable', 'string', 'max:150'], 'page' => ['nullable', 'integer', 'min:1']]);
+        $data = $request->validate(['q' => ['nullable', 'string', 'max:150'], 'page' => ['nullable', 'integer', 'min:1'], 'include_options' => ['nullable', 'boolean']]);
         $rows = SpPortfolioFieldMap::with('field:id,nama,type,is_active')
             ->when(filled($data['q'] ?? ''), fn ($q) => $q->where('portfolio', 'like', '%'.addcslashes($data['q'], '%_\\').'%'))
             ->orderBy('portfolio')->paginate(12);
 
-        return response()->json(['rows' => $rows->map(fn ($row) => $this->present($row)), 'page' => $rows->currentPage(), 'last_page' => $rows->lastPage()])
+        $payload = ['rows' => $rows->map(fn ($row) => $this->present($row)), 'page' => $rows->currentPage(), 'last_page' => $rows->lastPage()];
+        if ($request->boolean('include_options')) {
+            $payload += $this->portfolioOptions();
+        }
+
+        return response()->json($payload)
             ->header('Cache-Control', 'private, no-store');
+    }
+
+    private function portfolioOptions(): array
+    {
+        // Loaded once when this dialog opens, never while typing or on other menus.
+        // Separate bounded queries also avoid incompatible collations on legacy DBs.
+        $values = collect();
+        $truncated = false;
+        foreach ([[MasterPortofolio::class, 'nama'], [Ppbj::class, 'portofolio'], [Torpr::class, 'portofolio'], [SpPortfolioFieldMap::class, 'portfolio']] as [$model, $column]) {
+            $names = $model::query()->whereNotNull($column)->where($column, '<>', '')
+                ->distinct()->orderBy($column)->limit(251)->pluck($column);
+            $truncated = $truncated || $names->count() > 250;
+            $values = $values->concat($names->take(250));
+        }
+        $values = $values->map(fn ($name) => trim((string) $name))
+            ->filter(fn ($name) => $name !== '' && mb_strlen($name) <= 150)
+            ->unique(fn ($name) => SpPortfolioFieldMap::key($name))->sort()->values();
+
+        return ['portfolio_options' => $values->take(500)->values()->all(), 'options_truncated' => $truncated || $values->count() > 500];
     }
 
     public function save(Request $request, ?int $id = null)

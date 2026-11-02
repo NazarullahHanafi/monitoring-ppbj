@@ -59,4 +59,8 @@
 .sg-status { font-size:12px;font-weight:600;color:var(--sg-accent)!important;overflow-wrap:anywhere; }
 .sg-pagination { display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:15px;font-size:11px; }
 .spph-signing-content button:disabled { opacity:.5;cursor:not-allowed; }
+.spph-signing-content .sp-map-select { appearance:auto!important;padding-right:14px;cursor:pointer; }
+.sp-map-search { display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:end;margin:18px 0; }
+.sp-map-list-title { margin-top:18px;font-size:13px;font-weight:800;color:var(--sg-text); }
+.spph-signing-content .sg-master-form>label { margin-top:14px; }
 @media(max-width:540px) { .sg-search { grid-template-columns:1fr auto; } .sg-search select { grid-column:1/-1; } .sg-modes { grid-template-columns:1fr; } }

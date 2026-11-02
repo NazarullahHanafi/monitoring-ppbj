@@ -4,10 +4,12 @@ namespace Tests\Feature;
 
 use App\Http\Controllers\SpPrintController;
 use App\Models\ActivityLog;
+use App\Models\MasterPortofolio;
 use App\Models\Ppbj;
 use App\Models\Sp;
 use App\Models\SpMasterOption;
 use App\Models\SpPortfolioFieldMap;
+use App\Models\Torpr;
 use App\Models\User;
 use App\Services\SpPrintPolicy;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -138,6 +140,39 @@ class SpSigningPolicyTest extends TestCase
         $this->actingAs(User::factory()->create(['department' => 'operasional', 'role' => 'user']));
         $this->getJson(route('sp.portfolio-mappings'))->assertForbidden();
         $this->getJson(route('sp.print-context', $this->document()))->assertForbidden();
+    }
+
+    public function test_portfolio_dropdown_merges_existing_sources_only_when_requested(): void
+    {
+        $this->actingAs($this->umum());
+        MasterPortofolio::create(['nama' => 'Master portfolio']);
+        Ppbj::create(['ppbj_no' => 'DROPDOWN-PR', 'portofolio' => 'Legacy PPBJ portfolio']);
+        Ppbj::create(['ppbj_no' => 'DROPDOWN-PR-DUPLICATE', 'portofolio' => ' master   portfolio ']);
+        Torpr::create(['nomor_pr' => 'DROPDOWN-TOR', 'portofolio' => 'TOR portfolio', 'tujuan_pengadaan' => 'Uji dropdown', 'created_by_user_id' => auth()->id()]);
+        $this->map('Old mapping portfolio');
+        $url = route('sp.portfolio-mappings');
+        $this->getJson($url)->assertOk()->assertJsonMissingPath('portfolio_options');
+        $response = $this->getJson($url.'?include_options=1')->assertOk()->assertJsonPath('options_truncated', false);
+        $values = $response->json('portfolio_options');
+        foreach (['Master portfolio', 'Legacy PPBJ portfolio', 'TOR portfolio', 'Old mapping portfolio'] as $value) {
+            $this->assertContains($value, $values);
+        }
+        $this->assertCount(count($values), array_unique(array_map(fn ($value) => SpPortfolioFieldMap::key($value), $values)));
+        MasterPortofolio::create(['nama' => 'New portfolio after opening']);
+        $this->assertContains('New portfolio after opening', $this->getJson($url.'?include_options=1')->assertOk()->json('portfolio_options'));
+        $this->actingAs(User::factory()->create(['department' => 'operasional']));
+        $this->getJson($url.'?include_options=1')->assertForbidden();
+    }
+
+    public function test_portfolio_options_are_bounded_without_limiting_mapping_search(): void
+    {
+        $this->actingAs($this->umum());
+        MasterPortofolio::insert(array_map(fn ($i) => ['nama' => 'Bounded '.str_pad((string) $i, 3, '0', STR_PAD_LEFT)], range(1, 270)));
+        $this->map('Mapping outside dropdown budget');
+        $response = $this->getJson(route('sp.portfolio-mappings', ['include_options' => 1, 'q' => 'outside']))->assertOk()
+            ->assertJsonPath('options_truncated', true)->assertJsonCount(1, 'rows');
+        $this->assertLessThanOrEqual(500, count($response->json('portfolio_options')));
+        $this->getJson(route('sp.portfolio-mappings', ['include_options' => 'invalid']))->assertUnprocessable();
     }
 
     public function test_printed_word_uses_selected_owner_and_sci_and_logs_one_manual_action(): void

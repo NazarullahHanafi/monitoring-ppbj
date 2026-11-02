@@ -12,10 +12,10 @@ function runtime(){
     return {window,requests,updates,events,nodes,dialog:()=>dialog,respond:(index,data,status=200)=>requests[index].resolve({ok:status<300,json:async()=>data})};
 }
 const row={id:1,portfolio:'PK - LAB',field_id:5,field_name:'Bidang LAB',is_active:true,version:'version-1'};
-const page=rows=>({rows,page:1,last_page:1});
+const page=rows=>({rows,page:1,last_page:1,portfolio_options:['IT - FERS','PK - LAB','PK - QAQC'],options_truncated:false});
 test('mapping manager is lazy, read-only has no writes, and portfolio text is escaped',async()=>{
     const h=runtime();assert.equal(h.requests.length,0);const task=h.window.SPPortfolioMaps.open({can_manage:false,portfolios:[]});const opened=h.dialog().options.didOpen();await tick();h.respond(0,page([{...row,portfolio:'<img onerror=x>'}]));await opened;
-    assert.match(h.updates.at(-1).html,/&lt;img/);assert.doesNotMatch(h.updates.at(-1).html,/id="spMapForm"|Edit pemetaan/);assert.equal(h.requests.length,1);
+    assert.match(h.updates.at(-1).html,/&lt;img/);assert.doesNotMatch(h.updates.at(-1).html,/id="spMapForm"|data-sp-map="edit"/);assert.equal(h.requests.length,1);
     h.dialog().options.willClose();h.dialog().resolve({});await task;assert.doesNotMatch(source,/setInterval|localStorage|sessionStorage/);
 });
 test('mapping search runs on submit only; failed save retains draft and sends CSRF once',async()=>{
@@ -33,5 +33,28 @@ test('mapping edits use versioned PUT and deactivation never permanently deletes
     h.nodes.spMapPortfolio={value:'PK - LAB'};h.nodes.spMapField={value:'5'};h.nodes.spMapActive={checked:false};const save=h.events.submit({target:{id:'spMapForm'},preventDefault(){}});
     const payload=JSON.parse(h.requests[1].options.body);assert.equal(h.requests[1].options.method,'PUT');assert.equal(payload.version,'version-1');assert.equal(payload.is_active,false);
     h.respond(1,{message:'Tersimpan'});await tick();h.respond(2,page([{...row,is_active:false}]));await save;assert.ok(h.requests.every(r=>r.options.method!=='DELETE'));
+    h.dialog().resolve({});await task;
+});
+
+test('portfolio is a real dropdown, searches locally and retains selection and other draft fields',async()=>{
+    const h=runtime();const task=h.window.SPPortfolioMaps.open({can_manage:true,portfolios:['IT - FERS']});const opened=h.dialog().options.didOpen();await tick();
+    assert.match(h.requests[0].url,/include_options=1/);h.respond(0,page([]));await opened;
+    assert.match(h.updates.at(-1).html,/<select id="spMapPortfolio"/);assert.doesNotMatch(h.updates.at(-1).html,/<datalist/);
+    assert.match(h.updates.at(-1).html,/PK - LAB/);assert.match(h.updates.at(-1).html,/Dari PR SP ini/);
+    h.nodes.spMapPortfolio={value:'IT - FERS',innerHTML:'',focus(){}};h.nodes.spMapField={value:'5'};h.nodes.spMapActive={checked:true};
+    h.events.input({target:{id:'spMapPortfolioQuery',value:'LAB'}});
+    assert.equal(h.requests.length,1);assert.match(h.nodes.spMapPortfolio.innerHTML,/PK - LAB/);assert.doesNotMatch(h.nodes.spMapPortfolio.innerHTML,/PK - QAQC/);assert.match(h.nodes.spMapPortfolio.innerHTML,/IT - FERS.*selected/);
+    h.events.click({target:{closest:()=>({dataset:{spMap:'manual'}})}});
+    assert.match(h.updates.at(-1).html,/<input id="spMapPortfolio" required/);assert.match(h.updates.at(-1).html,/value="5" selected/);
+    h.nodes.spMapPortfolio.value='Portfolio baru';h.events.click({target:{closest:()=>({dataset:{spMap:'manual'}})}});
+    assert.match(h.updates.at(-1).html,/<select id="spMapPortfolio"/);assert.match(h.updates.at(-1).html,/value="Portfolio baru" selected/);
+    h.nodes.spMapQuery={value:'FERS'};const search=h.events.submit({target:{id:'spMapSearch'},preventDefault(){}});
+    assert.doesNotMatch(h.requests[1].url,/include_options/);h.respond(1,{rows:[],page:1,last_page:1});await search;
+    h.dialog().resolve({});await task;
+});
+
+test('empty master list still offers the current SP portfolio and manual fallback with escaped names',async()=>{
+    const h=runtime();const task=h.window.SPPortfolioMaps.open({can_manage:true,portfolios:['Legacy <portfolio>']});const opened=h.dialog().options.didOpen();await tick();h.respond(0,{rows:[],page:1,last_page:1,portfolio_options:[],options_truncated:true});await opened;
+    assert.match(h.updates.at(-1).html,/Legacy &lt;portfolio&gt;/);assert.match(h.updates.at(-1).html,/Portofolio belum ada\? Isi manual/);assert.match(h.updates.at(-1).html,/Daftar dibatasi/);
     h.dialog().resolve({});await task;
 });
