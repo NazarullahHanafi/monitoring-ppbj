@@ -22,6 +22,15 @@ class PpbjListCacheTest extends TestCase
         {
             public int $calculations = 0;
 
+            public int $statusCalculations = 0;
+
+            public function getStatusSlaAttribute()
+            {
+                $this->statusCalculations++;
+
+                return parent::getStatusSlaAttribute();
+            }
+
             public function contractStatusLabel(): string
             {
                 $this->calculations++;
@@ -30,7 +39,7 @@ class PpbjListCacheTest extends TestCase
             }
         };
         $row->setRawAttributes([
-            'id' => $id, 'ppbj_no' => 'CACHE/PR/'.$id, 'status' => 'ACTIVE',
+            'id' => $id, 'ppbj_no' => 'CACHE/PR/'.$id, 'status' => 'ACTIVE', 'status_sla' => 'OVERDUE',
             'total_sebelum_ppn' => 1000000, 'tgl_terima_pr' => '2026-10-20',
             'tgl_spk' => '2026-10-21', 'promised_date' => '2026-11-20',
             'general_registered_at' => '2026-10-20 09:00:00',
@@ -47,12 +56,17 @@ class PpbjListCacheTest extends TestCase
         $row->do_updated_by_name = 'User A';
         $first = PpbjListPresentation::forPage(collect([$row]));
         $this->assertSame(1, $row->calculations);
+        $this->assertSame(1, $row->statusCalculations);
 
         $row->collaboration_unread_count = 0;
         $row->collaboration_note_count = 5;
         $row->do_updated_by_name = 'User B';
         $second = PpbjListPresentation::forPage(collect([$row]));
         $this->assertSame(1, $row->calculations, 'Warm labels must not repeat SLA/contract calculations.');
+        $this->assertSame(1, $row->statusCalculations, 'Warm serialization must not recompute the cached live status.');
+        $this->assertNotContains('status_sla', $row->getHidden());
+        $this->assertSame('ON TRACK', $second[1]['status_sla']);
+        $this->assertSame('2026-11-20', $second[1]['promised_date']);
         $this->assertSame($first[1]['contract_status_label'], $second[1]['contract_status_label']);
         $this->assertSame(0, $second[1]['collaboration_unread_count']);
         $this->assertSame(5, $second[1]['collaboration_note_count']);

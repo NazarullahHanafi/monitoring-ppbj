@@ -12,6 +12,42 @@ class PpbjCollaborationAndPreflightTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_list_counts_use_one_page_aggregate_and_keep_mentions_private_and_fresh(): void
+    {
+        $alice = $this->user('umum', 'user', 'Alice');
+        $bob = $this->user('umum', 'user', 'Bob');
+        $empty = Ppbj::create(['ppbj_no' => 'PERF-NOTES-EMPTY']);
+        $ppbj = Ppbj::create(['ppbj_no' => 'PERF-NOTES-A']);
+        $notes = [];
+        foreach (['First note', 'Second note'] as $body) {
+            $notes[] = DB::table('ppbj_collaboration_notes')->insertGetId([
+                'ppbj_id' => $ppbj->id, 'user_id' => $alice->id, 'author_name' => 'Alice',
+                'body' => $body, 'created_at' => now(), 'updated_at' => now(),
+            ]);
+        }
+        DB::table('ppbj_note_mentions')->insert([
+            ['note_id' => $notes[0], 'user_id' => $alice->id, 'read_at' => null],
+            ['note_id' => $notes[0], 'user_id' => $bob->id, 'read_at' => now()],
+            ['note_id' => $notes[1], 'user_id' => $bob->id, 'read_at' => null],
+        ]);
+        DB::enableQueryLog();
+        $response = $this->actingAs($alice)->get(route('ppbj.index'))->assertOk();
+        $queries = collect(DB::getQueryLog());
+        DB::disableQueryLog();
+        $this->assertCount(1, $queries->filter(fn ($q) => str_contains($q['query'], 'ppbj_collaboration_notes')));
+        $rows = $response->viewData('ppbj')->getCollection()->keyBy('id');
+        $this->assertSame(2, $rows[$ppbj->id]->collaboration_note_count);
+        $this->assertSame(1, $rows[$ppbj->id]->collaboration_unread_count);
+        $this->assertSame(0, $rows[$empty->id]->collaboration_note_count);
+        $this->assertSame(0, $rows[$empty->id]->collaboration_unread_count);
+        $rows = $this->actingAs($bob)->get(route('ppbj.index'))->assertOk()->viewData('ppbj')->getCollection()->keyBy('id');
+        $this->assertSame(2, $rows[$ppbj->id]->collaboration_note_count);
+        $this->assertSame(1, $rows[$ppbj->id]->collaboration_unread_count);
+        DB::table('ppbj_note_mentions')->where('user_id', $bob->id)->update(['read_at' => now()]);
+        $rows = $this->get(route('ppbj.index'))->assertOk()->viewData('ppbj')->getCollection()->keyBy('id');
+        $this->assertSame(0, $rows[$ppbj->id]->collaboration_unread_count);
+    }
+
     public function test_note_can_mention_cross_department_user_and_is_mirrored_to_team_chat(): void
     {
         $author = $this->user('umum', 'superadmin', 'Umum Author');

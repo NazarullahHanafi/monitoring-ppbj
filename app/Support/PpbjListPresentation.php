@@ -35,13 +35,23 @@ final class PpbjListPresentation
         $labels = CacheBatch::remember($loaders, 300);
 
         return $rows->keyBy('id')->map(
-            fn (Ppbj $row) => array_replace($row->toArray(), $labels[$keys[$row->id]])
+            fn (Ppbj $row) => array_replace(self::attributesForPresentation($row), $labels[$keys[$row->id]])
         );
     }
 
     public static function make(Ppbj $ppbj): array
     {
-        return array_replace($ppbj->toArray(), self::calculated($ppbj));
+        return array_replace(self::attributesForPresentation($ppbj), self::calculated($ppbj));
+    }
+
+    private static function attributesForPresentation(Ppbj $row): array
+    {
+        // status_sla already comes from the fingerprinted live-label snapshot.
+        // Do not invoke the accessor a second time just to overwrite it. Cloning
+        // keeps the original model/visibility intact and preserves all date casts.
+        $copy = clone $row;
+
+        return $copy->makeHidden('status_sla')->toArray();
     }
 
     private static function calculated(Ppbj $ppbj): array

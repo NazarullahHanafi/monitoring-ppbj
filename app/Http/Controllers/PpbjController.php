@@ -193,30 +193,25 @@ class PpbjController extends Controller
             }
         }
 
-        // Dua agregasi terindeks untuk baris pada halaman aktif. Isi catatan tidak
-        // ikut dimuat dan baru diambil ketika panel kolaborasi dibuka.
+        // One indexed page aggregate; scope unread mentions inside the JOIN so
+        // notes without a mention remain counted. Bodies are loaded on demand.
         $pagePpbjIds = collect($ppbj->items())->pluck('id')->map(fn ($id) => (int) $id)->all();
-        $collaborationNoteCounts = $pagePpbjIds === []
+        $collaborationCounts = $pagePpbjIds === []
             ? collect()
-            : DB::table('ppbj_collaboration_notes')
-                ->whereIn('ppbj_id', $pagePpbjIds)
-                ->select('ppbj_id', DB::raw('COUNT(*) as total'))
-                ->groupBy('ppbj_id')
-                ->pluck('total', 'ppbj_id');
-        $collaborationUnreadCounts = $pagePpbjIds === []
-            ? collect()
-            : DB::table('ppbj_note_mentions as mention')
-                ->join('ppbj_collaboration_notes as note', 'note.id', '=', 'mention.note_id')
-                ->where('mention.user_id', $request->user()->id)
-                ->whereNull('mention.read_at')
+            : DB::table('ppbj_collaboration_notes as note')
+                ->leftJoin('ppbj_note_mentions as mention', function ($join) use ($request) {
+                    $join->on('mention.note_id', '=', 'note.id')
+                        ->where('mention.user_id', $request->user()->id)
+                        ->whereNull('mention.read_at');
+                })
                 ->whereIn('note.ppbj_id', $pagePpbjIds)
-                ->select('note.ppbj_id', DB::raw('COUNT(*) as total'))
+                ->select('note.ppbj_id', DB::raw('COUNT(DISTINCT note.id) as total'), DB::raw('COUNT(mention.id) as unread'))
                 ->groupBy('note.ppbj_id')
-                ->pluck('total', 'note.ppbj_id');
+                ->get()->keyBy('ppbj_id');
 
         foreach ($ppbj->items() as $row) {
-            $row->collaboration_note_count = (int) ($collaborationNoteCounts[$row->id] ?? 0);
-            $row->collaboration_unread_count = (int) ($collaborationUnreadCounts[$row->id] ?? 0);
+            $row->collaboration_note_count = (int) ($collaborationCounts->get($row->id)?->total ?? 0);
+            $row->collaboration_unread_count = (int) ($collaborationCounts->get($row->id)?->unread ?? 0);
         }
 
         $collaborationMentionCount = (int) DB::table('ppbj_note_mentions')

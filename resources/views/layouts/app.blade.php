@@ -577,15 +577,13 @@
             userId: @json((int) auth()->id()),
             userGender: @json(auth()->user()->gender ?? null),
             userName: @json(auth()->user()->name ?? 'User'),
-            moodEnabled: @json($moodFeatureEnabled)
+            moodEnabled: @json($moodFeatureEnabled),
+            approvalCountUrl: @json(auth()->user()?->department === 'umum' ? route('approval.pr.pendingCount') : null)
         });
     </script>
     <script src="{{ asset('assets/app/app-shell.js') }}?v={{ filemtime(public_path('assets/app/app-shell.js')) }}" defer></script>
     <script src="{{ asset('assets/app/activity-broadcast.js') }}?v={{ filemtime(public_path('assets/app/activity-broadcast.js')) }}" defer></script>
     <script>
-        @if(auth()->user()?->department === 'umum')
-            (function () { var url = '{{ route('approval.pr.pendingCount') }}', b1 = document.getElementById('badgePendingPr'), b2 = document.getElementById('badgePendingPrMobile'), t = null; function refresh() { fetch(url, { headers: { 'Accept': 'application/json' } }).then(function (r) { if (!r.ok) throw 0; return r.json() }).then(function (d) { var c = Number(d.count || 0);[b1, b2].forEach(function (b) { if (b) { b.textContent = c; if (c > 0) b.classList.remove('hidden'); else b.classList.add('hidden') } }) }).catch(function () { }) } function schedule() { if (!t) t = setInterval(refresh, 60000) } document.addEventListener('visibilitychange', function () { if (document.hidden) { clearInterval(t); t = null } else { refresh(); schedule() } }); if (!document.hidden) schedule() })();
-        @endif
 
         @if(auth()->user()?->isReadOnly())
             (function () {

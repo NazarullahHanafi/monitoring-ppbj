@@ -1,4 +1,34 @@
 
+/* BEGIN SHELL BACKGROUND READS */
+(function () {
+    'use strict';
+    // One in-flight read per feature. No response/user data is persisted or shared.
+    var pending = new Map();
+    function begin(key, replace) {
+        var previous = pending.get(key);
+        if (previous && !replace) return null;
+        if (previous) previous.cancel();
+        var controller = new AbortController(), timer;
+        var lease = {
+            signal: controller.signal,
+            current: function () { return pending.get(key) === lease && !controller.signal.aborted; },
+            release: function () {
+                clearTimeout(timer);
+                if (pending.get(key) === lease) pending.delete(key);
+            },
+            cancel: function () { controller.abort(); lease.release(); }
+        };
+        pending.set(key, lease);
+        timer = setTimeout(lease.cancel, 20000);
+        return lease;
+    }
+    window.addEventListener('pagehide', function () {
+        Array.from(pending.values()).forEach(function (lease) { lease.cancel(); });
+    });
+    window.SimonBackgroundReads = { begin: begin };
+})();
+/* END SHELL BACKGROUND READS */
+
         /* ═══ SIDEBAR ═══ */
         (function () {
             document.querySelectorAll('.nav-item').forEach(function (el) { el.addEventListener('click', function (e) { var r = this.getBoundingClientRect(), s = document.createElement('span'); s.style.cssText = 'width:20px;height:20px;left:' + (e.clientX - r.left - 10) + 'px;top:' + (e.clientY - r.top - 10) + 'px'; s.classList.add('ripple'); this.appendChild(s); setTimeout(function () { s.remove() }, 600) }) });
@@ -400,10 +430,13 @@
 
             function refreshMentionSummary() {
                 if (isChatReadable() || mentionRequestPending) return;
+                var lease = window.SimonBackgroundReads.begin('chat-summary');
+                if (!lease) return;
                 mentionRequestPending = true;
-                fetch(URL_MENTION_COUNT, { headers: { 'Accept': 'application/json' } })
+                fetch(URL_MENTION_COUNT, { signal: lease.signal, headers: { 'Accept': 'application/json' } })
                     .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json() })
                     .then(function (data) {
+                        if (!lease.current()) return;
                         mentionUnread = Math.max(0, parseInt(data.count, 10) || 0);
                         unread = Math.max(0, parseInt(data.unread_count, 10) || 0);
                         uB();
@@ -411,7 +444,7 @@
                         handleSummaryNotification(data.latest_message || null);
                     })
                     .catch(function () { })
-                    .finally(function () { mentionRequestPending = false });
+                    .finally(function () { lease.release(); mentionRequestPending = false });
             }
 
             function scrollToNextMention() {
@@ -863,17 +896,21 @@
             }
 
             function refreshVisibleReactions() {
-                if (!chatOpen || !messagesEl) return;
+                if (!chatOpen || chatMinimized || document.hidden || !messagesEl) return;
                 var nodes = messagesEl.querySelectorAll('.msg-wrap[data-msg-id]'), ids = [];
                 for (var i = 0; i < nodes.length && i < 40; i++) ids.push(nodes[i].getAttribute('data-msg-id'));
                 if (!ids.length) return;
-                fetch(URL_REACTIONS + '?message_ids=' + encodeURIComponent(ids.join(',')), { headers: { 'Accept': 'application/json' } })
+                var lease = window.SimonBackgroundReads.begin('chat-reactions');
+                if (!lease) return;
+                fetch(URL_REACTIONS + '?message_ids=' + encodeURIComponent(ids.join(',')), { signal: lease.signal, headers: { 'Accept': 'application/json' } })
                     .then(function (response) { if (!response.ok) throw new Error(response.status); return response.json() })
                     .then(function (data) {
+                        if (!lease.current()) return;
                         var map = data.reactions || {}; for (var j = 0; j < ids.length; j++) renderReactionsForMessage(ids[j], map[ids[j]] || []);
                         var updates = data.message_updates || []; for (var k = 0; k < updates.length; k++) applyMessageUpdate(updates[k]);
                     })
-                    .catch(function () { });
+                    .catch(function () { })
+                    .finally(lease.release);
             }
 
             function messageDataFromWrap(wrap) {
@@ -1126,12 +1163,16 @@
 
             /* ── Load messages ── */
             function loadMessages(initial) {
+                if (!chatOpen || chatMinimized || document.hidden) return;
+                var lease = window.SimonBackgroundReads.begin('chat-messages', initial);
+                if (!lease) return;
                 ensureReadPopupStillValid();
                 if (initial) closeReadPopup();
                 var since = initial ? 0 : chatMaxId;
-                fetch(URL_MSGS + '?since=' + since, { headers: { 'Accept': 'application/json' } })
+                fetch(URL_MSGS + '?since=' + since, { signal: lease.signal, headers: { 'Accept': 'application/json' } })
                     .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json() })
                     .then(function (data) {
+                        if (!lease.current() || !chatOpen || chatMinimized || document.hidden) return;
                         var msgs = data.messages;
                         if (initial) { historyHasMore = !!data.has_more; historyLoading = false }
                         if (!msgs || !msgs.length) { if (initial) { messagesEl.innerHTML = ''; sE(true); renderHistoryControl() } return }
@@ -1176,7 +1217,8 @@
                         var idsToRead = []; for (var k = 0; k < msgs.length; k++) { if (String(msgs[k].user_id) !== String(MY_ID)) idsToRead.push(msgs[k].id) }
                         if (idsToRead.length && isChatReadable()) markRead(idsToRead);
                     })
-                    .catch(function () { });
+                    .catch(function () { })
+                    .finally(lease.release);
             }
 
             function loadOlderMessages() {
@@ -1289,6 +1331,7 @@
             function minimizeChat() {
                 if (!chatOpen || chatMinimized) return;
                 chatMinimized = true; chatFullscreen = false;
+                stopPoll(); stopReactionPoll();
                 closeReadPopup();
                 if (panel) { panel.classList.add('minimized'); panel.classList.remove('fullscreen') }
                 document.body.classList.remove('chat-fullscreen-open'); toggleSearch(false);
@@ -1356,7 +1399,13 @@
             }
             document.addEventListener('visibilitychange', function () {
                 if (document.hidden) { stopPoll(); stopReactionPoll(); if (!notifyEnabled && !soundEnabled) stopMentionPoll() }
-                else { startMentionPoll(false); if (chatOpen) { startPoll(); startReactionPoll() } }
+                else { startMentionPoll(false); if (chatOpen && !chatMinimized) { startPoll(); startReactionPoll() } }
+            });
+            window.addEventListener('pagehide', function () { stopPoll(); stopReactionPoll(); stopMentionPoll(); });
+            window.addEventListener('pageshow', function (event) {
+                if (!event.persisted || document.hidden) return;
+                startMentionPoll(false);
+                if (chatOpen && !chatMinimized) { loadMessages(true); startPoll(); startReactionPoll(); }
             });
             if (!document.hidden) startMentionPoll(false);
 
@@ -1405,4 +1454,32 @@
         })();
 
         /* ═══ APPROVAL PR POLLING ═══ */
+        (function () {
+            var url = window.APP_SHELL_CONFIG?.approvalCountUrl;
+            if (!url) return;
+            var timer = null;
+            function refresh() {
+                if (document.hidden) return;
+                var lease = window.SimonBackgroundReads.begin('approval-count');
+                if (!lease) return;
+                fetch(url, {signal: lease.signal, headers: {'Accept': 'application/json'}})
+                    .then(function (response) { if (!response.ok) throw new Error(response.status); return response.json(); })
+                    .then(function (data) {
+                        if (!lease.current()) return;
+                        var count = Number(data.count || 0);
+                        ['badgePendingPr', 'badgePendingPrMobile'].forEach(function (id) {
+                            var badge = document.getElementById(id);
+                            if (!badge) return;
+                            badge.textContent = count;
+                            badge.classList.toggle('hidden', count <= 0);
+                        });
+                    }).catch(function () {}).finally(lease.release);
+            }
+            function start() { if (!timer && !document.hidden) timer = setInterval(refresh, 60000); }
+            function stop() { clearInterval(timer); timer = null; }
+            document.addEventListener('visibilitychange', function () { if (document.hidden) stop(); else { refresh(); start(); } });
+            window.addEventListener('pagehide', stop);
+            window.addEventListener('pageshow', function (event) { if (event.persisted) { refresh(); start(); } });
+            start();
+        })();
 
