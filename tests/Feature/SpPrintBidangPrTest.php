@@ -17,7 +17,7 @@ class SpPrintBidangPrTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_sp_page_renders_native_bidang_pr_print_dialog_and_handler(): void
+    public function test_sp_page_loads_on_demand_print_dialog_assets(): void
     {
         $user = User::factory()->create([
             'department' => 'umum',
@@ -27,15 +27,11 @@ class SpPrintBidangPrTest extends TestCase
         $response = $this->actingAs($user)->get(route('sp.index'));
 
         $response->assertOk();
-        $response->assertSee('id="spBidangPrintModal"', false);
-        $response->assertSee('id="spSignerPrintSelect"', false);
-        $response->assertSee('id="spSignerTitlePrintSelect"', false);
-        $response->assertSee('class="sp-print-choice-overlay"', false);
-        $response->assertSee('.sp-print-choice-card', false);
-        $response->assertSee("modal.classList.add('is-open')", false);
-        $response->assertSee('window.openSpPrintPreview = function', false);
-        $response->assertSee('DUKUNGAN BISNIS');
-        $response->assertSee('PENGUJIAN DAN KONSULTANSI');
+        $response->assertSee('assets/sp/sp-print.js', false);
+        $response->assertSee('assets/sp/sp-portfolio-maps.js', false);
+        $response->assertSee('assets/spph/spph-print-master.js', false);
+        $response->assertSee('assets/spph/spph-print.css', false);
+        $response->assertDontSee('id="spBidangPrintModal"', false);
     }
 
     public function test_selected_bidang_pr_is_written_to_sp_document_note(): void

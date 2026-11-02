@@ -16,7 +16,7 @@ class SpMasterOptionController extends Controller
 {
     public function printOptions(Request $request)
     {
-        $data = $request->validate(['type' => ['required', Rule::in(['penandatangan_sci', 'jabatan_sci'])],
+        $data = $request->validate(['type' => ['required', Rule::in(['penandatangan_sci', 'jabatan_sci', 'bidang_pr'])],
             'q' => ['nullable', 'string', 'max:100'], 'active_only' => ['nullable', 'boolean'],
             'include_id' => ['nullable', 'integer', 'min:1'],
             'per_page' => ['nullable', 'integer', 'min:1', 'max:50'], 'page' => ['nullable', 'integer', 'min:1']]);

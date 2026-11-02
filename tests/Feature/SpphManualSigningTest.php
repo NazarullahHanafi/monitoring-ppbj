@@ -122,7 +122,8 @@ class SpphManualSigningTest extends TestCase
         $this->actingAs($viewer);
         $this->getJson(route('spph.print-masters', ['type' => 'penandatangan_sci']))->assertOk();
         $this->postJson(route('sp-master-options.store'), ['type' => 'penandatangan_sci', 'nama' => 'Should not save'])->assertForbidden();
-        $this->getJson(route('spph.print-masters', ['type' => 'bidang_pr']))->assertUnprocessable();
+        $this->getJson(route('spph.print-masters', ['type' => 'bidang_pr']))->assertOk();
+        $this->getJson(route('spph.print-masters', ['type' => 'unknown']))->assertUnprocessable();
         $this->getJson(route('spph.print-masters', ['type' => 'penandatangan_sci', 'per_page' => 1000]))->assertUnprocessable();
         $this->getJson(route('spph.print-masters', ['type' => 'penandatangan_sci', 'q' => 'Harits']))->assertJsonCount(1, 'options');
         $this->assertDatabaseMissing('sp_master_options', ['nama' => 'Should not save']);

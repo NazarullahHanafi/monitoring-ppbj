@@ -345,6 +345,9 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
             ->except(['show', 'create', 'edit']);
         Route::get('/spph/print-masters', [SpMasterOptionController::class, 'printOptions'])
             ->middleware('throttle:60,1')->name('spph.print-masters');
+        Route::get('/sp/portfolio-mappings', [\App\Http\Controllers\SpPortfolioFieldMapController::class, 'index'])->middleware('throttle:60,1')->name('sp.portfolio-mappings');
+        Route::post('/sp/portfolio-mappings', [\App\Http\Controllers\SpPortfolioFieldMapController::class, 'save'])->middleware('throttle:20,1')->name('sp.portfolio-mappings.store');
+        Route::put('/sp/portfolio-mappings/{id}', [\App\Http\Controllers\SpPortfolioFieldMapController::class, 'save'])->whereNumber('id')->middleware('throttle:20,1')->name('sp.portfolio-mappings.update');
 
         Route::prefix('spph')->name('spph.')->middleware('auth')->group(function () {
 
@@ -473,8 +476,9 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
             Route::get('/{sp}/items', [SpController::class, 'getItems'])->name('items')->middleware('throttle:60,1');
 
             // Cetak SP
-            Route::get('/{sp}/cetak-preview', [SpController::class, 'previewCetak'])->name('cetak.preview')->middleware('throttle:30,1');
-            Route::get('/{sp}/cetak', [SpController::class, 'cetakSp'])->name('cetak')->middleware('throttle:30,1');
+            Route::get('/{sp}/print-context', [\App\Http\Controllers\SpPrintController::class, 'context'])->name('print-context')->middleware('throttle:40,1');
+            Route::get('/{sp}/cetak-preview', [\App\Http\Controllers\SpPrintController::class, 'preview'])->name('cetak.preview')->middleware('throttle:30,1');
+            Route::get('/{sp}/cetak', [\App\Http\Controllers\SpPrintController::class, 'download'])->name('cetak')->middleware('throttle:30,1');
 
             // Utilities
             Route::get('/poll', [SpController::class, 'poll'])

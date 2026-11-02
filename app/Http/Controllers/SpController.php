@@ -12,7 +12,6 @@ use App\Models\User;
 use App\Models\Vendor;
 use App\Services\ProcurementJourneyService;
 use App\Support\CacheBatch;
-use App\Support\PrintPreviewFile;
 use App\Support\ProcurementDocumentSearch;
 use App\Traits\HasPresence;
 use Illuminate\Database\QueryException;
@@ -432,8 +431,8 @@ class SpController extends Controller
         ?string $requestedTitle,
         ?float $nilaiAcuan = null
     ): array {
-        $legacyNames = ['Jumelda', 'Bambang Harwanta'];
-        $legacyTitles = ['Pgs. Kepala Bidang Dukungan Bisnis', 'Pj. Kepala Cabang'];
+        $legacyNames = [config('spph.signing.below.name'), config('spph.signing.at_or_above.name')];
+        $legacyTitles = [config('spph.signing.below.title'), config('spph.signing.at_or_above.title')];
 
         $names = collect(Cache::remember(
             'sp_master_options:penandatangan_sci:active_names',
@@ -465,7 +464,8 @@ class SpController extends Controller
         $storedTitle = trim((string) ($sp->jabatan_sci ?? ''));
         $nilaiAcuan ??= $this->hitungNilaiAcuan($sp);
 
-        $preferredName = $nilaiAcuan >= 300_000_000 ? 'Bambang Harwanta' : 'Jumelda';
+        $rule = config('spph.signing.'.($nilaiAcuan >= config('spph.signing.threshold') ? 'at_or_above' : 'below'));
+        $preferredName = $rule['name'];
         $nameCandidate = $explicitName !== '' ? $explicitName : $storedName;
         $name = $this->matchActiveSpMasterOption($names, $nameCandidate);
 
@@ -478,9 +478,7 @@ class SpController extends Controller
         $name ??= $this->matchActiveSpMasterOption($names, $preferredName)
             ?? (string) $names->first();
 
-        $preferredTitle = strcasecmp($name, 'Bambang Harwanta') === 0
-            ? 'Pj. Kepala Cabang'
-            : 'Pgs. Kepala Bidang Dukungan Bisnis';
+        $preferredTitle = $rule['title'];
         $titleCandidate = $explicitTitle !== '' ? $explicitTitle : $storedTitle;
         $title = $this->matchActiveSpMasterOption($titles, $titleCandidate);
 
@@ -1901,45 +1899,6 @@ class SpController extends Controller
     // =========================================================
     // CETAK SP → WORD (dengan tabel items dinamis)
     // =========================================================
-    public function previewCetak(Request $request, Sp $sp)
-    {
-        $bidangPr = $this->resolvePrintBidangPr($request->query('bidang_pr'));
-        $signer = $this->resolvePrintSciSigner(
-            $sp,
-            $request->query('penandatangan_sci'),
-            $request->query('jabatan_sci')
-        );
-        $nomor = trim((string) ($sp->nomor_sp ?: 'SP-'.$sp->id));
-        $filename = $this->previewDownloadName('SP '.$nomor.'.docx');
-        $mode = strtolower((string) ($sp->numbering_mode ?? 'auto')) === 'oracle' ? 'oracle' : 'auto';
-        $preview = PrintPreviewFile::store(
-            $this->cetakSp($sp, $bidangPr, $signer['name'], $signer['title']),
-            $filename
-        );
-
-        return view('documents.print-preview', [
-            'title' => 'Preview Cetak SP',
-            'eyebrow' => 'PENOMORAN SP',
-            'documentType' => strtoupper($preview['extension'] ?? 'docx'),
-            'documentName' => $nomor,
-            'subtitle' => $sp->deskripsi_pengadaan ?: 'Surat Pesanan',
-            'downloadUrl' => $preview['downloadUrl'],
-            'previewFrameUrl' => $preview['previewFrameUrl'],
-            'filename' => $preview['filename'],
-            'backUrl' => route('sp.index', ['mode' => $mode]),
-            'meta' => [
-                'Nomor SP' => $nomor,
-                'Nomor PR/PPBJ' => $sp->linkedPpbjLabel(),
-                'Vendor' => $sp->nama_vendor ?: '-',
-                'Nilai SP' => $sp->nilai_sp ? 'Rp '.number_format((float) $sp->nilai_sp, 0, ',', '.') : '-',
-                'PIC' => $sp->pic ?: '-',
-                'Bidang PR' => $bidangPr,
-                'Penandatangan SCI' => $signer['name'].' - '.$signer['title'],
-                'Link berlaku sampai' => $preview['expiresText'],
-            ],
-        ]);
-    }
-
     public function cetakSp(
         Sp $sp,
         ?string $bidangPr = null,
@@ -6509,14 +6468,6 @@ class SpController extends Controller
     private function formatMoney($value): string
     {
         return number_format($this->moneyToFloat($value), 0, ',', '.');
-    }
-
-    private function previewDownloadName(string $name): string
-    {
-        $name = preg_replace('/[^\pL\pN\s._-]+/u', ' ', $name);
-        $name = preg_replace('/\s+/', ' ', trim((string) $name));
-
-        return $name !== '' ? $name : 'dokumen.docx';
     }
 
     // =========================================================
