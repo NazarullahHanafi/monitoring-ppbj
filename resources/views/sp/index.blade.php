@@ -425,7 +425,7 @@
                                             </svg>
                                         </button>
                                         <button type="button"
-                                            onclick="openSpPrintPreview(@js(route('sp.cetak.preview', $s)), @js($s->nomor_sp ?? ('SP-' . $s->id)), @js($s->penandatangan_sci ?? ''), @js($s->jabatan_sci ?? ''))"
+                                            onclick="openSpPrintPreview(@js(route('sp.cetak.preview', $s)))"
                                             class="p-1.5 rounded-lg text-sky-600 hover:bg-sky-50 dark:hover:bg-sky-900/30 transition-colors"
                                             title="Preview & simpan SP"><svg class="w-4 h-4" fill="none" stroke="currentColor"
                                                 viewBox="0 0 24 24">

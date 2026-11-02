@@ -31,7 +31,7 @@
                 if(!alive())return;state.edit=null;state.deactivate=null;await load();state.message=result.message;
             }catch(error){state.message=error.message;}finally{state.busy=false;if(cancel)cancel.disabled=false;draw();}
         }
-        const result=await Swal.fire({title:'Master penandatangan & jabatan',html:render(state,canManage),width:760,customClass:{popup:'spph-signing-popup'},
+        const result=await Swal.fire({title:withFields?'Master cetak SP':'Master penandatangan & jabatan',html:render(state,canManage),width:760,customClass:{popup:'spph-signing-popup'},
             background:document.documentElement.classList.contains('dark')?'#162034':'#fff',color:document.documentElement.classList.contains('dark')?'#edf3ff':'#18253d',
             showCancelButton:false,confirmButtonText:'Kembali ke cetak',confirmButtonColor:'#3157d9',focusConfirm:false,
             allowOutsideClick:()=>!state.busy,allowEscapeKey:()=>!state.busy,willClose:()=>{closed=true;nonce++;},preConfirm:()=>state.busy?false:true,
