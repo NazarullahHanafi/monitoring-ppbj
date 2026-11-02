@@ -14,6 +14,7 @@ use App\Models\User;
 use App\Services\SpPrintPolicy;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
@@ -204,5 +205,113 @@ class SpSigningPolicyTest extends TestCase
         DB::disableQueryLog();
         $this->assertSame(20, $context['pr_count']);
         $this->assertLessThanOrEqual(5, $count);
+    }
+
+    public function test_first_field_choice_is_remembered_on_post_and_next_print_is_automatic(): void
+    {
+        $sp = $this->document(1000000, ['PK - LAB', 'PK - LAB']);
+        $user = $this->umum();
+        $this->actingAs($user);
+        $context = $this->getJson(route('sp.print-context', $sp))->assertOk()->assertJsonPath('owner_can_learn', true)->json();
+        $payload = ['signing_mode' => 'auto', 'field_id' => $this->field()->id, 'learn_portfolio' => true, 'print_basis' => $context['fingerprint']];
+        $confirmed = $this->postJson(route('sp.print-selection', $sp), $payload)->assertOk()->assertJsonPath('mapping_saved', true)
+            ->assertJsonPath('owner_field_id', $this->field()->id)->assertJsonPath('owner_can_learn', false)->assertJsonPath('can_manage', true)->json();
+        $this->assertNotSame($context['fingerprint'], $confirmed['fingerprint']);
+        $this->assertSame($confirmed['fingerprint'], $confirmed['selection']['print_basis']);
+        $this->assertArrayNotHasKey('learn_portfolio', $confirmed['selection']);
+        $this->assertDatabaseHas('sp_portfolio_field_maps', ['portfolio_key' => 'PK - LAB', 'field_id' => $this->field()->id, 'updated_by_user_id' => $user->id, 'is_active' => true]);
+        $this->assertSame(1, ActivityLog::where('model_type', SpPortfolioFieldMap::class)->count());
+        $this->postJson(route('sp.print-selection', $sp), $confirmed['selection'])->assertOk()->assertJsonPath('mapping_saved', false);
+        $this->assertSame(1, SpPortfolioFieldMap::count());
+        $this->assertSame(1, ActivityLog::where('model_type', SpPortfolioFieldMap::class)->count());
+        $this->getJson(route('sp.print-context', $sp))->assertOk()->assertJsonPath('owner_field_id', $this->field()->id);
+    }
+
+    public function test_learning_cannot_be_triggered_by_get_or_without_a_fresh_basis(): void
+    {
+        $sp = $this->document();
+        $this->actingAs($this->umum());
+        $payload = ['signing_mode' => 'auto', 'field_id' => $this->field()->id, 'learn_portfolio' => 1];
+        $this->getJson(route('sp.print-context', [$sp, ...$payload]))->assertUnprocessable();
+        $this->getJson(route('sp.cetak', [$sp, ...$payload]))->assertUnprocessable();
+        $this->postJson(route('sp.print-selection', $sp), $payload)->assertUnprocessable()->assertJsonValidationErrors('print_basis');
+        $context = app(SpPrintPolicy::class)->context($sp);
+        $sp->update(['nilai_sp' => 60000000]);
+        $this->postJson(route('sp.print-selection', $sp), $payload + ['print_basis' => $context['fingerprint']])->assertUnprocessable()->assertJsonValidationErrors('print_basis');
+        $this->assertSame(0, SpPortfolioFieldMap::count());
+    }
+
+    public function test_existing_or_inactive_mapping_is_never_overwritten_by_learning(): void
+    {
+        $sp = $this->document();
+        $this->actingAs($this->umum());
+        $context = app(SpPrintPolicy::class)->context($sp);
+        $map = $this->map('PK - LAB');
+        $other = SpMasterOption::where('type', 'bidang_pr')->where('nama', 'DUKUNGAN BISNIS')->firstOrFail();
+        $payload = ['signing_mode' => 'auto', 'field_id' => $other->id, 'learn_portfolio' => true, 'print_basis' => $context['fingerprint']];
+        $this->postJson(route('sp.print-selection', $sp), $payload)->assertUnprocessable()->assertJsonValidationErrors('print_basis');
+        $payload['print_basis'] = app(SpPrintPolicy::class)->context($sp->fresh())['fingerprint'];
+        $this->postJson(route('sp.print-selection', $sp), $payload)->assertUnprocessable();
+        $payload['learn_portfolio'] = false;
+        $payload['field_reason'] = 'Bidang berbeda sesuai penugasan pemilik PR';
+        $this->postJson(route('sp.print-selection', $sp), $payload)->assertOk()->assertJsonPath('mapping_saved', false)->assertJsonPath('selection.field_id', $other->id);
+        $this->assertSame($this->field()->id, $map->fresh()->field_id);
+        $map->update(['is_active' => false]);
+        $context = app(SpPrintPolicy::class)->context($sp->fresh());
+        $this->assertFalse($context['owner_can_learn']);
+        $payload['print_basis'] = $context['fingerprint'];
+        $payload['learn_portfolio'] = true;
+        $this->postJson(route('sp.print-selection', $sp), $payload)->assertUnprocessable();
+        $this->assertFalse($map->fresh()->is_active);
+    }
+
+    public function test_cross_portfolio_package_needs_manual_reason_and_does_not_create_mappings(): void
+    {
+        $sp = $this->document(1000000, ['PK - LAB', 'PK - QAQC']);
+        $this->actingAs($this->umum());
+        $context = app(SpPrintPolicy::class)->context($sp->fresh());
+        $this->assertFalse($context['owner_can_learn']);
+        $payload = ['signing_mode' => 'auto', 'field_id' => $this->field()->id, 'print_basis' => $context['fingerprint']];
+        $this->postJson(route('sp.print-selection', $sp), $payload)->assertUnprocessable()->assertJsonValidationErrors('field_reason');
+        $this->postJson(route('sp.print-selection', $sp), $payload + ['field_reason' => 'Bidang koordinator sesuai konfirmasi'])->assertOk()->assertJsonPath('mapping_saved', false);
+        $this->assertSame(0, SpPortfolioFieldMap::count());
+        $sp->ppbjs()->update(['portofolio' => null]);
+        $this->assertFalse(app(SpPrintPolicy::class)->context($sp->fresh())['owner_can_learn']);
+        $sp->ppbjs()->detach();
+        $sp->update(['nomor_pr' => null]);
+        $this->assertFalse(app(SpPrintPolicy::class)->context($sp->fresh())['owner_can_learn']);
+    }
+
+    public function test_learning_rejects_viewers_operasional_invalid_fields_and_zero_sp(): void
+    {
+        $sp = $this->document();
+        $payload = ['signing_mode' => 'auto', 'field_id' => $this->field()->id, 'learn_portfolio' => 1, 'print_basis' => app(SpPrintPolicy::class)->context($sp->fresh())['fingerprint']];
+        foreach ([$this->umum(['role' => 'viewer']), User::factory()->create(['department' => 'operasional'])] as $user) {
+            $this->actingAs($user)->postJson(route('sp.print-selection', $sp), $payload)->assertForbidden();
+        }
+        $this->actingAs($this->umum());
+        $this->postJson(route('sp.print-selection', $sp), array_replace($payload, ['field_id' => SpMasterOption::where('type', 'penandatangan_sci')->firstOrFail()->id]))->assertUnprocessable();
+        $this->field()->update(['is_active' => false]);
+        $this->postJson(route('sp.print-selection', $sp), $payload)->assertUnprocessable();
+        $sp->update(['nilai_sp' => 0]);
+        $payload['print_basis'] = app(SpPrintPolicy::class)->context($sp->fresh())['fingerprint'];
+        $this->postJson(route('sp.print-selection', $sp), $payload)->assertUnprocessable();
+        $this->assertSame(0, SpPortfolioFieldMap::count());
+    }
+
+    public function test_global_read_only_mode_blocks_mapping_confirmation(): void
+    {
+        $sp = $this->document();
+        $this->actingAs($this->umum());
+        Cache::put('simonpr:read_only_mode', true);
+        try {
+            $this->postJson(route('sp.print-selection', $sp), [
+                'signing_mode' => 'auto', 'field_id' => $this->field()->id, 'learn_portfolio' => true,
+                'print_basis' => app(SpPrintPolicy::class)->context($sp->fresh())['fingerprint'],
+            ])->assertForbidden();
+            $this->assertSame(0, SpPortfolioFieldMap::count());
+        } finally {
+            Cache::forget('simonpr:read_only_mode');
+        }
     }
 }

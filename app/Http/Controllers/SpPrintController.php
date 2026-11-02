@@ -5,11 +5,20 @@ namespace App\Http\Controllers;
 use App\Models\ActivityLog;
 use App\Models\Sp;
 use App\Services\SpPrintPolicy;
+use App\Services\SpPrintSelection;
 use App\Support\PrintPreviewFile;
 use Illuminate\Http\Request;
 
 class SpPrintController extends Controller
 {
+    public function confirm(Request $request, Sp $sp)
+    {
+        abort_if($request->user()->isReadOnly(), 403);
+
+        return response()->json(app(SpPrintSelection::class)->confirm($request, $sp))
+            ->header('Cache-Control', 'private, no-store');
+    }
+
     public function context(Request $request, Sp $sp)
     {
         $context = app(SpPrintPolicy::class)->context($sp);

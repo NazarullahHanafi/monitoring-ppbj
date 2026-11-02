@@ -19,12 +19,12 @@ class SpPrintPolicy
             $prs = Ppbj::where('ppbj_no', $sp->nomor_pr)->get(['id', 'ppbj_no', 'portofolio', 'total_sebelum_ppn', 'updated_at']);
         }
         $portfolios = $prs->pluck('portofolio')->map(fn ($value) => SpPortfolioFieldMap::key((string) $value))->unique();
-        $maps = SpPortfolioFieldMap::with('field:id,nama,type,is_active')->whereIn('portfolio_key', $portfolios)->where('is_active', true)->get()->keyBy('portfolio_key');
+        $maps = SpPortfolioFieldMap::with('field:id,nama,type,is_active')->whereIn('portfolio_key', $portfolios)->get()->keyBy('portfolio_key');
         $fields = [];
         $diagnostics = [];
         foreach ($portfolios as $portfolio) {
             $map = $maps->get($portfolio);
-            if ($map?->field?->is_active && $map->field->type === 'bidang_pr') {
+            if ($map?->is_active && $map->field?->is_active && $map->field->type === 'bidang_pr') {
                 $fields[$map->field_id] = $map->field->nama;
             } else {
                 $diagnostics[] = $portfolio === '' ? 'Ada PR tanpa portofolio.' : 'Belum ada pemetaan aktif: '.$portfolio;
@@ -40,6 +40,8 @@ class SpPrintPolicy
             $diagnostics[] = 'PR gabungan berasal dari bidang berbeda. Tentukan bidang penanggung jawab secara manual.';
         }
         $fieldId = count($fields) === 1 && ! $diagnostics ? (int) array_key_first($fields) : null;
+        $learnable = $prs->isNotEmpty() && $prs->count() <= 100 && $portfolios->count() === 1
+            && filled($portfolios->first()) && mb_strlen($portfolios->first()) <= 150 && $maps->isEmpty();
         $amount = (string) $sp->nilai_sp;
         $threshold = (int) config('spph.signing.threshold');
         $pair = config('spph.signing.'.((float) $amount >= $threshold ? 'at_or_above' : 'below'));
@@ -61,25 +63,32 @@ class SpPrintPolicy
             'rule' => ((float) $amount >= $threshold ? 'Mulai dari Rp' : 'Di bawah Rp').number_format($threshold, 0, ',', '.'),
             'rules' => [['label' => 'Di bawah', ...config('spph.signing.below')], ['label' => 'Mulai dari', ...config('spph.signing.at_or_above')]],
             'ready' => ! $errors, 'errors' => $errors, 'owner_field_id' => $fieldId, 'owner_field_name' => $fieldId ? $fields[$fieldId] : null,
+            'owner_can_learn' => $learnable,
             'owner_diagnostics' => $diagnostics, 'portfolios' => $portfolios->filter()->values()->all(), 'vendor' => $sp->nama_vendor,
             'checked_at' => now()->format('d M Y H:i:s').' WIB', 'ppbj_url' => route('ppbj.index', ['search' => $prs->first()?->ppbj_no]),
             'fingerprint' => hash('sha256', json_encode([$sp->getAttributes(), $prs->toArray(), $maps->map(fn ($map) => [$map->version(), $map->field?->nama, $map->field?->is_active])->all(), $name?->id, $title?->id, config('spph.signing')]))];
     }
 
-    public function validate(Request $request, array $context): array
+    public function validate(Request $request, array $context, bool $allowLearning = false): array
     {
         $selected = app(SpphPrintPolicy::class)->validate($request, $context);
-        $data = validator($request->query(), ['field_id' => ['required', 'integer', 'min:1'], 'field_reason' => ['nullable', 'string', 'max:500']])->validate();
+        $data = validator($request->query(), ['field_id' => ['required', 'integer', 'min:1'], 'field_reason' => ['nullable', 'string', 'max:500'], 'learn_portfolio' => ['nullable', 'boolean']])->validate();
         $field = SpMasterOption::active()->where('type', 'bidang_pr')->find($data['field_id']);
         if (! $field) {
             throw ValidationException::withMessages(['field_id' => 'Pilih bidang pemilik PR dari master aktif.']);
         }
         $manual = $context['owner_field_id'] !== $field->id;
-        if ($manual && mb_strlen(trim($data['field_reason'] ?? '')) < 10) {
+        $learning = $allowLearning && ! empty($data['learn_portfolio']) && $context['owner_can_learn']
+            && $request->user()?->department === 'umum' && ! $request->user()->isReadOnly();
+        if (! empty($data['learn_portfolio']) && ! $learning) {
+            throw ValidationException::withMessages(['field_id' => 'Pilihan belum bisa diingat otomatis. Pemetaan sudah ada, portofolio berbeda, atau akses Anda baca-saja. Periksa ulang pilihan.']);
+        }
+        if ($manual && ! $learning && mb_strlen(trim($data['field_reason'] ?? '')) < 10) {
             throw ValidationException::withMessages(['field_reason' => 'Jelaskan pilihan bidang manual minimal 10 karakter.']);
         }
         $selected['field_name'] = $field->nama;
         $selected['field_manual'] = $manual;
+        $selected['learn_portfolio'] = $learning;
         $selected['field_reason'] = trim($data['field_reason'] ?? '');
         $selected['query'] += ['field_id' => $field->id, 'field_reason' => $selected['field_reason']];
 

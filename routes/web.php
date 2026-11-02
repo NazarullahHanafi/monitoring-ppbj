@@ -477,6 +477,7 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
 
             // Cetak SP
             Route::get('/{sp}/print-context', [\App\Http\Controllers\SpPrintController::class, 'context'])->name('print-context')->middleware('throttle:40,1');
+            Route::post('/{sp}/print-selection', [\App\Http\Controllers\SpPrintController::class, 'confirm'])->name('print-selection')->middleware('throttle:20,1');
             Route::get('/{sp}/cetak-preview', [\App\Http\Controllers\SpPrintController::class, 'preview'])->name('cetak.preview')->middleware('throttle:30,1');
             Route::get('/{sp}/cetak', [\App\Http\Controllers\SpPrintController::class, 'download'])->name('cetak')->middleware('throttle:30,1');
 
