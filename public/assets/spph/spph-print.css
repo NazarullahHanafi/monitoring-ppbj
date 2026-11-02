@@ -1,0 +1,25 @@
+.spph-signing-popup { --sg-soft:#f3f6fc;--sg-text:#18253d;--sg-muted:#52627c;--sg-line:#dbe3f0;--sg-accent:#3157d9;border-radius:20px!important; }
+.dark .spph-signing-popup { --sg-soft:#101929;--sg-text:#edf3ff;--sg-muted:#b2c3df;--sg-line:#384a69;--sg-accent:#a6b8ff;color-scheme:dark; }
+.spph-signing-content { text-align:left;color:var(--sg-text);font-size:13px;line-height:1.65; }
+.spph-signing-content p { color:var(--sg-muted);margin:6px 0; }
+.spph-signing-intro { font-weight:800;font-size:15px;overflow-wrap:anywhere; }
+.spph-signing-intro p { font-weight:400;font-size:13px; }
+.spph-signing-grid { display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:18px 0; }
+.spph-signing-card { padding:16px;border-radius:14px;background:var(--sg-soft);border:1px solid var(--sg-line); }
+.spph-signing-card small { display:block;font-size:10px;font-weight:800;letter-spacing:.06em;color:var(--sg-muted); }
+.spph-signing-card strong { display:block;font-size:19px;line-height:1.4;margin-top:8px;overflow-wrap:anywhere; }
+.spph-signing-official { border-color:var(--sg-accent); }
+.spph-signing-official strong { color:var(--sg-accent); }
+.spph-signing-rule { border-left:3px solid var(--sg-accent);border-radius:8px;padding:10px 14px;background:var(--sg-soft); }
+.spph-signing-breakdown { margin:16px 0;border:1px solid var(--sg-line);border-radius:10px;padding:12px; }
+.spph-signing-breakdown summary { cursor:pointer;font-weight:700; }
+.spph-signing-breakdown>div { display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-bottom:1px solid var(--sg-line);overflow-wrap:anywhere; }
+.spph-signing-help { list-style:decimal;padding-left:20px;margin:14px 0; }
+.spph-signing-help li { margin:6px 0; }
+.spph-signing-warning { border:1px solid #d68c3c;background:#fff5e6;color:#713f12;padding:12px;border-radius:10px;margin:12px 0; }
+.spph-signing-warning p { color:inherit; }
+.dark .spph-signing-warning { background:#392b15;color:#ffe1a8;border-color:#a57635; }
+.spph-signing-time { font-size:11px; }
+.spph-signing-links { display:flex;gap:12px;flex-wrap:wrap;margin:14px 0; }
+.spph-signing-links a { color:var(--sg-accent);text-decoration:underline;text-underline-offset:3px;font-weight:600;font-size:12px; }
+@media(max-width:540px) { .spph-signing-grid { grid-template-columns:1fr; } .spph-signing-breakdown>div { flex-wrap:wrap; } }

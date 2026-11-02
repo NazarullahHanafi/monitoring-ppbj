@@ -446,6 +446,7 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
                 ->name('archive')
                 ->middleware('throttle:30,1');
             Route::get('/{spph}/cetak-preview', [SpphController::class, 'previewCetak'])->name('cetak.preview')->middleware('throttle:30,1');
+            Route::get('/{spph}/print-context', [SpphController::class, 'printContext'])->name('print-context')->middleware('throttle:40,1');
             Route::get('/{spph}/cetak', [SpphController::class, 'cetakSpph'])->name('cetak')->middleware('throttle:30,1');
             Route::get('/{spph}/cetak-semua-vendor-preview', [SpphController::class, 'previewCetakSemuaVendor'])->name('cetak-semua-vendor.preview')->middleware('throttle:30,1');
             Route::get('/{spph}/cetak-semua-vendor', [SpphController::class, 'cetakSemuaVendor'])->name('cetak-semua-vendor')->middleware('throttle:30,1');

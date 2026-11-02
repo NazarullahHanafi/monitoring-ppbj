@@ -3,23 +3,9 @@
 @section('title', 'Penomoran SPPH')
 
 @push('styles')
+    <link rel="stylesheet" href="{{ asset('assets/spph/spph-print.css') }}?v={{ filemtime(public_path('assets/spph/spph-print.css')) }}">
     <link rel="stylesheet" href="{{ asset('assets/app/procurement-review.css') }}?v={{ filemtime(public_path('assets/app/procurement-review.css')) }}">
     <link rel="stylesheet" href="{{ asset('assets/spph/spph.css') }}?v=20261020e">
-    <style>
-        #spphPrintSigner, #spphPrintTitle,
-        #spphPrintSigner option, #spphPrintTitle option {
-            color-scheme: light;
-            background-color: #fff;
-            color: #0f172a;
-        }
-        .dark #spphPrintSigner, .dark #spphPrintTitle,
-        .dark #spphPrintSigner option, .dark #spphPrintTitle option {
-            color-scheme: dark;
-            border-color: #475569 !important;
-            background-color: #172033 !important;
-            color: #f8fafc !important;
-        }
-    </style>
 @endpush
 
 @section('content')
@@ -998,9 +984,6 @@
             'satuanStoreUrl' => route('satuan.store'),
             'vendorUsageStatsUrl' => route('spph.vendor-usage-stats'),
             'vendorStoreUrl' => route('vendor.store'),
-            'printSigners' => $spphSigners,
-            'printSignerTitles' => $spphSignerTitles,
-            'printMasterUrl' => route('sp-master-options.index', ['type' => 'penandatangan_sci']),
             'lastId' => $spphs->count() > 0 ? $spphs->max('id') : 0,
             'firstPage' => $spphs->onFirstPage(),
             'hasFilter' => (bool) ((($search ?? '') !== '') || ($pic ?? '') || ($vendorFilter ?? '') || ($dari ?? '') || ($sampai ?? '')),
@@ -1013,6 +996,7 @@
     <script src="{{ asset('assets/app/procurement-review.js') }}?v={{ filemtime(public_path('assets/app/procurement-review.js')) }}" defer></script>
     <script src="{{ asset('assets/app/procurement-filters.js') }}?v={{ filemtime(public_path('assets/app/procurement-filters.js')) }}" defer></script>
     <script src="{{ asset('assets/spph/spph.js') }}?v={{ filemtime(public_path('assets/spph/spph.js')) }}" defer></script>
+    <script src="{{ asset('assets/spph/spph-print.js') }}?v={{ filemtime(public_path('assets/spph/spph-print.js')) }}" defer></script>
 @endpush
 
 @include('components.archive-upload-popup')

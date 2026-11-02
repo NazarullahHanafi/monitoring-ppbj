@@ -4,12 +4,12 @@ namespace App\Http\Controllers;
 
 use App\Models\Ppbj;
 use App\Models\Sp;
-use App\Models\SpMasterOption;
 use App\Models\Spph;
 use App\Models\SpphItem;
 use App\Models\User;
 use App\Models\Vendor;
 use App\Services\ProcurementJourneyService;
+use App\Services\SpphPrintPolicy;
 use App\Support\CacheBatch;
 use App\Support\PrintPreviewFile;
 use App\Support\ProcurementDocumentSearch;
@@ -34,6 +34,21 @@ class SpphController extends Controller
 
     /** @var array<string, string|null> Cache kecil per-request untuk mencegah query vendor SP berulang. */
     private array $activeSpVendorCache = [];
+
+    public function printContext(Spph $spph)
+    {
+        return response()->json(app(SpphPrintPolicy::class)->context($spph))
+            ->header('Cache-Control', 'private, no-store');
+    }
+
+    private function automaticPrintSigner(Request $request, Spph $spph): array
+    {
+        $key = 'spph_print_context:'.$spph->id;
+        $context = $request->attributes->get($key) ?? app(SpphPrintPolicy::class)->context($spph);
+        $request->attributes->set($key, $context);
+
+        return app(SpphPrintPolicy::class)->validate($request, $context);
+    }
 
     protected function presenceKey(): string
     {
@@ -67,16 +82,6 @@ class SpphController extends Controller
                 ->select('nomor_spph', 'sequence_number')
                 ->orderBy('sequence_number', 'desc')
                 ->first(),
-            'sp_master_options:penandatangan_sci:active_names' => fn () => SpMasterOption::active()
-                ->where('type', 'penandatangan_sci')
-                ->orderBy('nama')
-                ->pluck('nama')
-                ->toArray(),
-            'sp_master_options:jabatan_sci:active_names' => fn () => SpMasterOption::active()
-                ->where('type', 'jabatan_sci')
-                ->orderBy('nama')
-                ->pluck('nama')
-                ->toArray(),
         ], 3600);
 
         $vendors = $referenceData['vendors:active'];
@@ -84,12 +89,6 @@ class SpphController extends Controller
         $satuans = $referenceData['satuans:all'];
         $lastSpph = $referenceData['spph:last_nomor'];
         $lastNomor = $lastSpph?->nomor_spph;
-        $spphSigners = collect($referenceData['sp_master_options:penandatangan_sci:active_names'])
-            ->values()
-            ->all();
-        $spphSignerTitles = collect($referenceData['sp_master_options:jabatan_sci:active_names'])
-            ->values()
-            ->all();
 
         $spphs = ProcurementDocumentSearch::apply(Spph::query(), $search)->select([
             'id',
@@ -124,8 +123,6 @@ class SpphController extends Controller
             'vendorFilter',
             'dari',
             'sampai',
-            'spphSigners',
-            'spphSignerTitles',
             'onboardingSeen',
             'itemSearchHints'
         ));
@@ -1016,10 +1013,7 @@ class SpphController extends Controller
     public function previewCetak(Request $request, Spph $spph)
     {
         $vendorName = $this->resolvePrintVendorName($spph, $request->query('vendor'));
-        $signer = $this->resolveSpphSigner(
-            $request->query('penandatangan'),
-            $request->query('jabatan')
-        );
+        $signer = $this->automaticPrintSigner($request, $spph);
         $downloadUrl = route('spph.cetak', [
             'spph' => $spph,
             'vendor' => $vendorName,
@@ -1031,7 +1025,9 @@ class SpphController extends Controller
             'penandatangan' => $signer['name'],
             'jabatan' => $signer['title'],
         ]);
+        $printRequest->attributes->set('spph_print_context:'.$spph->id, $signer);
         $preview = PrintPreviewFile::store(
+            // Reuse the checked snapshot only within this one print operation.
             $this->cetakSpph($printRequest, $spph),
             $this->safeDownloadName('SPPH '.($spph->nomor_spph ?: $spph->id).' - '.$vendorName.'.docx')
         );
@@ -1050,6 +1046,7 @@ class SpphController extends Controller
                 'Nomor SPPH' => $spph->nomor_spph ?: '-',
                 'Nomor PR/PPBJ' => $spph->linkedPpbjLabel(),
                 'Vendor' => $vendorName ?: '-',
+                'Dasar penandatangan' => 'Total '.$signer['pr_count'].' PR/PPBJ: Rp '.number_format((float) $signer['amount'], 2, ',', '.').' — '.$signer['rule'],
                 'Penandatangan' => ($signer['name'] ?? '-').' - '.($signer['title'] ?? '-'),
                 'PIC' => $spph->pic ?: '-',
                 'Link berlaku sampai' => $preview['expiresText'],
@@ -1060,10 +1057,7 @@ class SpphController extends Controller
     public function previewCetakSemuaVendor(Request $request, Spph $spph)
     {
         $vendorCount = count($spph->print_vendor_names);
-        $signer = $this->resolveSpphSigner(
-            $request->query('penandatangan'),
-            $request->query('jabatan')
-        );
+        $signer = $this->automaticPrintSigner($request, $spph);
         $downloadUrl = route('spph.cetak-semua-vendor', [
             'spph' => $spph,
             'penandatangan' => $signer['name'],
@@ -1076,6 +1070,7 @@ class SpphController extends Controller
                 'penandatangan' => $signer['name'],
                 'jabatan' => $signer['title'],
             ]);
+            $printRequest->attributes->set('spph_print_context:'.$spph->id, $signer);
             $preview = PrintPreviewFile::store(
                 $this->cetakSemuaVendor($printRequest, $spph),
                 $this->safeDownloadName('SPPH '.($spph->nomor_spph ?: $spph->id).' - Semua Vendor.docx')
@@ -1099,6 +1094,7 @@ class SpphController extends Controller
                 'Nomor SPPH' => $spph->nomor_spph ?: '-',
                 'Nomor PR/PPBJ' => $spph->linkedPpbjLabel(),
                 'Jumlah Vendor' => $vendorCount.' vendor',
+                'Dasar penandatangan' => 'Total '.$signer['pr_count'].' PR/PPBJ: Rp '.number_format((float) $signer['amount'], 2, ',', '.').' — '.$signer['rule'],
                 'Penandatangan' => ($signer['name'] ?? '-').' - '.($signer['title'] ?? '-'),
                 'PIC' => $spph->pic ?: '-',
                 'Link berlaku sampai' => $preview['expiresText'] ?? 'Dibuat saat download',
@@ -1111,10 +1107,7 @@ class SpphController extends Controller
         Settings::setOutputEscapingEnabled(true);
         $spph->load('items');
         $printVendorName = $this->resolvePrintVendorName($spph, $request->query('vendor'));
-        $signer = $this->resolveSpphSigner(
-            $request->query('penandatangan'),
-            $request->query('jabatan')
-        );
+        $signer = $this->automaticPrintSigner($request, $spph);
 
         $phpWord = new PhpWord;
         $phpWord->setDefaultFontName('Arial');
@@ -1337,6 +1330,7 @@ class SpphController extends Controller
 
     public function cetakSemuaVendor(Request $request, Spph $spph)
     {
+        $signer = $this->automaticPrintSigner($request, $spph);
         $spph->load('items');
         $vendors = $spph->print_vendor_names;
 
@@ -1364,6 +1358,7 @@ class SpphController extends Controller
                 'penandatangan' => $request->query('penandatangan'),
                 'jabatan' => $request->query('jabatan'),
             ]);
+            $vendorRequest->attributes->set('spph_print_context:'.$spph->id, $signer);
             $response = $this->cetakSpph($vendorRequest, $spph);
             $filePath = $response->getFile()->getPathname();
             $entryName = $this->safeDownloadName('SPPH '.$spph->nomor_spph.' - '.$vendorName.'.docx');
@@ -1386,92 +1381,6 @@ class SpphController extends Controller
     // =========================================================
     // PRIVATE: Sanitize untuk XML 1.0 — buang karakter ilegal
     // =========================================================
-    private function resolveSpphSigner(?string $requestedName, ?string $requestedTitle = null): array
-    {
-        $legacySigners = [
-            'jumelda' => [
-                'name' => 'Jumelda',
-                'title' => 'Pgs. Kepala Bidang Dukungan Bisnis',
-            ],
-            'bambang' => [
-                'name' => 'Bambang Harwanta',
-                'title' => 'Kepala Cabang',
-            ],
-        ];
-
-        $names = Cache::remember(
-            'sp_master_options:penandatangan_sci:active_names',
-            3600,
-            fn () => SpMasterOption::active()
-                ->where('type', 'penandatangan_sci')
-                ->orderBy('nama')
-                ->pluck('nama')
-                ->toArray()
-        );
-        $titles = Cache::remember(
-            'sp_master_options:jabatan_sci:active_names',
-            3600,
-            fn () => SpMasterOption::active()
-                ->where('type', 'jabatan_sci')
-                ->orderBy('nama')
-                ->pluck('nama')
-                ->toArray()
-        );
-
-        $names = collect($names)->filter()->values()->all();
-        $titles = collect($titles)->filter()->values()->all();
-        $names = $names ?: array_column($legacySigners, 'name');
-        $titles = $titles ?: array_values(array_unique(array_column($legacySigners, 'title')));
-
-        $rawName = trim((string) $requestedName);
-        $legacy = $legacySigners[strtolower($rawName)] ?? null;
-        $rawName = $legacy['name'] ?? $rawName;
-        $rawTitle = trim((string) $requestedTitle);
-
-        if ($rawName === '') {
-            $rawName = $this->findSpphMasterOption($names, 'Jumelda') ?? $names[0];
-        }
-
-        $name = $this->findSpphMasterOption($names, $rawName);
-        if ($name === null) {
-            throw ValidationException::withMessages([
-                'penandatangan' => 'Penandatangan SPPH tidak tersedia atau sudah dinonaktifkan di master data.',
-            ]);
-        }
-
-        if ($rawTitle === '') {
-            $preferredTitle = $legacy['title'] ?? (
-                strcasecmp($name, 'Bambang Harwanta') === 0
-                    ? 'Kepala Cabang'
-                    : 'Pgs. Kepala Bidang Dukungan Bisnis'
-            );
-            $rawTitle = $this->findSpphMasterOption($titles, $preferredTitle)
-                ?? (strcasecmp($name, 'Jumelda') === 0
-                    ? collect($titles)->first(fn ($title) => str_contains(strtolower($title), 'kepala bidang dukungan bisnis'))
-                    : null)
-                ?? $titles[0];
-        }
-
-        $title = $this->findSpphMasterOption($titles, $rawTitle);
-        if ($title === null) {
-            throw ValidationException::withMessages([
-                'jabatan' => 'Jabatan penandatangan SPPH tidak tersedia atau sudah dinonaktifkan di master data.',
-            ]);
-        }
-
-        return ['name' => $name, 'title' => $title];
-    }
-
-    private function findSpphMasterOption(array $options, string $requested): ?string
-    {
-        foreach ($options as $option) {
-            if (strcasecmp(trim((string) $option), trim($requested)) === 0) {
-                return (string) $option;
-            }
-        }
-
-        return null;
-    }
 
     private function sanitizeXml(string $text): string
     {

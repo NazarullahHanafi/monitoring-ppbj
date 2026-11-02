@@ -3,8 +3,9 @@
 namespace Tests\Feature;
 
 use App\Http\Controllers\SpphController;
-use App\Models\Spph;
+use App\Models\Ppbj;
 use App\Models\SpMasterOption;
+use App\Models\Spph;
 use App\Models\Vendor;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
@@ -14,6 +15,12 @@ use ZipArchive;
 class SpphKopSuratLayoutTest extends TestCase
 {
     use RefreshDatabase;
+
+    private function linkPr(Spph $spph, int $amount): void
+    {
+        $pr = Ppbj::create(['ppbj_no' => 'PR/SIGNER/'.$spph->id, 'tgl_ppbj' => '2026-07-02', 'total_sebelum_ppn' => $amount]);
+        $spph->ppbjs()->sync([$pr->id => ['urutan' => 1]]);
+    }
 
     public function test_spph_letterhead_reserves_footer_space(): void
     {
@@ -34,10 +41,11 @@ class SpphKopSuratLayoutTest extends TestCase
             'pic' => 'Tester',
         ]);
 
-        $response = (new SpphController())->cetakSpph(Request::create('/spph-preview'), $spph);
+        $this->linkPr($spph, 1000000);
+        $response = (new SpphController)->cetakSpph(Request::create('/spph-preview'), $spph);
         $docxPath = $response->getFile()->getPathname();
 
-        $zip = new ZipArchive();
+        $zip = new ZipArchive;
         $this->assertTrue($zip->open($docxPath));
 
         $documentXml = $zip->getFromName('word/document.xml');
@@ -79,10 +87,11 @@ class SpphKopSuratLayoutTest extends TestCase
         ]);
 
         $request = Request::create('/spph-preview', 'GET', ['penandatangan' => 'bambang']);
-        $response = (new SpphController())->cetakSpph($request, $spph);
+        $this->linkPr($spph, 50000000);
+        $response = (new SpphController)->cetakSpph($request, $spph);
         $docxPath = $response->getFile()->getPathname();
 
-        $zip = new ZipArchive();
+        $zip = new ZipArchive;
         $this->assertTrue($zip->open($docxPath));
         $documentXml = $zip->getFromName('word/document.xml');
         $zip->close();
@@ -96,8 +105,9 @@ class SpphKopSuratLayoutTest extends TestCase
         $this->assertStringNotContainsString('Pj. Kepala Bidang Dukungan Bisnis', $documentXml);
     }
 
-    public function test_spph_print_uses_active_signer_and_title_from_master_data(): void
+    public function test_spph_print_uses_policy_pair_from_active_master_data(): void
     {
+        config(['spph.signing.below' => ['name' => 'Siti Penguji', 'title' => 'Manajer Pengadaan']]);
         SpMasterOption::updateOrCreate(
             ['type' => 'penandatangan_sci', 'nama' => 'Siti Penguji'],
             ['is_active' => true]
@@ -119,14 +129,15 @@ class SpphKopSuratLayoutTest extends TestCase
             'pic' => 'Tester',
         ]);
 
+        $this->linkPr($spph, 1000000);
         $request = Request::create('/spph-preview', 'GET', [
             'penandatangan' => 'Siti Penguji',
             'jabatan' => 'Manajer Pengadaan',
         ]);
-        $response = (new SpphController())->cetakSpph($request, $spph);
+        $response = (new SpphController)->cetakSpph($request, $spph);
         $docxPath = $response->getFile()->getPathname();
 
-        $zip = new ZipArchive();
+        $zip = new ZipArchive;
         $this->assertTrue($zip->open($docxPath));
         $documentXml = $zip->getFromName('word/document.xml');
         $zip->close();
