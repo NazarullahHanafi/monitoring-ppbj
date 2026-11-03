@@ -85,7 +85,7 @@
                 CL = ['#6366f1', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#3b82f6', '#ef4444', '#14b8a6', '#f97316', '#84cc16', '#06b6d4', '#a855f7'],
                 MO = [{ e: '\u{1F604}', l: 'Senang', d: 'Hari menyenangkan!' }, { e: '\u{1F60A}', l: 'Baik', d: 'Berjalan lancar' }, { e: '\u{1F60E}', l: 'Keren', d: 'On top of the world' }, { e: '\u{1F525}', l: 'Semangat', d: "Full energy!" }, { e: '\u{1F389}', l: 'Eksis', d: 'Ada spesial' }, { e: '\u{1F62E}', l: 'Wow', d: 'Banyak kejutan' }, { e: '\u{1F610}', l: 'Biasa', d: 'Gitu aja' }, { e: '\u{1F62B}', l: 'Lelah', d: 'Butuh kopi' }, { e: '\u{1F971}', l: 'Ngantuk', d: 'Mata 5 watt, jiwa tetap online ☕' }, { e: '\u{1F60C}', l: 'Santuy', d: 'Pelan-pelan asal kelar, bestie' }, { e: '\u{1F92F}', l: 'Overthinking', d: 'Mikirnya kejauhan, kerjaan tetap jalan' }, { e: '\u{1FAE0}', l: 'Meleleh', d: 'Capek tipis, tetap elegan awkwk' }, { e: '\u{1F4BC}', l: 'Sibuk', d: 'Mode fokus, balasnya kalau semesta mengizinkan' }, { e: '\u{1F6B6}', l: 'Away', d: 'Lagi geser dari radar, nanti muncul lagi' }, { e: '\u{26D4}', l: 'Jangan Ganggu', d: 'Sedang bertapa digital, urgent boleh colek' }, { e: '\u{1F621}', l: 'Badmood', d: 'Butuh ruang dulu, jangan disenggol 😅' }, { e: '\u{1F622}', l: 'Sedih', d: 'Besok lebih baik' }, { e: '\u{1F912}', l: 'Sakit', d: 'Tidak enak badan' }];
             var MY_GENDER = APP_SHELL.userGender || null, MY_NAME = APP_SHELL.userName || 'User', MOOD_ENABLED = APP_SHELL.moodEnabled !== false;
-            var tm = null, pO = false, myM = null, mC = false, mS = false, moodCheckAttempts = 0, moodCheckTimer = null;
+            var tm = null, pO = false, myM = null, mC = false, mS = false, moodCheckAttempts = 0, moodCheckTimer = null, heartbeatRequest = null;
             window._presenceUsers = [];
             function eH(s) { return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;') }
             function moodText(mood) { for (var mi = 0; mi < MO.length; mi++) { if (MO[mi].e === mood) return MO[mi].l + ' — ' + MO[mi].d } return mood || '' }
@@ -133,7 +133,16 @@
                     pl.innerHTML = ph;
                 }
             }
-            function hb() { fetch(UH, { method: 'POST', headers: { 'X-CSRF-TOKEN': CSRF, 'Accept': 'application/json' } }).then(function (r) { if (!r.ok) throw 0; return r.json() }).then(function (d) { if (Array.isArray(d.online)) { render(d.online); ensurePresenceScrollTools(); } }).catch(function () { }) }
+            function hb() {
+                if (document.hidden) return;
+                var lease = window.SimonBackgroundReads.begin('presence-heartbeat');
+                if (!lease) return;
+                heartbeatRequest = lease;
+                fetch(UH, {method: 'POST', signal: lease.signal, headers: {'X-CSRF-TOKEN': CSRF, 'Accept': 'application/json'}})
+                    .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+                    .then(function (d) { if (lease.current() && Array.isArray(d.online)) { render(d.online); ensurePresenceScrollTools(); } })
+                    .catch(function () {}).finally(function () { lease.release(); if (heartbeatRequest === lease) heartbeatRequest = null; });
+            }
             function scheduleMoodCheck(delay) {
                 if (!MOOD_ENABLED || moodCheckTimer || document.hidden) return;
                 moodCheckTimer = setTimeout(function () {
@@ -321,12 +330,18 @@
                 }
                 if (immediate) launch(); else startTimer = setTimeout(launch, 6500);
             }
-            function stop() { if (startTimer) clearTimeout(startTimer); startTimer = null; if (moodCheckTimer) clearTimeout(moodCheckTimer); moodCheckTimer = null; clearInterval(tm); tm = null }
+            function stop() { if (startTimer) clearTimeout(startTimer); startTimer = null; if (moodCheckTimer) clearTimeout(moodCheckTimer); moodCheckTimer = null; clearInterval(tm); tm = null; if (heartbeatRequest) heartbeatRequest.cancel(); heartbeatRequest = null; }
             document.addEventListener('visibilitychange', function () {
                 if (document.hidden) {
                     stop();
                     return;
                 }
+                scheduleMoodCheck(100);
+                start(false);
+            });
+            window.addEventListener('pagehide', stop);
+            window.addEventListener('pageshow', function (event) {
+                if (!event.persisted || document.hidden) return;
                 scheduleMoodCheck(100);
                 start(false);
             });
@@ -1462,7 +1477,7 @@
                 if (document.hidden) return;
                 var lease = window.SimonBackgroundReads.begin('approval-count');
                 if (!lease) return;
-                fetch(url, {signal: lease.signal, headers: {'Accept': 'application/json'}})
+                fetch(url, {signal: lease.signal, headers: {'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest'}})
                     .then(function (response) { if (!response.ok) throw new Error(response.status); return response.json(); })
                     .then(function (data) {
                         if (!lease.current()) return;

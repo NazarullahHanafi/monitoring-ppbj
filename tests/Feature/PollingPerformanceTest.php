@@ -18,6 +18,25 @@ class PollingPerformanceTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_approval_badge_poll_uses_ajax_contract_cache_and_department_boundary(): void
+    {
+        $general = User::factory()->create(['department' => 'umum', 'role' => 'user']);
+        Cache::forget('pr_receipt_pending_count');
+        $this->actingAs($general)->getJson(route('approval.pr.pendingCount'))->assertNotFound();
+        $queries = [];
+        DB::listen(function ($query) use (&$queries) {
+            $queries[] = $query->sql;
+        });
+        foreach (range(1, 2) as $attempt) {
+            $this->getJson(route('approval.pr.pendingCount'), ['X-Requested-With' => 'XMLHttpRequest'])
+                ->assertOk()->assertJsonPath('count', 0);
+        }
+        $counts = collect($queries)->filter(fn ($query) => str_contains($query, 'from "pr_receipt_approvals"'));
+        $this->assertCount(1, $counts, 'Repeated badge polling must reuse the pending-count cache.');
+        $operational = User::factory()->create(['department' => 'operasional', 'role' => 'user']);
+        $this->actingAs($operational)->getJson(route('approval.pr.pendingCount'), ['X-Requested-With' => 'XMLHttpRequest'])->assertForbidden();
+    }
+
     public function test_torpr_and_ppbj_can_share_warm_portfolio_cache_between_roles(): void
     {
         \App\Models\MasterPortofolio::create(['nama' => 'Shared Portfolio']);

@@ -3022,16 +3022,27 @@
             // ==========================================
             // AUTO REFRESH RECEIPT STATUS
             // ==========================================
+            let receiptRequest = null;
             async function refreshReceiptBadges() {
+                if (document.hidden || receiptRequest) return;
                 const rows = document.querySelectorAll('[data-row-id]');
                 if (!rows.length) return;
 
-                const ids = [...rows].map(r => r.dataset.rowId);
+                const ids = [...new Set([...rows].map(r => r.dataset.rowId))].slice(0, 100);
+                const controller = new AbortController();
+                receiptRequest = controller;
+                const timeout = setTimeout(() => {
+                    controller.abort();
+                    if (receiptRequest === controller) receiptRequest = null;
+                }, 20000);
 
                 try {
-                    const r = await fetch(`/torpr/receipt-status-bulk?ids=${ids.join(',')}`);
+                    const r = await fetch(`/torpr/receipt-status-bulk?ids=${ids.join(',')}`, {
+                        signal: controller.signal, headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
+                    });
                     if (!r.ok) return;
                     const data = await r.json();
+                    if (controller.signal.aborted || receiptRequest !== controller) return;
 
                     rows.forEach(tr => {
                         const j = data[tr.dataset.rowId];
@@ -3041,6 +3052,7 @@
                         const sub = tr.querySelector('[data-receipt-sub]');
 
                         const status = j.status ?? '—';
+                        if (!badge || !sub) return;
                         badge.textContent = status;
                         badge.className = "inline-flex items-center px-2 py-1 rounded-full text-xs font-bold text-white " +
                             (status === "APPROVED" ? "bg-green-600" :
@@ -3057,7 +3069,10 @@
                             sub.textContent = "—";
                     });
                 } catch (e) {
-                    console.error('Refresh error:', e);
+                    if (e.name !== 'AbortError') console.error('Refresh error:', e);
+                } finally {
+                    clearTimeout(timeout);
+                    if (receiptRequest === controller) receiptRequest = null;
                 }
             }
 
@@ -3070,14 +3085,19 @@
             }
 
             function stopReceiptRefresh() {
-                if (!receiptRefreshTimer) return;
                 clearInterval(receiptRefreshTimer);
                 receiptRefreshTimer = null;
+                if (receiptRequest) receiptRequest.abort();
+                receiptRequest = null;
             }
 
             startReceiptRefresh();
             document.addEventListener('visibilitychange', () => {
                 if (document.hidden) stopReceiptRefresh();
                 else startReceiptRefresh();
+            });
+            window.addEventListener('pagehide', stopReceiptRefresh);
+            window.addEventListener('pageshow', event => {
+                if (event.persisted) startReceiptRefresh();
             });
         })();

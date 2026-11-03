@@ -51,6 +51,7 @@ test('reaction refresh is bounded, single-flight and skips hidden/minimized chat
 });
 test('approval polling does not overlap and resumes once after BFCache restore',async()=>{
     const h=runtime(approval);assert.equal(h.requests.length,0);assert.equal(h.intervals.size,1);let interval=[...h.intervals.values()][0];interval.fn();interval.fn();assert.equal(h.requests.length,1);
+    assert.equal(h.requests[0].options.headers['X-Requested-With'],'XMLHttpRequest');
     h.respond(0,{count:2});await tick();h.events.pagehide.forEach(fn=>fn());assert.equal(h.intervals.size,0);h.events.pageshow.forEach(fn=>fn({persisted:true}));assert.equal(h.intervals.size,1);assert.equal(h.requests.length,2);
     h.sandbox.document.hidden=true;h.documentEvents.visibilitychange();assert.equal(h.intervals.size,0);
 });

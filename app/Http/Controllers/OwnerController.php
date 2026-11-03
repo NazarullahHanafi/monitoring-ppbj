@@ -24,29 +24,42 @@ class OwnerController extends Controller
         $ownerEmails = config('app.owner_emails', []);
         $user = auth()->user();
         $auditFilters = $this->auditFilters($request);
-        $dashboardSummary = Cache::remember('owner:dashboard-summary:v2', now()->addMinute(), function () {
+        $dashboardSummary = Cache::remember('owner:dashboard-summary:v3', now()->addMinute(), function () {
+            $users = User::query()->selectRaw("COUNT(*) AS total,
+                COALESCE(SUM(CASE WHEN role = 'superadmin' THEN 1 ELSE 0 END), 0) AS superadmin,
+                COALESCE(SUM(CASE WHEN role = 'user' THEN 1 ELSE 0 END), 0) AS regular_users,
+                COALESCE(SUM(CASE WHEN role = 'viewer' THEN 1 ELSE 0 END), 0) AS viewers,
+                COALESCE(SUM(CASE WHEN department = 'umum' THEN 1 ELSE 0 END), 0) AS umum,
+                COALESCE(SUM(CASE WHEN department = 'operasional' THEN 1 ELSE 0 END), 0) AS operasional")->first();
+            $modules = [
+                'ppbj' => $this->moduleSnapshot(Ppbj::class, 'ppbj', 'PPBJ'),
+                'torpr' => $this->moduleSnapshot(Torpr::class, 'torprs', 'TOR/PR'),
+                'spph' => $this->moduleSnapshot(Spph::class, 'spphs', 'SPPH'),
+                'sp' => $this->moduleSnapshot(Sp::class, 'sps', 'SP'),
+            ];
+            $pending = Schema::hasTable('pr_receipt_approvals')
+                ? PrReceiptApproval::where('status', 'PENDING')->count() : 0;
+
             return [
-                'users' => User::count(),
-                'ppbj' => $this->safeCount(Ppbj::class, 'ppbj'),
-                'torpr' => $this->safeCount(Torpr::class, 'torprs'),
-                'spph' => $this->safeCount(Spph::class, 'spphs'),
-                'sp' => $this->safeCount(Sp::class, 'sps'),
-                'pending_approvals' => Schema::hasTable('pr_receipt_approvals')
-                    ? PrReceiptApproval::where('status', 'PENDING')->count()
-                    : 0,
+                'users' => (int) $users->total,
+                'ppbj' => $modules['ppbj']['total'],
+                'torpr' => $modules['torpr']['total'],
+                'spph' => $modules['spph']['total'],
+                'sp' => $modules['sp']['total'],
+                'pending_approvals' => $pending,
                 'unread_contact_messages' => Schema::hasTable('contact_messages')
                     ? ContactMessage::whereNull('read_at')->count()
                     : 0,
                 'user_breakdown' => [
-                    'superadmin' => User::where('role', 'superadmin')->count(),
-                    'user' => User::where('role', 'user')->count(),
-                    'viewer' => User::where('role', 'viewer')->count(),
-                    'umum' => User::where('department', 'umum')->count(),
-                    'operasional' => User::where('department', 'operasional')->count(),
+                    'superadmin' => (int) $users->superadmin,
+                    'user' => (int) $users->regular_users,
+                    'viewer' => (int) $users->viewers,
+                    'umum' => (int) $users->umum,
+                    'operasional' => (int) $users->operasional,
                 ],
                 'audit_summary' => $this->auditSummary(),
                 'audit_actions' => $this->auditActions(),
-                'user_activity_insights' => $this->userActivityInsights(),
+                'user_activity_insights' => $this->userActivityInsights(array_values($modules), $pending),
             ];
         });
 
@@ -242,11 +255,12 @@ class OwnerController extends Controller
         try {
             $key = 'owner_health_check_'.auth()->id();
             Cache::put($key, 'ok', now()->addMinute());
+            $healthy = Cache::get($key) === 'ok';
 
             return [
                 'label' => 'Cache',
-                'value' => Cache::get($key) === 'ok' ? 'Aktif' : 'Tidak stabil',
-                'status' => Cache::get($key) === 'ok' ? 'safe' : 'warning',
+                'value' => $healthy ? 'Aktif' : 'Tidak stabil',
+                'status' => $healthy ? 'safe' : 'warning',
                 'description' => 'Cache digunakan untuk mempercepat dashboard, badge, dan polling ringan.',
             ];
         } catch (\Throwable $e) {
@@ -273,13 +287,26 @@ class OwnerController extends Controller
         ];
     }
 
-    private function safeCount(string $model, string $table): int
+    private function moduleSnapshot(string $model, string $table, string $label): array
     {
-        if (! Schema::hasTable($table)) {
-            return 0;
+        $columns = Schema::getColumnListing($table);
+        if ($columns === []) {
+            return ['label' => $label, 'total' => 0, 'month' => 0];
         }
 
-        return $model::query()->count();
+        // Preserve soft-deleted exclusion for totals and the existing all-row
+        // monthly creation count, but scan each module only once per snapshot.
+        $total = method_exists(new $model, 'getDeletedAtColumn')
+            ? 'COUNT(CASE WHEN deleted_at IS NULL THEN 1 END)' : 'COUNT(*)';
+        $query = DB::table($table)->selectRaw($total.' AS total');
+        if (in_array('created_at', $columns, true)) {
+            $query->selectRaw('COALESCE(SUM(CASE WHEN created_at >= ? THEN 1 ELSE 0 END), 0) AS month', [now()->startOfMonth()]);
+        } else {
+            $query->selectRaw('0 AS month');
+        }
+        $row = $query->first();
+
+        return ['label' => $label, 'total' => (int) $row->total, 'month' => (int) $row->month];
     }
 
     private function auditSummary(): array
@@ -368,7 +395,7 @@ class OwnerController extends Controller
             ->pluck('action');
     }
 
-    private function userActivityInsights(): array
+    private function userActivityInsights(array $modules, int $pending): array
     {
         $hasLogs = Schema::hasTable('activity_logs');
 
@@ -449,31 +476,13 @@ class OwnerController extends Controller
             'events_week' => $hasLogs
                 ? ActivityLog::query()->where('created_at', '>=', now()->subDays(7))->count()
                 : 0,
-            'pending_approvals' => Schema::hasTable('pr_receipt_approvals')
-                ? PrReceiptApproval::where('status', 'PENDING')->count()
-                : 0,
-            'module_totals' => [
-                ['label' => 'PPBJ', 'total' => $this->safeCount(Ppbj::class, 'ppbj'), 'month' => $this->safePeriodCount('ppbj')],
-                ['label' => 'TOR/PR', 'total' => $this->safeCount(Torpr::class, 'torprs'), 'month' => $this->safePeriodCount('torprs')],
-                ['label' => 'SPPH', 'total' => $this->safeCount(Spph::class, 'spphs'), 'month' => $this->safePeriodCount('spphs')],
-                ['label' => 'SP', 'total' => $this->safeCount(Sp::class, 'sps'), 'month' => $this->safePeriodCount('sps')],
-            ],
+            'pending_approvals' => $pending,
+            'module_totals' => $modules,
             'top_users' => $topUsers,
             'top_actions' => $topActions,
             'daily_trend' => $dailyTrend,
             'max_daily' => max(1, (int) $dailyTrend->max('count')),
         ];
-    }
-
-    private function safePeriodCount(string $table): int
-    {
-        if (! Schema::hasTable($table) || ! Schema::hasColumn($table, 'created_at')) {
-            return 0;
-        }
-
-        return DB::table($table)
-            ->where('created_at', '>=', now()->startOfMonth())
-            ->count();
     }
 
     private function latestSystemEvents(): array

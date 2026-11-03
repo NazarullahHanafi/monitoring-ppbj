@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Models\Vendor;
 use App\Support\PpbjVendorFilter;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 class PpbjVendorFilterTest extends TestCase
@@ -64,5 +65,29 @@ class PpbjVendorFilterTest extends TestCase
         $query = Ppbj::query();
         PpbjVendorFilter::apply($query, 'PT 100%_!');
         $this->assertSame(['LITERAL'], $query->pluck('ppbj_no')->all());
+    }
+
+    public function test_unrelated_document_updates_keep_vendor_options_warm_but_vendor_changes_refresh(): void
+    {
+        foreach ([Sp::class, Spph::class] as $model) {
+            $attributes = ['nama_vendor' => 'Original Supplier', 'sequence_number' => 1, 'deskripsi_pengadaan' => 'Original', 'pic' => 'Test'];
+            $attributes[$model === Sp::class ? 'nomor_sp' : 'nomor_spph'] = 'CACHE/'.$model;
+            $attributes[$model === Sp::class ? 'tanggal_sp' : 'tanggal'] = now()->toDateString();
+            $document = $model::create($attributes)->fresh();
+            $this->assertContains('Original Supplier', PpbjVendorFilter::options());
+            $document->update(['deskripsi_pengadaan' => 'Only description changed']);
+            DB::enableQueryLog();
+            PpbjVendorFilter::options();
+            $this->assertCount(0, DB::getQueryLog(), 'Description edits must not rebuild the multi-source vendor list.');
+            DB::disableQueryLog();
+            DB::flushQueryLog();
+            $document->update(['nama_vendor' => 'Updated Supplier']);
+            $this->assertContains('Updated Supplier', PpbjVendorFilter::options());
+            $document->delete();
+            $this->assertNotContains('Updated Supplier', PpbjVendorFilter::options());
+            $document->restore();
+            $this->assertContains('Updated Supplier', PpbjVendorFilter::options());
+            $document->forceDelete();
+        }
     }
 }

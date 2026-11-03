@@ -74,14 +74,20 @@ let conversationHistory = [];
     // ✅ NEW: BADGE NOTIF REALTIME
     // =====================================================
 if (isAuthenticated) {
-        let badgeRequestPending = false;
+        let badgeRequest = null;
         let badgeTimer = null;
         function updateNotifBadge() {
-            if (document.hidden || badgeRequestPending) return;
-            badgeRequestPending = true;
-            fetch('/chatbot/notifications/count', { headers: { Accept: 'application/json' } })
+            if (document.hidden || badgeRequest) return;
+            const controller = new AbortController();
+            badgeRequest = controller;
+            const timeout = setTimeout(() => {
+                controller.abort();
+                if (badgeRequest === controller) badgeRequest = null;
+            }, 20000);
+            fetch('/chatbot/notifications/count', { signal: controller.signal, headers: { Accept: 'application/json' } })
                 .then(r => { if (!r.ok) throw new Error('Notifikasi belum tersedia'); return r.json(); })
                 .then(data => {
+                    if (controller.signal.aborted || badgeRequest !== controller) return;
                     const badge = document.getElementById('chatbot-notif-badge');
                     if (badge) {
                         if (data.count > 0) {
@@ -92,14 +98,21 @@ if (isAuthenticated) {
                             badge.style.display = 'none';
                         }
                     }
-                }).catch(() => { }).finally(() => { badgeRequestPending = false; });
+                }).catch(() => { }).finally(() => {
+                    clearTimeout(timeout);
+                    if (badgeRequest === controller) badgeRequest = null;
+                });
         }
         function startBadgePolling() {
             if (document.hidden || badgeTimer) return;
             updateNotifBadge();
             badgeTimer = setInterval(updateNotifBadge, 120000);
         }
-        function stopBadgePolling() { clearInterval(badgeTimer); badgeTimer = null; }
+        function stopBadgePolling() {
+            clearInterval(badgeTimer); badgeTimer = null;
+            if (badgeRequest) badgeRequest.abort();
+            badgeRequest = null;
+        }
         document.addEventListener('visibilitychange', () => {
             if (document.hidden) stopBadgePolling();
             else startBadgePolling();

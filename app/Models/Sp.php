@@ -55,7 +55,11 @@ class Sp extends Model
 
     protected static function booted(): void
     {
-        static::saved(fn () => \App\Support\PpbjVendorFilter::forget());
+        static::saved(function (Sp $sp) {
+            if ($sp->wasRecentlyCreated || $sp->wasChanged('nama_vendor')) {
+                \App\Support\PpbjVendorFilter::forget();
+            }
+        });
         static::deleted(fn () => \App\Support\PpbjVendorFilter::forget());
         static::restored(fn () => \App\Support\PpbjVendorFilter::forget());
         static::saving(function (Sp $sp) {
