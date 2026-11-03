@@ -55,3 +55,31 @@ test('approval polling does not overlap and resumes once after BFCache restore',
     h.respond(0,{count:2});await tick();h.events.pagehide.forEach(fn=>fn());assert.equal(h.intervals.size,0);h.events.pageshow.forEach(fn=>fn({persisted:true}));assert.equal(h.intervals.size,1);assert.equal(h.requests.length,2);
     h.sandbox.document.hidden=true;h.documentEvents.visibilitychange();assert.equal(h.intervals.size,0);
 });
+
+test('returning to a tab and BFCache refresh update existing approval badges without duplicating them',async()=>{
+    const h=runtime(approval);
+    const badges=new Map(['badgePendingPr','badgePendingPrMobile'].map(id=>{
+        const classes=new Set();
+        return [id,{textContent:'54',classList:{toggle(name,hidden){if(hidden)classes.add(name);else classes.delete(name);}},classes}];
+    }));
+    h.sandbox.document.getElementById=id=>badges.get(id)||null;
+    for(let cycle=0;cycle<3;cycle++){
+        h.sandbox.document.hidden=true;h.documentEvents.visibilitychange();
+        assert.equal(h.intervals.size,0);
+        h.sandbox.document.hidden=false;h.documentEvents.visibilitychange();
+        h.documentEvents.visibilitychange(); // repeated focus cannot stack a fetch
+        assert.equal(h.requests.length,cycle+1);
+        h.respond(cycle,{count:54});await tick();
+        assert.equal(h.intervals.size,1);
+        assert.equal(badges.size,2); // one desktop + one mobile, never two in one link
+        for(const badge of badges.values()){
+            assert.equal(String(badge.textContent),'54');assert.equal(badge.classes.has('hidden'),false);
+        }
+    }
+    h.events.pagehide.forEach(fn=>fn());
+    h.events.pageshow.forEach(fn=>fn({persisted:true}));
+    h.respond(3,{count:0});await tick();
+    for(const badge of badges.values()){
+        assert.equal(String(badge.textContent),'0');assert.equal(badge.classes.has('hidden'),true);
+    }
+});

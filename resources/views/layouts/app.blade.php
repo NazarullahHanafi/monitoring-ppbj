@@ -152,11 +152,10 @@
                         class="nav-item group flex items-center justify-between gap-3 px-4 py-3 rounded-xl {{ request()->is('approval/pr-receipts*') ? 'active' : 'text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-blue-600 dark:hover:text-blue-400' }}">
                         <div class="flex items-center gap-3"><span class="icon-box text-xl">✅</span><span
                                 class="nav-text font-medium">Approval
-                                PR</span>@if(isset($pendingApprovalCount) && $pendingApprovalCount > 0)<span
-                                class="ml-2 bg-red-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full ring-2 ring-white dark:ring-gray-800 animate-bounce">{{ $pendingApprovalCount }}</span>@endif
+                                PR</span>
                         </div>
                         <span id="badgePendingPr"
-                            class="badge-pulse hidden text-xs font-bold bg-gradient-to-r from-red-500 to-pink-500 text-white px-2.5 py-1 rounded-full shadow-lg shadow-red-500/30">0</span>
+                            class="badge-pulse {{ ($pendingApprovalCount ?? 0) > 0 ? '' : 'hidden' }} text-xs font-bold bg-gradient-to-r from-red-500 to-pink-500 text-white px-2.5 py-1 rounded-full shadow-lg shadow-red-500/30">{{ (int) ($pendingApprovalCount ?? 0) }}</span>
                     </a>
                     @if(auth()->user()->role === 'superadmin')
                         <a href="{{ route('users.index') }}"
@@ -291,7 +290,7 @@
                             class="nav-item flex items-center justify-between px-4 py-3 rounded-xl {{ request()->is('approval/pr-receipts*') ? 'active' : 'text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-blue-900/20' }}"><span
                                 class="flex items-center gap-3"><span class="text-xl">✅</span><span
                                     class="font-medium">Approval PR</span></span><span id="badgePendingPrMobile"
-                                class="badge-pulse hidden text-xs font-bold bg-gradient-to-r from-red-500 to-pink-500 text-white px-2.5 py-1 rounded-full">0</span></a>
+                                class="badge-pulse {{ ($pendingApprovalCount ?? 0) > 0 ? '' : 'hidden' }} text-xs font-bold bg-gradient-to-r from-red-500 to-pink-500 text-white px-2.5 py-1 rounded-full">{{ (int) ($pendingApprovalCount ?? 0) }}</span></a>
                         @if(auth()->user()->role === 'superadmin')
                             <a href="{{ route('users.index') }}"
                                 class="nav-item block px-4 py-3 rounded-xl {{ request()->is('users*') ? 'active' : 'text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-blue-900/20' }}"><span
