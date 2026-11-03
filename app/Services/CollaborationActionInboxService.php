@@ -17,7 +17,7 @@ class CollaborationActionInboxService
         $department = strtolower(trim((string) $user->department));
 
         return collect(Cache::remember(
-            "collaboration_action_radar:{$department}:v1",
+            "collaboration_action_radar:{$department}:v2",
             now()->addSeconds(self::CACHE_SECONDS),
             fn () => $department === 'operasional'
                 ? $this->operationalActions()
@@ -34,7 +34,9 @@ class CollaborationActionInboxService
                     ->orWhereNull('tgl_spk')
                     ->orWhere(function ($handover) {
                         $handover->whereNotNull('promised_date')
-                            ->whereDate('promised_date', '<=', now()->addDays(7)->toDateString())
+                            // Exclusive next-day bound also covers legacy
+                            // datetime values throughout the seventh day.
+                            ->where('promised_date', '<', now()->addDays(8)->toDateString())
                             ->where(fn ($document) => $document->whereNull('do_no')->orWhereNull('do_date'));
                     })
                     ->orWhere(function ($invoice) {
@@ -47,6 +49,8 @@ class CollaborationActionInboxService
             ->get([
                 'id', 'ppbj_no', 'uraian', 'buyer', 'portofolio', 'status_sla', 'sisa_target_sla',
                 'spph_rfq_1', 'tgl_spk', 'promised_date', 'do_no', 'do_date', 'no_invoice',
+                'total_sebelum_ppn', 'tgl_diserahkan', 'tgl_terima_pr', 'tgl_ppbj',
+                'awarding_sp', 'tgl_awarding_sp',
             ])
             ->map(function (Ppbj $ppbj) {
                 $remaining = $ppbj->slaCurrentRemainingDays();
@@ -59,7 +63,7 @@ class CollaborationActionInboxService
                     return $this->action($ppbj, 'Terbitkan SP / kontrak', 'SPPH tersedia, tetapi tanggal SP/kontrak belum lengkap.', $remaining !== null && $remaining < 0 ? 'critical' : 'high', 'sp');
                 }
 
-                if (filled($ppbj->promised_date) && blank($ppbj->do_no)) {
+                if (filled($ppbj->promised_date) && (blank($ppbj->do_no) || blank($ppbj->do_date))) {
                     return $this->action($ppbj, 'Pantau serah terima', 'Batas pemenuhan sudah dekat atau terlewati; dokumen DO/BAST belum lengkap.', 'critical', 'ppbj');
                 }
 
@@ -103,7 +107,7 @@ class CollaborationActionInboxService
                 'priority' => $approval->requested_at?->lt(now()->subDays(2)) ? 'critical' : 'normal',
                 'owner' => $approval->requested_name ?: 'Operasional',
                 'portfolio' => $approval->torpr?->portofolio,
-                'url' => route('torpr.index', ['search' => $approval->torpr?->nomor_pr]),
+                'url' => route('torpr.index', ['q' => $approval->torpr?->nomor_pr]),
             ]);
 
         return $goods->concat($approvals)

@@ -19,6 +19,11 @@
     var fallbackTimer = null;
     var resizeTimer = null;
     var isPaused = false;
+    var dismissed = false;
+    var motionFrame = null;
+    var motionVersion = 0;
+    var loadTimer = null;
+    var feedRequest = null;
 
     var icons = {
         package: '📦',
@@ -52,6 +57,9 @@
     }
 
     function stopMotion() {
+        motionVersion++;
+        if (motionFrame !== null) window.cancelAnimationFrame(motionFrame);
+        motionFrame = null;
         if (fallbackTimer) window.clearTimeout(fallbackTimer);
         fallbackTimer = null;
         track.classList.remove('is-scrolling');
@@ -59,8 +67,10 @@
 
     function scheduleNext(delay) {
         if (fallbackTimer) window.clearTimeout(fallbackTimer);
+        var version = motionVersion;
         fallbackTimer = window.setTimeout(function () {
-            if (isPaused || document.hidden || root.hidden) return;
+            fallbackTimer = null;
+            if (version !== motionVersion || isPaused || document.hidden || root.hidden) return;
             show(activeIndex + 1);
         }, delay);
     }
@@ -68,7 +78,10 @@
     function startMotion() {
         stopMotion();
 
-        window.requestAnimationFrame(function () {
+        var version = motionVersion;
+        motionFrame = window.requestAnimationFrame(function () {
+            if (version !== motionVersion) return;
+            motionFrame = null;
             if (isPaused || document.hidden || root.hidden) return;
 
             if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
@@ -85,7 +98,9 @@
             track.style.setProperty('--broadcast-end', -(textWidth + 24) + 'px');
             track.style.setProperty('--broadcast-duration', seconds.toFixed(2) + 's');
 
-            window.requestAnimationFrame(function () {
+            motionFrame = window.requestAnimationFrame(function () {
+                if (version !== motionVersion) return;
+                motionFrame = null;
                 if (!isPaused && !document.hidden && !root.hidden) {
                     track.classList.add('is-scrolling');
                     scheduleNext(Math.ceil(seconds * 1000) + 600);
@@ -162,7 +177,10 @@
         root.querySelector('[data-broadcast-prev]').addEventListener('click', function () { show(activeIndex - 1); });
         root.querySelector('[data-broadcast-next]').addEventListener('click', function () { show(activeIndex + 1); });
         root.querySelector('[data-broadcast-close]').addEventListener('click', function () {
+            dismissed = true;
             stopMotion();
+            cancelLoad();
+            panel.hidden = true;
             root.hidden = true;
         });
 
@@ -172,7 +190,24 @@
         });
 
         document.addEventListener('visibilitychange', function () {
-            if (document.hidden) stopMotion(); else if (!isPaused) show(activeIndex);
+            if (document.hidden) {
+                stopMotion();
+                cancelLoad();
+            } else if (!dismissed) {
+                if (!isPaused) show(activeIndex);
+                scheduleLoad();
+            }
+        });
+        window.addEventListener('pagehide', function () {
+            stopMotion();
+            cancelLoad();
+            window.clearTimeout(resizeTimer);
+            resizeTimer = null;
+        });
+        window.addEventListener('pageshow', function () {
+            if (dismissed || document.hidden) return;
+            if (!isPaused) show(activeIndex);
+            scheduleLoad();
         });
 
         document.addEventListener('click', function (event) {
@@ -182,7 +217,7 @@
         window.addEventListener('resize', function () {
             if (resizeTimer) window.clearTimeout(resizeTimer);
             resizeTimer = window.setTimeout(function () {
-                if (!isPaused && !root.hidden) show(activeIndex);
+                if (!isPaused && !document.hidden && !root.hidden) show(activeIndex);
             }, 180);
         }, { passive: true });
     }
@@ -207,6 +242,7 @@
     }
 
     function display(feedItems) {
+        if (dismissed) return;
         items = feedItems;
         if (!items.length) return;
 
@@ -215,10 +251,37 @@
         show(0);
     }
 
+    function cancelLoad() {
+        window.clearTimeout(loadTimer);
+        loadTimer = null;
+        if (feedRequest) {
+            window.clearTimeout(feedRequest.timer);
+            feedRequest.controller.abort();
+            feedRequest = null;
+        }
+    }
+
+    function scheduleLoad() {
+        if (!endpoint || dismissed || document.hidden || items.length || feedRequest || loadTimer !== null) return;
+        loadTimer = window.setTimeout(function () {
+            loadTimer = null;
+            load();
+        }, 5000);
+    }
+
     function load() {
-        if (!endpoint) return;
+        if (!endpoint || dismissed || document.hidden || items.length || feedRequest) return;
+        var request = { controller: new AbortController(), timer: null };
+        feedRequest = request;
+        request.timer = window.setTimeout(function () {
+            if (feedRequest !== request) return;
+            request.controller.abort();
+            feedRequest = null;
+            if (!items.length) root.hidden = true;
+        }, 15000);
 
         fetch(endpoint, {
+            signal: request.controller.signal,
             headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
             credentials: 'same-origin'
         })
@@ -227,13 +290,18 @@
                 return response.json();
             })
             .then(function (payload) {
+                if (feedRequest !== request || request.controller.signal.aborted || document.hidden || dismissed) return;
                 var feedItems = Array.isArray(payload.items) ? payload.items : [];
                 if (!feedItems.length) return;
                 writeCache(feedItems);
                 display(feedItems);
             })
             .catch(function () {
-                if (!items.length) root.hidden = true;
+                if (feedRequest === request && !items.length) root.hidden = true;
+            })
+            .finally(function () {
+                window.clearTimeout(request.timer);
+                if (feedRequest === request) feedRequest = null;
             });
     }
 
@@ -242,6 +310,6 @@
     if (cachedItems) {
         display(cachedItems);
     } else {
-        window.setTimeout(load, 5000);
+        scheduleLoad();
     }
 })();

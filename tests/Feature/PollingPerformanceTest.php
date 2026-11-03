@@ -89,7 +89,7 @@ class PollingPerformanceTest extends TestCase
         $this->assertStringContainsString("filemtime(public_path('assets/app/app-shell.js')) }}\" defer", $layout);
         $this->assertStringContainsString('startTimer = setTimeout(launch, 6500)', $appShell);
         $this->assertStringContainsString('mentionStartTimer = setTimeout(launch, 9000)', $appShell);
-        $this->assertStringContainsString('window.setTimeout(load, 5000)', file_get_contents(public_path('assets/app/activity-broadcast.js')));
+        $this->assertMatchesRegularExpression('/loadTimer = window\.setTimeout\([\s\S]*?\}, 5000\)/', file_get_contents(public_path('assets/app/activity-broadcast.js')));
         $this->assertStringContainsString("typeof window._chatHideContext === 'function'", $appShell);
         $this->assertStringNotContainsString(' } hideCtx() }', $appShell);
         $this->assertStringContainsString('assets/app/chatbot-loader.js', $chatbot);

@@ -33,10 +33,10 @@ class ActivityBroadcastFeedTest extends TestCase
         $this->assertIsString($script);
         $this->assertIsString($style);
         $this->assertStringContainsString("track.addEventListener('animationend'", $script);
-        $this->assertStringContainsString("show(activeIndex + 1)", $script);
+        $this->assertStringContainsString('show(activeIndex + 1)', $script);
         $this->assertStringContainsString('window.sessionStorage.getItem(cacheKey)', $script);
         $this->assertStringContainsString('cacheTtl = 60000', $script);
-        $this->assertStringContainsString('window.setTimeout(load, 5000)', $script);
+        $this->assertMatchesRegularExpression('/loadTimer = window\.setTimeout\([\s\S]*?\}, 5000\)/', $script);
         $this->assertStringContainsString('--broadcast-start', $style);
         $this->assertStringContainsString('--broadcast-end', $style);
     }
