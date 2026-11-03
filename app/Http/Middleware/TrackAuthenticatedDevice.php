@@ -22,6 +22,7 @@ class TrackAuthenticatedDevice
      */
     public function terminate(Request $request, Response $response): void
     {
+        $touchKey = null;
         try {
             $user = $request->user();
             $sessionId = (string) $request->session()->getId();
@@ -37,27 +38,61 @@ class TrackAuthenticatedDevice
             }
 
             $hash = hash_hmac('sha256', $sessionId, (string) config('app.key'));
-
-            if (! Cache::add('security:device-touch:'.$hash, true, now()->addMinutes(5))) {
+            $key = 'security:device-touch:'.$hash;
+            if (! Cache::add($key, true, now()->addMinutes(5))) {
                 return;
             }
+            $touchKey = $key;
 
-            SecurityDeviceSession::query()->updateOrCreate(
-                ['session_hash' => $hash],
-                [
+            // The unique session_hash index makes this one atomic write, even
+            // when two workers see the same device around cache expiry.
+            SecurityDeviceSession::query()->upsert(
+                [[
+                    'session_hash' => $hash,
                     'session_id_encrypted' => Crypt::encryptString($sessionId),
                     'user_id' => $user->id,
                     'ip_address' => $request->ip(),
                     'user_agent' => mb_substr((string) $request->userAgent(), 0, 1000),
                     'last_activity_at' => now(),
-                ]
+                ]],
+                ['session_hash'],
+                ['session_id_encrypted', 'user_id', 'ip_address', 'user_agent', 'last_activity_at']
             );
 
-            SecurityDeviceSession::query()
-                ->where('last_activity_at', '<', now()->subDays(7))
-                ->delete();
+            $this->pruneExpiredSessions();
         } catch (\Throwable) {
+            // A transient DB failure must not hide the device for five minutes.
+            if ($touchKey !== null) {
+                try {
+                    Cache::forget($touchKey);
+                } catch (\Throwable) {
+                    // Cache may itself be unavailable; leave the response intact.
+                }
+            }
             // Telemetri perangkat tidak boleh mengganggu request utama.
+        }
+    }
+
+    private function pruneExpiredSessions(): void
+    {
+        $key = 'security:device-prune:v1';
+        if (! Cache::add($key, true, now()->addHour())) {
+            return;
+        }
+
+        try {
+            // Cleanup is global, not once per device. Keep each sweep small and
+            // use the activity index; never delete or revoke active sessions.
+            $cutoff = now()->subDays(7);
+            $ids = SecurityDeviceSession::query()->where('last_activity_at', '<', $cutoff)
+                ->orderBy('last_activity_at')->limit(500)->pluck('id');
+            if ($ids->isNotEmpty()) {
+                SecurityDeviceSession::query()->whereIn('id', $ids)
+                    ->where('last_activity_at', '<', $cutoff)->delete();
+            }
+        } catch (\Throwable $exception) {
+            Cache::forget($key);
+            throw $exception;
         }
     }
 }

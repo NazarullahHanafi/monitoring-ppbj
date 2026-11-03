@@ -22,7 +22,7 @@ class TrackingPrController extends Controller
 
     public function landing(Request $request)
     {
-        $keyword = trim((string) $request->get('q', ''));
+        $keyword = $this->trackingKeyword($request);
 
         if ($keyword !== '') {
             return redirect()->route('landing.track.token', [
@@ -61,7 +61,7 @@ class TrackingPrController extends Controller
 
     private function resolveTrackingData(Request $request): array
     {
-        $keyword = trim($request->get('q', ''));
+        $keyword = $this->trackingKeyword($request);
         $row = null;
         $ppbj = null;
         $sourceType = null;
@@ -103,6 +103,13 @@ class TrackingPrController extends Controller
         }
 
         return compact('row', 'ppbj', 'keyword', 'sourceType', 'likeResults');
+    }
+
+    private function trackingKeyword(Request $request): string
+    {
+        $validated = $request->validate(['q' => ['nullable', 'string', 'max:180']]);
+
+        return trim((string) ($validated['q'] ?? ''));
     }
 
     private function encodeTrackingToken(string $keyword): string
@@ -197,39 +204,34 @@ class TrackingPrController extends Controller
                     ->where('torpr_id', $torpr->id)
                     ->orderBy('id', 'DESC')
                     ->first();
-
-                if ($latestApproval) {
-                    if (!empty($latestApproval->approved_by)) {
-                        $latestApproval->approvedBy = DB::table('users')->select(['id', 'name'])->where('id', $latestApproval->approved_by)->first();
-                    }
-                    if (!empty($latestApproval->rejected_by)) {
-                        $latestApproval->rejectedBy = DB::table('users')->select(['id', 'name'])->where('id', $latestApproval->rejected_by)->first();
-                    }
-                    if (empty($latestApproval->requested_name)) {
-                        $latestApproval->requested_name = 'Unknown';
-                    }
-                    if ($latestApproval->requested_name === 'Unknown' && !empty($latestApproval->requested_by)) {
-                        $reqUser = DB::table('users')->select(['name'])->where('id', $latestApproval->requested_by)->first();
-                        if ($reqUser) $latestApproval->requested_name = $reqUser->name;
-                    }
-                }
             } catch (\Exception $e) {
                 Log::warning('Approval query failed: ' . $e->getMessage());
                 $latestApproval = null;
             }
 
-            // ✅ FIX: received_by_umum_user_id
-            $receivedByUser = null;
-            if (!empty($torpr->received_by_umum_user_id)) {
-                $receivedByUser = DB::table('users')->select(['id', 'name'])->where('id', $torpr->received_by_umum_user_id)->first();
-            }
+            // At most five actors, fetched once; do not load credentials or
+            // repeatedly query the same user for different steps of the journey.
+            $actorIds = collect([
+                $torpr->created_by_user_id, $torpr->received_by_umum_user_id,
+                $latestApproval?->approved_by, $latestApproval?->rejected_by,
+                $latestApproval?->requested_by,
+            ])->filter()->unique()->values();
+            $actors = $actorIds->isNotEmpty()
+                ? DB::table('users')->whereIn('id', $actorIds)->get(['id', 'name'])->keyBy('id')
+                : collect();
+            $receivedByUser = $actors->get($torpr->received_by_umum_user_id);
+            $createdByUser = $actors->get($torpr->created_by_user_id);
 
-            $createdByUser = null;
-            if (!empty($torpr->created_by_user_id)) {
-                $createdByUser = DB::table('users')
-                    ->select(['id', 'name'])
-                    ->where('id', $torpr->created_by_user_id)
-                    ->first();
+            if ($latestApproval) {
+                if (!empty($latestApproval->approved_by)) {
+                    $latestApproval->approvedBy = $actors->get($latestApproval->approved_by);
+                }
+                if (!empty($latestApproval->rejected_by)) {
+                    $latestApproval->rejectedBy = $actors->get($latestApproval->rejected_by);
+                }
+                if (empty($latestApproval->requested_name) || $latestApproval->requested_name === 'Unknown') {
+                    $latestApproval->requested_name = $actors->get($latestApproval->requested_by)?->name ?: 'Unknown';
+                }
             }
 
             $result = (object) [
@@ -671,8 +673,10 @@ class TrackingPrController extends Controller
 
     public function suggest(Request $request)
     {
+        // Validate before the error fallback, so invalid input is a 422 and
+        // never reaches database scans or the application-error alert path.
+        $q = $this->trackingKeyword($request);
         try {
-            $q = trim((string) $request->get('q', ''));
             if (mb_strlen($q) < 2) return response()->json(['items' => []]);
 
             $q = preg_replace('/[^A-Z0-9\-\/\s]/i', '', $q);
@@ -782,7 +786,8 @@ class TrackingPrController extends Controller
     {
         $this->ensureSuperadminOperasional($request);
 
-        $nomor = $request->get('nomor_pr');
+        $validated = $request->validate(['nomor_pr' => ['nullable', 'string', 'max:180']]);
+        $nomor = trim((string) ($validated['nomor_pr'] ?? ''));
         if (!$nomor) return response()->json(['success' => false], 400);
 
         $cleared = [];
