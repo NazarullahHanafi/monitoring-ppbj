@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Services\CollaborationActionInboxService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\URL;
 use Tests\TestCase;
 
 class InboxRadarConsistencyTest extends TestCase
@@ -83,5 +84,18 @@ class InboxRadarConsistencyTest extends TestCase
         $this->assertCount(1, $queries);
         $this->assertStringNotContainsString('date("promised_date")', $queries[0]);
         $this->assertStringNotContainsString('strftime', $queries[0]);
+    }
+
+    public function test_cached_actions_do_not_capture_the_host_that_populated_the_cache(): void
+    {
+        $user = User::factory()->create(['department' => 'umum']);
+        Ppbj::create(['ppbj_no' => 'HOST-INDEPENDENT', 'status' => 'ACTIVE']);
+        URL::forceRootUrl('https://audit.invalid');
+        $service = app(CollaborationActionInboxService::class);
+        $url = $service->smartActions($user)->first()['url'];
+        $this->assertStringStartsWith('/spph?', $url);
+        $this->assertStringNotContainsString('audit.invalid', $url);
+        URL::forceRootUrl('https://production.example');
+        $this->assertSame($url, $service->smartActions($user)->first()['url']);
     }
 }

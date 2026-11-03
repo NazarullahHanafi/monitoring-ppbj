@@ -17,7 +17,7 @@ class CollaborationActionInboxService
         $department = strtolower(trim((string) $user->department));
 
         return collect(Cache::remember(
-            "collaboration_action_radar:{$department}:v2",
+            "collaboration_action_radar:{$department}:v3",
             now()->addSeconds(self::CACHE_SECONDS),
             fn () => $department === 'operasional'
                 ? $this->operationalActions()
@@ -107,7 +107,7 @@ class CollaborationActionInboxService
                 'priority' => $approval->requested_at?->lt(now()->subDays(2)) ? 'critical' : 'normal',
                 'owner' => $approval->requested_name ?: 'Operasional',
                 'portfolio' => $approval->torpr?->portofolio,
-                'url' => route('torpr.index', ['q' => $approval->torpr?->nomor_pr]),
+                'url' => route('torpr.index', ['q' => $approval->torpr?->nomor_pr], false),
             ]);
 
         return $goods->concat($approvals)
@@ -120,10 +120,10 @@ class CollaborationActionInboxService
     private function action(Ppbj $ppbj, string $title, string $description, string $priority, string $target): array
     {
         $url = match ($target) {
-            'spph' => route('spph.index', ['search' => $ppbj->ppbj_no]),
-            'sp' => route('sp.index', ['search' => $ppbj->ppbj_no]),
-            'tracking' => route('tracking.index', ['q' => $ppbj->ppbj_no]),
-            default => route('ppbj.index', ['search' => $ppbj->ppbj_no]),
+            'spph' => route('spph.index', ['search' => $ppbj->ppbj_no], false),
+            'sp' => route('sp.index', ['search' => $ppbj->ppbj_no], false),
+            'tracking' => route('tracking.index', ['q' => $ppbj->ppbj_no], false),
+            default => route('ppbj.index', ['search' => $ppbj->ppbj_no], false),
         };
 
         return [

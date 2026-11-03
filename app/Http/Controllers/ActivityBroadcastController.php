@@ -53,7 +53,7 @@ class ActivityBroadcastController extends Controller
             }
 
             return $rows
-                ->map(fn ($row) => $this->formatItem($row, $user))
+                ->map(fn ($row) => $this->formatItem($row))
                 ->filter()
                 ->unique(fn ($item) => implode('|', [
                     $item['event_type'] ?? '',
@@ -64,6 +64,13 @@ class ActivityBroadcastController extends Controller
                 ->values()
                 ->all();
         });
+
+        // Cache shared content, not the host or the recipient's navigation.
+        // Rebuild URLs even for older cached entries containing an absolute URL.
+        foreach ($items as &$item) {
+            $item['url'] = $this->targetUrl($item['event_type'], $item['number'], $user);
+        }
+        unset($item);
 
         return response()->json([
             'items' => $items,
@@ -88,7 +95,7 @@ class ActivityBroadcastController extends Controller
         return false;
     }
 
-    private function formatItem(object $row, User $user): ?array
+    private function formatItem(object $row): ?array
     {
         $data = json_decode((string) ($row->share_data ?? ''), true);
         $data = is_array($data) ? $data : [];
@@ -125,25 +132,24 @@ class ActivityBroadcastController extends Controller
             'icon' => $this->icon($eventType, $severity),
             'occurred_at' => $createdAt->toIso8601String(),
             'occurred_label' => $createdAt->translatedFormat('d M Y H:i'),
-            'url' => $this->targetUrl($eventType, $number, $user),
         ];
     }
 
     private function targetUrl(string $eventType, string $number, User $user): string
     {
         if ($user->department === 'operasional') {
-            return route('tracking.index', array_filter(['q' => $number ?: null]));
+            return route('tracking.index', array_filter(['q' => $number ?: null]), false);
         }
 
         if (str_contains($eventType, 'spph')) {
-            return route('spph.index', array_filter(['search' => $number ?: null]));
+            return route('spph.index', array_filter(['search' => $number ?: null]), false);
         }
 
         if (str_contains($eventType, 'sp_') || str_starts_with($eventType, 'sp')) {
-            return route('sp.index', array_filter(['search' => $number ?: null]));
+            return route('sp.index', array_filter(['search' => $number ?: null]), false);
         }
 
-        return route('ppbj.index', array_filter(['search' => $number ?: null]));
+        return route('ppbj.index', array_filter(['search' => $number ?: null]), false);
     }
 
     private function severity(string $eventType, string $title): string

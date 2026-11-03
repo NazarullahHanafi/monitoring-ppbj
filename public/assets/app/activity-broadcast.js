@@ -6,7 +6,7 @@
     root.dataset.initialized = '1';
 
     var endpoint = root.dataset.feedUrl;
-    var cacheKey = 'simonpr:activity-broadcast:v2:' + (root.dataset.cacheKey || 'guest');
+    var cacheKey = 'simonpr:activity-broadcast:v3:' + (root.dataset.cacheKey || 'guest');
     var cacheTtl = 60000;
     var track = root.querySelector('[data-broadcast-track]');
     var text = root.querySelector('[data-broadcast-text]');

@@ -81,6 +81,33 @@ class ActivityBroadcastFeedTest extends TestCase
             ->assertJsonPath('items.0.number', 'PKB/PR-26/CON/0011');
     }
 
+    public function test_warm_shared_feed_rebuilds_host_independent_links_for_each_department(): void
+    {
+        $general = User::factory()->create(['department' => 'umum']);
+        $operationalAdmin = User::factory()->create(['department' => 'operasional', 'role' => 'superadmin']);
+        $this->insertJourney($general, 100, 'Shared update', []);
+        \Illuminate\Support\Facades\URL::forceRootUrl('https://audit.invalid');
+        $this->actingAs($general)->getJson('/activity-broadcast/feed')->assertOk()
+            ->assertJsonPath('items.0.url', '/sp?search=PKB%2FPR-26%2FCON%2F0100');
+
+        // Older cache entries might still contain a URL from a CLI/request host.
+        $cached = Cache::get('activity_broadcast:umum:v2');
+        $cached[0]['url'] = 'http://localhost/sp?search=old';
+        Cache::put('activity_broadcast:umum:v2', $cached, 20);
+        $queries = [];
+        DB::listen(function ($query) use (&$queries) {
+            if (str_contains($query->sql, 'chat_messages')) {
+                $queries[] = $query->sql;
+            }
+        });
+        \Illuminate\Support\Facades\URL::forceRootUrl('https://production.example');
+        $this->actingAs($operationalAdmin)->getJson('/activity-broadcast/feed')->assertOk()
+            ->assertJsonPath('items.0.url', '/tracking-pr?q=PKB%2FPR-26%2FCON%2F0100');
+        $this->actingAs($general)->getJson('/activity-broadcast/feed')->assertOk()
+            ->assertJsonPath('items.0.url', '/sp?search=PKB%2FPR-26%2FCON%2F0100');
+        $this->assertSame([], $queries, 'Rebuilding navigation must not repeat the feed query.');
+    }
+
     private function insertJourney(User $actor, int $id, string $title, array $mentions): void
     {
         DB::table('chat_messages')->insert($this->messagePayload(

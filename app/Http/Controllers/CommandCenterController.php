@@ -785,9 +785,9 @@ class CommandCenterController extends Controller
             'matched_on' => $matched,
             'matched_value' => $matchedValue,
             'action_urls' => [
-                'ppbj' => route('ppbj.index', ['search' => $row->ppbj_no]),
-                'spph' => route('spph.index', ['search' => $row->ppbj_no]),
-                'sp' => route('sp.index', ['search' => $row->ppbj_no]),
+                'ppbj' => route('ppbj.index', ['search' => $row->ppbj_no], false),
+                'spph' => route('spph.index', ['search' => $row->ppbj_no], false),
+                'sp' => route('sp.index', ['search' => $row->ppbj_no], false),
             ],
             'details' => $this->resultDetails($row),
         ];
