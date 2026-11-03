@@ -1,3 +1,6 @@
+let archiveLookupController = null;
+let archiveLookupVersion = 0;
+window.addEventListener?.('pagehide', () => archiveLookupController?.abort());
 window.openArchiveAttachmentList = async function (payload) {
                 const dark = document.documentElement.classList.contains('dark');
                 const moduleName = String(payload?.module || 'Dokumen');
@@ -14,31 +17,45 @@ window.openArchiveAttachmentList = async function (payload) {
                     return;
                 }
 
+                const version = ++archiveLookupVersion;
+                archiveLookupController?.abort();
+                const controller = new AbortController();
+                archiveLookupController = controller;
+                let loaded = false;
+                let timedOut = false;
+                const timeout = setTimeout(() => { timedOut = true; controller.abort(); }, 20000);
                 Swal.fire({
                     title: 'Memuat arsip...',
                     text: `Mencari lampiran ${moduleName} ${nomor}`,
                     allowOutsideClick: false,
                     showConfirmButton: false,
+                    showCancelButton: true,
+                    cancelButtonText: 'Batal',
                     background: dark ? '#0f172a' : '#fff',
                     color: dark ? '#f8fafc' : '#0f172a',
                     didOpen: () => Swal.showLoading()
-                });
+                }).then(result => { if (result?.isDismissed && !loaded) controller.abort(); });
 
                 try {
                     const endpoint = new URL(payload.url, window.location.origin);
+                    if (endpoint.origin !== window.location.origin) throw new Error('Alamat pemeriksaan arsip tidak valid.');
                     if (payload.refresh) endpoint.searchParams.set('refresh', '1');
 
                     const response = await fetch(endpoint.toString(), {
+                        signal: controller.signal,
                         headers: {
                             'Accept': 'application/json',
                             'X-Requested-With': 'XMLHttpRequest'
                         }
                     });
                     const data = await response.json().catch(() => ({}));
+                    if (controller.signal.aborted || version !== archiveLookupVersion) return;
                     if (!response.ok) {
                         throw new Error(data.message || 'Status arsip gagal diperiksa.');
                     }
 
+                    loaded = true;
+                    clearTimeout(timeout);
                     const decision = await Swal.fire({
                         title: `Arsip ${escapeArchiveUploadHtml(moduleName)}`,
                         html: renderArchiveAttachmentList(data, { moduleName, nomor }),
@@ -56,14 +73,20 @@ window.openArchiveAttachmentList = async function (payload) {
                         await window.openArchiveAttachmentList({ ...payload, refresh: true });
                     }
                 } catch (error) {
+                    if (version !== archiveLookupVersion || (controller.signal.aborted && !timedOut)) return;
+                    clearTimeout(timeout);
+                    loaded = true;
                     await Swal.fire({
                         icon: 'warning',
                         title: 'Arsip belum dapat dibuka',
-                        text: error.message || 'Sistem Arsip sedang tidak dapat dihubungi.',
+                        text: timedOut ? 'Pemeriksaan terlalu lama. Silakan coba kembali; halaman lain tetap bisa digunakan.' : error.message || 'Sistem Arsip sedang tidak dapat dihubungi.',
                         confirmButtonColor: '#f97316',
                         background: dark ? '#0f172a' : '#fff',
                         color: dark ? '#f8fafc' : '#0f172a'
                     });
+                } finally {
+                    clearTimeout(timeout);
+                    if (archiveLookupController === controller) archiveLookupController = null;
                 }
             };
 

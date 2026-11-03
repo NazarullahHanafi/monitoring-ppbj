@@ -54,6 +54,8 @@ return [
         'connect_timeout' => env('ARCHIVE_API_CONNECT_TIMEOUT', 2),
         'timeout' => env('ARCHIVE_API_TIMEOUT', 5),
         'cache_seconds' => env('ARCHIVE_API_CACHE_SECONDS', 300),
+        'lookup_concurrency' => env('ARCHIVE_API_LOOKUP_CONCURRENCY', 3),
+        'lookup_budget_seconds' => env('ARCHIVE_API_LOOKUP_BUDGET_SECONDS', 10),
     ],
 
     'telegram' => [

@@ -2,9 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Ppbj;
 use App\Models\Sp;
 use App\Models\Spph;
-use App\Models\Ppbj;
 use App\Services\PrArchiveService;
 use App\Services\ProcurementJourneyService;
 use Illuminate\Http\JsonResponse;
@@ -227,8 +227,9 @@ class ArchiveAttachmentController extends Controller
             ]);
         }
 
-        $sources = $numbers->map(function (string $number) use ($archiveService, $request) {
-            $archive = $archiveService->findByPrNumber($number, $request->boolean('refresh'));
+        $archives = $archiveService->findByPrNumbers($numbers->all(), $request->boolean('refresh'));
+        $sources = $numbers->map(function (string $number) use ($archives) {
+            $archive = $archives[$number];
 
             $archive['nomor_pr'] = $number;
             $archive['documents'] = collect($archive['documents'] ?? [])
@@ -247,6 +248,7 @@ class ArchiveAttachmentController extends Controller
         $packages = $sources->flatMap(fn (array $source) => $source['packages'] ?? [])->values();
         $hasArchive = $sources->contains(fn (array $source) => (bool) ($source['has_archive'] ?? false));
         $hasUnavailable = $sources->contains(fn (array $source) => in_array($source['state'] ?? '', ['unavailable', 'failed'], true));
+        $hasDeferred = $sources->contains(fn (array $source) => (bool) ($source['refresh_deferred'] ?? false));
         $allUnconfigured = $sources->every(fn (array $source) => ($source['state'] ?? '') === 'unconfigured');
         $state = $hasArchive ? 'available' : ($allUnconfigured ? 'unconfigured' : ($hasUnavailable ? 'unavailable' : 'empty'));
         $documentCount = max(
@@ -260,12 +262,16 @@ class ArchiveAttachmentController extends Controller
             'unavailable' => 'Sebagian atau seluruh data arsip sedang tidak dapat dihubungi.',
             default => 'Belum ada arsip atau laporan untuk nomor PR/PPBJ terkait.',
         };
+        if ($hasArchive && ($hasUnavailable || $hasDeferred)) {
+            $message .= ' Sebagian PR belum bisa diperiksa. Pilih Muat ulang untuk mencoba lagi.';
+        }
 
         return response()->json([
             'module' => $module,
             'record_id' => $recordId,
             'document_number' => $documentNumber,
             'state' => $state,
+            'partial' => $hasUnavailable || $hasDeferred,
             'has_archive' => $hasArchive,
             'document_count' => $documentCount,
             'documents' => $documents->all(),
@@ -276,6 +282,7 @@ class ArchiveAttachmentController extends Controller
                 'has_archive' => (bool) ($source['has_archive'] ?? false),
                 'document_count' => (int) ($source['document_count'] ?? 0),
                 'message' => $source['message'] ?? null,
+                'refresh_deferred' => (bool) ($source['refresh_deferred'] ?? false),
             ])->values()->all(),
             'message' => $message,
             'checked_at' => now()->toIso8601String(),

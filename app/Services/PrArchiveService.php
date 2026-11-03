@@ -3,11 +3,14 @@
 namespace App\Services;
 
 use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Http\Client\PendingRequest;
+use Illuminate\Http\Client\Pool;
+use Illuminate\Http\Client\Response as HttpResponse;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Http\UploadedFile;
 use Throwable;
 
 class PrArchiveService
@@ -20,27 +23,111 @@ class PrArchiveService
             return $this->result('empty', 'Nomor PR belum tersedia.');
         }
 
+        return $this->findByPrNumbers([$prNumber], $fresh)[$prNumber];
+    }
+
+    /** Read a bounded package without serially waiting for every cloud lookup. */
+    public function findByPrNumbers(array $prNumbers, bool $fresh = false): array
+    {
+        $numbers = collect($prNumbers)->map(fn ($number) => trim((string) $number))
+            ->filter(fn ($number) => $number !== '')->unique()->take(20)->values()->all();
+        if ($numbers === []) {
+            return [];
+        }
         $baseUrl = rtrim((string) config('services.pr_archive.base_url'), '/');
 
         if ($baseUrl === '') {
-            return $this->result(
-                'unconfigured',
-                'Koneksi ke sistem arsip belum dikonfigurasi.',
-                ['configured' => false]
-            );
+            return array_fill_keys($numbers, $this->result('unconfigured', 'Koneksi ke sistem arsip belum dikonfigurasi.', ['configured' => false]));
         }
 
-        $cacheKey = 'pr_archive:' . hash('sha256', $baseUrl . '|' . $prNumber);
-
+        $keys = array_combine($numbers, array_map(fn ($number) => 'pr_archive:'.hash('sha256', $baseUrl.'|'.$number), $numbers));
+        $cached = Cache::many(array_values($keys));
+        $results = [];
+        $missing = [];
+        foreach ($keys as $number => $key) {
+            if (is_array($cached[$key] ?? null)) {
+                $results[$number] = $cached[$key];
+            }
+            if ($fresh || ! isset($results[$number])) {
+                $missing[] = (string) $number;
+            }
+        }
         if ($fresh) {
-            Cache::forget($cacheKey);
+            // Missing/oldest metadata first, so repeated retries make progress
+            // instead of spending the budget on the same first PRs every time.
+            usort($missing, fn ($a, $b) => strtotime($results[$a]['checked_at'] ?? '') <=> strtotime($results[$b]['checked_at'] ?? ''));
+        }
+        $pending = array_fill_keys($missing, true);
+
+        $concurrency = min(4, max(1, (int) config('services.pr_archive.lookup_concurrency', 3)));
+        $budget = min(12, max(1, (int) config('services.pr_archive.lookup_budget_seconds', 10)));
+        $started = $this->lookupClock();
+        $path = (string) config('services.pr_archive.pr_path', '/api/pr/documents');
+        foreach (array_chunk($missing, $concurrency) as $chunk) {
+            if ($this->lookupClock() - $started >= $budget) {
+                break;
+            }
+            $work = [];
+            $locks = [];
+            try {
+                foreach ($chunk as $number) {
+                    // Never wait on another PHP worker or duplicate a lookup for
+                    // the same PR while it is already being fetched elsewhere.
+                    $lock = Cache::lock($keys[$number].':lookup', 10);
+                    if (! $lock->get()) {
+                        $results[$number] ??= $this->result('unavailable', 'Arsip ini sedang diperiksa oleh permintaan lain. Coba kembali sebentar lagi.');
+
+                        continue;
+                    }
+                    $locks[] = $lock;
+                    $work[] = $number;
+                }
+                if ($work === []) {
+                    continue;
+                }
+                try {
+                    $responses = Http::pool(function (Pool $pool) use ($work, $baseUrl, $path) {
+                        foreach ($work as $index => $number) {
+                            $this->lookupRequest($pool->as((string) $index))->get($this->buildLookupUrl($baseUrl, $path, $number));
+                        }
+                    }, concurrency: $concurrency);
+                } catch (Throwable $exception) {
+                    $responses = array_fill(0, count($work), $exception);
+                }
+                $writes = [];
+                foreach ($work as $index => $number) {
+                    $result = $this->normaliseLookupResponse($responses[$index] ?? new ConnectionException('Lookup did not complete.'), $baseUrl, $number);
+                    $results[$number] = $result;
+                    unset($pending[$number]);
+                    $ttl = $result['state'] === 'unavailable' ? 10 : min(300, max(30, (int) config('services.pr_archive.cache_seconds', 300)));
+                    $writes[$ttl][$keys[$number]] = $result;
+                }
+                // Keep prior metadata available while an explicit refresh runs.
+                foreach ($writes as $ttl => $values) {
+                    Cache::putMany($values, $ttl);
+                }
+            } finally {
+                foreach ($locks as $lock) {
+                    $lock->release();
+                }
+            }
         }
 
-        return Cache::remember(
-            $cacheKey,
-            min(300, max(30, (int) config('services.pr_archive.cache_seconds', 300))),
-            fn () => $this->requestArchive($baseUrl, $prNumber)
-        );
+        $ordered = [];
+        foreach ($numbers as $number) {
+            // Unattempted PRs are NOT cached as empty/missing archives.
+            $ordered[$number] = $results[$number] ?? $this->result('unavailable', 'Batas waktu pemeriksaan paket tercapai. Periksa ulang untuk melanjutkan PR ini.');
+            if (isset($pending[$number])) {
+                $ordered[$number]['refresh_deferred'] = true;
+            }
+        }
+
+        return $ordered;
+    }
+
+    protected function lookupClock(): float
+    {
+        return hrtime(true) / 1e9;
     }
 
     public function uploadDocument(array $metadata, UploadedFile $file): array
@@ -56,7 +143,7 @@ class PrArchiveService
         }
 
         $path = (string) config('services.pr_archive.upload_path', '/api/documents');
-        $url = $baseUrl . '/' . ltrim($path, '/');
+        $url = $baseUrl.'/'.ltrim($path, '/');
         $token = trim((string) config('services.pr_archive.token'));
 
         try {
@@ -89,7 +176,7 @@ class PrArchiveService
                 ]);
             }
 
-            if (!$response->successful()) {
+            if (! $response->successful()) {
                 Log::warning('Upload dokumen ke sistem arsip gagal.', [
                     'status' => $response->status(),
                     'source_module' => $metadata['source_module'] ?? null,
@@ -133,31 +220,31 @@ class PrArchiveService
             return;
         }
 
-        Cache::forget('pr_archive:' . hash('sha256', $baseUrl . '|' . $prNumber));
+        Cache::forget('pr_archive:'.hash('sha256', $baseUrl.'|'.$prNumber));
     }
 
-    private function requestArchive(string $baseUrl, string $prNumber): array
+    private function lookupRequest(PendingRequest $request): PendingRequest
     {
-        $path = (string) config('services.pr_archive.pr_path', '/api/pr/documents');
-        $url = $this->buildLookupUrl($baseUrl, $path, $prNumber);
+        $request->acceptJson()
+            ->connectTimeout(min(3, max(1, (int) config('services.pr_archive.connect_timeout', 2))))
+            ->timeout(min(5, max(2, (int) config('services.pr_archive.timeout', 5))));
         $token = trim((string) config('services.pr_archive.token'));
 
+        return $token !== '' ? $request->withToken($token) : $request;
+    }
+
+    private function normaliseLookupResponse(HttpResponse|Throwable $response, string $baseUrl, string $prNumber): array
+    {
         try {
-            $request = Http::acceptJson()
-                ->connectTimeout(max(1, (int) config('services.pr_archive.connect_timeout', 2)))
-                ->timeout(max(2, (int) config('services.pr_archive.timeout', 5)));
-
-            if ($token !== '') {
-                $request = $request->withToken($token);
+            if ($response instanceof Throwable) {
+                throw $response;
             }
-
-            $response = $request->get($url);
 
             if ($response->status() === 404) {
                 return $this->result('empty', 'Belum ada arsip atau laporan untuk PR ini.');
             }
 
-            if (!$response->successful()) {
+            if (! $response->successful()) {
                 Log::warning('Pengecekan arsip PR gagal.', [
                     'pr_number' => $prNumber,
                     'status' => $response->status(),
@@ -168,7 +255,7 @@ class PrArchiveService
 
             $payload = $response->json();
 
-            if (!is_array($payload)) {
+            if (! is_array($payload)) {
                 return $this->result('unavailable', 'Format jawaban sistem arsip tidak dikenali.');
             }
 
@@ -188,13 +275,13 @@ class PrArchiveService
                 ?? ($reportedCount > 0 || count($documents) > 0));
             $documentCount = max($reportedCount, count($documents));
 
-            if (!$hasArchive && $documentCount === 0) {
+            if (! $hasArchive && $documentCount === 0) {
                 return $this->result('empty', 'Belum ada arsip atau laporan untuk PR ini.');
             }
 
             return $this->result(
                 'available',
-                $documentCount . ' dokumen arsip ditemukan.',
+                $documentCount.' dokumen arsip ditemukan.',
                 [
                     'has_archive' => true,
                     'document_count' => $documentCount,
@@ -222,7 +309,7 @@ class PrArchiveService
             ?? Arr::get($payload, 'data.files')
             ?? Arr::get($payload, 'data');
 
-        if (!is_array($items) || !array_is_list($items)) {
+        if (! is_array($items) || ! array_is_list($items)) {
             return [];
         }
 
@@ -267,7 +354,7 @@ class PrArchiveService
             ?? Arr::get($payload, 'data.packages')
             ?? [];
 
-        if (!is_array($items) || !array_is_list($items)) {
+        if (! is_array($items) || ! array_is_list($items)) {
             return [];
         }
 
@@ -303,7 +390,7 @@ class PrArchiveService
             ?? Arr::get($payload, 'data')
             ?? $payload;
 
-        if (!is_array($item)) {
+        if (! is_array($item)) {
             return [];
         }
 
@@ -343,7 +430,7 @@ class PrArchiveService
     {
         return collect($metadata)
             ->map(fn ($value) => is_scalar($value) || is_null($value) ? trim((string) $value) : $value)
-            ->filter(fn ($value) => !($value === '' || $value === [] || $value === null))
+            ->filter(fn ($value) => ! ($value === '' || $value === [] || $value === null))
             ->all();
     }
 
@@ -352,19 +439,19 @@ class PrArchiveService
         if (str_contains($path, '{nomor_pr}')) {
             $path = str_replace('{nomor_pr}', rawurlencode($prNumber), $path);
 
-            return $baseUrl . '/' . ltrim($path, '/');
+            return $baseUrl.'/'.ltrim($path, '/');
         }
 
         $separator = str_contains($path, '?') ? '&' : '?';
 
-        return $baseUrl . '/' . ltrim($path, '/') . $separator . http_build_query([
+        return $baseUrl.'/'.ltrim($path, '/').$separator.http_build_query([
             'nomor_pr' => $prNumber,
         ], '', '&', PHP_QUERY_RFC3986);
     }
 
     private function normaliseUrl(mixed $url, string $baseUrl): ?string
     {
-        if (!is_string($url) || trim($url) === '') {
+        if (! is_string($url) || trim($url) === '') {
             return null;
         }
 
@@ -376,16 +463,16 @@ class PrArchiveService
 
         if (str_starts_with($url, '/')) {
             $parts = parse_url($baseUrl);
-            $origin = ($parts['scheme'] ?? 'https') . '://' . ($parts['host'] ?? '');
+            $origin = ($parts['scheme'] ?? 'https').'://'.($parts['host'] ?? '');
 
             if (isset($parts['port'])) {
-                $origin .= ':' . $parts['port'];
+                $origin .= ':'.$parts['port'];
             }
 
-            return $origin . $url;
+            return $origin.$url;
         }
 
-        return $baseUrl . '/' . ltrim($url, '/');
+        return $baseUrl.'/'.ltrim($url, '/');
     }
 
     private function normaliseLocation(array $item): array

@@ -31,7 +31,10 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $middleware->prepend(DisableLoggingForPolling::class);
         $middleware->prepend(EnsureNotSoftMaintenance::class);
-        $middleware->append(EnsureActiveUser::class);
+        // Session cookies must be decrypted and loaded before checking account
+        // status. A global check ran before StartSession and missed locked users.
+        $middleware->web(append: [EnsureActiveUser::class]);
+        $middleware->prependToPriorityList(\Illuminate\View\Middleware\ShareErrorsFromSession::class, EnsureActiveUser::class);
         $middleware->append(SecurityHeaders::class);
         $middleware->append(MonitorPerformance::class);
         $middleware->append(TrackAuthenticatedDevice::class);

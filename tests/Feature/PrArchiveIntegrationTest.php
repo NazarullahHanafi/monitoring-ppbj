@@ -332,6 +332,25 @@ class PrArchiveIntegrationTest extends TestCase
         Http::assertSentCount(2);
     }
 
+    public function test_grouped_archive_partial_failures_are_explicit_without_dropping_available_documents(): void
+    {
+        config(['services.pr_archive.base_url' => 'https://arsip.example.test']);
+        Http::fake([
+            '*PR-PARTIAL-1*' => Http::response(['documents' => [['id' => 100, 'name' => 'Available document']]]),
+            '*PR-PARTIAL-2*' => Http::response([], 503),
+        ]);
+        [$user, $first] = $this->generalUserAndPpbj('PR-PARTIAL-1');
+        $second = DB::table('ppbj')->insertGetId(['ppbj_no' => 'PR-PARTIAL-2']);
+        $sp = Sp::create(['nomor_sp' => 'PARTIAL/SP', 'sequence_number' => 1, 'nama_vendor' => 'Vendor', 'pic' => 'Test',
+            'nomor_pr' => 'PR-PARTIAL-1', 'deskripsi_pengadaan' => 'Grouped archive']);
+        $sp->ppbjs()->attach([$first, $second]);
+        $response = $this->actingAs($user)->getJson(route('sp.archive', $sp))->assertOk()
+            ->assertJsonPath('state', 'available')->assertJsonPath('partial', true)->assertJsonPath('document_count', 1)
+            ->assertJsonPath('sources.1.state', 'unavailable');
+        $this->assertStringContainsString('Sebagian PR belum bisa diperiksa', $response->json('message'));
+        Http::assertSentCount(2);
+    }
+
     private function generalUserAndPpbj(string $prNumber): array
     {
         $user = User::factory()->create([
