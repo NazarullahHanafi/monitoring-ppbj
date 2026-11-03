@@ -62,10 +62,37 @@
         dialog.addEventListener('cancel', event => { if (saving) event.preventDefault(); });
         dialog.addEventListener('close', () => { serial++; loading?.abort(); history.length=0; activeDetail=null; if (lastFocus?.isConnected) lastFocus.focus(); });
         async function get(url) {
-            loading?.abort(); loading = new AbortController();
-            const response = await fetch(url,{headers:{Accept:'application/json','X-Requested-With':'XMLHttpRequest'},signal:loading.signal,cache:'no-store'});
-            if (!response.ok) throw new Error(response.status === 403 ? 'Anda tidak memiliki akses ke rincian ini.' : response.status === 404 ? 'Dokumen tidak ditemukan atau telah dipindahkan ke Sampah.' : 'Data belum dapat dimuat. Silakan coba lagi.');
-            return response.json();
+            if (!allowedUrl(url)) throw new Error('Alamat rincian tidak valid. Muat ulang halaman lalu coba lagi.');
+            loading?.abort();
+            const controller = new AbortController();
+            loading = controller;
+            let timer, cancel, timedOut = false;
+            const cancelled = () => Object.assign(new Error('Permintaan dibatalkan.'), {name:'AbortError'});
+            const deadline = new Promise((_,reject) => {
+                cancel = () => reject(cancelled());
+                controller.signal.addEventListener('abort',cancel,{once:true});
+                timer = setTimeout(() => { timedOut=true; controller.abort(); },20000);
+            });
+            try {
+                const read = async () => {
+                    const response = await fetch(url,{headers:{Accept:'application/json','X-Requested-With':'XMLHttpRequest'},signal:controller.signal,cache:'no-store'});
+                    if (!response.ok) throw new Error(response.status === 403 ? 'Anda tidak memiliki akses ke rincian ini.' : response.status === 404 ? 'Dokumen tidak ditemukan atau telah dipindahkan ke Sampah.' : 'Data belum dapat dimuat. Silakan coba lagi.');
+                    return response.json();
+                };
+                // Bound both the response headers and JSON body. Superseding or
+                // closing the panel also settles this even if a transport hangs.
+                const data = await Promise.race([read(),deadline]);
+                if (controller.signal.aborted || loading!==controller) throw cancelled();
+                return data;
+            } catch(error) {
+                if (timedOut && loading===controller) throw new Error('Pemuatan melewati 20 detik. Periksa koneksi Anda, lalu coba muat kembali.');
+                if (controller.signal.aborted) throw cancelled();
+                throw error;
+            } finally {
+                clearTimeout(timer);
+                controller.signal.removeEventListener('abort',cancel);
+                if (loading===controller) loading=null;
+            }
         }
         function fieldsHtml(fields) {
             return `<dl class="ws-grid">${(fields || []).map(field=>`<div class="ws-field"><dt>${escape(field.label)}</dt><dd>${field.type==='money' ? money(field.value) : escape(field.value)}</dd></div>`).join('')}</dl>`;

@@ -41,6 +41,9 @@ class ProcurementQuickDetailController extends Controller
     private function present(Ppbj|Sp|Spph $record, string $kind): array
     {
         if ($record instanceof Ppbj) {
+            // These references are displayed below and reused by journey's
+            // existence checks. Do not hydrate unrelated document fields.
+            $record->load(['sps:id,nomor_sp', 'spphs:id,nomor_spph']);
             // Reuse the established journey logic instead of another calculation engine.
             $journey = app(CommandCenterController::class)->journey($record)->getData(true);
             // A legacy stored remaining-days column can keep declining after SP

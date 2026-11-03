@@ -52,14 +52,15 @@ test('table layout is local DOM work, stable on repeat, protects key columns and
 });
 
 function runtime() {
-    const requests=[],handlers={},window={},copies=[];
+    const requests=[],handlers={},window={},copies=[],timers=new Map(); let nextTimer=0;
     const config={page:'sp',columns:{number:'Nomor',description:'Uraian',actions:'Aksi'},filterKeys:['search'],saveUrl:'/procurement-workspace/sp',
         state:{version:0,settings:{layout:{visible:['number','description','actions'],order:['number','description','actions'],density:'comfortable'},favorites:[]}}};
     const status=element(),body=element(),title=element(),close=element();
     const stages=element();body.querySelector=selector=>selector==='.ws-stages'?stages:undefined;
     const dialog={...element(),open:false,querySelector:()=>close,querySelectorAll:()=>[],showModal(){this.open=true;},
         addEventListener:(type,fn)=>handlers[type]=fn,close(){this.open=false;handlers.close?.();}};
-    const nodes={wsConfig:{textContent:JSON.stringify(config)},wsDialog:dialog,wsStatus:status,wsBody:body,wsDialogTitle:title};
+    const archive=element();
+    const nodes={wsConfig:{textContent:JSON.stringify(config)},wsDialog:dialog,wsStatus:status,wsBody:body,wsDialogTitle:title,wsArchiveResult:archive};
     const events={};
     const document={activeElement:{isConnected:true,focus(){}},getElementById:id=>nodes[id],querySelector:()=>null,
         createElement:()=>element(),addEventListener:(type,fn)=>{(events[type] ||= []).push(fn);}};
@@ -67,13 +68,16 @@ function runtime() {
         navigator:{clipboard:{writeText:async text=>copies.push(text)}},
         location:{origin:'https://simon.example',search:'?search=kursi'},
         fetch:(url,options)=>new Promise(resolve=>requests.push({url,options,resolve})),
+        setTimeout:(fn,delay)=>{const id=++nextTimer;timers.set(id,{fn,delay});return id;},clearTimeout:id=>timers.delete(id),
     });
     events.DOMContentLoaded[0]();
     const click=dataset=>{
         const button={dataset,hasAttribute:name=>Object.hasOwn(dataset,name.slice(5).replace(/-([a-z])/g,(_,letter)=>letter.toUpperCase()))};
         return events.click[0]({target:{closest:()=>button},preventDefault(){}});
     };
-    return {requests,dialog,body,status,click,copies,stages,change:target=>events.change[0]({target})};
+    return {requests,dialog,body,status,click,copies,stages,archive,timers,
+        timeout(){const [id,timer]=[...timers][0];assert.equal(timer.delay,20000);timers.delete(id);timer.fn();},
+        change:target=>events.change[0]({target})};
 }
 const response=data=>({ok:true,json:async()=>data});
 const detail=number=>({kind:'sp',number,title:'<img src=x onerror=alert(1)>',cache_seconds:20,fields:[{label:'Uraian',value:'<script>bad()</script>'}],items:[],prs:[]});
@@ -121,6 +125,51 @@ test('closing panel aborts fetch and no longer renders the response',async()=>{
     assert.equal(h.requests[0].options.signal.aborted,true);
     h.requests[0].resolve(response(detail('SHOULD-NOT-RENDER')));await new Promise(setImmediate);
     assert.doesNotMatch(h.body.innerHTML,/SHOULD-NOT-RENDER/);
+    assert.equal(h.timers.size,0);
+});
+
+test('hung quick detail stops at its deadline and shows an explicit manual retry without polling',async()=>{
+    const h=runtime();await h.click({wsDetail:'1',wsKind:'sp'});
+    assert.equal(h.timers.size,1);h.timeout();await new Promise(setImmediate);
+    assert.equal(h.requests[0].options.signal.aborted,true);
+    assert.match(h.body.innerHTML,/Coba lagi/);assert.match(h.status.textContent,/20 detik/);
+    assert.equal(h.requests.length,1);assert.equal(h.timers.size,0);
+    await h.click({wsRefresh:''});assert.equal(h.requests.length,2);
+    assert.equal(h.requests[1].url,'/procurement-quick-detail/sp/1?fresh=1');
+    h.requests[1].resolve(response(detail('RETRIED')));await new Promise(setImmediate);
+    h.requests[0].resolve(response(detail('EXPIRED')));await new Promise(setImmediate);
+    assert.match(h.body.innerHTML,/RETRIED/);assert.doesNotMatch(h.body.innerHTML,/EXPIRED/);
+    assert.equal(h.timers.size,0);
+});
+
+test('JSON body reads are bounded too and a superseded request cannot clear the replacement deadline',async()=>{
+    const h=runtime();await h.click({wsDetail:'1',wsKind:'sp'});
+    let finishBody;h.requests[0].resolve({ok:true,json:()=>new Promise(resolve=>finishBody=resolve)});
+    await new Promise(setImmediate);
+    await h.click({wsDetail:'2',wsKind:'sp'});await new Promise(setImmediate);
+    assert.equal(h.timers.size,1);h.timeout();await new Promise(setImmediate);
+    assert.equal(h.requests[1].options.signal.aborted,true);
+    assert.match(h.status.textContent,/20 detik/);
+    finishBody(detail('OLD-BODY'));await new Promise(setImmediate);
+    assert.doesNotMatch(h.body.innerHTML,/OLD-BODY/);assert.equal(h.timers.size,0);
+});
+
+test('an unfinished JSON body itself times out rather than leaving the panel loading forever',async()=>{
+    const h=runtime();await h.click({wsDetail:'1',wsKind:'ppbj'});
+    h.requests[0].resolve({ok:true,json:()=>new Promise(()=>{})});await new Promise(setImmediate);
+    h.timeout();await new Promise(setImmediate);
+    assert.match(h.body.innerHTML,/Coba lagi/);assert.match(h.status.textContent,/20 detik/);
+    h.dialog.close();assert.equal(h.timers.size,0);
+});
+
+test('archive metadata addresses outside the current origin never receive a request',async()=>{
+    for(const url of ['https://evil.example/metadata','javascript:alert(1)']) {
+        const h=runtime();await h.click({wsDetail:'1',wsKind:'ppbj'});
+        h.requests[0].resolve(response({...detail('SAFE'),archive_url:url}));await new Promise(setImmediate);
+        await h.click({wsArchive:''});
+        assert.equal(h.requests.length,1);assert.match(h.archive.textContent,/Alamat rincian tidak valid/);
+        assert.equal(h.timers.size,0);
+    }
 });
 
 test('TOR quick detail uses the Operational endpoint; checklist and copy work locally without extra requests',async()=>{

@@ -240,9 +240,18 @@ class CommandCenterController extends Controller
 
     public function journey(Ppbj $ppbj): JsonResponse
     {
+        // The stage indicator only needs existence, not document models. Quick
+        // detail may already have loaded its references; reuse those instead.
+        $missing = [];
+        foreach (['spphs' => 'spph_rfq_1', 'sps' => 'awarding_sp'] as $relation => $reference) {
+            if (blank($ppbj->$reference) && ! $ppbj->relationLoaded($relation)) {
+                $missing[] = $relation;
+            }
+        }
+        if ($missing !== []) {
+            $ppbj->loadExists($missing);
+        }
         $ppbj->load([
-            'spphs:id,nomor_spph,tanggal,nama_vendor',
-            'sps:id,nomor_sp,tanggal_sp,nilai_sp,nama_vendor,promised_date',
             'realTrackings' => fn ($q) => $q->latest('event_date')->latest('id')->limit(50),
         ]);
 
@@ -935,8 +944,8 @@ class CommandCenterController extends Controller
         $stages = [
             ['key' => 'pr', 'label' => 'PR diterima Umum', 'done' => filled($row->tgl_diserahkan ?: $row->tgl_terima_pr), 'date' => $row->tgl_diserahkan ?: $row->tgl_terima_pr],
             ['key' => 'registration', 'label' => 'Registrasi Umum', 'done' => filled($row->general_registration_number), 'date' => $row->general_registered_at ?? null],
-            ['key' => 'spph', 'label' => 'SPPH / RFQ', 'done' => filled($row->spph_rfq_1) || $row->spphs->isNotEmpty(), 'date' => $row->tgl_spph],
-            ['key' => 'sp', 'label' => 'SP / Kontrak', 'done' => filled($row->awarding_sp) || $row->sps->isNotEmpty(), 'date' => $row->tgl_spk ?: $row->tgl_awarding_sp],
+            ['key' => 'spph', 'label' => 'SPPH / RFQ', 'done' => filled($row->spph_rfq_1) || $this->hasJourneyDocument($row, 'spphs'), 'date' => $row->tgl_spph],
+            ['key' => 'sp', 'label' => 'SP / Kontrak', 'done' => filled($row->awarding_sp) || $this->hasJourneyDocument($row, 'sps'), 'date' => $row->tgl_spk ?: $row->tgl_awarding_sp],
             ['key' => 'delivery', 'label' => 'DO / Surat Jalan / BAST', 'done' => filled($row->do_no) && filled($row->do_date), 'date' => $row->do_date],
             ['key' => 'finance', 'label' => 'Keuangan', 'done' => filled($row->bpg_no) || filled($row->bpb_no), 'date' => null],
             ['key' => 'invoice', 'label' => 'Invoice & Arsip', 'done' => filled($row->no_invoice), 'date' => null],
@@ -948,6 +957,13 @@ class CommandCenterController extends Controller
 
             return $stage;
         })->values()->all();
+    }
+
+    private function hasJourneyDocument(Ppbj $row, string $relation): bool
+    {
+        return $row->relationLoaded($relation)
+            ? $row->getRelation($relation)->isNotEmpty()
+            : (bool) $row->getAttribute($relation.'_exists');
     }
 
     private function findMatchedField(Ppbj $row, string $query): array
