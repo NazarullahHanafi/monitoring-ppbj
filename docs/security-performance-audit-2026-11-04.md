@@ -56,7 +56,7 @@ Monitoring juga mengenali probe dotfile backup agar tidak dihitung sebagai traff
 - Header HSTS, nosniff, SAMEORIGIN, Referrer-Policy, Permissions-Policy, serta CSP terlihat pada respons login.
 - CSP masih mengizinkan inline/eval dan sejumlah CDN agar sesuai frontend yang ada. Migrasi ke nonce/self-hosted assets memerlukan pekerjaan tersendiri; keberadaan CSP tidak berarti semua risiko XSS hilang.
 - Queue default sync; tabel jobs/failed_jobs kosong saat snapshot. Angka nol tidak membuktikan seluruh integrasi selalu bebas masalah, dan driver tidak diubah dalam audit ini.
-- File `.env` 0600. Storage root ditemukan 0777 dan ditinjau untuk menghapus izin tulis bagi other setelah backup.
+- File `.env` 0600. Storage root ditemukan 0777; setelah backup, direktori root storage dan bootstrap/cache diperketat menjadi 0750. PHP dan pemilik direktori menggunakan akun hosting yang sama. Health/login tetap 200 setelah perubahan; aset publik tetap 0644. Isi direktori tidak dihapus.
 - Partisi server bersama: **95% terpakai, sekitar 17 GB tersedia** pada snapshot. Ini mencakup seluruh partisi hosting, bukan hanya akun SIMONPR. Aplikasi SIMONPR sekitar 146 MB; backup akun sekitar 1,5 GB. Tidak dilakukan penghapusan backup atau aplikasi lain.
 - Load average sekitar 20–23 pada mesin dengan 60 CPU logis. Angka load sendiri tidak cukup untuk menyimpulkan CPU jenuh; limit akun CPU/Entry Processes/I/O dan p95 jam ramai belum tersedia dari pemeriksaan ini.
 - Tidak terlihat berkas log harian baru setelah 26 Oktober pada daftar yang diperiksa. Absennya log baru/metrik error tidak membuktikan tidak pernah ada error pengguna.
@@ -84,7 +84,36 @@ Tidak ada bukti yang mengharuskan menambah indeks atau merombak query daftar yan
 
 ## Rilis dan verifikasi production
 
-Status deployment serta pengukuran setelah rilis dicatat setelah pemeriksaan selesai. Browser terdeteksi tetapi koneksi kontrol tab gagal setelah percobaan pemulihan; tidak ada klaim verifikasi visual light/dark pada audit ini. Pemeriksaan hosting dilanjutkan melalui SSH yang sudah terotorisasi, HTTP, serta profil controller.
+Rilis **`279286b`** sudah dipush ke `main` dan diaktifkan di hosting. Dependency disiapkan di direktori privat terlebih dahulu dan diverifikasi pada PHP 8.3.36 sebelum pergantian vendor. Backup kode/dependency serta webroot tersedia di direktori privat `deployment-artifacts/security-20261104-155256`. Cache konfigurasi/routes/views dibangun kembali tanpa flush Redis, migrasi, atau perubahan data transaksi.
+
+Composer audit runtime production juga **0 advisory** dan seluruh persyaratan platform PHP/extension berhasil. Versi Laravel runtime terkonfirmasi 12.71.0; config dan routes cache aktif. Tabel jobs/failed_jobs tetap kosong pada snapshot setelah rilis.
+
+Webroot hosting terpisah telah menerima manifest/aset baru dan aturan .htaccess; perbandingan berkas dengan repository identik. Aset build lama di webroot tidak dihapus agar tab yang masih menggunakan HTML lama tidak kehilangan berkasnya. HTTP setelah rilis:
+
+| Pemeriksaan | Hasil |
+| --- | --- |
+| /up dan /login | 200 |
+| app-shell.js, manifest, JavaScript dan CSS baru | 200 |
+| error_log, backup.sql, test.php | 404 |
+| .env.production.backup | 403 (perlindungan hosting) |
+| Gateway arsip tanpa login, Accept JSON | 401 |
+
+Seluruh 32 endpoint × tiga sampel setelah rilis kembali berhasil (96 respons 200). Perbandingan berikut memakai **median**, berbeda dari tabel rata-rata baseline di atas:
+
+| Endpoint | Median sebelum (ms) | Median sesudah (ms) | Query hangat sebelum/sesudah |
+| --- | ---: | ---: | ---: |
+| dashboard.indexumum | 17,11 | 12,63 | 0 / 0 |
+| ppbj.index | 32,86 | 41,85 | 5 / 5 |
+| sp.index | 43,13 | 27,23 | 5 / 5 |
+| spph.index | 28,46 | 29,32 | 3 / 3 |
+| torpr.index | 21,24 | 24,21 | 6 / 6 |
+| collaboration-inbox.index | 12,71 | 16,85 | 4 / 4 |
+| ppbj.report.data | 30,04 | 24,10 | 4 / 4 |
+| command-center.search | 10,30 | 10,32 | 1 / 1 |
+
+Beberapa sampel lebih cepat dan beberapa lebih lambat. Query halaman yang diuji tidak bertambah; tidak ada dasar untuk menyebut seluruh website mengalami percepatan drastis. Keterbatasan profil CLI dan variasi shared hosting tetap berlaku. Sampel HTTP HEAD setelah rilis `/up` sekitar 324 ms dan `/login` 293 ms dari hosting; tidak dibandingkan sebagai benchmark terkontrol karena hanya satu sampel pada waktu berbeda.
+
+Browser terdeteksi tetapi koneksi kontrol tab gagal setelah percobaan pemulihan; tidak ada klaim verifikasi visual light/dark pada audit ini. Pemeriksaan hosting dilanjutkan melalui SSH yang sudah terotorisasi, HTTP, serta profil controller.
 
 ## Batas dan tindak lanjut
 
