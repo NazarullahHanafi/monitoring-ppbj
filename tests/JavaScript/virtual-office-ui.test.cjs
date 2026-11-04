@@ -9,13 +9,14 @@ const tick = () => new Promise(setImmediate);
 async function fixture({ canChat = true } = {}) {
     const state = await load, timers = new Map(), requests = [], calls = [], events = {}, documentEvents = {}, nodes = new Map(); let timerId = 0;
     class Element {
-        constructor(id = '') { this.id = id; this.dataset = {}; this.attrs = {}; this.children = []; this.events = {}; this.hidden = false; this.value = ''; this.textContent = ''; this.scrollTop = 0; this.style = { setProperty() {} }; this.classList = { add() {}, remove() {}, toggle() {} }; }
+        constructor(id = '') { this.id = id; this.dataset = {}; this.attrs = {}; this.children = []; this.events = {}; this.hidden = false; this.value = ''; this.textContent = ''; this.scrollTop = 0; this.style = { setProperty() {} }; const classes = new Set(); this.classList = { add: x => classes.add(x), remove: x => classes.delete(x), contains: x => classes.has(x), toggle: x => classes.has(x) ? classes.delete(x) : classes.add(x) }; }
         addEventListener(name, fn) { (this.events[name] ??= []).push(fn); }
         setAttribute(key, value) { this.attrs[key] = value; }
         append(...children) { this.children.push(...children); children.forEach(child => { child.parent = this; }); }
         replaceChildren(...children) { this.children = []; this.append(...children); }
         contains(node) { return node === this || this.children.some(child => child.contains?.(node)); }
         querySelector(selector) { const id = /data-person-id="(\d+)"/.exec(selector)?.[1]; return this.children.find(child => String(child.dataset.personId) === id) || null; }
+        querySelectorAll() { return this.children; }
         focus() { document.activeElement = this; }
         click() { (this.events.click || []).forEach(fn => fn({})); }
         set innerHTML(value) { throw new Error('Unsafe HTML sink: ' + value); }
@@ -26,11 +27,13 @@ async function fixture({ canChat = true } = {}) {
     get('virtualOffice').querySelectorAll = selector => selector.includes('filter') ? filters : rooms;
     const people = [{ id: 1, name: '<svg onload=alert(1)>', department: 'umum', state: 'idle', mood: '☕', is_me: false },
         { id: 2, name: 'My account', department: 'operasional', state: 'online', mood: '', is_me: true }];
-    get('voConfig').textContent = JSON.stringify({ canChat, feedUrl: '/virtual-office/presence', initial: { people, updated_at: '2026-11-04T10:00:00Z' } });
+    const avatar = state.safeAvatar();
+    get('voConfig').textContent = JSON.stringify({ canChat, feedUrl: '/virtual-office/presence', profileUrl: '/virtual-office/avatar',
+        myProfile: { avatar, share_activity: true, version: 0 }, avatarOptions: Object.fromEntries(Object.entries(avatar).map(([key, value]) => [key, [value]])), initial: { people, updated_at: '2026-11-04T10:00:00Z' } });
     const document = { hidden: false, activeElement: null, fullscreenElement: null, getElementById: get,
         createElement: () => new Element(), createTextNode: text => Object.assign(new Element(), { textContent: text }),
-        addEventListener: (name, fn) => (documentEvents[name] ??= []).push(fn) };
-    const sceneState = { disposed: 0, visible: [], people: [] };
+        querySelector: () => ({ content: 'test-csrf-token' }), addEventListener: (name, fn) => (documentEvents[name] ??= []).push(fn) };
+    const sceneState = { disposed: 0, visible: [], people: [], rooms: [] };
     let resolveScene;
     const scenePromise = new Promise(resolve => { resolveScene = resolve; });
     const window = { location: { origin: 'https://simon.example.test' }, matchMedia: () => ({ matches: false, addEventListener() {} }),
@@ -45,7 +48,7 @@ async function fixture({ canChat = true } = {}) {
     return { get, people, calls, filters, rooms, requests, sceneState, timers,
         search(value) { get('voSearch').value = value; get('voSearch').events.input[0](); },
         hide(hidden) { document.hidden = hidden; (documentEvents.visibilitychange || []).forEach(fn => fn()); },
-        resolveScene() { resolveScene({ createOfficeScene: () => ({ setPeople: values => sceneState.people.push(values), setPaused() {}, setVisible: value => sceneState.visible.push(value), dispose: () => sceneState.disposed++, focusRoom() {}, select() {}, resize() {} }) }); } };
+        resolveScene() { resolveScene({ createOfficeScene: () => ({ setPeople: values => sceneState.people.push(values), setPaused() {}, setVisible: value => sceneState.visible.push(value), dispose: () => sceneState.disposed++, focusRoom: value => sceneState.rooms.push(value), select() {}, resize() {} }) }); } };
 }
 test('office displays hostile names as inert text, filters locally and never sends a chat automatically', async () => {
     const f = await fixture(); assert.equal(f.requests.length, 0); assert.equal(f.get('voPeople').children.length, 2);
@@ -67,4 +70,30 @@ test('loaded scene is paused on hiding and disposed when selecting lightweight v
     const f = await fixture(); f.get('voView3d').click(); f.resolveScene(); await tick();
     assert.equal(f.sceneState.people.length, 1); f.hide(true); assert.equal(f.sceneState.visible.at(-1), false);
     f.get('voViewList').click(); assert.equal(f.sceneState.disposed, 1); assert.equal(f.get('voLoading').hidden, true);
+});
+
+test('selecting a game from lightweight mode retains the requested focus after lazy scene loading', async () => {
+    const f = await fixture(); assert.equal(f.get('voGames').children.length, 12);
+    f.get('voGames').children[1].click(); f.resolveScene(); await tick();
+    assert.equal(f.sceneState.rooms.at(-1), 'badminton'); f.hide(true);
+});
+
+test('changing selected person cancels the journal request and ignores its late result', async () => {
+    const f = await fixture(); f.get('voPeople').children[0].click(); f.get('voLoadActivity').click();
+    assert.equal(f.requests.length, 1); const request = f.requests[0];
+    f.get('voPeople').children.find(node => node.dataset.personId === 1).click();
+    assert.equal(request.options.signal.aborted, true);
+    request.resolve({ ok: true, json: async () => ({ visits: [{ menu: 'Private stale result', at: new Date().toISOString() }] }) }); await tick();
+    assert.equal(f.get('voActivityList').children.length, 0); f.hide(true);
+});
+
+test('own avatar editor sends only own preference data with csrf and handles stale-version conflicts', async () => {
+    const f = await fixture(); f.get('voOpenAvatar').click();
+    assert.equal(f.get('voAvatarFields').children.length, 7); assert.equal(f.get('voAvatarPreview').children.length, 16);
+    const submit = f.get('voAvatarForm').events.submit[0]({ preventDefault() {} });
+    assert.equal(f.requests.length, 1); const request = f.requests[0], body = JSON.parse(request.options.body);
+    assert.equal(new URL(request.url).pathname, '/virtual-office/avatar'); assert.equal(body.user_id, undefined);
+    assert.equal(body.version, 0); assert.equal(request.options.headers['X-CSRF-TOKEN'], 'test-csrf-token');
+    request.resolve({ ok: false, status: 409 }); await submit;
+    assert.match(f.get('voAvatarStatus').textContent, /tab lain/); assert.equal(f.get('voSaveAvatar').disabled, false); f.hide(true);
 });

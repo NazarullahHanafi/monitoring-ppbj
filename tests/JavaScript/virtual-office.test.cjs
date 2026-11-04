@@ -18,7 +18,10 @@ async function fixture() {
 }
 test('office uses distinct illustrative resting poses and validates bounded presence data', async () => {
     const { poseFor, safePeople, initials } = await load;
-    assert.equal(poseFor({ id: 1, state: 'offline' }), 'sleeping');
+    assert.equal(poseFor({ id: 1, state: 'offline' }, new Date('2026-11-04T10:00:00Z')), 'sleeping');
+    assert.equal(poseFor({ id: 1, state: 'offline' }, new Date('2026-11-04T00:00:00Z')), 'playing');
+    assert.equal(poseFor({ id: 1, state: 'offline' }, new Date('2026-11-03T23:59:59Z')), 'sleeping');
+    assert.equal(poseFor({ id: 1, state: 'offline' }, new Date('2026-11-04T09:59:59Z')), 'playing');
     assert.equal(poseFor({ id: 1, state: 'online' }), 'working');
     assert.deepEqual([0, 1, 2].map(id => poseFor({ id, state: 'idle' })), ['coffee', 'eating', 'sleeping']);
     assert.equal(initials('  Putri  Bunga  '), 'PB');

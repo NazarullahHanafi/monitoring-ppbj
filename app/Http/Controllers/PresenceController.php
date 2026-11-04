@@ -29,8 +29,14 @@ class PresenceController extends Controller
 
     public function heartbeat(Request $request)
     {
-        $request->validate(['idle' => ['sometimes', 'boolean']]);
+        $request->validate(['idle' => ['sometimes', 'boolean'], 'menu' => ['sometimes', 'nullable', \Illuminate\Validation\Rule::in(array_keys(\App\Services\VirtualOfficeActivity::MENUS))]]);
         $user = Auth::user();
+        if ($request->filled('menu') && $user->shouldDisplayInPresence() && in_array($user->department, ['umum', 'operasional'], true)) {
+            // Presence only; the daily journal records successful page responses.
+            Cache::put('office:menu:'.$user->id, $request->input('menu'), self::PRESENCE_TTL);
+        } elseif ($request->exists('menu')) {
+            Cache::forget('office:menu:'.$user->id);
+        }
         $this->markLastSeen($user);
 
         // Akun khusus yang mood-nya dinonaktifkan tidak boleh meninggalkan

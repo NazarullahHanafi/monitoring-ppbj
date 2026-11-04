@@ -7,15 +7,17 @@ use Illuminate\Support\Facades\Cache;
 
 class VirtualOfficePresence
 {
-    public const DIRECTORY_KEY = 'virtual-office:directory:v1';
+    public const DIRECTORY_KEY = 'virtual-office:directory:v2';
 
     public function snapshot(User $viewer): array
     {
         $directory = Cache::remember(self::DIRECTORY_KEY, 60, function (): array {
-            return User::query()->where('is_active', true)->whereIn('department', ['umum', 'operasional'])
-                ->orderBy('id')->limit(122)->get(['id', 'name', 'email', 'role', 'department'])
+            return User::query()->leftJoin('virtual_office_profiles as profile', 'users.id', '=', 'profile.user_id')
+                ->where('users.is_active', true)->whereIn('department', ['umum', 'operasional'])
+                ->orderBy('users.id')->limit(122)->get(['users.id', 'name', 'email', 'role', 'department', 'gender', 'profile.avatar', 'profile.share_activity'])
                 ->filter(fn (User $user) => $user->shouldDisplayInPresence())
-                ->map(fn (User $user) => ['id' => $user->id, 'name' => $user->name, 'department' => $user->department])
+                ->map(fn (User $user) => ['id' => $user->id, 'name' => $user->name, 'department' => $user->department,
+                    'avatar' => VirtualOfficeAvatar::sanitize($user->avatar, $user->gender, $user->id), 'share_activity' => $user->share_activity === null || (bool) $user->share_activity])
                 ->values()->all();
         });
         $limited = count($directory) > 120;
@@ -24,6 +26,7 @@ class VirtualOfficePresence
         foreach ($directory as $person) {
             $keys[] = 'presence:user:'.$person['id'];
             $keys[] = 'presence:mood:'.$person['id'];
+            $keys[] = 'office:menu:'.$person['id'];
         }
         $presence = $keys === [] ? [] : Cache::many($keys);
         $counts = ['online' => 0, 'idle' => 0, 'offline' => 0];
@@ -37,10 +40,12 @@ class VirtualOfficePresence
                 'state' => $state,
                 'mood' => mb_substr((string) ($presence['presence:mood:'.$person['id']] ?? $entry['mood'] ?? ''), 0, 20),
                 'is_me' => (int) $person['id'] === (int) $viewer->id,
+                'current_menu' => $online && ($person['share_activity'] || (int) $person['id'] === (int) $viewer->id)
+                    ? (VirtualOfficeActivity::MENUS[$presence['office:menu:'.$person['id']] ?? ''] ?? null) : null,
             ];
         }
 
         return ['people' => $people, 'counts' => $counts, 'limited' => $limited,
-            'updated_at' => now()->toIso8601String(), 'refresh_seconds' => 45];
+            'updated_at' => now()->toIso8601String(), 'refresh_seconds' => 45, 'timezone' => 'Asia/Jakarta'];
     }
 }

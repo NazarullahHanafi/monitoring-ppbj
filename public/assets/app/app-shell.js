@@ -144,7 +144,7 @@
                 var lease = window.SimonBackgroundReads.begin('presence-heartbeat');
                 if (!lease) return;
                 heartbeatRequest = lease;
-                fetch(UH, {method: 'POST', signal: lease.signal, headers: {'X-CSRF-TOKEN': CSRF, 'Accept': 'application/json', 'Content-Type': 'application/json'}, body: JSON.stringify({idle: window.SimonPresenceIdle()})})
+                fetch(UH, {method: 'POST', signal: lease.signal, headers: {'X-CSRF-TOKEN': CSRF, 'Accept': 'application/json', 'Content-Type': 'application/json'}, body: JSON.stringify({idle: window.SimonPresenceIdle(), menu: APP_SHELL.officeMenu || null})})
                     .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
                     .then(function (d) { if (lease.current() && Array.isArray(d.online)) { render(d.online); ensurePresenceScrollTools(); } })
                     .catch(function () {}).finally(function () { lease.release(); if (heartbeatRequest === lease) heartbeatRequest = null; });

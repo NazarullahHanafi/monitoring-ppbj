@@ -2,20 +2,20 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { poseFor } from './virtual-office-state.js';
+import { poseFor, games, gameFor, safeAvatar, isOfficeNight } from './virtual-office-state.js';
 
 // Original procedural scene: no models, textures, or code from the reference site.
 // Static furniture is batched by material; animation is capped at 30fps / 24 avatars.
 export function createOfficeScene({ host, labels, onSelect, onFailure,
     rendererFactory = options => new THREE.WebGLRenderer(options), controlsFactory = (camera, element) => new OrbitControls(camera, element) }) {
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(36, 1, .1, 180);
+    const camera = new THREE.PerspectiveCamera(36, 1, .1, 1200);
     const renderer = rendererFactory({ antialias: true, alpha: false, powerPreference: 'low-power' });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5)); renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.18;
     host.append(renderer.domElement);
     const controls = controlsFactory(camera, renderer.domElement);
-    controls.enableDamping = true; controls.dampingFactor = .09; controls.minDistance = 16; controls.maxDistance = 125;
+    controls.enableDamping = true; controls.dampingFactor = .09; controls.minDistance = 8; controls.maxDistance = 650;
     controls.minPolarAngle = .32; controls.maxPolarAngle = 1.28; controls.target.set(0, 0, 0);
     controls.enablePan = true; controls.panSpeed = .7; controls.rotateSpeed = .55; controls.enableKeys = false;
     const hemi = new THREE.HemisphereLight('#fbf3dc', '#526c61', 2.8); scene.add(hemi);
@@ -57,6 +57,79 @@ export function createOfficeScene({ host, labels, onSelect, onFailure,
         const geometry = new THREE.PlaneGeometry(width, width / 4); ownedGeometries.add(geometry);
         const mesh = new THREE.Mesh(geometry, mat); mesh.position.set(x, y, z); mesh.rotation.y = ry; scene.add(mesh);
         materials.set(`sign-${text}`, mat);
+    }
+    // A landscaped campus surrounds the original office. Courts and game
+    // furniture are original geometry, batched by material with the building.
+    box(86, .6, 70, 0, -.94, 15, 'base', .3);
+    box(85.5, .14, 69.5, 0, -.57, 15, '#c6d4bc', .18);
+    box(83, .08, 4, 0, -.44, 20, '#e6dfcc', .12);
+    box(6, .08, 64, 0, -.44, 16, '#e6dfcc', .1);
+    box(78, .08, 4, 0, -.44, 35, '#e6dfcc', .1);
+    for (const x of [-41, 41]) for (const z of [-15, -2, 14, 31, 46]) {
+        plant(x, z, 1.7); cylinder(.08, 3.2, x + (x < 0 ? 1 : -1), 1.15, z + 2, 'gold');
+        orb(.22, .25, .22, x + (x < 0 ? 1 : -1), 2.85, z + 2, 'white');
+    }
+    const gameBalls = [];
+    function net(x, z, width, height) {
+        for (const dx of [-width / 2, width / 2]) cylinder(.055, height, x + dx, height / 2, z, 'white');
+        for (let h = .3; h <= height; h += .22) box(width, .018, .025, x, h, z, 'white', 0);
+        for (let dx = -width / 2; dx <= width / 2; dx += .4) box(.012, height - .3, .018, x + dx, (height + .3) / 2, z, 'white', 0);
+    }
+    function gameBall(game, color, radius = .16) {
+        const geometry = new THREE.SphereGeometry(radius, 10, 8); ownedGeometries.add(geometry);
+        const mesh = new THREE.Mesh(geometry, material(color)); scene.add(mesh); gameBalls.push({ mesh, game });
+    }
+    for (const game of games) {
+        const { x, z, id } = game;
+        box(game.kind === 'court' ? 17 : 10, .12, game.kind === 'court' ? 13 : 9, x, -.29, z, id === 'tennis' ? '#a77355' : id === 'badminton' ? '#3b7e77' : id === 'basketball' ? '#b99569' : '#dce0ca', .14);
+        // Low brass signboards face the open front of each area.
+        box(6, 1.1, .12, x, .65, z - (game.kind === 'court' ? 6 : 4.2), 'deep');
+        sign(game.name.toUpperCase(), 'RECREATION / AVATAR SIMULATION', 5.7, x, .75, z - (game.kind === 'court' ? 5.91 : 4.11));
+        if (id === 'tennis' || id === 'badminton' || id === 'basketball') {
+            for (const dx of [-7, 7]) box(.045, .015, 10.8, x + dx, -.21, z, 'white', 0);
+            for (const dz of [-5.4, 0, 5.4]) box(14, .015, .045, x, -.21, z + dz, 'white', 0);
+            if (id !== 'basketball') {
+                for (const dx of [-5.7, 5.7]) box(.035, .015, 10.8, x + dx, -.2, z, 'white', 0);
+                net(x, z, 14, id === 'badminton' ? 1.7 : 1.15);
+                gameBall(game, id === 'tennis' ? '#d9e56b' : 'white', id === 'tennis' ? .17 : .12);
+            } else {
+                for (const side of [-1, 1]) {
+                    cylinder(.09, 3.6, x, 1.5, z + side * 5, 'metal');
+                    box(2.3, 1.35, .13, x, 3.1, z + side * 4.7, 'white');
+                    const hoop = new THREE.TorusGeometry(.43, .045, 6, 20); bake(hoop, '#c67543', x, 2.8, z + side * 4.1, Math.PI / 2);
+                }
+                gameBall(game, '#bd6c32', .25);
+            }
+        } else if (id === 'golf') {
+            box(13, .12, 8, x, -.15, z, '#69885c', .15);
+            for (const dx of [-6.5, 6.5]) box(.2, .35, 8, x + dx, -.05, z, 'woodLight');
+            for (let n = 0; n < 3; n++) { cylinder(.22, .02, x - 4 + n * 4, -.07, z + (n % 2 ? 2 : -2), 'black'); cylinder(.025, 1.5, x - 4 + n * 4, .65, z + (n % 2 ? 2 : -2), 'gold'); box(.8, .4, .03, x - 3.6 + n * 4, 1.25, z + (n % 2 ? 2 : -2), '#c78362'); }
+            gameBall(game, 'white', .12);
+        } else if (id === 'bowling') {
+            box(5, .09, 11, x, -.13, z, 'woodLight');
+            for (const dx of [-2.7, 2.7]) box(.35, .12, 11, x + dx, -.1, z, 'oak');
+            for (let row = 0; row < 4; row++) for (let n = 0; n <= row; n++) { const px = x + (n - row / 2) * .55, pz = z - 2 - row * .5; cylinder(.14, .5, px, .17, pz, 'white', .08); orb(.13, .14, .13, px, .49, pz, 'white'); }
+            gameBall(game, '#786397', .28);
+        } else if (id === 'arcade') {
+            for (const dx of [-2.2, 2.2]) {
+                box(2.1, 2.6, 1.6, x + dx, 1.1, z, 'deep', .1);
+                box(1.6, 1.1, .05, x + dx, 1.7, z + .83, 'screen');
+                for (let n = 0; n < 5; n++) box(.05, .6, .02, x + dx + (n - 2) * .2, 1.7, z + .87, n % 2 ? '#e8c877' : 'screenLine', 0);
+                cylinder(.18, .06, x + dx, .9, z + 1.1, 'gold'); box(1.2, .45, 1.2, x + dx, .2, z + 2, 'sofa', .1);
+            }
+        } else if (id === 'darts') {
+            box(5, 3, .22, x, 1.25, z - 1.8, 'deep');
+            for (let n = 0; n < 4; n++) { const g = new THREE.CylinderGeometry(1.05 - n * .23, 1.05 - n * .23, .025, 24); bake(g, n % 2 ? 'white' : '#bf6f59', x, 1.6, z - 1.64 + n * .025, Math.PI / 2); }
+        } else {
+            box(5.5, .25, 3.5, x, 1, z, id === 'pingpong' ? '#4c7783' : id === 'billiards' ? '#376a59' : 'woodLight', .1);
+            for (const dx of [-2.2, 2.2]) for (const dz of [-1.2, 1.2]) box(.18, 1.1, .18, x + dx, .4, z + dz, 'oak');
+            if (id === 'pingpong') { net(x, z, 5.5, 1.45); gameBall(game, 'white', .1); }
+            if (id === 'uno') for (let n = 0; n < 16; n++) { const side = n % 4; box(.32, .035, .48, x + (side < 2 ? -1.7 + (n % 4) * .3 : 1.4), 1.16 + n * .002, z + (side % 2 ? -.9 : .9), ['#b85e55', '#c7ac54', '#4b797d', '#719263'][n % 4], .02, n * .3); }
+            if (id === 'chess') for (let a = 0; a < 8; a++) for (let b = 0; b < 8; b++) { box(.34, .02, .34, x + (a - 3.5) * .34, 1.14, z + (b - 3.5) * .34, (a + b) % 2 ? 'deep' : 'white', 0); if (b < 2 || b > 5) { cylinder(.075, .17, x + (a - 3.5) * .34, 1.24, z + (b - 3.5) * .34, b < 2 ? 'white' : 'black'); } }
+            if (id === 'billiards') for (let n = 0; n < 10; n++) orb(.12, .12, .12, x + Math.sin(n * 2) * 1.8, 1.25, z + Math.cos(n) * .9, ['gold', 'white', 'deep'][n % 3]);
+            if (id === 'foosball') for (let n = 0; n < 5; n++) { box(.045, .045, 4.5, x - 2 + n, 1.4, z, 'metal', 0); for (const dz of [-1, 0, 1]) box(.2, .45, .18, x - 2 + n, 1.48, z + dz, n % 2 ? '#ba7864' : 'deep'); }
+            for (const side of [-1, 1]) box(4, .35, .8, x, .28, z + side * 2.8, 'sofa', .1);
+        }
     }
     // Floating architectural model, warm stone base and an open front elevation.
     box(40.5, .6, 28, 0, -.6, 0, 'base', .22);
@@ -155,22 +228,46 @@ export function createOfficeScene({ host, labels, onSelect, onFailure,
     const shirts = ['#547a71', '#557591', '#ad8a62', '#856c8c', '#6f8362', '#9e7270'];
     function figure(person) {
         const group = new THREE.Group(); scene.add(group);
-        const body = new THREE.Group(); group.add(body); const skin = ['#dba77d', '#c18d67', '#ebbf99', '#a77454'][person.id % 4];
-        avatarPart(body, 'box', [.48, .62, .33], shirts[person.id % shirts.length], [0, 1.17, 0]);
+        const appearance = safeAvatar(person.avatar), feminine = appearance.style === 'feminine';
+        const shirt = { emerald: '#547a71', navy: '#405978', rose: '#b97988', cream: '#d3bc96', lavender: '#9682ae', terracotta: '#bb8265' }[appearance.color] || shirts[person.id % shirts.length];
+        const body = new THREE.Group(); group.add(body); const skin = { light: '#efd0ae', warm: '#dba77d', tan: '#bc8762', deep: '#895e46' }[appearance.skin];
+        const hairColor = appearance.hair === 'hijab' ? shirt : '#352c32';
+        avatarPart(body, 'box', [feminine ? .43 : .5, .65, .33], shirt, [0, 1.17, 0]);
+        if (appearance.outfit === 'blazer') {
+            avatarPart(body, 'box', [.15, .42, .035], 'white', [0, 1.29, .18]);
+            for (const side of [-1, 1]) { const lapel = avatarPart(body, 'box', [.07, .32, .035], 'gold', [side * .12, 1.33, .19]); lapel.rotation.z = side * .25; }
+        }
+        if (appearance.outfit === 'sport') avatarPart(body, 'box', [.32, .055, .02], 'white', [0, 1.3, .18]);
+        const skirt = appearance.outfit === 'dress' ? avatarPart(body, 'box', [.6, .4, .44], shirt, [0, .79, 0]) : null;
         const head = new THREE.Group(); head.position.y = 1.69; body.add(head);
         avatarPart(head, 'box', [.43, .46, .4], skin, [0, 0, 0]);
-        avatarPart(head, 'box', [.46, .18, .42], person.id % 3 === 0 ? '#3d3330' : '#343932', [0, .21, -.02]);
-        avatarPart(head, 'box', [.43, .29, .09], '#343932', [0, .07, -.19]);
+        avatarPart(head, 'box', [.47, .18, .44], hairColor, [0, .21, -.02]);
+        avatarPart(head, 'box', [.45, appearance.hair === 'long' || appearance.hair === 'hijab' ? .67 : .3, .12], hairColor, [0, appearance.hair === 'long' || appearance.hair === 'hijab' ? -.12 : .07, -.2]);
+        if (appearance.hair !== 'short') for (const side of [-1, 1]) avatarPart(head, 'box', [.09, appearance.hair === 'bob' ? .4 : .53, .32], hairColor, [side * .235, -.01, -.03]);
+        if (appearance.hair === 'ponytail') avatarPart(head, 'box', [.24, .53, .22], hairColor, [0, -.02, -.35]);
+        if (appearance.hair === 'hijab') avatarPart(body, 'box', [.58, .18, .43], hairColor, [0, 1.44, -.04]);
         for (const x of [-.095, .095]) avatarPart(head, 'box', [.035, .045, .025], '#263833', [x, .035, .205]);
+        avatarPart(head, 'box', [.09, .02, .025], feminine ? '#b96f78' : '#9c6d58', [0, -.105, .21]);
+        if (feminine) for (const x of [-.14, .14]) avatarPart(head, 'box', [.065, .025, .02], '#d39589', [x, -.065, .21]);
+        if (appearance.accessory === 'glasses') {
+            for (const side of [-1, 1]) { avatarPart(head, 'box', [.15, .11, .025], 'gold', [side * .105, .04, .224]); avatarPart(head, 'box', [.11, .07, .025], skin, [side * .105, .04, .24]); }
+            avatarPart(head, 'box', [.08, .025, .02], 'gold', [0, .05, .24]);
+        }
+        if (appearance.accessory === 'headphones') { avatarPart(head, 'box', [.53, .08, .28], 'gold', [0, .32, -.02]); for (const side of [-1, 1]) avatarPart(head, 'box', [.12, .2, .18], 'deep', [side * .28, .07, 0]); }
         const arms = [];
         for (const x of [-.34, .34]) {
             const arm = new THREE.Group(); arm.position.set(x, 1.42, 0); body.add(arm);
-            avatarPart(arm, 'box', [.17, .4, .2], shirts[person.id % shirts.length], [0, -.19, 0]);
+            avatarPart(arm, 'box', [.17, .4, .2], shirt, [0, -.19, 0]);
             avatarPart(arm, 'box', [.15, .27, .16], skin, [0, -.45, .05]); arms.push(arm);
         }
-        for (const x of [-.14, .14]) { avatarPart(body, 'box', [.2, .21, .55], '#35463f', [x, .73, .18]); avatarPart(body, 'box', [.17, .52, .19], '#35463f', [x, .43, .39]); avatarPart(body, 'box', [.21, .14, .35], '#24352f', [x, .15, .46]); }
+        const legs = [];
+        for (const x of [-.14, .14]) { const leg = new THREE.Group(); leg.position.set(x, .83, 0); body.add(leg); avatarPart(leg, 'box', [.18, .64, .2], '#35463f', [0, -.32, 0]); avatarPart(leg, 'box', [.23, .14, .34], appearance.outfit === 'sport' ? 'white' : '#24352f', [0, -.7, .07]); legs.push(leg); }
         const cup = avatarPart(arms[1], 'sphere', [.12], 'white', [0, -.49, .14]);
         const plate = avatarPart(arms[0], 'box', [.35, .045, .24], 'white', [0, -.43, .23]);
+        const racket = new THREE.Group(); arms[1].add(racket); racket.position.set(0, -.48, .16);
+        avatarPart(racket, 'box', [.04, .44, .05], 'gold', [0, -.14, 0]);
+        const racketGeometry = new THREE.TorusGeometry(.24, .025, 6, 16); ownedGeometries.add(racketGeometry);
+        racket.add(new THREE.Mesh(racketGeometry, material('white'))); racket.rotation.x = Math.PI / 2;
         const ringGeo = new THREE.RingGeometry(.5, .59, 24); ownedGeometries.add(ringGeo);
         const ringMat = new THREE.MeshBasicMaterial({ color: '#c5a061', side: THREE.DoubleSide }); materials.set(`ring-${person.id}`, ringMat);
         const ring = new THREE.Mesh(ringGeo, ringMat); ring.rotation.x = -Math.PI / 2; ring.position.y = .02; group.add(ring); ring.visible = false;
@@ -178,7 +275,8 @@ export function createOfficeScene({ host, labels, onSelect, onFailure,
         const dot = document.createElement('i'), name = document.createElement('span'), icon = document.createElement('small'); label.append(dot, name, icon); labels.append(label);
         label.addEventListener('click', () => onSelect(person.id));
         group.traverse(obj => { if (obj.isMesh) obj.userData.personId = person.id; });
-        return { group, body, head, arms, cup, plate, label, dot, name, icon, ring, person, target: new THREE.Vector3(), phase: person.id * 1.75 };
+        return { group, body, head, arms, legs, skirt, cup, plate, racket, label, dot, name, icon, ring, person, appearance: JSON.stringify(person.avatar),
+            privateGeometry: racketGeometry, target: new THREE.Vector3(), phase: person.id * 1.75 };
     }
     let selected = null, paused = false, visible = true, disposed = false, frame = null, lastFrame = 0, lastLabels = 0;
     const targetFocus = new THREE.Vector3(), cameraGoal = new THREE.Vector3(); let easingCamera = false;
@@ -187,21 +285,32 @@ export function createOfficeScene({ host, labels, onSelect, onFailure,
         const chosen = [], seats = { umum: 0, operasional: 0 }; let resting = 0, cafe = 0;
         for (const person of sorted) { if (chosen.length >= 24) break; if (person.state === 'online' && seats[person.department] >= 16) continue; chosen.push(person); if (person.state === 'online') seats[person.department]++; }
         const ids = new Set(chosen.map(p => p.id));
-        for (const [id, f] of figures) if (!ids.has(id)) { scene.remove(f.group); f.label.remove(); f.ring.geometry.dispose(); ownedGeometries.delete(f.ring.geometry); f.ring.material.dispose(); materials.delete(`ring-${id}`); figures.delete(id); }
+        for (const [id, f] of figures) if (!ids.has(id) || f.appearance !== JSON.stringify(chosen.find(p => p.id === id)?.avatar)) {
+            scene.remove(f.group); f.label.remove(); f.ring.geometry.dispose(); ownedGeometries.delete(f.ring.geometry); f.privateGeometry.dispose(); ownedGeometries.delete(f.privateGeometry); f.ring.material.dispose(); materials.delete(`ring-${id}`); figures.delete(id);
+        }
         seats.umum = seats.operasional = 0;
         for (const person of chosen) {
             let f = figures.get(person.id), fresh = !f;
             if (!f) { f = figure(person); figures.set(person.id, f); }
+            const previousGame = f.game?.id, previousPose = f.pose;
             f.person = person; f.pose = poseFor(person); let placement;
+            f.game = gameFor(person);
             if (f.pose === 'working') { placement = desks[person.department][seats[person.department]++]; f.group.rotation.y = Math.PI; }
+            else if (f.pose === 'playing') { const side = person.id % 2 ? -1 : 1; placement = [f.game.x + side * (f.game.kind === 'court' ? 3 : 0), -.12, f.game.z + side * (f.game.kind === 'court' ? 3.6 : 2.5)]; f.group.rotation.y = side < 0 ? 0 : Math.PI; }
             else if (f.pose === 'sleeping') { const n = resting++; placement = [-15.8 + (n % 8) * 2.02, .12, 4.7 + Math.floor(n / 8) * 3.3]; f.group.rotation.y = 0; }
             else if (cafe < 8) { const n = cafe++, table = n % 4, side = n < 4 ? 1 : -1; placement = [(table % 2 ? 13.8 : 8) + side * 1.65, .08, table < 2 ? 5.1 : 9.7]; f.group.rotation.y = side * Math.PI / 2; }
             else { const n = resting++; placement = [-15.8 + (n % 8) * 2.02, .12, 4.7 + Math.floor(n / 8) * 3.3]; f.group.rotation.y = 0; }
-            f.target.set(...placement); if (fresh || paused) f.group.position.copy(f.target);
+            f.target.set(...placement); f.home = f.target.clone(); if (fresh || paused) f.group.position.copy(f.target);
+            if (!fresh && f.pose === 'playing' && previousPose === 'playing' && previousGame !== f.game.id) {
+                // Route between courts via the front promenade rather than
+                // crossing desks and the building's glass partitions.
+                f.waypoints = [new THREE.Vector3(f.group.position.x, -.12, 20), new THREE.Vector3(f.home.x, -.12, 20), f.home.clone()];
+            } else if (f.pose !== 'playing') f.waypoints = [];
             f.dot.className = `vo-dot ${person.state}`; f.name.textContent = person.name;
-            f.icon.textContent = f.pose === 'sleeping' ? 'zᶻ' : f.pose === 'coffee' ? '☕' : f.pose === 'eating' ? '🍽' : '';
+            f.icon.textContent = `${person.state === 'offline' ? 'OFFLINE ' : person.state === 'idle' ? 'JEDA ' : 'ONLINE '}${f.pose === 'sleeping' ? '☾' : f.pose === 'playing' ? f.game.icon : f.pose === 'coffee' ? '☕' : ''}`;
             f.label.setAttribute('aria-label', `${person.name}, ${person.state === 'online' ? 'online' : person.state === 'idle' ? 'jeda di aplikasi' : 'tidak online'}. Lihat detail anggota.`);
             f.cup.visible = f.pose === 'coffee'; f.plate.visible = f.pose === 'eating';
+            f.racket.visible = f.pose === 'playing' && ['tennis', 'badminton', 'pingpong', 'golf'].includes(f.game.id);
             f.ring.visible = selected === person.id; f.label.setAttribute('aria-pressed', String(selected === person.id));
         }
         requestDraw();
@@ -212,7 +321,7 @@ export function createOfficeScene({ host, labels, onSelect, onFailure,
         for (const f of [...figures.values()].sort((a, b) => Number(b.person.id === selected) - Number(a.person.id === selected))) {
             f.group.getWorldPosition(point); point.y += 2.35; point.project(camera);
             const x = (point.x + 1) / 2 * rect.width, y = (1 - point.y) / 2 * rect.height;
-            const width = 104, height = 25; const overlap = occupied.some(r => Math.abs(r.x - x) < width && Math.abs(r.y - y) < height);
+            const width = 166, height = 27; const overlap = occupied.some(r => Math.abs(r.x - x) < width && Math.abs(r.y - y) < height);
             const show = point.z < 1 && point.z > -1 && x > 18 && x < rect.width - 18 && y > 15 && y < rect.height - 65 && (!overlap || f.person.id === selected);
             f.label.hidden = !show;
             if (show) { f.label.style.transform = `translate(${x}px,${y}px) translate(-50%,-100%)`; occupied.push({ x, y }); }
@@ -224,13 +333,28 @@ export function createOfficeScene({ host, labels, onSelect, onFailure,
         lastFrame = now;
         if (easingCamera) { camera.position.lerp(cameraGoal, .12); controls.target.lerp(targetFocus, .12); if (camera.position.distanceTo(cameraGoal) < .04) { camera.position.copy(cameraGoal); controls.target.copy(targetFocus); easingCamera = false; } }
         for (const f of figures.values()) {
-            f.group.position.lerp(f.target, paused ? 1 : .1);
             const t = paused ? 0 : now / 1000 + f.phase;
+            const playing = f.pose === 'playing', walking = !paused && (playing || (f.pose === 'working' && Math.sin(t / 14) > .8));
+            f.target.copy(f.home);
+            if (walking) { f.target.x += Math.sin(t * (playing ? .65 : .8)) * (f.game.kind === 'court' && playing ? 1.7 : .4); f.target.z += Math.cos(t * .5) * (playing ? .45 : .2); }
+            if (f.waypoints?.length && !paused) {
+                const waypoint = f.waypoints[0], distance = f.group.position.distanceTo(waypoint);
+                if (distance < .12) f.waypoints.shift();
+                else { f.group.rotation.y = Math.atan2(waypoint.x - f.group.position.x, waypoint.z - f.group.position.z); f.group.position.lerp(waypoint, Math.min(1, .13 / distance)); }
+            } else f.group.position.lerp(f.target, paused ? 1 : .06);
+            f.legs.forEach((leg, i) => { leg.rotation.x = walking ? Math.sin(t * 4 + i * Math.PI) * .32 : f.pose === 'working' || f.pose === 'sleeping' ? -1.1 : 0; });
             f.body.position.y = Math.sin(t * 1.6) * (paused ? 0 : .018);
-            f.body.rotation.z = f.pose === 'sleeping' ? .12 : 0;
+            f.body.rotation.z = f.pose === 'sleeping' ? .45 : playing ? Math.sin(t * 1.5) * .07 : 0;
             f.head.rotation.x = f.pose === 'sleeping' ? .43 + Math.sin(t * .8) * (paused ? 0 : .05) : Math.sin(t * .6) * (paused ? 0 : .025);
             f.arms[0].rotation.x = f.pose === 'working' ? -.65 + Math.sin(t * 5) * (paused ? 0 : .045) : f.pose === 'eating' ? -1.05 : .1;
             f.arms[1].rotation.x = f.pose === 'working' ? -.65 + Math.sin(t * 5 + 1) * (paused ? 0 : .045) : f.pose === 'coffee' ? -1.2 + Math.sin(t * 1.2) * (paused ? 0 : .13) : f.pose === 'eating' ? -.8 + Math.sin(t * 2) * (paused ? 0 : .13) : .1;
+            if (playing) { f.arms[1].rotation.x = -.6 + Math.sin(t * 2.3) * (paused ? 0 : .7); f.arms[0].rotation.x = -.25 + Math.sin(t * 2.3 + 1) * (paused ? 0 : .25); }
+        }
+        for (const { mesh, game } of gameBalls) {
+            const t = paused ? 0 : now / 1000;
+            const active = !isOfficeNight() && [...figures.values()].some(f => f.pose === 'playing' && f.game.id === game.id);
+            const wave = active ? Math.sin(t * 1.8) : 0;
+            mesh.position.set(game.x + (game.id === 'golf' ? wave * 4 : wave * 1.5), game.id === 'pingpong' ? 1.45 + Math.abs(wave) * .65 : game.id === 'basketball' ? .15 + Math.abs(wave) * 2.2 : game.id === 'bowling' || game.id === 'golf' ? .06 : .4 + Math.abs(wave) * 2, game.z + wave * (game.kind === 'court' ? 4 : 1.3));
         }
         controls.update(); renderer.render(scene, camera);
         if (paused || now - lastLabels > 120 || easingCamera) { drawLabels(); lastLabels = now; }
@@ -239,7 +363,8 @@ export function createOfficeScene({ host, labels, onSelect, onFailure,
     function requestDraw() { if (!disposed && visible && frame === null) frame = requestAnimationFrame(render); }
     function resize() { if (disposed) return; const rect = host.getBoundingClientRect(); if (rect.width < 1 || rect.height < 1) return; renderer.setSize(rect.width, rect.height, false); camera.aspect = rect.width / rect.height; camera.updateProjectionMatrix(); requestDraw(); }
     function focusRoom(room = 'all') {
-        const narrow = host.clientWidth < 600, views = { all: [[0, 0, 0], [34, 31, 42]], umum: [[-9, .5, -5], [11, 22, 22]], operasional: [[9, .5, -5], [28, 21, 24]], lounge: [[-3, .4, 7], [17, 23, 31]] };
+        const narrow = host.clientWidth < 600, views = { all: [[0, 0, 14], [86, 90, 125]], office: [[0, 0, 0], [34, 31, 42]], umum: [[-9, .5, -5], [11, 22, 22]], operasional: [[9, .5, -5], [28, 21, 24]], lounge: [[-3, .4, 7], [17, 23, 31]], park: [[0, 0, 28], [56, 65, 96]] };
+        for (const game of games) views[game.id] = [[game.x, .3, game.z], [game.x + 14, 19, game.z + 22]];
         const [target, position] = views[room] || views.all; targetFocus.set(...target); cameraGoal.set(...position);
         if (narrow) cameraGoal.sub(targetFocus).multiplyScalar(room === 'all' ? Math.max(1.23, 1.34 / Math.max(.3, host.clientWidth / host.clientHeight)) : 1.23).add(targetFocus);
         if (paused) { camera.position.copy(cameraGoal); controls.target.copy(targetFocus); easingCamera = false; } else easingCamera = true;

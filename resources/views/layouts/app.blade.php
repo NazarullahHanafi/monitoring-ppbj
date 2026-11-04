@@ -572,6 +572,7 @@
 
     <script>
         window.APP_SHELL_CONFIG = Object.freeze({
+            officeMenu: @json(\App\Services\VirtualOfficeActivity::menuForRoute(request()->route()?->getName())),
             presenceHeartbeatUrl: @json(route('presence.heartbeat')),
             presenceMoodGetUrl: @json(route('presence.mood.get')),
             presenceMoodUrl: @json(route('presence.mood')),

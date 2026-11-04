@@ -86,7 +86,13 @@ Route::get('/home', function () {
 Route::post('/procurement-workspace/{page}', [\App\Http\Controllers\ProcurementWorkspaceController::class, 'save'])
     ->whereIn('page', ['ppbj', 'sp', 'spph'])->middleware(['auth', 'dept:umum', 'throttle:20,1'])->name('procurement.workspace.save');
 
+// Own avatar is a personal preference, including for read-only viewers.
+Route::post('/virtual-office/avatar', [\App\Http\Controllers\VirtualOfficeController::class, 'saveAvatar'])
+    ->middleware(['auth', 'throttle:20,1'])->name('virtual-office.avatar');
+
 Route::middleware(['auth', 'readonly.block'])->group(function () {
+    Route::get('/virtual-office/people/{user}/activity', [\App\Http\Controllers\VirtualOfficeController::class, 'activity'])
+        ->middleware('throttle:30,1')->name('virtual-office.activity');
     Route::get('/virtual-office', [\App\Http\Controllers\VirtualOfficeController::class, 'index'])
         ->name('virtual-office.index');
     Route::get('/virtual-office/presence', [\App\Http\Controllers\VirtualOfficeController::class, 'presence'])

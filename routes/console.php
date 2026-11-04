@@ -8,6 +8,13 @@ Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->purpose('Display an inspiring quote');
 
+Artisan::command('office:prune-visits', function () {
+    $count = \Illuminate\Support\Facades\DB::table('virtual_office_visits')->where('visited_at', '<', now()->subDays(30))->delete();
+    $this->info("Pruned {$count} old virtual-office visits.");
+})->purpose('Keep only 30 days of coarse virtual-office menu visits');
+
+Schedule::command('office:prune-visits')->dailyAt('02:30')->withoutOverlapping();
+
 Schedule::command('owner:backup-email')
     ->weeklyOn(5, '02:00')
     ->timezone(config('app.timezone', 'Asia/Jakarta'))

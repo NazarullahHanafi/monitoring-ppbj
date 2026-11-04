@@ -44,11 +44,11 @@ test('procedural 3D office builds valid batched geometry, bounds avatars and rel
             assert.ok(node.position.toArray().every(Number.isFinite));
         });
         assert.ok(coordinateCount > 10000, 'The room must contain actual geometry.');
-        assert.ok(meshCount < 500, `Static furniture should be batched; got ${meshCount} meshes.`);
+        assert.ok(meshCount < 750, `Expanded campus and 24 detailed avatars must stay bounded; got ${meshCount} meshes.`);
         scene.setPaused(true); draw(200); assert.equal(frames.size, 0, 'Paused scene must not leave an animation loop.');
         host.clientWidth = 350; host.clientHeight = 430; scene.resize(); scene.focusRoom('all'); draw(300);
         rendered.camera.updateMatrixWorld(true);
-        for (const corner of [[-20.25, 0, -13.5], [20.25, 0, -13.5], [-20.25, 0, 13.5], [20.25, 0, 13.5]]) {
+        for (const corner of [[-43, 0, -20], [43, 0, -20], [-43, 0, 50], [43, 0, 50]]) {
             const projected = new THREE.Vector3(...corner).project(rendered.camera);
             assert.ok(Math.abs(projected.x) < 1 && Math.abs(projected.y) < 1, `Default mobile camera must contain the office floor: ${projected.toArray()}`);
         }

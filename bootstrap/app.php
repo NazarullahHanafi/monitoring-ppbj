@@ -38,6 +38,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->append(SecurityHeaders::class);
         $middleware->append(MonitorPerformance::class);
         $middleware->append(TrackAuthenticatedDevice::class);
+        $middleware->append(\App\Http\Middleware\RecordVirtualOfficeVisit::class);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->report(function (\Throwable $e) {
