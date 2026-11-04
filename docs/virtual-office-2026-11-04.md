@@ -45,7 +45,26 @@ Build memberi peringatan chunk 3D lebih dari 500 KB minified; chunk tersebut sen
 - Tes scene membentuk model dengan geometry three.js sebenarnya dan renderer/controls tiruan; ini memverifikasi konstruksi/model/lifecycle, **bukan render WebGL aktual atau FPS perangkat pengguna**.
 - Build Vite berhasil, npm audit nol kerentanan, serta pemeriksaan format PHP terkait berhasil.
 
-Verifikasi browser visual belum dapat diklaim: koneksi kontrol tab browser pada sesi ini bermasalah. Pemeriksaan production, hash aset, profil controller, serta hasil deployment dicatat setelah rilis. Tampilan WebGL, performa GPU, dukungan fullscreen, dan kenyamanan interaksi pada perangkat pengguna tetap memiliki batas verifikasi tersebut.
+Verifikasi browser visual belum dapat diklaim: koneksi kontrol tab browser pada sesi ini bermasalah, termasuk saat mencoba membuka halaman setelah rilis. Tampilan WebGL, performa GPU, dukungan fullscreen, dan kenyamanan interaksi pada perangkat pengguna tetap memiliki batas verifikasi tersebut.
+
+## Hasil deployment production
+
+Rilis aplikasi **`89b1001`** sudah dipush dan dideploy. Backup kode, cache, shell, manifest, dan aset webroot tersimpan privat pada `deployment-artifacts/virtual-office-20261104-163300`. Tidak ada migrasi atau perubahan transaksi. Autoload dioptimalkan kembali dan cache config/routes/views dibangun tanpa flush Redis.
+
+Pemeriksaan PHP hosting 8.3.36 berhasil. Dua route baru aktif. `/up` setelah deploy HTTP 200 (satu sampel sekitar 141 ms), halaman login HTTP 200, halaman kantor tanpa login diarahkan 302, dan feed tanpa login 401. CSS office, shell, stylesheet aplikasi, entry module, dan chunk 3D yang disajikan lewat HTTP memiliki SHA-256 yang sama dengan berkas repository production. Aset build lama di webroot dipertahankan untuk tab yang masih memakai HTML sebelumnya.
+
+Profil baca controller (origin production eksplisit, tanpa login baru atau perubahan data bisnis):
+
+| Skenario | Waktu sampel (ms) | SQL | Hasil |
+| --- | ---: | ---: | --- |
+| Feed pertama | 35,53 | 1 | 200, 22 anggota, payload 2.266 byte |
+| Feed hangat | 1,20 | 0 | 200, tidak ada field email/role/password/IP |
+| Halaman kantor Umum | 24,20 | 1 | 200, entry module ada, chunk 3D tidak dipreload |
+| Halaman kantor Operasional | 6,16 | 0 | 200, entry module ada, chunk 3D tidak dipreload |
+
+Query halaman inti tetap terjaga setelah rilis. Tiga sampel berurutan per endpoint seluruhnya berhasil; query hangat PPBJ/SP/SPPH/TORPR tetap **5/5/3/6**. Median controller/render pada sampel ini masing-masing 26,91 / 28,98 / 26,60 / 21,42 ms.
+
+Angka profil tersebut tidak mencakup bootstrap HTTP penuh, middleware/terminate, TLS/jaringan, rendering GPU, atau FPS perangkat. Itu bukan jaminan latensi end-to-end atau performa pada semua laptop. Tidak dilakukan stress test production maupun pengiriman chat percobaan atas nama pengguna.
 
 ## Catatan penggunaan
 
