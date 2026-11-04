@@ -87,6 +87,11 @@ Route::post('/procurement-workspace/{page}', [\App\Http\Controllers\ProcurementW
     ->whereIn('page', ['ppbj', 'sp', 'spph'])->middleware(['auth', 'dept:umum', 'throttle:20,1'])->name('procurement.workspace.save');
 
 Route::middleware(['auth', 'readonly.block'])->group(function () {
+    Route::get('/virtual-office', [\App\Http\Controllers\VirtualOfficeController::class, 'index'])
+        ->name('virtual-office.index');
+    Route::get('/virtual-office/presence', [\App\Http\Controllers\VirtualOfficeController::class, 'presence'])
+        ->middleware([\App\Http\Middleware\DisableLoggingForPolling::class, 'throttle:20,1'])
+        ->name('virtual-office.presence');
     Route::get('/archive-gateway', ArchiveDownloadGatewayController::class)
         ->name('archive.gateway')
         ->middleware('throttle:20,1');

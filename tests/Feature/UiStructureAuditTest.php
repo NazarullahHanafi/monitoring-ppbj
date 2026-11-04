@@ -33,6 +33,7 @@ class UiStructureAuditTest extends TestCase
             ['collaboration-calendar.index', $general], ['collaboration-inbox.index', $general],
             ['approval.pr.index', $general], ['owner.index', $general],
             ['torpr.index', $operational], ['tracking.index', $operational],
+            ['virtual-office.index', $general],
         ] as [$name, $user]) {
             $html = $this->actingAs($user)->get(route($name))->assertOk()->getContent();
             $document = new DOMDocument;

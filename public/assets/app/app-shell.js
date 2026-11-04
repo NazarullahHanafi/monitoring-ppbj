@@ -87,6 +87,12 @@
             var MY_GENDER = APP_SHELL.userGender || null, MY_NAME = APP_SHELL.userName || 'User', MOOD_ENABLED = APP_SHELL.moodEnabled !== false;
             var tm = null, pO = false, myM = null, mC = false, mS = false, moodCheckAttempts = 0, moodCheckTimer = null, heartbeatRequest = null;
             window._presenceUsers = [];
+            var lastPresenceActivity = Date.now();
+            window.SimonPresenceIdle = function () { return Date.now() - lastPresenceActivity >= 180000; };
+            // No input values, key names, or mouse coordinates are recorded.
+            ['pointerdown', 'pointermove', 'keydown', 'touchstart', 'scroll'].forEach(function (eventName) {
+                document.addEventListener(eventName, function () { lastPresenceActivity = Date.now(); }, { passive: true });
+            });
             function eH(s) { return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;') }
             function moodText(mood) { for (var mi = 0; mi < MO.length; mi++) { if (MO[mi].e === mood) return MO[mi].l + ' — ' + MO[mi].d } return mood || '' }
             function ensurePresenceScrollTools() {
@@ -138,7 +144,7 @@
                 var lease = window.SimonBackgroundReads.begin('presence-heartbeat');
                 if (!lease) return;
                 heartbeatRequest = lease;
-                fetch(UH, {method: 'POST', signal: lease.signal, headers: {'X-CSRF-TOKEN': CSRF, 'Accept': 'application/json'}})
+                fetch(UH, {method: 'POST', signal: lease.signal, headers: {'X-CSRF-TOKEN': CSRF, 'Accept': 'application/json', 'Content-Type': 'application/json'}, body: JSON.stringify({idle: window.SimonPresenceIdle()})})
                     .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
                     .then(function (d) { if (lease.current() && Array.isArray(d.online)) { render(d.online); ensurePresenceScrollTools(); } })
                     .catch(function () {}).finally(function () { lease.release(); if (heartbeatRequest === lease) heartbeatRequest = null; });
@@ -1389,6 +1395,18 @@
                 window._chatOpen = true;
             }
             window._chatOpen = false; window._chatToggle = doToggle;
+            window.SimonOfficeMention = function (user) {
+                if ((window.APP_SHELL_CONFIG || {}).readOnly || !inp || !user || !Number.isInteger(Number(user.id)) || Number(user.id) <= 0) return false;
+                var name = String(user.name || '').slice(0, 100);
+                if (!name || inp.value.length + name.length + 3 > MAX_LEN) return false;
+                if (!chatOpen) doToggle();
+                if (chatMinimized) restoreChat();
+                if (inp.value && !/\s$/.test(inp.value)) inp.value += ' ';
+                inp.selectionStart = inp.selectionEnd = inp.value.length;
+                mentionState.start = undefined;
+                insertMention(user.id, name);
+                return true;
+            };
             window._chatHandleEscape = function () { if (chatFullscreen) setChatFullscreen(false); else closeChat() };
 
             function startPoll() { if (chatTimer) return; chatTimer = setInterval(function () { loadMessages(false) }, 8000) }

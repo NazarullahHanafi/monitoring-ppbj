@@ -1,6 +1,6 @@
 {
   "resources/css/app.css": {
-    "file": "assets/app-b7mCpKKM.css",
+    "file": "assets/app-BOo76kZH.css",
     "src": "resources/css/app.css",
     "isEntry": true,
     "name": "app",
@@ -13,5 +13,23 @@
     "name": "app",
     "src": "resources/js/app.js",
     "isEntry": true
+  },
+  "resources/js/virtual-office-scene.js": {
+    "file": "assets/virtual-office-scene-D6Gqn_6L.js",
+    "name": "virtual-office-scene",
+    "src": "resources/js/virtual-office-scene.js",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/virtual-office.js"
+    ]
+  },
+  "resources/js/virtual-office.js": {
+    "file": "assets/virtual-office-BCseaRI3.js",
+    "name": "virtual-office",
+    "src": "resources/js/virtual-office.js",
+    "isEntry": true,
+    "dynamicImports": [
+      "resources/js/virtual-office-scene.js"
+    ]
   }
 }

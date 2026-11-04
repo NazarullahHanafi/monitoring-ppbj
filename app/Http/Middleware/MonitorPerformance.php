@@ -99,6 +99,7 @@ class MonitorPerformance
             'presence/mood',
             'presence/mood/*',
             'activity-broadcast/feed',
+            'virtual-office/presence',
             'archive-gateway',
             'chat/messages',
             'chat/mentions/unread',

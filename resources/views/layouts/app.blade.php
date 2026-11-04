@@ -99,6 +99,7 @@
                     </svg></button>
             </div>
             <nav class="px-3 py-4 space-y-1 overflow-y-auto custom-scrollbar flex-1">
+                @includeIf('virtual-office.nav')
                 @if(auth()->user()?->department === 'umum')
                     <a href="{{ route('dashboard.indexumum') }}"
                         class="nav-item group flex items-center gap-3 px-4 py-3 rounded-xl {{ request()->is('dashboard*') ? 'active' : 'text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-blue-600 dark:hover:text-blue-400' }}"><span
@@ -230,6 +231,7 @@
                         </svg></button>
                 </div>
                 <nav class="px-3 py-4 space-y-1 overflow-y-auto h-[calc(100%-4rem)]">
+                    @includeIf('virtual-office.nav')
                     @if(auth()->user()?->department === 'umum')
                         <a href="{{ route('dashboard.indexumum') }}"
                             class="nav-item block px-4 py-3 rounded-xl {{ request()->is('dashboard*') ? 'active' : 'text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-blue-900/20' }}"><span
@@ -577,6 +579,7 @@
             userGender: @json(auth()->user()->gender ?? null),
             userName: @json(auth()->user()->name ?? 'User'),
             moodEnabled: @json($moodFeatureEnabled),
+            readOnly: @json((bool) auth()->user()?->isReadOnly()),
             approvalCountUrl: @json(auth()->user()?->department === 'umum' ? route('approval.pr.pendingCount') : null)
         });
     </script>

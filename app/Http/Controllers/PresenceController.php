@@ -29,6 +29,7 @@ class PresenceController extends Controller
 
     public function heartbeat(Request $request)
     {
+        $request->validate(['idle' => ['sometimes', 'boolean']]);
         $user = Auth::user();
         $this->markLastSeen($user);
 
@@ -53,6 +54,7 @@ class PresenceController extends Controller
                     'initials' => $this->initials($user->name),
                     'color' => $this->colorFor($user->id),
                     'mood' => $mood,
+                    'idle' => $request->boolean('idle'),
                 ],
                 self::PRESENCE_TTL
             );

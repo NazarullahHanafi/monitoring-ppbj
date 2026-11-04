@@ -6,6 +6,9 @@
 *.md diff=markdown
 *.php diff=php
 
+# Generated three.js bundles contain upstream GLSL whitespace inside string literals.
+public/build/assets/virtual-office-scene-*.js -whitespace linguist-generated=true
+
 /.github export-ignore
 CHANGELOG.md export-ignore
 .styleci.yml export-ignore

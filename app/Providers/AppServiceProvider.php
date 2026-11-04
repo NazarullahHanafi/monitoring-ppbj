@@ -33,6 +33,10 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        // Directory contains presentation fields only; heartbeat's raw SQL last-seen
+        // updates do not invalidate it. Account edits/locks do invalidate it.
+        User::saved(fn () => Cache::forget(\App\Services\VirtualOfficePresence::DIRECTORY_KEY));
+        User::deleted(fn () => Cache::forget(\App\Services\VirtualOfficePresence::DIRECTORY_KEY));
         // ✅ Hapus presence saat user logout
         \Event::listen(Logout::class, function (Logout $event) {
             if ($event->user && isset($event->user->id)) {
