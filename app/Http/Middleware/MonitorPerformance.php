@@ -124,7 +124,7 @@ class MonitorPerformance
             return true;
         }
 
-        if (preg_match('#/(?:\.env|\.git|\.svn|\.hg)(?:/|$)#', $path) === 1) {
+        if (preg_match('#/\.(?!well-known(?:/|$))#', $path) === 1) {
             return true;
         }
 

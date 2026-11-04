@@ -19,6 +19,8 @@ class SecurityScannerProtectionTest extends TestCase
             '/wp-content/plugins/hellopress/wp_filemanager.php',
             '/wp-login.php',
             '/.env',
+            '/.env.production.backup',
+            '/nested/.git/config',
             '/random/dragonshell.php',
         ] as $path) {
             $this->assertTrue(
@@ -42,5 +44,32 @@ class SecurityScannerProtectionTest extends TestCase
         $this->assertStringContainsString('RewriteCond %{HTTPS} !=on', $rules);
         $this->assertStringContainsString('Header unset X-Powered-By', $rules);
         $this->assertStringContainsString('Header always unset X-Powered-By', $rules);
+    }
+
+    public function test_apache_denies_sensitive_static_files_but_keeps_acme_and_assets_available(): void
+    {
+        $rules = file_get_contents(public_path('.htaccess'));
+        preg_match_all('/^\s*RewriteRule\s+(\S+)\s+-\s+\[R=404,L(?:,NC)?\]/m', $rules, $matches);
+        $blocked = function (string $path) use ($matches): bool {
+            foreach ($matches[1] as $pattern) {
+                // The bare ^ rule has an IP RewriteCond; it is not unconditional.
+                if ($pattern === '^') {
+                    continue;
+                }
+                if (preg_match('~'.$pattern.'~i', ltrim($path, '/')) === 1) {
+                    return true;
+                }
+            }
+
+            return false;
+        };
+
+        foreach (['/.env.production.backup', '/.git/config', '/.htaccess.backup', '/error_log', '/error_log.1',
+            '/backup.sql', '/database.sqlite', '/debug.log', '/config.php.bak'] as $path) {
+            $this->assertTrue($blocked($path), 'Sensitive static file must be blocked: '.$path);
+        }
+        foreach (['/.well-known/acme-challenge/test', '/assets/app-shell.js', '/images/logo4.png', '/build/manifest.json', '/index.php'] as $path) {
+            $this->assertFalse($blocked($path), 'Public asset must remain available: '.$path);
+        }
     }
 }

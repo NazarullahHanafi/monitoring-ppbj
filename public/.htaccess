@@ -22,7 +22,8 @@
 
     # Jangan izinkan file konfigurasi, repository, atau tool development
     # diakses dari web walaupun suatu saat tidak sengaja ikut terunggah.
-    RewriteRule (^|/)\.(?:env|git|svn|hg)(?:/|$) - [R=404,L,NC]
+    RewriteRule (^|/)\.(?!well-known(?:/|$)) - [R=404,L,NC]
+    RewriteRule (^|/)(?:error_log(?:[.-][^/]*)?|[^/]+\.(?:sql|sqlite3?|bak|backup|old|orig|log))(?:/|$) - [R=404,L,NC]
     RewriteRule ^(?:artisan|composer\.(?:json|lock)|package(?:-lock)?\.json|phpunit\.xml(?:\.dist)?|vite\.config\.js)$ - [R=404,L,NC]
 
     # Semua halaman dan cookie autentikasi wajib melewati HTTPS.

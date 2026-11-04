@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Torpr;
 use App\Services\PrArchiveService;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Request;
@@ -23,6 +24,17 @@ class ArchiveDownloadGatewayController extends Controller
             'file' => ['required', 'string', 'max:160', 'regex:/^[A-Za-z0-9._:-]+$/'],
             'action' => ['required', Rule::in(['preview', 'download', 'package'])],
         ]);
+
+        $user = $request->user();
+        abort_unless(in_array($user?->department, ['umum', 'operasional'], true), 403);
+        if ($user->department === 'operasional') {
+            // Match the ownership boundary of TORPR's archive metadata endpoint.
+            // Check before reading even warm API metadata or resolving file IDs.
+            abort_unless(Torpr::query()
+                ->where('created_by_user_id', $user->id)
+                ->where('nomor_pr', trim($validated['pr']))
+                ->exists(), 403);
+        }
 
         // PrArchiveService caches metadata for less time than the archive signature lifetime.
         // Reusing that short cache keeps downloads fast while an old page still receives a
