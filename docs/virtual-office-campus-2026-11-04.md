@@ -30,3 +30,21 @@ Pengujian mencakup batas waktu WIB, ukuran denah pada kamera mobile, geometri va
 Pratinjau browser langsung belum dapat diverifikasi karena alat browser gagal membaca tab. Pengujian scene memakai Three.js asli dengan renderer pengujian; ini memeriksa geometri dan lifecycle, bukan screenshot, frame GPU nyata atau FPS perangkat pengguna.
 
 Validasi lokal akhir: **461 tes PHP / 2.893 assertion**, **99 tes JavaScript**, build Vite berhasil, dan `git diff --check` bersih. Chunk grafis sekitar 575 KB minified / 147 KB gzip dan tetap lazy; entry office sekitar 21 KB / 8 KB gzip. Stylesheet dan entry JavaScript halaman inti tidak berubah.
+
+## Verifikasi hosting
+
+Rilis aplikasi `704f0b9` terpasang pada hosting PHP 8.3.36. Backup privat kode, aset dan database tersedia pada `deployment-artifacts/office-campus-20261104-170927`. Dump database sebelum migrasi 4.558.468 byte, mode file 0600 dan direktori 0700; berkas kredensial sementara sudah dihapus. Migrasi tambahan berhasil sebelum kode baru dipublikasikan. Cache aplikasi/routes/views dan autoload telah dibangun kembali. Aset lama dipertahankan di webroot untuk tab lama.
+
+Health HTTP 200; login 200; kantor tanpa login 302; feed serta jurnal tanpa login 401. SHA-256 CSS office, shell, stylesheet aplikasi, entry office dan chunk 3D yang diunduh melalui HTTP cocok dengan berkas production. Jadwal retensi 02.30 terdaftar.
+
+| Sampel baca controller | Waktu (ms) | SQL | Hasil |
+| --- | ---: | ---: | --- |
+| Feed cold-cache | 16,64 | 1 | 22 anggota, 6.059 byte, tanpa email/role/password/IP |
+| Feed warm-cache | 1,61 | 0 | Semua profil avatar dan flag berbagi tersedia |
+| Halaman Umum | 24,15 | 2 | Editor tersedia, chunk grafis tidak dipreload |
+| Halaman Operasional | 7,06 | 1 | Editor tersedia, chunk grafis tidak dipreload |
+| Jurnal sendiri | 15,28 | 2 | 200, kosong sebelum ada kunjungan nyata |
+
+Angka tersebut merupakan sampel controller/render, bukan latensi HTTP menyeluruh atau FPS. Profil tidak menjalankan terminating middleware dan tidak membuat kunjungan palsu atau mengubah preferensi pengguna production. Pemakaian SQL per halaman bertambah satu pembacaan profil sendiri; halaman inti lain tidak memuat profil atau grafis office.
+
+Whitelist menu juga mencakup TORPR Operasional dan Command Center. Pemutakhiran kecil whitelist diuji kembali bersama tes office. Karena autentikasi SSH GitHub pada hosting menolak key, fetch rilis memakai HTTPS repository publik tanpa mengubah remote atau menambahkan kredensial.

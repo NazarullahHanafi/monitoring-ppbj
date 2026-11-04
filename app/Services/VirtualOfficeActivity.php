@@ -15,6 +15,7 @@ class VirtualOfficeActivity
         'spph' => 'SPPH', 'tracking-pr' => 'Tracking PR', 'dashboard' => 'Dashboard',
         'collaboration-calendar' => 'Kalender Bersama', 'collaboration-inbox' => 'Action Inbox',
         'procurement-documents' => 'Dokumen Pengadaan',
+        'torpr' => 'TOR / Purchase Requisition', 'command-center' => 'Command Center',
     ];
 
     public static function menuForRoute(?string $route): ?string

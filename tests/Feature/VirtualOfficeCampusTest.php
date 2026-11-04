@@ -105,6 +105,8 @@ class VirtualOfficeCampusTest extends TestCase
         $this->assertNull(VirtualOfficeActivity::menuForRoute('owner.index'));
         $this->assertSame('dashboard', VirtualOfficeActivity::menuForRoute('ops.dashboard'));
         $this->assertSame('tracking-pr', VirtualOfficeActivity::menuForRoute('tracking.index'));
+        $this->assertSame('torpr', VirtualOfficeActivity::menuForRoute('torpr.index'));
+        $this->assertSame('command-center', VirtualOfficeActivity::menuForRoute('command-center.index'));
     }
 
     public function test_retention_prunes_only_old_office_visits(): void
