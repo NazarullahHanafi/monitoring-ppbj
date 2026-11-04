@@ -13,7 +13,7 @@ export const games = [
     { id: 'arcade', name: 'Arcade Racing', icon: '🎮', x: -12, z: 41, kind: 'table' },
     { id: 'bowling', name: 'Bowling', icon: '🎳', x: 12, z: 41, kind: 'court' },
 ];
-export const poseLabel = { working: 'Di meja kerja', coffee: 'Menikmati kopi', eating: 'Menikmati camilan', sleeping: 'Pulang / beristirahat (17.00–07.00 WIB)', playing: 'Bermain di taman rekreasi' };
+export const poseLabel = { working: 'Di meja kerja', coffee: 'Menikmati kopi', eating: 'Menikmati camilan', resting: 'Bersantai di lounge', sleeping: 'Tidur di rumah pribadi (17.00–07.00 WIB)', playing: 'Bermain di taman rekreasi' };
 export function isOfficeNight(date = new Date()) {
     const hour = (date.getUTCHours() + 7) % 24;
     return hour >= 17 || hour < 7;
@@ -26,7 +26,7 @@ export function gameFor(person, date = new Date()) {
 }
 export function poseFor(person, date = new Date()) {
     if (person.state === 'offline') return isOfficeNight(date) ? 'sleeping' : 'playing';
-    if (person.state === 'idle') return ['coffee', 'eating', 'sleeping'][Number(person.id) % 3];
+    if (person.state === 'idle') return ['coffee', 'eating', 'resting'][Number(person.id) % 3];
     return 'working';
 }
 export function initials(name) { return String(name || '').trim().split(/\s+/u).slice(0, 2).map(x => Array.from(x)[0] || '').join('').toLocaleUpperCase('id'); }

@@ -23,7 +23,7 @@ test('office uses distinct illustrative resting poses and validates bounded pres
     assert.equal(poseFor({ id: 1, state: 'offline' }, new Date('2026-11-03T23:59:59Z')), 'sleeping');
     assert.equal(poseFor({ id: 1, state: 'offline' }, new Date('2026-11-04T09:59:59Z')), 'playing');
     assert.equal(poseFor({ id: 1, state: 'online' }), 'working');
-    assert.deepEqual([0, 1, 2].map(id => poseFor({ id, state: 'idle' })), ['coffee', 'eating', 'sleeping']);
+    assert.deepEqual([0, 1, 2].map(id => poseFor({ id, state: 'idle' })), ['coffee', 'eating', 'resting']);
     assert.equal(initials('  Putri  Bunga  '), 'PB');
     const base = { id: 1, department: 'umum', name: '<img src=x onerror=alert(1)>', state: 'online', email: 'private@example.test', role: 'superadmin' };
     const valid = safePeople({ people: [base, base, { ...base, id: -1 }, { ...base, id: 2, department: 'other' }, { ...base, id: 3, state: 'invented' }] });

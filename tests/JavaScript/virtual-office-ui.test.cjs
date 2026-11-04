@@ -23,7 +23,7 @@ async function fixture({ canChat = true } = {}) {
     }
     const get = id => { if (!nodes.has(id)) nodes.set(id, new Element(id)); return nodes.get(id); };
     const filters = ['all', 'umum', 'operasional'].map(value => Object.assign(new Element(), { dataset: { voFilter: value } }));
-    const rooms = ['all', 'umum', 'operasional', 'lounge'].map(value => Object.assign(new Element(), { dataset: { voRoom: value } }));
+    const rooms = ['all', 'umum', 'operasional', 'lounge', 'residences'].map(value => Object.assign(new Element(), { dataset: { voRoom: value } }));
     get('virtualOffice').querySelectorAll = selector => selector.includes('filter') ? filters : rooms;
     const people = [{ id: 1, name: '<svg onload=alert(1)>', department: 'umum', state: 'idle', mood: '☕', is_me: false },
         { id: 2, name: 'My account', department: 'operasional', state: 'online', mood: '', is_me: true }];
@@ -33,7 +33,7 @@ async function fixture({ canChat = true } = {}) {
     const document = { hidden: false, activeElement: null, fullscreenElement: null, getElementById: get,
         createElement: () => new Element(), createTextNode: text => Object.assign(new Element(), { textContent: text }),
         querySelector: () => ({ content: 'test-csrf-token' }), addEventListener: (name, fn) => (documentEvents[name] ??= []).push(fn) };
-    const sceneState = { disposed: 0, visible: [], people: [], rooms: [] };
+    const sceneState = { disposed: 0, visible: [], people: [], rooms: [], homes: [] };
     let resolveScene;
     const scenePromise = new Promise(resolve => { resolveScene = resolve; });
     const window = { location: { origin: 'https://simon.example.test' }, matchMedia: () => ({ matches: false, addEventListener() {} }),
@@ -48,7 +48,7 @@ async function fixture({ canChat = true } = {}) {
     return { get, people, calls, filters, rooms, requests, sceneState, timers,
         search(value) { get('voSearch').value = value; get('voSearch').events.input[0](); },
         hide(hidden) { document.hidden = hidden; (documentEvents.visibilitychange || []).forEach(fn => fn()); },
-        resolveScene() { resolveScene({ createOfficeScene: () => ({ setPeople: values => sceneState.people.push(values), setPaused() {}, setVisible: value => sceneState.visible.push(value), dispose: () => sceneState.disposed++, focusRoom: value => sceneState.rooms.push(value), select() {}, resize() {} }) }); } };
+        resolveScene() { resolveScene({ createOfficeScene: () => ({ setPeople: values => sceneState.people.push(values), setPaused() {}, setVisible: value => sceneState.visible.push(value), dispose: () => sceneState.disposed++, focusRoom: value => sceneState.rooms.push(value), visitHome: id => sceneState.homes.push(id), select() {}, resize() {} }) }); } };
 }
 test('office displays hostile names as inert text, filters locally and never sends a chat automatically', async () => {
     const f = await fixture(); assert.equal(f.requests.length, 0); assert.equal(f.get('voPeople').children.length, 2);
@@ -76,6 +76,14 @@ test('selecting a game from lightweight mode retains the requested focus after l
     const f = await fixture(); assert.equal(f.get('voGames').children.length, 12);
     f.get('voGames').children[1].click(); f.resolveScene(); await tick();
     assert.equal(f.sceneState.rooms.at(-1), 'badminton'); f.hide(true);
+});
+
+test('visiting a private home from lightweight mode retains its owner after lazy loading', async () => {
+    const f = await fixture(); f.get('voPeople').children.find(p => p.dataset.personId === 1).click();
+    f.get('voVisitHome').click(); f.resolveScene(); await tick();
+    assert.equal(f.sceneState.rooms.at(-1), 'residences'); assert.equal(f.sceneState.homes.at(-1), 1);
+    assert.equal(f.requests.length, 0, 'Visiting a virtual home does not send a request or change real presence.');
+    f.get('voCloseDetail').click(); assert.equal(f.get('voDetail').hidden, true); f.hide(true);
 });
 
 test('changing selected person cancels the journal request and ignores its late result', async () => {

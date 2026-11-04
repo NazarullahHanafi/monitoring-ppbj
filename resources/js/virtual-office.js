@@ -7,7 +7,7 @@ if (root && !root.dataset.initialized) {
     const config = JSON.parse($('voConfig').textContent);
     const palette = ['#dce9df', '#eadfcc', '#dde5f1', '#e8dce5', '#d3e8e4', '#f0dfce'];
     let people = [], filter = 'all', selected = null, scene = null, sceneTicket = 0, sceneLoading = false, inView = true, leftPage = false;
-    let requestedRoom = 'all';
+    let requestedRoom = isOfficeNight() ? 'residences' : 'all', requestedHome = null;
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
     let paused = reduced.matches, mode = '3d';
     try { if (localStorage.getItem('simonpr:office:view') === 'list') mode = 'list'; } catch {}
@@ -28,7 +28,7 @@ if (root && !root.dataset.initialized) {
         const button = document.createElement('button'); button.type = 'button'; button.className = 'vo-person';
         button.dataset.personId = person.id; button.setAttribute('aria-pressed', String(selected === person.id));
         const avatar = document.createElement('span'); avatar.className = 'vo-person-avatar'; avatar.style.setProperty('--avatar-bg', palette[person.id % palette.length]); avatar.textContent = initials(person.name);
-        const pose = document.createElement('small'); pose.textContent = person.state === 'offline' ? '💤' : person.state === 'idle' ? (poseFor(person) === 'coffee' ? '☕' : poseFor(person) === 'eating' ? '🍽' : '💤') : person.mood || '';
+        const pose = document.createElement('small'), posture = poseFor(person); pose.textContent = posture === 'sleeping' ? '🏠' : posture === 'playing' ? gameFor(person).icon : posture === 'coffee' ? '☕' : posture === 'eating' ? '🍽' : posture === 'resting' ? '🛋' : person.mood || '';
         avatar.append(pose);
         const info = document.createElement('span'); info.className = 'vo-person-info';
         const name = document.createElement('b'); name.textContent = person.name;
@@ -51,7 +51,7 @@ if (root && !root.dataset.initialized) {
     }
     function select(id, focus = false) {
         const person = people.find(p => p.id === id); if (!person) return;
-        if (selected !== id) { stopActivity(); $('voActivityList').replaceChildren(); text('voActivityStatus', 'Pilih tanggal lalu lihat aktivitas menu.'); }
+        if (selected !== id) { requestedHome = null; stopActivity(); $('voActivityList').replaceChildren(); text('voActivityStatus', 'Pilih tanggal lalu lihat aktivitas menu.'); }
         selected = id; $('voDetail').hidden = false;
         portrait($('voDetailAvatar'), person.avatar);
         text('voDetailDept', person.department === 'umum' ? 'BIDANG UMUM' : 'BIDANG OPERASIONAL');
@@ -59,6 +59,7 @@ if (root && !root.dataset.initialized) {
         text('voCurrentMenu', person.state === 'offline' ? 'Offline · menu tidak dilacak' : person.current_menu || (person.share_activity ? 'Belum tersedia / halaman lain' : 'Aktivitas tidak dibagikan'));
         $('voEditOwnAvatar').hidden = !person.is_me;
         text('voDetailMood', person.mood || '✧');
+        text('voHomeStatus', poseFor(person) === 'sleeping' ? 'Penghuni beristirahat di kasur rumahnya. Pilih Lihat rumah untuk membuka tampilan interior.' : 'Rumah pribadi tetap tersedia; penghuni sedang berada di area lain.');
         text('voDetailNote', 'Kehadiran mengikuti heartbeat aplikasi. Pose avatar hanya ilustrasi; tidak menunjukkan aktivitas fisik atau produktivitas anggota tim.');
         $('voChat').disabled = !config.canChat || person.is_me;
         text('voChatNote', !config.canChat ? 'Mode Viewer: Anda dapat melihat tim, tanpa mengirim pesan.' : person.is_me ? 'Ini adalah avatar Anda di ruang virtual.' : 'Membuka draf mention; pesan dikirim setelah Anda menekan Kirim.');
@@ -79,7 +80,7 @@ if (root && !root.dataset.initialized) {
         if (selected !== null && !people.some(p => p.id === selected)) { selected = null; $('voDetail').hidden = true; }
         renderPeople(); scene?.setPeople(people);
         if (selected !== null) select(selected);
-        text('voDayPhase', isOfficeNight() ? '17.00–07.00 WIB · avatar offline beristirahat' : '07.00–17.00 WIB · avatar offline berekreasi');
+        text('voDayPhase', isOfficeNight() ? '17.00–07.00 WIB · tidur di rumah masing-masing' : '07.00–17.00 WIB · avatar offline berekreasi');
     }
     let feedUrl;
     try { feedUrl = new URL(config.feedUrl, window.location.origin); if (feedUrl.origin !== window.location.origin || feedUrl.pathname !== '/virtual-office/presence') throw new Error('Alamat kehadiran tidak valid.'); }
@@ -101,6 +102,7 @@ if (root && !root.dataset.initialized) {
             scene.setPeople(people); scene.setPaused(paused); scene.setVisible(visible());
             scene.focusRoom(requestedRoom);
             if (selected) scene.select(selected, true);
+            if (requestedHome !== null) scene.visitHome?.(requestedHome);
         } catch {
             if (ticket === sceneTicket) { switchView('list', false); text('voSync', 'Ruang 3D belum dapat dibuka. Mode ringan tetap tersedia.'); }
         } finally { if (ticket === sceneTicket) { sceneLoading = false; $('voLoading').hidden = true; } }
@@ -119,9 +121,10 @@ if (root && !root.dataset.initialized) {
     }
     $('voSearch').addEventListener('input', renderPeople);
     root.querySelectorAll('[data-vo-filter]').forEach(button => button.addEventListener('click', () => { filter = button.dataset.voFilter; root.querySelectorAll('[data-vo-filter]').forEach(b => b.setAttribute('aria-pressed', String(b === button))); renderPeople(); }));
-    function focusArea(room) { requestedRoom = room; if (mode !== '3d') switchView('3d'); scene?.focusRoom(room); }
+    function focusArea(room) { requestedRoom = room; requestedHome = null; if (mode !== '3d') switchView('3d'); scene?.focusRoom(room); }
     root.querySelectorAll('[data-vo-room]').forEach(button => button.addEventListener('click', () => { root.querySelectorAll('[data-vo-room]').forEach(b => b.setAttribute('aria-pressed', String(b === button))); focusArea(button.dataset.voRoom); }));
-    $('voCloseDetail').addEventListener('click', () => { stopActivity(); selected = null; $('voDetail').hidden = true; scene?.select(null); renderPeople(); });
+    $('voCloseDetail').addEventListener('click', () => { stopActivity(); selected = null; requestedHome = null; $('voDetail').hidden = true; scene?.select(null); renderPeople(); });
+    $('voVisitHome').addEventListener('click', () => { if (selected === null) return; const id = selected; focusArea('residences'); requestedHome = id; scene?.visitHome?.(id); text('voSceneHint', 'Interior rumah terpilih · tutup detail untuk menutup atap kembali'); });
     $('voView3d').addEventListener('click', () => switchView('3d')); $('voViewList').addEventListener('click', () => switchView('list'));
     $('voZoomIn').addEventListener('click', () => scene?.zoom(.82)); $('voZoomOut').addEventListener('click', () => scene?.zoom(1.22)); $('voReset').addEventListener('click', () => focusArea('all'));
     function motionButton() { $('voMotion').setAttribute('aria-pressed', String(paused)); $('voMotion').setAttribute('aria-label', paused ? 'Lanjutkan animasi' : 'Jeda animasi'); $('voMotion').textContent = paused ? '▷' : 'Ⅱ'; }
@@ -211,5 +214,6 @@ if (root && !root.dataset.initialized) {
     window.addEventListener('pagehide', () => { leftPage = true; loop.stop(); stopActivity(); avatarRequest?.abort(); scene?.setVisible(false); });
     window.addEventListener('pageshow', event => { if (event.persisted) { leftPage = false; lifecycle(); } });
     if ('IntersectionObserver' in window) { const observer = new IntersectionObserver(entries => { const next = entries[0].isIntersecting; if (next !== inView) { inView = next; lifecycle(); } }, { rootMargin: '120px' }); observer.observe($('voWorkspace')); }
+    root.querySelectorAll('[data-vo-room]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.voRoom === requestedRoom)));
     apply(config.initial); motionButton(); switchView(mode, false); if (feedUrl) loop.start();
 }

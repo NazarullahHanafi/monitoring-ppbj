@@ -3,11 +3,12 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { poseFor, games, gameFor, safeAvatar, isOfficeNight } from './virtual-office-state.js';
+import { createResidences } from './virtual-office-residences.js';
 
 // Original procedural scene: no models, textures, or code from the reference site.
 // Static furniture is batched by material; animation is capped at 30fps / 24 avatars.
 export function createOfficeScene({ host, labels, onSelect, onFailure,
-    rendererFactory = options => new THREE.WebGLRenderer(options), controlsFactory = (camera, element) => new OrbitControls(camera, element) }) {
+    rendererFactory = options => new THREE.WebGLRenderer(options), controlsFactory = (camera, element) => new OrbitControls(camera, element), getDate = () => new Date() }) {
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(36, 1, .1, 1200);
     const renderer = rendererFactory({ antialias: true, alpha: false, powerPreference: 'low-power' });
@@ -212,6 +213,7 @@ export function createOfficeScene({ host, labels, onSelect, onFailure,
     for (const [x, z, scale] of [[-18, -11.6, 1.1], [18, -11.6, 1.1], [-1.6, -12, .8], [1.6, -12, .8], [-18, 1.5, 1.1], [18, 1.5, 1.1], [-18, 11.5, 1.3], [18, 11.5, 1.2], [3, 3, .9], [3, 11, .9]]) plant(x, z, scale);
     for (const [key, parts] of batches) { const combined = mergeGeometries(parts, false); parts.forEach(g => g.dispose()); if (combined) { ownedGeometries.add(combined); scene.add(new THREE.Mesh(combined, material(key))); } }
     batches.clear();
+    const residences = createResidences({ scene, material, ownedGeometries });
     // A soft ambient contact shadow is one small procedural texture, no shadow-map pass.
     const shadowCanvas = document.createElement('canvas'); shadowCanvas.width = shadowCanvas.height = 128;
     const shadowCtx = shadowCanvas.getContext('2d'), gradient = shadowCtx.createRadialGradient(64, 64, 7, 64, 64, 64); gradient.addColorStop(0, '#16382f35'); gradient.addColorStop(1, '#16382f00'); shadowCtx.fillStyle = gradient; shadowCtx.fillRect(0, 0, 128, 128);
@@ -246,7 +248,8 @@ export function createOfficeScene({ host, labels, onSelect, onFailure,
         if (appearance.hair !== 'short') for (const side of [-1, 1]) avatarPart(head, 'box', [.09, appearance.hair === 'bob' ? .4 : .53, .32], hairColor, [side * .235, -.01, -.03]);
         if (appearance.hair === 'ponytail') avatarPart(head, 'box', [.24, .53, .22], hairColor, [0, -.02, -.35]);
         if (appearance.hair === 'hijab') avatarPart(body, 'box', [.58, .18, .43], hairColor, [0, 1.44, -.04]);
-        for (const x of [-.095, .095]) avatarPart(head, 'box', [.035, .045, .025], '#263833', [x, .035, .205]);
+        const eyes = [];
+        for (const x of [-.095, .095]) eyes.push(avatarPart(head, 'box', [.035, .045, .025], '#263833', [x, .035, .205]));
         avatarPart(head, 'box', [.09, .02, .025], feminine ? '#b96f78' : '#9c6d58', [0, -.105, .21]);
         if (feminine) for (const x of [-.14, .14]) avatarPart(head, 'box', [.065, .025, .02], '#d39589', [x, -.065, .21]);
         if (appearance.accessory === 'glasses') {
@@ -260,8 +263,8 @@ export function createOfficeScene({ host, labels, onSelect, onFailure,
             avatarPart(arm, 'box', [.17, .4, .2], shirt, [0, -.19, 0]);
             avatarPart(arm, 'box', [.15, .27, .16], skin, [0, -.45, .05]); arms.push(arm);
         }
-        const legs = [];
-        for (const x of [-.14, .14]) { const leg = new THREE.Group(); leg.position.set(x, .83, 0); body.add(leg); avatarPart(leg, 'box', [.18, .64, .2], '#35463f', [0, -.32, 0]); avatarPart(leg, 'box', [.23, .14, .34], appearance.outfit === 'sport' ? 'white' : '#24352f', [0, -.7, .07]); legs.push(leg); }
+        const legs = [], shoes = [];
+        for (const x of [-.14, .14]) { const leg = new THREE.Group(); leg.position.set(x, .83, 0); body.add(leg); avatarPart(leg, 'box', [.18, .64, .2], '#35463f', [0, -.32, 0]); shoes.push(avatarPart(leg, 'box', [.23, .14, .34], appearance.outfit === 'sport' ? 'white' : '#24352f', [0, -.7, .07])); legs.push(leg); }
         const cup = avatarPart(arms[1], 'sphere', [.12], 'white', [0, -.49, .14]);
         const plate = avatarPart(arms[0], 'box', [.35, .045, .24], 'white', [0, -.43, .23]);
         const racket = new THREE.Group(); arms[1].add(racket); racket.position.set(0, -.48, .16);
@@ -275,13 +278,16 @@ export function createOfficeScene({ host, labels, onSelect, onFailure,
         const dot = document.createElement('i'), name = document.createElement('span'), icon = document.createElement('small'); label.append(dot, name, icon); labels.append(label);
         label.addEventListener('click', () => onSelect(person.id));
         group.traverse(obj => { if (obj.isMesh) obj.userData.personId = person.id; });
-        return { group, body, head, arms, legs, skirt, cup, plate, racket, label, dot, name, icon, ring, person, appearance: JSON.stringify(person.avatar),
+        return { group, body, head, arms, legs, shoes, eyes, skirt, cup, plate, racket, label, dot, name, icon, ring, person, appearance: JSON.stringify(person.avatar),
             privateGeometry: racketGeometry, target: new THREE.Vector3(), phase: person.id * 1.75 };
     }
     let selected = null, paused = false, visible = true, disposed = false, frame = null, lastFrame = 0, lastLabels = 0;
+    let roster = [], visitingHome = null;
     const targetFocus = new THREE.Vector3(), cameraGoal = new THREE.Vector3(); let easingCamera = false;
     function setPeople(people) {
-        const sorted = [...people].sort((a, b) => ({ online: 0, idle: 1, offline: 2 }[a.state] - { online: 0, idle: 1, offline: 2 }[b.state]) || a.id - b.id);
+        roster = people; residences.sync(people);
+        const sorted = [...people].sort((a, b) => Number(b.id === selected) - Number(a.id === selected)
+            || ({ online: 0, idle: 1, offline: 2 }[a.state] - { online: 0, idle: 1, offline: 2 }[b.state]) || a.id - b.id);
         const chosen = [], seats = { umum: 0, operasional: 0 }; let resting = 0, cafe = 0;
         for (const person of sorted) { if (chosen.length >= 24) break; if (person.state === 'online' && seats[person.department] >= 16) continue; chosen.push(person); if (person.state === 'online') seats[person.department]++; }
         const ids = new Set(chosen.map(p => p.id));
@@ -293,33 +299,39 @@ export function createOfficeScene({ host, labels, onSelect, onFailure,
             let f = figures.get(person.id), fresh = !f;
             if (!f) { f = figure(person); figures.set(person.id, f); }
             const previousGame = f.game?.id, previousPose = f.pose;
-            f.person = person; f.pose = poseFor(person); let placement;
-            f.game = gameFor(person);
+            f.person = person; f.pose = poseFor(person, getDate()); let placement;
+            f.game = gameFor(person, getDate());
             if (f.pose === 'working') { placement = desks[person.department][seats[person.department]++]; f.group.rotation.y = Math.PI; }
             else if (f.pose === 'playing') { const side = person.id % 2 ? -1 : 1; placement = [f.game.x + side * (f.game.kind === 'court' ? 3 : 0), -.12, f.game.z + side * (f.game.kind === 'court' ? 3.6 : 2.5)]; f.group.rotation.y = side < 0 ? 0 : Math.PI; }
-            else if (f.pose === 'sleeping') { const n = resting++; placement = [-15.8 + (n % 8) * 2.02, .12, 4.7 + Math.floor(n / 8) * 3.3]; f.group.rotation.y = 0; }
+            else if (f.pose === 'sleeping') { placement = residences.bed(person.id); f.group.rotation.y = 0; }
+            else if (f.pose === 'resting') { const n = resting++; placement = [-15.8 + (n % 8) * 2.02, .12, 4.7 + Math.floor(n / 8) * 3.3]; f.group.rotation.y = 0; }
             else if (cafe < 8) { const n = cafe++, table = n % 4, side = n < 4 ? 1 : -1; placement = [(table % 2 ? 13.8 : 8) + side * 1.65, .08, table < 2 ? 5.1 : 9.7]; f.group.rotation.y = side * Math.PI / 2; }
             else { const n = resting++; placement = [-15.8 + (n % 8) * 2.02, .12, 4.7 + Math.floor(n / 8) * 3.3]; f.group.rotation.y = 0; }
-            f.target.set(...placement); f.home = f.target.clone(); if (fresh || paused) f.group.position.copy(f.target);
+            f.target.set(...placement); f.home = f.target.clone(); if (fresh || paused || previousPose !== f.pose) f.group.position.copy(f.target);
             if (!fresh && f.pose === 'playing' && previousPose === 'playing' && previousGame !== f.game.id) {
                 // Route between courts via the front promenade rather than
                 // crossing desks and the building's glass partitions.
                 f.waypoints = [new THREE.Vector3(f.group.position.x, -.12, 20), new THREE.Vector3(f.home.x, -.12, 20), f.home.clone()];
             } else if (f.pose !== 'playing') f.waypoints = [];
             f.dot.className = `vo-dot ${person.state}`; f.name.textContent = person.name;
-            f.icon.textContent = `${person.state === 'offline' ? 'OFFLINE ' : person.state === 'idle' ? 'JEDA ' : 'ONLINE '}${f.pose === 'sleeping' ? '☾' : f.pose === 'playing' ? f.game.icon : f.pose === 'coffee' ? '☕' : ''}`;
+            f.icon.textContent = `${person.state === 'offline' ? 'OFFLINE ' : person.state === 'idle' ? 'JEDA ' : 'ONLINE '}${f.pose === 'sleeping' ? '☾ RUMAH' : f.pose === 'playing' ? f.game.icon : f.pose === 'coffee' ? '☕' : ''}`;
             f.label.setAttribute('aria-label', `${person.name}, ${person.state === 'online' ? 'online' : person.state === 'idle' ? 'jeda di aplikasi' : 'tidak online'}. Lihat detail anggota.`);
             f.cup.visible = f.pose === 'coffee'; f.plate.visible = f.pose === 'eating';
             f.racket.visible = f.pose === 'playing' && ['tennis', 'badminton', 'pingpong', 'golf'].includes(f.game.id);
+            f.shoes.forEach(shoe => { shoe.visible = f.pose !== 'sleeping'; });
+            f.eyes.forEach(eye => { eye.scale.y = f.pose === 'sleeping' ? .18 : 1; });
             f.ring.visible = selected === person.id; f.label.setAttribute('aria-pressed', String(selected === person.id));
         }
+        residences.select(visitingHome ?? (figures.get(selected)?.pose === 'sleeping' ? selected : null));
         requestDraw();
     }
     const point = new THREE.Vector3();
     function drawLabels() {
         const rect = host.getBoundingClientRect(), occupied = [];
         for (const f of [...figures.values()].sort((a, b) => Number(b.person.id === selected) - Number(a.person.id === selected))) {
-            f.group.getWorldPosition(point); point.y += 2.35; point.project(camera);
+            if (f.pose === 'sleeping') { const house = residences.location(f.person.id); point.set(house.x, 5.2, house.z + 1); }
+            else { f.group.getWorldPosition(point); point.y += 2.35; }
+            point.project(camera);
             const x = (point.x + 1) / 2 * rect.width, y = (1 - point.y) / 2 * rect.height;
             const width = 166, height = 27; const overlap = occupied.some(r => Math.abs(r.x - x) < width && Math.abs(r.y - y) < height);
             const show = point.z < 1 && point.z > -1 && x > 18 && x < rect.width - 18 && y > 15 && y < rect.height - 65 && (!overlap || f.person.id === selected);
@@ -342,17 +354,18 @@ export function createOfficeScene({ host, labels, onSelect, onFailure,
                 if (distance < .12) f.waypoints.shift();
                 else { f.group.rotation.y = Math.atan2(waypoint.x - f.group.position.x, waypoint.z - f.group.position.z); f.group.position.lerp(waypoint, Math.min(1, .13 / distance)); }
             } else f.group.position.lerp(f.target, paused ? 1 : .06);
-            f.legs.forEach((leg, i) => { leg.rotation.x = walking ? Math.sin(t * 4 + i * Math.PI) * .32 : f.pose === 'working' || f.pose === 'sleeping' ? -1.1 : 0; });
-            f.body.position.y = Math.sin(t * 1.6) * (paused ? 0 : .018);
-            f.body.rotation.z = f.pose === 'sleeping' ? .45 : playing ? Math.sin(t * 1.5) * .07 : 0;
-            f.head.rotation.x = f.pose === 'sleeping' ? .43 + Math.sin(t * .8) * (paused ? 0 : .05) : Math.sin(t * .6) * (paused ? 0 : .025);
+            f.legs.forEach((leg, i) => { leg.rotation.x = walking ? Math.sin(t * 4 + i * Math.PI) * .32 : f.pose === 'working' || f.pose === 'resting' ? -1.1 : 0; });
+            f.body.position.y = Math.sin(t * 1.6) * (paused ? 0 : f.pose === 'sleeping' ? .007 : .018);
+            f.body.rotation.x = f.pose === 'sleeping' ? -Math.PI / 2 : 0;
+            f.body.rotation.z = playing ? Math.sin(t * 1.5) * .07 : 0;
+            f.head.rotation.x = f.pose === 'sleeping' ? 0 : Math.sin(t * .6) * (paused ? 0 : .025);
             f.arms[0].rotation.x = f.pose === 'working' ? -.65 + Math.sin(t * 5) * (paused ? 0 : .045) : f.pose === 'eating' ? -1.05 : .1;
             f.arms[1].rotation.x = f.pose === 'working' ? -.65 + Math.sin(t * 5 + 1) * (paused ? 0 : .045) : f.pose === 'coffee' ? -1.2 + Math.sin(t * 1.2) * (paused ? 0 : .13) : f.pose === 'eating' ? -.8 + Math.sin(t * 2) * (paused ? 0 : .13) : .1;
             if (playing) { f.arms[1].rotation.x = -.6 + Math.sin(t * 2.3) * (paused ? 0 : .7); f.arms[0].rotation.x = -.25 + Math.sin(t * 2.3 + 1) * (paused ? 0 : .25); }
         }
         for (const { mesh, game } of gameBalls) {
             const t = paused ? 0 : now / 1000;
-            const active = !isOfficeNight() && [...figures.values()].some(f => f.pose === 'playing' && f.game.id === game.id);
+            const active = !isOfficeNight(getDate()) && [...figures.values()].some(f => f.pose === 'playing' && f.game.id === game.id);
             const wave = active ? Math.sin(t * 1.8) : 0;
             mesh.position.set(game.x + (game.id === 'golf' ? wave * 4 : wave * 1.5), game.id === 'pingpong' ? 1.45 + Math.abs(wave) * .65 : game.id === 'basketball' ? .15 + Math.abs(wave) * 2.2 : game.id === 'bowling' || game.id === 'golf' ? .06 : .4 + Math.abs(wave) * 2, game.z + wave * (game.kind === 'court' ? 4 : 1.3));
         }
@@ -366,7 +379,24 @@ export function createOfficeScene({ host, labels, onSelect, onFailure,
         const narrow = host.clientWidth < 600, views = { all: [[0, 0, 14], [86, 90, 125]], office: [[0, 0, 0], [34, 31, 42]], umum: [[-9, .5, -5], [11, 22, 22]], operasional: [[9, .5, -5], [28, 21, 24]], lounge: [[-3, .4, 7], [17, 23, 31]], park: [[0, 0, 28], [56, 65, 96]] };
         for (const game of games) views[game.id] = [[game.x, .3, game.z], [game.x + 14, 19, game.z + 22]];
         const [target, position] = views[room] || views.all; targetFocus.set(...target); cameraGoal.set(...position);
-        if (narrow) cameraGoal.sub(targetFocus).multiplyScalar(room === 'all' ? Math.max(1.23, 1.34 / Math.max(.3, host.clientWidth / host.clientHeight)) : 1.23).add(targetFocus);
+        if (room === 'all' || room === 'residences') {
+            const bounds = residences.bounds(), front = room === 'all' ? 50 : bounds.front;
+            const width = bounds.right - bounds.left, depth = front - bounds.back;
+            targetFocus.set(0, 0, (front + bounds.back) / 2);
+            const aspect = Math.max(.3, host.clientWidth / Math.max(1, host.clientHeight));
+            const halfFov = Math.min(THREE.MathUtils.degToRad(camera.fov / 2), Math.atan(Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * aspect));
+            const distance = Math.hypot(width, depth) / 2 / Math.sin(halfFov) * 1.07;
+            cameraGoal.copy(new THREE.Vector3(1, 1.18, 1.3).normalize().multiplyScalar(distance).add(targetFocus));
+        } else if (narrow) cameraGoal.sub(targetFocus).multiplyScalar(1.23).add(targetFocus);
+        visitingHome = null; residences.select(figures.get(selected)?.pose === 'sleeping' ? selected : null);
+        if (paused) { camera.position.copy(cameraGoal); controls.target.copy(targetFocus); easingCamera = false; } else easingCamera = true;
+        requestDraw();
+    }
+    function visitHome(id) {
+        const location = residences.location(id); if (!location) return;
+        visitingHome = id; residences.select(id);
+        targetFocus.set(location.x, 1.2, location.z); cameraGoal.copy(targetFocus).add(new THREE.Vector3(11, 12, 15));
+        if (host.clientWidth < 600) cameraGoal.sub(targetFocus).multiplyScalar(1.23).add(targetFocus);
         if (paused) { camera.position.copy(cameraGoal); controls.target.copy(targetFocus); easingCamera = false; } else easingCamera = true;
         requestDraw();
     }
@@ -376,7 +406,11 @@ export function createOfficeScene({ host, labels, onSelect, onFailure,
     const up = e => {
         if (!dragStart || Math.hypot(e.clientX - dragStart[0], e.clientY - dragStart[1]) > 6) return; dragStart = null;
         const rect = renderer.domElement.getBoundingClientRect(); pointer.set((e.clientX - rect.left) / rect.width * 2 - 1, -(e.clientY - rect.top) / rect.height * 2 + 1);
-        raycaster.setFromCamera(pointer, camera); const hit = raycaster.intersectObjects([...figures.values()].map(f => f.group), true)[0]; if (hit?.object.userData.personId) onSelect(hit.object.userData.personId);
+        raycaster.setFromCamera(pointer, camera);
+        const hit = raycaster.intersectObjects([...figures.values()].map(f => f.group).concat(residences.meshes), true)[0];
+        const resident = residences.personForHit(hit);
+        if (resident) { onSelect(resident); visitHome(resident); }
+        else if (hit?.object.userData.personId) onSelect(hit.object.userData.personId);
     };
     function theme() {
         const dark = document.documentElement.classList.contains('dark'); scene.background = new THREE.Color(dark ? '#101e25' : '#eaf0ec');
@@ -389,14 +423,21 @@ export function createOfficeScene({ host, labels, onSelect, onFailure,
     renderer.domElement.addEventListener('pointerdown', down); renderer.domElement.addEventListener('pointerup', up); renderer.domElement.addEventListener('webglcontextlost', lost);
     const changed = () => requestDraw(); controls.addEventListener('change', changed); controls.addEventListener('start', () => { easingCamera = false; });
     theme(); focusRoom('all'); camera.position.copy(cameraGoal); controls.target.copy(targetFocus); easingCamera = false; resize();
-    return { setPeople, resize, focusRoom,
-        select(id, focus = false) { selected = id; for (const [key, f] of figures) { f.ring.visible = key === id; f.label.setAttribute('aria-pressed', String(key === id)); } const f = figures.get(id); if (f && focus) { targetFocus.copy(f.target).add(new THREE.Vector3(0, 1, 0)); cameraGoal.copy(targetFocus).add(new THREE.Vector3(11, 11, 14)); if (paused) { camera.position.copy(cameraGoal); controls.target.copy(targetFocus); } else easingCamera = true; } requestDraw(); },
+    return { setPeople, resize, focusRoom, visitHome,
+        select(id, focus = false) {
+            if (selected !== id) visitingHome = null;
+            selected = id; if (id && !figures.has(id) && roster.some(p => p.id === id)) setPeople(roster);
+            for (const [key, f] of figures) { f.ring.visible = key === id; f.label.setAttribute('aria-pressed', String(key === id)); }
+            const f = figures.get(id); residences.select(visitingHome ?? (f?.pose === 'sleeping' ? id : null));
+            if (f && focus && f.pose === 'sleeping') { visitHome(id); return; }
+            if (f && focus) { targetFocus.copy(f.target).add(new THREE.Vector3(0, 1, 0)); cameraGoal.copy(targetFocus).add(new THREE.Vector3(11, 11, 14)); if (paused) { camera.position.copy(cameraGoal); controls.target.copy(targetFocus); } else easingCamera = true; } requestDraw();
+        },
         zoom(factor) { camera.position.sub(controls.target).multiplyScalar(factor).add(controls.target); controls.update(); requestDraw(); },
         setPaused(value) { paused = value; if (frame !== null) cancelAnimationFrame(frame); frame = null; requestDraw(); },
         setVisible(value) { visible = value; if (!value && frame !== null) { cancelAnimationFrame(frame); frame = null; } else if (value) { lastFrame = 0; resize(); requestDraw(); } },
         dispose() { disposed = true; if (frame !== null) cancelAnimationFrame(frame); frame = null; observer.disconnect(); themeObserver.disconnect(); controls.dispose();
             renderer.domElement.removeEventListener('pointerdown', down); renderer.domElement.removeEventListener('pointerup', up); renderer.domElement.removeEventListener('webglcontextlost', lost);
-            for (const geometry of ownedGeometries) geometry.dispose(); for (const mat of materials.values()) mat.dispose(); for (const texture of textures) texture.dispose();
+            residences.dispose(); for (const geometry of ownedGeometries) geometry.dispose(); for (const mat of materials.values()) mat.dispose(); for (const texture of textures) texture.dispose();
             figures.forEach(f => f.label.remove()); figures.clear(); scene.clear(); renderer.dispose(); renderer.forceContextLoss(); renderer.domElement.remove(); }
     };
 }

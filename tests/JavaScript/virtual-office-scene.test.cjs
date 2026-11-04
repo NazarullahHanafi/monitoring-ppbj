@@ -27,6 +27,7 @@ test('procedural 3D office builds valid batched geometry, bounds avatars and rel
         global.cancelAnimationFrame = id => frames.delete(id);
         const host = new Node(), labels = new Node(), element = new Node(); let ratio;
         const scene = createOfficeScene({ host, labels, onSelect() {}, onFailure() {},
+            getDate: () => new Date('2026-11-04T12:00:00Z'),
             rendererFactory: () => ({ domElement: element, setPixelRatio: value => { ratio = value; }, setSize() {},
                 render(world, camera) { world.updateMatrixWorld(true); camera.updateMatrixWorld(true); rendered = { world, camera }; }, dispose() { disposed = true; }, forceContextLoss() {} }),
             controlsFactory: camera => ({ target: new THREE.Vector3(), addEventListener() {}, update() { camera.lookAt(this.target); camera.updateMatrixWorld(true); }, dispose() {} }) });
@@ -48,11 +49,25 @@ test('procedural 3D office builds valid batched geometry, bounds avatars and rel
         scene.setPaused(true); draw(200); assert.equal(frames.size, 0, 'Paused scene must not leave an animation loop.');
         host.clientWidth = 350; host.clientHeight = 430; scene.resize(); scene.focusRoom('all'); draw(300);
         rendered.camera.updateMatrixWorld(true);
-        for (const corner of [[-43, 0, -20], [43, 0, -20], [-43, 0, 50], [43, 0, 50]]) {
+        for (const corner of [[-43, 0, -180], [43, 0, -180], [-43, 0, 50], [43, 0, 50]]) {
             const projected = new THREE.Vector3(...corner).project(rendered.camera);
             assert.ok(Math.abs(projected.x) < 1 && Math.abs(projected.y) < 1, `Default mobile camera must contain the office floor: ${projected.toArray()}`);
         }
         scene.setPeople(people.slice(0, 2)); assert.equal(labels.children.length, 2);
+        scene.setPeople(people.slice(0, 2).map(person => ({ ...person, state: 'offline' })));
+        scene.select(1, true); draw(400);
+        let body = null;
+        rendered.world.traverse(node => {
+            if (node.isGroup && Math.abs(node.rotation.x + Math.PI / 2) < .001) body = node;
+        });
+        assert.ok(body, 'Sleeping body must lie horizontally on a bed, not slouch on a sofa.');
+        const position = new THREE.Vector3(); body.getWorldPosition(position);
+        assert.ok(position.z < -20, 'Sleeping avatars must be inside the residential neighbourhood.');
+        assert.ok(position.y > .88 && position.y < 1, 'Sleeping avatars must rest at mattress height.');
+        const roof = rendered.world.children.find(node => node.userData.residenceLayer === 'roof');
+        const instance = new THREE.Matrix4(); roof.getMatrixAt(0, instance); assert.equal(instance.determinant(), 0);
+        roof.getMatrixAt(1, instance); assert.ok(instance.determinant() > .9, 'Other homes remain closed.');
+        scene.select(null); draw(500); roof.getMatrixAt(0, instance); assert.ok(instance.determinant() > .9, 'Closing detail restores the roof.');
         scene.setVisible(false); assert.equal(frames.size, 0);
         scene.dispose(); assert.equal(disposed, true); assert.equal(host.children.length, 0); assert.equal(labels.children.length, 0); assert.equal(frames.size, 0);
     } finally { for (const [key, value] of Object.entries(previous)) { if (value === undefined) delete global[key]; else global[key] = value; } }
