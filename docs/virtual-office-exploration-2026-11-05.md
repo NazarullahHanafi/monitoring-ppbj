@@ -46,3 +46,19 @@ Referensi visual: [Naruto Official](https://naruto-official.com/en/anime/naruto1
 - Pemeriksaan visual dan FPS GPU di browser belum dapat dilakukan karena konektor browser gagal dengan `Cannot read properties of undefined (reading 'timeoutMs')`. Pengujian geometri dan SSR bukan pengukuran FPS perangkat; tidak mengklaim bebas lag pada semua perangkat/jaringan.
 
 Pemasangan menggunakan backup privat kode/aset/database dan tidak membutuhkan migrasi skema baru. Aset lama dipertahankan untuk tab yang masih terbuka. Data layout/kostum/collision di `resources/data` harus ikut terpasang bersama layanan PHP dan bundle.
+
+## Hasil produksi
+
+Commit aplikasi `887f01c26ef549201c6e27c1711323bb26c4bc86` terpasang di [Kantor Virtual](https://sucofindoumumpku.com/virtual-office) pada PHP 8.3.36. Autoload serta cache config/event/route/view berhasil diperbarui. Lima aset kantor lolos pembandingan SHA-256 dari HTTP; health `/up` 200 dan endpoint data privat tetap 401 tanpa login. Sebanyak 30 preset, lima seri, 198 collider, UI pilot/bekal, serta konfigurasi privat owner terbaca benar pada SSR produksi.
+
+| Sampel proses PHP | Waktu | SQL |
+|---|---:|---:|
+| Presence dingin, 22 anggota | 64,75 ms | 1 |
+| Presence hangat | 3,18 ms | 0 |
+| Render kantor owner | 32,30 ms | 2 |
+| Render kantor anggota | 41,97 ms | 1 |
+| Render kantor Operasional | 14,62 ms | 1 |
+
+Ini sampel waktu proses PHP, bukan latency jaringan atau FPS browser. Pemeriksaan tidak membuat sesi pilot/presence, undangan, pesan, pesanan, atau bonus fiktif. Budget route pilot 900/menit dan leave 180/menit terpisah per pengguna dan route. Mode privat hanya disertakan pada halaman pemilik tersembunyi, sementara roster publik tetap tidak memuat identitasnya. Modul 3D, permainan, dan musik tetap lazy.
+
+Backup sebelum pemasangan: `/home4/suc45578/deployment-artifacts/office-exploration-20261105-104604`, termasuk database 4.600.977 byte. Mode direktori 700 dan database 600; file kredensial dump sementara telah dihapus. Tidak ada migrasi database pada rilis ini.
