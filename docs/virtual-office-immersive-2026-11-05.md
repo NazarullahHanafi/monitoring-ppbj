@@ -34,3 +34,11 @@ Berjalan masuk ke rumah sendiri mengaktifkan tampilan interior: hanya rumah itu,
 - Konektor browser dapat membaca inventaris tab, tetapi membuka tab pemeriksaan kembali gagal dengan `Cannot read properties of undefined (reading 'timeoutMs')`. Tidak mengklaim verifikasi visual WebGL, native fullscreen nyata, atau FPS perangkat. Tes native fullscreen di atas memeriksa controller dengan API fullscreen terkontrol.
 
 Rilis menggunakan backup privat kode/aset/data/database tanpa migrasi skema. Pemeriksaan produksi hanya membaca/render server dan memeriksa endpoint tamu, tanpa membuat avatar, sesi, pesanan, jurus, atau bonus fiktif.
+
+## Hasil pemasangan produksi
+
+Commit aplikasi `f662b0ee4fb0be49b2ee8429f9a8e29ef349b8ea` terpasang melalui fast-forward. Autoload Composer dan optimize Laravel berhasil. Hash SHA-256 CSS, entry kantor, scene, play, dan music yang diunduh lewat HTTPS sesuai dengan rilis. Health check `/up` merespons 200; lima endpoint baca privat merespons 401 untuk tamu.
+
+Render server menghasilkan HTTP 200 untuk owner, member Umum, dan Operasional, masing-masing 53,92 / 16,01 / 14,62 ms dengan 3 / 1 / 1 query. Snapshot presence cold 9,71 ms dengan satu query; warm 1,86 ms tanpa query. Ini sampel waktu server, bukan FPS atau waktu muat browser. Semua ID panel/kontrol baru tersedia tepat sekali, data terdiri atas 30 kostum dari lima seri, 43 jurus dengan 31 pemetaan termasuk avatar biasa, serta 203 collider. Privasi owner dan lazy loading modul tetap lolos pemeriksaan.
+
+Backup sebelum rilis berada di `/home4/suc45578/deployment-artifacts/office-immersive-20261105-162508`, mencakup kode/aset/data dan database 4.626.684 byte. Direktori berizin 700 dan dump 600; kredensial dump sementara sudah dihapus. Tidak ada perubahan skema database.
