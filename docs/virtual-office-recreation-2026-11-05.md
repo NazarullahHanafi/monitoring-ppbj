@@ -30,4 +30,22 @@ Game memakai mutex cache, peserta terikat sesi, persetujuan hanya penerima, nomo
 - Bundle kantor sekitar 44,5 KB minified / 15,5 KB gzip; mini-game 17,8 KB / 8,0 KB; musik 2,3 KB / 1,3 KB; scene 608,4 KB / 158,7 KB termasuk Three.js. Peringatan ukuran chunk Vite berasal dari scene dinamis tersebut.
 - Pemeriksaan browser/screenshot dan FPS GPU perangkat belum dapat dilakukan: konektor browser gagal saat membuka tab dengan `Cannot read properties of undefined (reading 'timeoutMs')`. Tes geometri dan interaksi tidak menggantikan pemeriksaan visual GPU.
 
-Deploy menggunakan migrasi aditif, backup privat kode/aset/database, publikasi aset ber-hash sebelum manifest, dan cache Laravel dibangun ulang. Verifikasi produksi ditambahkan setelah rilis.
+## Verifikasi produksi
+
+Rilis aplikasi `0c945720b340574983a3cec4c0d9edaab8cbdefd` berhasil dipasang di `https://sucofindoumumpku.com/virtual-office` pada 5 November 2026. Migrasi kelima tabel sukses pada PHP 8.3.36. Autoload/config/event/route/view cache dibangun ulang. Lima aset CSS/JS terverifikasi SHA-256 terhadap berkas repository. `/up` HTTP 200; endpoint presence/live/messages/game/recreation mengembalikan 401 tanpa login.
+
+Pemeriksaan server terautentikasi tanpa mengirim pesan, membuat undangan/pesanan, memberi saldo buatan, atau heartbeat palsu:
+
+| Pemeriksaan | Waktu proses layanan | SQL |
+|---|---:|---:|
+| Presence dingin, 22 anggota / 7.832 byte | 8,66 ms | 2 |
+| Presence hangat | 1,44 ms | 0 |
+| Render halaman Umum | 32,64 ms | 3 |
+| Render halaman Operasional | 7,97 ms | 1 |
+| Poll pesan | 16,36 ms | 1 |
+| Poll permainan kosong | 1,54 ms | 0 |
+| Baca dompet melalui layanan, tanpa pemberian bonus | 4,15 ms | 3 |
+
+Ini waktu pemrosesan PHP pada server, bukan latency jaringan atau FPS browser. Render memastikan ID panel unik dan modul scene/game/musik tetap lazy. Katalog terverifikasi 44 item.
+
+Backup privat sebelum migrasi: `/home4/suc45578/deployment-artifacts/office-club-20261105-093315` (direktori 700), mencakup kode/aset/cache dan database 4.587.565 byte (600). Berkas kredensial dump sementara telah dihapus. Aset di webroot diterbitkan sebelum manifest; aset versi lama tetap tersedia bagi tab yang masih terbuka. Migrasi bersifat aditif dan tidak menghapus data lama.
