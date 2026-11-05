@@ -14,7 +14,7 @@ export const games = [
     { id: 'bowling', name: 'Bowling', icon: '🎳', x: 12, z: 41, kind: 'court' },
     { id: 'archery', name: 'Panahan', icon: '🏹', x: 32, z: 45, kind: 'court' },
 ];
-export const poseLabel = { working: 'Di meja kerja', coffee: 'Menikmati kopi', eating: 'Menikmati camilan', resting: 'Bersantai di lounge', sleeping: 'Tidur di rumah pribadi (17.00–07.00 WIB)', playing: 'Bermain di taman rekreasi' };
+export const poseLabel = { dancing: 'Berdansa di Éclipse', working: 'Di meja kerja', coffee: 'Menikmati kopi', eating: 'Menikmati camilan', resting: 'Bersantai di lounge', sleeping: 'Tidur di rumah pribadi (17.00–07.00 WIB)', playing: 'Bermain di taman rekreasi' };
 export function isOfficeNight(date = new Date()) {
     const hour = (date.getUTCHours() + 7) % 24;
     return hour >= 17 || hour < 7;
@@ -27,6 +27,8 @@ export function gameFor(person, date = new Date()) {
 }
 export function poseFor(person, date = new Date()) {
     if (person.state === 'offline') return isOfficeNight(date) ? 'sleeping' : 'playing';
+    const outing=person.recreation;
+    if(outing?.until>date.valueOf()/1000&&outing.destination!=='office')return({drink:'coffee',food:'eating',dance:'dancing',game:'playing',relax:'resting'})[outing.kind]||'working';
     if (person.state === 'idle') return ['coffee', 'eating', 'resting'][Number(person.id) % 3];
     return 'working';
 }
@@ -40,7 +42,7 @@ export function safePeople(payload) {
         state: p.state, mood: String(p.mood || '').slice(0, 40), is_me: p.is_me === true,
         avatar: safeAvatar(p.avatar), share_activity: p.share_activity !== false,
         can_talk: p.can_talk !== false,
-        recreation: p.recreation && ['bar','beach','garden','terrace','lounge','office',...games.map(g=>g.id)].includes(p.recreation.destination) ? { destination: p.recreation.destination, kind: ['drink','food','relax','game'].includes(p.recreation.kind) ? p.recreation.kind : 'relax', until: Number(p.recreation.until) || 0 } : null,
+        recreation: p.recreation && ['bar','disco','beach','garden','terrace','lounge','office',...games.map(g=>g.id)].includes(p.recreation.destination) ? { destination: p.recreation.destination, kind: ['drink','food','relax','game','dance'].includes(p.recreation.kind) ? p.recreation.kind : 'relax', until: Number(p.recreation.until) || 0 } : null,
         meeting_with: Number.isSafeInteger(p.meeting_with) && p.meeting_with > 0 ? p.meeting_with : null,
         meeting_spot: Number.isInteger(p.meeting_spot) && p.meeting_spot >= 0 && p.meeting_spot < 12 ? p.meeting_spot : null,
         current_menu: typeof p.current_menu === 'string' ? p.current_menu.slice(0, 60) : null }));

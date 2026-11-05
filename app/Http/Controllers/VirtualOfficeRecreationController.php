@@ -36,10 +36,19 @@ class VirtualOfficeRecreationController extends Controller
         $user = $this->user($request); $data = $request->validate(['id' => ['required', 'uuid'], 'request_id' => ['required', 'uuid'], 'destination' => ['required', Rule::in(array_keys($service::DESTINATIONS))]]);
         return $this->json($service->consume($user, $data['id'], $data['destination'], $data['request_id']));
     }
+    public function checkout(Request $request, VirtualOfficeRecreation $service)
+    {
+        $user = $this->user($request);
+        $data = $request->validate(['request_id' => ['required', 'uuid'], 'destination' => ['required', Rule::in(array_keys($service::DESTINATIONS))],
+            'items' => ['required', 'array', 'min:1', 'max:20'], 'items.*' => ['required', 'array:item,quantity'],
+            'items.*.item' => ['required', 'string', 'distinct:strict', Rule::in(array_keys($service::catalog()))], 'items.*.quantity' => ['required', 'integer', 'between:1,10'],
+            'user_id' => ['prohibited'], 'price' => ['prohibited'], 'total' => ['prohibited'], 'balance' => ['prohibited']]);
+        return $this->json($service->checkout($user, $data), 201);
+    }
     public function move(Request $request, VirtualOfficeRecreation $service)
     {
         $user = $this->user($request); $data = $request->validate(['destination' => ['required', Rule::in(array_merge(array_keys($service::DESTINATIONS), ['office']))]]);
-        $service->activity($user, ['destination' => $data['destination'], 'kind' => 'relax']);
+        $service->activity($user, ['destination' => $data['destination'], 'kind' => $data['destination'] === 'disco' ? 'dance' : 'relax']);
         return $this->json(['activity' => $data]);
     }
     public function messages(Request $request)

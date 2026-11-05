@@ -112,7 +112,7 @@ if (root && !root.dataset.initialized) {
         try {
             const { createOfficeScene } = await import('./virtual-office-scene.js');
             if (ticket !== sceneTicket || mode !== '3d' || !visible()) return;
-            scene = createOfficeScene({ host: $('voScene'), labels: $('voLabels'), onSelect: id => select(id, true), onFailure: () => { sceneUnavailable = true; switchView('list', false); text('voSync', 'Ruang 3D tidak tersedia. Tim tetap dapat dilihat di mode ringan.'); } });
+            scene = createOfficeScene({ host: $('voScene'), labels: $('voLabels'), onSelect: id => select(id, true), onVenue: venue => club?.openVenue?.(venue), onFailure: () => { sceneUnavailable = true; switchView('list', false); text('voSync', 'Ruang 3D tidak tersedia. Tim tetap dapat dilihat di mode ringan.'); } });
             scene.setPeople(people); scene.setPaused(paused); scene.setVisible(visible());
             scene.configureWorld?.(worldConfig); scene.setEnergySaver?.(energySaver);
             scene.focusRoom(requestedRoom);

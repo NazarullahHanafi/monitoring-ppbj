@@ -46,6 +46,9 @@ test('procedural 3D office builds valid batched geometry, bounds avatars and rel
         });
         assert.ok(coordinateCount > 10000, 'The room must contain actual geometry.');
         assert.ok(meshCount < 750, `Expanded campus and 24 detailed avatars must stay bounded; got ${meshCount} meshes.`);
+        const beams=rendered.world.children.filter(n=>n.userData.rivageEffect==='beam');assert.equal(beams.length,4);assert.ok(beams.every(n=>n.material.opacity<.05));
+        assert.equal(rendered.world.children.filter(n=>n.userData.officeVenue==='bar').length,2,'Counter and physical menu stand must be clickable.');
+        scene.setVenueEffects(false);draw(160);assert.ok(beams.every(n=>!n.visible),'Calm lighting must disable atmospheric beams.');
         scene.setPaused(true); draw(200); assert.equal(frames.size, 0, 'Paused scene must not leave an animation loop.');
         host.clientWidth = 350; host.clientHeight = 430; scene.resize(); scene.focusRoom('all'); draw(300);
         rendered.camera.updateMatrixWorld(true);
@@ -91,7 +94,7 @@ test('procedural 3D office builds valid batched geometry, bounds avatars and rel
         scene.setPeople([{...people[0],state:'online',is_me:true},{...people[1],state:'offline'}]);
         const positionFor = id => rendered.world.children.find(g=>{if(!g.isGroup)return false;let found=false;g.traverse(n=>{if(n.userData.personId===id)found=true;});return found;})?.position;
         let stamp=700000;
-        for(const [destination,x,z]of [['bar',-30.5,50.5],['beach',-33.5,69],['garden',-6.5,61],['terrace',18.5,67],['lounge',-12.5,10]]){
+        for(const [destination,x,z]of [['bar',-30.5,49],['disco',-31.5,56],['beach',-33.5,69],['garden',-6.5,61],['terrace',18.5,67],['lounge',-12.5,10]]){
             scene.setRecreation(1,{destination,kind:'drink'});
             for(let i=0;i<2200;i++)draw(stamp+i*40);stamp+=100000;
             const p=positionFor(1);assert.ok(Math.hypot(p.x-x,p.z-z)<1.1,`Avatar must actually reach ${destination}, got ${p.toArray()}`);

@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\DB;
 
 class VirtualOfficeRecreation
 {
-    public const DESTINATIONS = ['bar' => 'Maison du Rivage · bar', 'beach' => 'Pantai & kursi santai', 'garden' => 'Taman bunga', 'terrace' => 'Teras pegunungan', 'lounge' => 'Lounge kantor'];
+    public const DESTINATIONS = ['bar' => 'Maison du Rivage · bar', 'disco' => 'Éclipse · lantai dansa', 'beach' => 'Pantai & kursi santai', 'garden' => 'Taman bunga', 'terrace' => 'Teras pegunungan', 'lounge' => 'Lounge kantor'];
 
     public static function catalog(): array
     {
@@ -50,6 +50,7 @@ class VirtualOfficeRecreation
         $wallet = DB::table('virtual_office_wallets')->where('user_id', $user->id)->first();
         return ['balance' => (int) ($wallet->balance ?? 0), 'awarded_on' => $wallet?->awarded_on, 'currency' => 'virtual USD',
             'orders' => DB::table('virtual_office_orders')->where('user_id', $user->id)->where('remaining', '>', 0)->orderByDesc('created_at')->limit(60)->get(),
+            'receipts' => DB::table('virtual_office_tabs')->where('user_id', $user->id)->orderByDesc('created_at')->limit(10)->get(['id', 'items', 'destination', 'total', 'created_at']),
             'ledger' => DB::table('virtual_office_ledger')->where('user_id', $user->id)->orderByDesc('id')->limit(15)->get(['reference', 'amount', 'balance', 'created_at'])];
     }
 
@@ -74,6 +75,39 @@ class VirtualOfficeRecreation
             DB::table('virtual_office_ledger')->insert(['user_id' => $user->id, 'reference' => 'order:'.$data['request_id'], 'amount' => -$cost, 'balance' => $balance, 'created_at' => now()]);
         }, 3);
         return $this->account($user);
+    }
+
+    public function checkout(User $user, array $data): array
+    {
+        $catalog = self::catalog();
+        $lines = collect($data['items'])->map(fn ($line) => ['item' => $line['item'], 'quantity' => (int) $line['quantity']])->sortBy('item')->values()->all();
+        $fingerprint = hash('sha256', json_encode([$lines, $data['destination']]));
+        DB::transaction(function () use ($user, $data, $lines, $catalog, $fingerprint) {
+            $wallet = DB::table('virtual_office_wallets')->where('user_id', $user->id)->lockForUpdate()->first();
+            abort_unless($wallet, 409, 'Buka menu bar untuk memuat dompet terlebih dahulu.');
+            $previous = DB::table('virtual_office_tabs')->where('id', $data['request_id'])->first();
+            if ($previous) {
+                abort_unless((int) $previous->user_id === (int) $user->id, 404);
+                abort_unless(hash_equals($previous->fingerprint, $fingerprint), 409, 'Nomor pembayaran sudah digunakan untuk keranjang berbeda.');
+                return;
+            }
+            $total = array_sum(array_map(fn ($line) => $catalog[$line['item']]['price'] * $line['quantity'], $lines));
+            abort_unless($wallet->balance >= $total, 422, 'Saldo virtual tidak cukup untuk keranjang ini. Kurangi jumlah atau pilih menu lain.');
+            $stored = DB::table('virtual_office_orders')->where('user_id', $user->id)->where('remaining', '>', 0)->count();
+            abort_if($stored + count($lines) > 60, 422, 'Nikmati pesanan tersimpan sebelum menambah pesanan baru.');
+            $receipt = [];
+            foreach ($lines as $line) {
+                $item = $catalog[$line['item']];
+                $orderId = \Ramsey\Uuid\Uuid::uuid5(\Ramsey\Uuid\Uuid::NAMESPACE_URL, $user->id.':'.$data['request_id'].':'.$item['id'])->toString();
+                DB::table('virtual_office_orders')->insert(['id' => $orderId, 'user_id' => $user->id, 'item' => $item['id'], 'price' => $item['price'], 'quantity' => $line['quantity'], 'remaining' => $line['quantity'], 'destination' => $data['destination'], 'created_at' => now(), 'updated_at' => now()]);
+                $receipt[] = ['item' => $item['id'], 'name' => $item['name'], 'price' => $item['price'], 'quantity' => $line['quantity']];
+            }
+            $balance = (int) $wallet->balance - $total;
+            DB::table('virtual_office_tabs')->insert(['id' => $data['request_id'], 'user_id' => $user->id, 'fingerprint' => $fingerprint, 'items' => json_encode($receipt), 'destination' => $data['destination'], 'total' => $total, 'created_at' => now()]);
+            DB::table('virtual_office_wallets')->where('user_id', $user->id)->update(['balance' => $balance, 'updated_at' => now()]);
+            DB::table('virtual_office_ledger')->insert(['user_id' => $user->id, 'reference' => 'checkout:'.$data['request_id'], 'amount' => -$total, 'balance' => $balance, 'created_at' => now()]);
+        }, 3);
+        return $this->account($user) + ['receipt_id' => $data['request_id']];
     }
 
     public function consume(User $user, string $id, string $destination, string $requestId): array

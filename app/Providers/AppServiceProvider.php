@@ -33,6 +33,22 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        // Numeric throttle middleware shares a user signature across routes. Office
+        // polling and actions need separate budgets, including from legacy pages.
+        \Illuminate\Support\Facades\RateLimiter::for('virtual-office', function (\Illuminate\Http\Request $request) {
+            $route = $request->route()?->getName() ?? $request->path();
+            $maximum = $request->isMethodSafe() ? 600 : match ($route) {
+                'virtual-office.game.hit' => 900,
+                'virtual-office.game.invite', 'virtual-office.meetings.invite', 'virtual-office.world' => 30,
+                default => 180,
+            };
+            return \Illuminate\Cache\RateLimiting\Limit::perMinute($maximum)
+                ->by('office-v2:'.($request->user()?->id ?? $request->ip()).':'.$route)
+                ->response(fn ($request, $headers) => response()->json([
+                    'message' => 'Aktivitas sangat cepat. Silakan lanjutkan setelah jeda singkat.',
+                    'retry_after' => (int) ($headers['Retry-After'] ?? 1),
+                ], 429, $headers)->header('Cache-Control', 'private, no-store'));
+        });
         \Event::listen(\Illuminate\Auth\Events\Login::class, function ($event) {
             if ($event->user instanceof User) app(\App\Services\VirtualOfficeRecreation::class)->daily($event->user);
         });

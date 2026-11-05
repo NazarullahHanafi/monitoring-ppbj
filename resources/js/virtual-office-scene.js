@@ -6,10 +6,11 @@ import { poseFor, games, gameFor, safeAvatar, isOfficeNight } from './virtual-of
 import { createResidences } from './virtual-office-residences.js';
 import { createOfficeNavigation } from './virtual-office-navigation.js';
 import { createOfficeEnvironment } from './virtual-office-environment.js';
+import { createRivageBar } from './virtual-office-bar.js';
 
 // Original procedural scene: no models, textures, or code from the reference site.
 // Static furniture is batched by material; animation is capped at 30fps / 24 avatars.
-export function createOfficeScene({ host, labels, onSelect, onFailure,
+export function createOfficeScene({ host, labels, onSelect, onFailure, onVenue = () => {},
     rendererFactory = options => new THREE.WebGLRenderer(options), controlsFactory = (camera, element) => new OrbitControls(camera, element), getDate = () => new Date() }) {
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(36, 1, .1, 1200);
@@ -70,14 +71,8 @@ export function createOfficeScene({ host, labels, onSelect, onFailure,
     // Waterfront furnishings share the existing static geometry batches.
     box(85,.07,18,0,-.43,67,'#e4cfa5',.1);box(160,.08,48,0,-.64,100,'#6ea6ad',.1);
     for(let n=0;n<8;n++)box(120-n*8,.02,.13,0,-.57,79+n*2.8,'#c4ddd4',0);
-    box(7,.07,24,0,-.4,60,'#e6dfcc',.1);box(18,.12,11,-32,-.28,47,'woodLight',.1);
-    box(14,2.8,.3,-32,1.12,42,'deep');navigation.addBox(14,.3,-32,42,'bar-wall',2.7);
-    box(12,.18,8,-32,3.4,45,'wood',.1);
-    for(const x of [-39,-25]){cylinder(.12,3.6,x,1.3,48,'gold');navigation.addBox(.3,.3,x,48,'bar-post',3.5);}
-    box(11,1.3,1.3,-32,.35,45,'oak');box(11.4,.15,1.6,-32,1.08,45,'white');navigation.addBox(11.4,1.6,-32,45,'bar-counter',1.2);
-    for(let n=0;n<9;n++){cylinder(.11,.6,-36+n,.35,43,'glass');cylinder(.055,.1,-36+n,.7,43,'gold');}
-    sign('MAISON DU RIVAGE','BAR / CUISINE / VIRTUAL DOLLARS',12,-32,2.1,42.2);
-    for(const x of [-37,-33,-29]){cylinder(.4,.15,x,.4,48,'deep');cylinder(.06,.65,x,.02,48,'gold');navigation.addBox(.8,.8,x,48,'bar-stool',.6);}
+    box(7,.07,24,0,-.4,60,'#e6dfcc',.1);
+    const rivageBar=createRivageBar({scene,box,cylinder,orb,bake,sign,material,navigation,ownedGeometries,materials});
     for(let n=0;n<8;n++){const x=-36+n*3.7;box(1.5,.25,2.8,x,-.1,67,'white',.1);box(1.4,.17,1,x,.26,66,'sofa',.08);navigation.addBox(1.5,2.8,x,67,'beach-chair',.6);if(n%2===0){cylinder(.05,3,x+1.2,1,65,'gold');bake(new THREE.ConeGeometry(1.8,.6,10),'white',x+1.2,2.7,65);navigation.addBox(.2,.2,x+1.2,65,'parasol',2.8);}}
     box(19,.15,10,22,-.3,65,'wood',.1);sign('LE BELVÉDÈRE','MOUNTAIN TERRACE',9,22,1.6,60.8);
     for(const x of [16,22,28]){cylinder(1.2,.13,x,.8,63,'white');cylinder(.1,1,x,.2,63,'gold');navigation.addBox(2.4,2.4,x,63,'terrace-table',.9);}
@@ -297,8 +292,11 @@ export function createOfficeScene({ host, labels, onSelect, onFailure,
         if (appearance.hair !== 'short') for (const side of [-1, 1]) avatarPart(head, 'box', [.09, appearance.hair === 'bob' ? .4 : .53, .32], hairColor, [side * .235, -.01, -.03]);
         if (appearance.hair === 'ponytail') avatarPart(head, 'box', [.24, .53, .22], hairColor, [0, -.02, -.35]);
         if (appearance.hair === 'hijab') avatarPart(body, 'box', [.58, .18, .43], hairColor, [0, 1.44, -.04]);
-        const eyes = [];
-        for (const x of [-.095, .095]) eyes.push(avatarPart(head, 'box', [.035, .045, .025], '#263833', [x, .035, .205]));
+        if(!avatarGeometry.has('eyes')){
+            const parts=[-.095,.095].map(x=>{const g=new THREE.BoxGeometry(.035,.045,.025);g.translate(x,.035,.205);const part=g.toNonIndexed();g.dispose();return part;});
+            const geometry=mergeGeometries(parts,false);parts.forEach(g=>g.dispose());avatarGeometry.set('eyes',geometry);ownedGeometries.add(geometry);
+        }
+        const eyeMesh=new THREE.Mesh(avatarGeometry.get('eyes'),material('#263833'));head.add(eyeMesh);const eyes=[eyeMesh];
         avatarPart(head, 'box', [.09, .02, .025], feminine ? '#b96f78' : '#9c6d58', [0, -.105, .21]);
         if (feminine) for (const x of [-.14, .14]) avatarPart(head, 'box', [.065, .025, .02], '#d39589', [x, -.065, .21]);
         if (appearance.accessory === 'glasses') {
@@ -335,7 +333,7 @@ export function createOfficeScene({ host, labels, onSelect, onFailure,
     let selected = null, paused = false, visible = true, disposed = false, frame = null, lastFrame = 0, lastLabels = 0;
     let roster = [], visitingHome = null, localMeeting = null, cameraMode = 'orbit', followId = null, energySaver = false, worldConfig = {};
     const recreation=new Map(),speechTimers=new Map();let localGame=null;
-    const destinations={bar:[-32,-.12,50.5],beach:[-35,-.12,69],garden:[-8,-.12,61],terrace:[17,-.12,67],lounge:[-14,.12,10]};
+    const destinations={bar:[-32,-.12,49],disco:[-33,-.12,56],beach:[-35,-.12,69],garden:[-8,-.12,61],terrace:[17,-.12,67],lounge:[-14,.12,10]};
     const targetFocus = new THREE.Vector3(), cameraGoal = new THREE.Vector3(); let easingCamera = false;
     function setPeople(people) {
         roster = people; residences.sync(people); environment.extent(residences.bounds().back);
@@ -370,7 +368,7 @@ export function createOfficeScene({ host, labels, onSelect, onFailure,
             const destination=outing&&(!outing.until||outing.until>Date.now()/1000)&&destinations[outing.destination];
             f.destination=Boolean(destination);
             if(destination&&!invitedGame&&person.state!=='offline'){
-                f.pose=outing.kind==='drink'?'coffee':outing.kind==='food'?'eating':'resting';placement=[destination[0]+(person.id%5)*1.6,destination[1],destination[2]+Math.floor(person.id%10/5)*1.3];
+                f.pose=outing.kind==='drink'?'coffee':outing.kind==='food'?'eating':outing.kind==='dance'?'dancing':'resting';placement=[destination[0]+(person.id%5)*1.6,destination[1],destination[2]+Math.floor(person.id%10/5)*1.3];
                 const safe=navigation.nearest({x:placement[0],z:placement[2]});if(safe)placement=[safe.x,placement[1],safe.z];f.group.rotation.y=Math.PI;
             }
             else if (person.meeting_with && Number.isInteger(person.meeting_spot)&&!invitedGame) {
@@ -403,6 +401,7 @@ export function createOfficeScene({ host, labels, onSelect, onFailure,
             f.dot.className = `vo-dot ${person.state}`; f.name.textContent = person.name;
             f.icon.textContent = `${person.state === 'offline' ? 'OFFLINE ' : person.state === 'idle' ? 'JEDA ' : 'ONLINE '}${f.pose === 'meeting' ? '💬' : f.pose === 'sleeping' ? '☾ RUMAH' : f.pose === 'playing' ? f.game.icon : f.pose === 'coffee' ? '☕' : ''}`;
             if(invitedGame&&localGame.bot&&person.id===localGame.to)f.icon.textContent='OFFLINE · NPC '+f.game.icon;
+            if(f.pose==='dancing')f.icon.textContent=(person.state==='idle'?'JEDA':'ONLINE')+' · ÉCLIPSE ♫';
             f.label.setAttribute('aria-label', `${person.name}, ${person.state === 'online' ? 'online' : person.state === 'idle' ? 'jeda di aplikasi' : 'tidak online'}. Lihat detail anggota.`);
             f.cup.visible = f.pose === 'coffee'; f.plate.visible = f.pose === 'eating';
             f.racket.visible = f.pose === 'playing' && ['tennis', 'badminton', 'pingpong', 'golf'].includes(f.game.id);
@@ -453,6 +452,7 @@ export function createOfficeScene({ host, labels, onSelect, onFailure,
             f.arms[0].rotation.x = f.pose === 'working' ? -.65 + Math.sin(t * 5) * (paused ? 0 : .045) : f.pose === 'eating' ? -1.05 : .1;
             f.arms[1].rotation.x = f.pose === 'working' ? -.65 + Math.sin(t * 5 + 1) * (paused ? 0 : .045) : f.pose === 'coffee' ? -1.2 + Math.sin(t * 1.2) * (paused ? 0 : .13) : f.pose === 'eating' ? -.8 + Math.sin(t * 2) * (paused ? 0 : .13) : .1;
             if (playing) { f.arms[1].rotation.x = -.6 + Math.sin(t * 2.3) * (paused ? 0 : .7); f.arms[0].rotation.x = -.25 + Math.sin(t * 2.3 + 1) * (paused ? 0 : .25); }
+            if(f.pose==='dancing'&&!walking){f.body.rotation.z=paused?0:Math.sin(t*2.4)*.13;f.arms.forEach((arm,i)=>{arm.rotation.x=-.8+Math.sin(t*2.4+i)* (paused?0:.5);});f.legs.forEach((leg,i)=>{leg.rotation.x=paused?0:Math.sin(t*2.4+i*Math.PI)*.25;});}
             if (f.pose === 'meeting') { f.arms[1].rotation.x = -.2 + Math.sin(t * 1.7) * (paused || walking ? 0 : .18); f.head.rotation.y = Math.sin(t * .7) * (paused ? 0 : .06); }
             else f.head.rotation.y = 0;
         }
@@ -462,6 +462,7 @@ export function createOfficeScene({ host, labels, onSelect, onFailure,
             const delta = nextTarget.clone().sub(controls.target).multiplyScalar(.25); controls.target.add(delta); camera.position.add(delta);
         }
         environment.update(now, { paused, dark: document.documentElement.classList.contains('dark'), center: controls.target });
+        rivageBar.update(now,{paused,energySaver});
         for (const { mesh, game } of gameBalls) {
             const t = paused ? 0 : now / 1000;
             const active = !isOfficeNight(getDate()) && [...figures.values()].some(f => f.pose === 'playing' && f.game.id === game.id);
@@ -532,10 +533,11 @@ export function createOfficeScene({ host, labels, onSelect, onFailure,
         if (!dragStart || Math.hypot(e.clientX - dragStart[0], e.clientY - dragStart[1]) > 6) return; dragStart = null;
         const rect = renderer.domElement.getBoundingClientRect(); pointer.set((e.clientX - rect.left) / rect.width * 2 - 1, -(e.clientY - rect.top) / rect.height * 2 + 1);
         raycaster.setFromCamera(pointer, camera);
-        const hit = raycaster.intersectObjects([...figures.values()].map(f => f.group).concat(residences.meshes), true)[0];
+        const hit = raycaster.intersectObjects([...figures.values()].map(f => f.group).concat(residences.meshes,rivageBar.targets), true)[0];
         const resident = residences.personForHit(hit);
         if (resident) { onSelect(resident); visitHome(resident); }
         else if (hit?.object.userData.personId) onSelect(hit.object.userData.personId);
+        else if(hit?.object.userData.officeVenue)onVenue(hit.object.userData.officeVenue);
     };
     function theme() {
         const dark = document.documentElement.classList.contains('dark');
@@ -548,7 +550,8 @@ export function createOfficeScene({ host, labels, onSelect, onFailure,
     const changed = () => requestDraw(); controls.addEventListener('change', changed); controls.addEventListener('start', () => { easingCamera = false; });
     theme(); focusRoom('all'); camera.position.copy(cameraGoal); controls.target.copy(targetFocus); easingCamera = false; resize();
     return { setPeople, resize, focusRoom, visitHome, setCameraMode,
-        setRecreation(id,value){recreation.set(Number(id),value?{...value,until:Date.now()/1000+900}:null);setPeople(roster);},
+        setRecreation(id,value){recreation.set(Number(id),value?{...value,until:value.until||Date.now()/1000+900}:null);setPeople(roster);},
+        setVenueEffects(value){rivageBar.setEnabled(value);requestDraw();},
         setGame(value){if(JSON.stringify(localGame)===JSON.stringify(value))return;localGame=value;setPeople(roster);},
         say(id,message){const f=figures.get(Number(id));if(!f)return;f.bubble.textContent=String(message||'').slice(0,350);f.bubble.hidden=false;if(speechTimers.has(id))clearTimeout(speechTimers.get(id));speechTimers.set(id,setTimeout(()=>{f.bubble.hidden=true;speechTimers.delete(id);requestDraw();},10000));requestDraw();},
         configureWorld(value) { worldConfig = value || {}; environment.configure(worldConfig, energySaver); material('#47695f').color.set(({ alps: '#47695f', village: '#936e53', nordic: '#566c80' })[worldConfig.settings?.landscape] || '#47695f'); requestDraw(); },
