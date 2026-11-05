@@ -36,3 +36,11 @@ Klik sasaran/permukaan mini-game sekarang menjalankan aksi melalui handler yang 
 - Konektor browser kembali dicoba pada tab Kantor Virtual dan tetap gagal dengan `Cannot read properties of undefined (reading 'timeoutMs')`. Tidak mengklaim pemeriksaan visual interaktif, FPS, atau jaminan tidak ada bug pada semua perangkat/jaringan. Tes di atas memverifikasi alur konkret yang telah direproduksi.
 
 Pemasangan menggunakan backup privat kode/aset/data/database, tanpa migrasi skema dan tanpa membuat sesi/pesan/pesanan/bonus fiktif untuk pemeriksaan produksi. Aset lama dipertahankan bagi tab lama; pengguna perlu memuat ulang untuk mendapatkan modul yang baru.
+
+## Hasil produksi
+
+Commit aplikasi `9333c71ee1826f9219d43fc3550a831690012dde` terpasang melalui fast-forward. Composer autoload dan cache Laravel berhasil dibangun. Hash SHA-256 CSS, entry kantor, scene, play, dan music yang diunduh melalui HTTPS identik dengan aset rilis; `/up` merespons 200. Lima endpoint baca privat merespons 401 untuk tamu.
+
+Pemeriksaan render server tanpa login/session pengguna menghasilkan HTTP 200 untuk owner, member Umum, dan Operasional, dengan satu query per halaman (45,93 / 15,44 / 9,61 ms). Snapshot presence cold 15,63 ms dengan tiga query; warm 2,88 ms tanpa query. Angka tersebut adalah sampel pemrosesan server, bukan waktu muat browser atau FPS. Seluruh ID kontrol/interaksi tersedia tepat sekali, modul berat tetap lazy, konfigurasi gerak 150 ms/12 unit/64 titik terpasang, dan data resource berisi 203 collider serta 30 kostum dari lima seri. Privasi owner tersembunyi tetap lolos pemeriksaan.
+
+Backup sebelum rilis tersimpan di `/home4/suc45578/deployment-artifacts/office-reliability-20261105-151647`: arsip kode/aset dan dump database 4.623.372 byte. Direktori berizin 700, dump 600, berkas kredensial sementara sudah dihapus. Tidak ada migrasi skema atau aktivitas pengguna fiktif dalam proses ini.
