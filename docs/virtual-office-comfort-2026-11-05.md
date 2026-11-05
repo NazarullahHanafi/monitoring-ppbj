@@ -40,3 +40,19 @@ Tidak ada migrasi atau penulisan data bisnis baru. Posisi, pintu, dan pose tetap
 - Browser telah dicoba kembali pada tab Kantor Virtual, tetapi konektor gagal dengan `Cannot read properties of undefined (reading 'timeoutMs')`. Pemeriksaan visual interaktif dan FPS GPU belum dapat dilakukan; tes geometri/SSR tidak menggantikannya.
 
 Rilis dipasang dengan backup privat kode, aset, `resources/data`, dan database. Aset sebelumnya dipertahankan di webroot agar tab lama tetap dapat memuat dependensinya. Pengguna perlu memuat ulang halaman untuk memperoleh kode klien baru.
+
+## Hasil produksi
+
+Commit aplikasi `ebd7dc33fbd1bd97c5a4e9263715cf4224c823eb` terpasang di [Kantor Virtual](https://sucofindoumumpku.com/virtual-office) pada PHP 8.3.36. Autoload serta cache config/event/route/view berhasil diperbarui; tidak ada migrasi skema. Lima aset kantor lolos perbandingan SHA-256 melalui HTTP, `/up` mengembalikan 200, dan endpoint data privat tetap 401 tanpa login.
+
+Pemeriksaan SSR untuk owner, anggota dan Operasional mengembalikan 200, mempunyai satu set kontrol pintu/rumah/pose, alamat rumah sendiri, dan 30 kostum. Avatar owner privat hanya disertakan pada halaman pemiliknya, sementara roster publik tetap tidak memuat owner tersembunyi. Endpoint pintu memakai auth dan limiter terpisah 180/menit; pilot tetap 900/menit. Pemeriksaan produksi tidak membuat sesi pilot, heartbeat, pesan, undangan, pesanan, atau bonus buatan.
+
+| Sampel proses PHP | Waktu | SQL |
+|---|---:|---:|
+| Presence dingin, 22 anggota | 29,62 ms | 3 |
+| Presence hangat | 1,88 ms | 0 |
+| Render kantor owner | 54,86 ms | 3 |
+| Render kantor anggota | 36,79 ms | 1 |
+| Render kantor Operasional | 14,17 ms | 1 |
+
+Angka tersebut merupakan sampel proses PHP, bukan latency jaringan atau FPS browser. Backup sebelum pemasangan berada di `/home4/suc45578/deployment-artifacts/office-comfort-20261105-144125`, termasuk database 4.620.432 byte. Direktori mode 700, database mode 600, dan kredensial dump sementara telah dihapus.
