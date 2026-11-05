@@ -14,6 +14,24 @@
 .vo-workspace:fullscreen .vo-main,.vo-workspace.vo-expanded .vo-main{min-height:0}.vo-workspace:fullscreen .vo-scene-wrap,.vo-workspace.vo-expanded .vo-scene-wrap{min-height:0;height:auto}.vo-workspace:fullscreen .vo-team,.vo-workspace.vo-expanded .vo-team{min-height:0}.vo-workspace:fullscreen .vo-people,.vo-workspace.vo-expanded .vo-people{min-height:0}
 
 .vo .vo-room-tabs{grid-template-columns:repeat(5,minmax(0,1fr))}
+.vo-live-hud{grid-column:1/-1;display:flex;align-items:center;gap:13px;flex-wrap:wrap;padding:12px 19px;background:var(--vo-paper);border-bottom:1px solid var(--vo-line)}
+.vo-live-hud>span{font-size:10px;color:var(--vo-accent);margin-right:auto;line-height:1.8}
+.vo-live-hud label{display:flex;align-items:center;gap:6px;font-size:9px;color:var(--vo-muted)}
+.vo-live-hud select{border:1px solid var(--vo-line);background:var(--vo-soft);color:var(--vo-ink);border-radius:7px;font:inherit;padding:6px 22px 6px 8px;max-width:150px}
+.vo-workspace:fullscreen,.vo-workspace.vo-expanded{grid-template-rows:auto minmax(0,1fr)}
+.vo-meeting-panel{padding:18px 21px;border-top:1px solid var(--vo-line);background:var(--vo-soft);max-height:350px;overflow:auto}
+.vo-meeting-panel>div>b{font:22px Georgia,serif;color:var(--vo-ink)}
+.vo-meeting-panel p,.vo-meeting-panel small{font-size:10px;line-height:1.8;color:var(--vo-muted)}
+.vo-meeting-actions{display:flex;gap:8px;margin:9px 0}.vo-meeting-actions button{font-size:10px}
+.vo-office-messages{max-height:145px;overflow:auto;scrollbar-width:thin}
+.vo-office-messages p{margin:6px 0;background:var(--vo-paper);border-radius:8px;padding:7px 11px;overflow-wrap:anywhere;white-space:pre-wrap}
+.vo-office-messages b{display:block;font-size:9px;color:var(--vo-accent)}.vo-office-messages span{color:var(--vo-ink)}
+.vo-meeting-panel form label{display:block;font-size:9px;margin:10px 0 5px;color:var(--vo-ink)}
+.vo-meeting-panel form>div{display:flex;gap:8px}.vo-meeting-panel form input{min-width:0;flex:1;border:1px solid var(--vo-line);border-radius:8px;background:var(--vo-paper);color:var(--vo-ink);font-size:11px;padding:10px}.vo-meeting-panel .vo-primary{width:auto;margin:0;padding:9px 15px}.vo-meeting-panel form small{display:block;font-size:8px;margin-top:7px}
+.vo-live-status{font-size:10px;line-height:1.8;margin:0;padding:0 19px;color:var(--vo-accent)}.vo-live-status:not(:empty){padding-top:9px;padding-bottom:9px}
+.vo-world-panel{position:fixed;inset:0;background:#10272b99;backdrop-filter:blur(10px);display:grid;place-items:center;z-index:1101;padding:20px;overflow:auto}
+.vo-person-detail #voInviteMeeting{width:100%;justify-content:center;margin-top:10px}
+@media(max-width:650px){.vo-live-hud{padding:9px 11px;gap:8px}.vo-live-hud>span{width:100%;font-size:9px}.vo-live-hud select{max-width:130px}.vo-meeting-panel{padding:14px 12px;max-height:300px}.vo-world-panel{padding:10px}}
 .vo-home-detail{width:100%;padding:18px 14px;margin:0 0 18px;border:1px solid var(--vo-line);border-radius:13px;background:linear-gradient(140deg,var(--vo-soft),var(--vo-paper))}
 .vo-home-detail h4{font:25px Georgia,serif;letter-spacing:-.5px;margin:10px 0}
 .vo-home-detail p,.vo-home-detail>small{font-size:9px;line-height:1.9;color:var(--vo-muted)}

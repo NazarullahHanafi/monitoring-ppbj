@@ -68,6 +68,25 @@ test('procedural 3D office builds valid batched geometry, bounds avatars and rel
         const instance = new THREE.Matrix4(); roof.getMatrixAt(0, instance); assert.equal(instance.determinant(), 0);
         roof.getMatrixAt(1, instance); assert.ok(instance.determinant() > .9, 'Other homes remain closed.');
         scene.select(null); draw(500); roof.getMatrixAt(0, instance); assert.ok(instance.determinant() > .9, 'Closing detail restores the roof.');
+        scene.setMeeting({ connected: true, room: { from: 1, to: 2, spot: 5, id: 'test-meeting' } });
+        scene.setPaused(false);
+        for (let i = 0; i < 120; i++) draw(600 + i * 40);
+        assert.equal(scene.meetingReady(), true, 'Both online avatars must reach unobstructed meeting spots and face each other.');
+        scene.setCameraMode('follow', 1); draw(5600); assert.equal(rendered.camera.fov, 44);
+        scene.setCameraMode('portrait', 1); draw(5640);
+        scene.setPaused(true); draw(5680); assert.equal(scene.meetingReady(), true, 'Reduced motion must still allow face-to-face chat.');
+        scene.setMeeting({ room: null, connected: false });
+        scene.setPeople(people.slice(0, 2).map(person => ({ ...person, state: 'online' })));
+        scene.setPaused(false); scene.setMeeting({ connected: true, room: { from: 1, to: 2, spot: 5, id: 'desk-meeting' } });
+        for (let i = 0; i < 900; i++) draw(5800 + i * 40);
+        assert.equal(scene.meetingReady(), true, 'Avatars must be able to navigate out of their desks and around other participants.');
+        for (let spot = 0; spot < 12; spot++) {
+            scene.setMeeting({ room: null, connected: false }); scene.setPeople(people.slice(0, 2).map(person => ({ ...person, state: 'online' })));
+            scene.setMeeting({ connected: true, room: { from: 1, to: 2, spot, id: 'spot-'+spot } });
+            for (let i = 0; i < 1200; i++) draw(50000 + spot * 50000 + i * 40);
+            const positions = []; rendered.world.children.filter(n => n.isGroup).forEach(g => { let id = null; g.traverse(n => { if (n.userData.personId) id = n.userData.personId; }); if (id) positions.push([id, g.position.toArray(), g.rotation.y]); });
+            assert.equal(scene.meetingReady(), true, `Both avatars must reach meeting spot ${spot}: ${JSON.stringify(positions)}`);
+        }
         scene.setVisible(false); assert.equal(frames.size, 0);
         scene.dispose(); assert.equal(disposed, true); assert.equal(host.children.length, 0); assert.equal(labels.children.length, 0); assert.equal(frames.size, 0);
     } finally { for (const [key, value] of Object.entries(previous)) { if (value === undefined) delete global[key]; else global[key] = value; } }

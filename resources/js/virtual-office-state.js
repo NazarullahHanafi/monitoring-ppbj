@@ -38,6 +38,9 @@ export function safePeople(payload) {
     }).map(p => ({ id: p.id, name: String(p.name || 'Anggota tim').slice(0, 150), department: p.department,
         state: p.state, mood: String(p.mood || '').slice(0, 40), is_me: p.is_me === true,
         avatar: safeAvatar(p.avatar), share_activity: p.share_activity !== false,
+        can_talk: p.can_talk !== false,
+        meeting_with: Number.isSafeInteger(p.meeting_with) && p.meeting_with > 0 ? p.meeting_with : null,
+        meeting_spot: Number.isInteger(p.meeting_spot) && p.meeting_spot >= 0 && p.meeting_spot < 12 ? p.meeting_spot : null,
         current_menu: typeof p.current_menu === 'string' ? p.current_menu.slice(0, 60) : null }));
 }
 
@@ -55,7 +58,7 @@ export function createOfficeReadLoop({ read, onData, onError = () => {}, visible
     let timer = null, deadline = null, controller = null, sequence = 0, running = false, enabled = false;
     function clear() { if (timer !== null) clearTimer(timer); timer = null; if (deadline !== null) clearTimer(deadline); deadline = null; }
     function stop() { enabled = false; sequence++; clear(); controller?.abort(); controller = null; running = false; }
-    function schedule() { if (enabled && visible()) timer = setTimer(() => { timer = null; refresh(); }, interval); }
+    function schedule() { if (enabled && visible()) timer = setTimer(() => { timer = null; refresh(); }, typeof interval === 'function' ? interval() : interval); }
     async function refresh(replace = false) {
         if (!visible() || (running && !replace)) return;
         if (replace) { stop(); enabled = true; }

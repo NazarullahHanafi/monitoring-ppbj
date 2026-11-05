@@ -145,6 +145,13 @@ export function createResidences({ scene, material, ownedGeometries }) {
         select(id) { selected = slots.has(id) ? id : null; update(); },
         location(id) { const slot = slots.get(id); return slot === undefined ? null : at(slot); },
         bed(id) { const location = this.location(id); return location ? [location.x - 2.05, .92, location.z - .5] : null; },
+        cameraBoxes(id) {
+            const p = this.location(id); if (!p) return [];
+            const box = (x, z, w, d, top) => ({ left: p.x + x - w / 2, right: p.x + x + w / 2, back: p.z + z - d / 2, front: p.z + z + d / 2, top });
+            const result = [box(-4.6, 0, .18, 7.8, 3.6), box(0, -3.9, 9.4, .18, 3.6), box(3.65, -2.78, 1.05, .92, 2.3), box(2.95, -.75, 2.62, .95, 1.3), box(2.8, 2.45, 2.6, 1.2, 1.3)];
+            if (id !== selected) result.push(box(4.6, 0, .18, 7.8, 3.6), box(0, 3.9, 9.4, .18, 3.6));
+            return result;
+        },
         personForHit(hit) { return hit?.object?.userData?.residenceLayer && Number.isInteger(hit.instanceId) ? owners[hit.instanceId] : null; },
         bounds() { return { left: -43, right: 43, back: -24 - rows * 12, front: -20 }; },
         dispose() { meshes.forEach(mesh => { mesh.dispose(); scene.remove(mesh); }); scene.remove(ground, avenue); slots.clear(); owners.fill(null); }

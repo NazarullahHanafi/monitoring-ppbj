@@ -91,6 +91,11 @@ Route::post('/virtual-office/avatar', [\App\Http\Controllers\VirtualOfficeContro
     ->middleware(['auth', 'throttle:20,1'])->name('virtual-office.avatar');
 
 Route::middleware(['auth', 'readonly.block'])->group(function () {
+    Route::post('/virtual-office/world', [\App\Http\Controllers\VirtualOfficeWorldController::class, 'save'])->middleware('throttle:10,1')->name('virtual-office.world');
+    Route::get('/virtual-office/live', [\App\Http\Controllers\VirtualOfficeMeetingController::class, 'live'])->middleware('throttle:40,1')->name('virtual-office.live');
+    Route::post('/virtual-office/meetings', [\App\Http\Controllers\VirtualOfficeMeetingController::class, 'invite'])->middleware('throttle:6,1')->name('virtual-office.meetings.invite');
+    Route::post('/virtual-office/meetings/respond', [\App\Http\Controllers\VirtualOfficeMeetingController::class, 'respond'])->middleware('throttle:20,1')->name('virtual-office.meetings.respond');
+    Route::post('/virtual-office/meetings/send', [\App\Http\Controllers\VirtualOfficeMeetingController::class, 'send'])->middleware('throttle:20,1')->name('virtual-office.meetings.send');
     Route::get('/virtual-office/people/{user}/activity', [\App\Http\Controllers\VirtualOfficeController::class, 'activity'])
         ->middleware('throttle:30,1')->name('virtual-office.activity');
     Route::get('/virtual-office', [\App\Http\Controllers\VirtualOfficeController::class, 'index'])

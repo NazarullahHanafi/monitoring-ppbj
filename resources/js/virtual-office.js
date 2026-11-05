@@ -1,4 +1,5 @@
 import { safePeople, poseFor, initials, stateLabel, poseLabel, createOfficeReadLoop, games, gameFor, safeAvatar, isOfficeNight } from './virtual-office-state.js';
+import { mountOfficeLive } from './virtual-office-live.js';
 
 const root = document.getElementById('virtualOffice');
 if (root && !root.dataset.initialized) {
@@ -8,6 +9,9 @@ if (root && !root.dataset.initialized) {
     const palette = ['#dce9df', '#eadfcc', '#dde5f1', '#e8dce5', '#d3e8e4', '#f0dfce'];
     let people = [], filter = 'all', selected = null, scene = null, sceneTicket = 0, sceneLoading = false, inView = true, leftPage = false;
     let requestedRoom = isOfficeNight() ? 'residences' : 'all', requestedHome = null;
+    let worldConfig = config.initial?.world || {}, live = null, sceneUnavailable = false;
+    let energySaver = window.matchMedia('(max-width: 650px)').matches || Number(window.navigator?.hardwareConcurrency || 8) <= 4 || Number(window.navigator?.deviceMemory || 8) <= 4;
+    try { const preference = localStorage.getItem('simonpr:office:quality'); if (['low', 'standard'].includes(preference)) energySaver = preference === 'low'; } catch {}
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
     let paused = reduced.matches, mode = '3d';
     try { if (localStorage.getItem('simonpr:office:view') === 'list') mode = 'list'; } catch {}
@@ -23,6 +27,14 @@ if (root && !root.dataset.initialized) {
         host.style.setProperty('--vo-shirt', { emerald: '#547a71', navy: '#405978', rose: '#b97988', cream: '#d3bc96', lavender: '#9682ae', terracotta: '#bb8265' }[a.color]);
         host.style.setProperty('--vo-skin', { light: '#efd0ae', warm: '#dba77d', tan: '#bc8762', deep: '#895e46' }[a.skin]);
         for (const part of ['halo', 'hair', 'ear-left', 'ear-right', 'neck', 'body', 'arm-left', 'arm-right', 'leg-left', 'leg-right', 'face', 'fringe', 'eyes', 'smile', 'glasses', 'phones']) { const node = document.createElement('span'); node.className = `vo-doll-${part}`; host.append(node); }
+    }
+    function chatActions(person) {
+        const meeting = live?.state();
+        const partner = meeting?.room && (meeting.room.from === Number(config.myId) ? meeting.room.to : meeting.room.from);
+        const ready = Boolean(meeting?.ready && partner === person.id && person.state !== 'offline');
+        $('voChat').disabled = !config.canChat || person.is_me || !ready;
+        $('voInviteMeeting').disabled = !config.canMeet || person.is_me || person.state === 'offline' || !person.can_talk || Boolean(meeting?.room);
+        text('voChatNote', !config.canChat ? 'Mode Viewer: melihat tim tanpa mengirim pesan.' : person.is_me ? 'Ini avatar Anda.' : ready ? 'Kedua avatar siap. Pesan mention terlihat oleh Chat Tim.' : 'Undang rekan online, tunggu diterima dan kedua avatar bertatap muka sebelum chat.');
     }
     function personButton(person) {
         const button = document.createElement('button'); button.type = 'button'; button.className = 'vo-person';
@@ -61,8 +73,7 @@ if (root && !root.dataset.initialized) {
         text('voDetailMood', person.mood || '✧');
         text('voHomeStatus', poseFor(person) === 'sleeping' ? 'Penghuni beristirahat di kasur rumahnya. Pilih Lihat rumah untuk membuka tampilan interior.' : 'Rumah pribadi tetap tersedia; penghuni sedang berada di area lain.');
         text('voDetailNote', 'Kehadiran mengikuti heartbeat aplikasi. Pose avatar hanya ilustrasi; tidak menunjukkan aktivitas fisik atau produktivitas anggota tim.');
-        $('voChat').disabled = !config.canChat || person.is_me;
-        text('voChatNote', !config.canChat ? 'Mode Viewer: Anda dapat melihat tim, tanpa mengirim pesan.' : person.is_me ? 'Ini adalah avatar Anda di ruang virtual.' : 'Membuka draf mention; pesan dikirim setelah Anda menekan Kirim.');
+        chatActions(person);
         if (focus) {
             $('voWorkspace').classList.remove('vo-team-hidden'); $('voWorkspace').classList.add('vo-team-open'); $('voToggleTeam').setAttribute('aria-pressed', 'true');
             if (!document.fullscreenElement && !$('voWorkspace').classList.contains('vo-expanded') && window.matchMedia('(max-width: 950px)').matches) $('voDetail').scrollIntoView?.({ block: 'nearest', behavior: paused ? 'auto' : 'smooth' });
@@ -79,6 +90,7 @@ if (root && !root.dataset.initialized) {
         text('voSync', `Diperbarui ${Number.isNaN(stamp.valueOf()) ? 'baru saja' : stamp.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}${snapshot?.limited ? ' · Maksimal 120 anggota' : ''}`);
         if (selected !== null && !people.some(p => p.id === selected)) { selected = null; $('voDetail').hidden = true; }
         renderPeople(); scene?.setPeople(people);
+        if (snapshot?.world) { worldConfig = snapshot.world; scene?.configureWorld?.(worldConfig); }
         if (selected !== null) select(selected);
         text('voDayPhase', isOfficeNight() ? '17.00–07.00 WIB · tidur di rumah masing-masing' : '07.00–17.00 WIB · avatar offline berekreasi');
     }
@@ -93,18 +105,21 @@ if (root && !root.dataset.initialized) {
             return response.json();
         }, onData: apply, onError: error => text('voSync', error.message) });
     async function ensureScene() {
-        if (scene || sceneLoading || mode !== '3d' || !visible()) return;
+        if (scene || sceneLoading || sceneUnavailable || mode !== '3d' || !visible()) return;
         const ticket = ++sceneTicket; sceneLoading = true; $('voLoading').hidden = false;
         try {
             const { createOfficeScene } = await import('./virtual-office-scene.js');
             if (ticket !== sceneTicket || mode !== '3d' || !visible()) return;
-            scene = createOfficeScene({ host: $('voScene'), labels: $('voLabels'), onSelect: id => select(id, true), onFailure: () => { switchView('list', false); text('voSync', 'Ruang 3D tidak tersedia. Tim tetap dapat dilihat di mode ringan.'); } });
+            scene = createOfficeScene({ host: $('voScene'), labels: $('voLabels'), onSelect: id => select(id, true), onFailure: () => { sceneUnavailable = true; switchView('list', false); text('voSync', 'Ruang 3D tidak tersedia. Tim tetap dapat dilihat di mode ringan.'); } });
             scene.setPeople(people); scene.setPaused(paused); scene.setVisible(visible());
+            scene.configureWorld?.(worldConfig); scene.setEnergySaver?.(energySaver);
             scene.focusRoom(requestedRoom);
             if (selected) scene.select(selected, true);
             if (requestedHome !== null) scene.visitHome?.(requestedHome);
+            if (live) scene.setMeeting?.(live.state());
+            if (['follow', 'portrait'].includes($('voCameraMode').value)) scene.setCameraMode?.($('voCameraMode').value, selected || people.find(p => p.is_me)?.id);
         } catch {
-            if (ticket === sceneTicket) { switchView('list', false); text('voSync', 'Ruang 3D belum dapat dibuka. Mode ringan tetap tersedia.'); }
+            if (ticket === sceneTicket) { sceneUnavailable = true; switchView('list', false); text('voSync', 'Ruang 3D belum dapat dibuka. Mode ringan tetap tersedia.'); }
         } finally { if (ticket === sceneTicket) { sceneLoading = false; $('voLoading').hidden = true; } }
     }
     function switchView(next, persist = true) {
@@ -116,23 +131,27 @@ if (root && !root.dataset.initialized) {
         $('voSceneHint').textContent = mode === '3d' ? 'Putar ruang dengan geser · Gulir untuk mendekat' : 'Pilih anggota untuk melihat detail dan membuka chat';
     }
     function lifecycle() {
-        if (!visible()) { loop.stop(); stopActivity(); scene?.setVisible(false); }
-        else { if (feedUrl) loop.start(true); scene?.setVisible(mode === '3d'); ensureScene(); }
+        if (!visible()) { loop.stop(); live?.stop(); stopActivity(); scene?.setVisible(false); }
+        else { if (feedUrl) loop.start(true); live?.start(true); scene?.setVisible(mode === '3d'); ensureScene(); }
     }
     $('voSearch').addEventListener('input', renderPeople);
     root.querySelectorAll('[data-vo-filter]').forEach(button => button.addEventListener('click', () => { filter = button.dataset.voFilter; root.querySelectorAll('[data-vo-filter]').forEach(b => b.setAttribute('aria-pressed', String(b === button))); renderPeople(); }));
-    function focusArea(room) { requestedRoom = room; requestedHome = null; if (mode !== '3d') switchView('3d'); scene?.focusRoom(room); }
+    function focusArea(room) { requestedRoom = room; requestedHome = null; $('voCameraMode').value = 'orbit'; if (mode !== '3d') switchView('3d'); scene?.focusRoom(room); }
     root.querySelectorAll('[data-vo-room]').forEach(button => button.addEventListener('click', () => { root.querySelectorAll('[data-vo-room]').forEach(b => b.setAttribute('aria-pressed', String(b === button))); focusArea(button.dataset.voRoom); }));
     $('voCloseDetail').addEventListener('click', () => { stopActivity(); selected = null; requestedHome = null; $('voDetail').hidden = true; scene?.select(null); renderPeople(); });
     $('voVisitHome').addEventListener('click', () => { if (selected === null) return; const id = selected; focusArea('residences'); requestedHome = id; scene?.visitHome?.(id); text('voSceneHint', 'Interior rumah terpilih · tutup detail untuk menutup atap kembali'); });
-    $('voView3d').addEventListener('click', () => switchView('3d')); $('voViewList').addEventListener('click', () => switchView('list'));
+    $('voView3d').addEventListener('click', () => { sceneUnavailable = false; switchView('3d'); }); $('voViewList').addEventListener('click', () => switchView('list'));
     $('voZoomIn').addEventListener('click', () => scene?.zoom(.82)); $('voZoomOut').addEventListener('click', () => scene?.zoom(1.22)); $('voReset').addEventListener('click', () => focusArea('all'));
     function motionButton() { $('voMotion').setAttribute('aria-pressed', String(paused)); $('voMotion').setAttribute('aria-label', paused ? 'Lanjutkan animasi' : 'Jeda animasi'); $('voMotion').textContent = paused ? '▷' : 'Ⅱ'; }
     $('voMotion').addEventListener('click', () => { paused = !paused; motionButton(); scene?.setPaused(paused); });
     reduced.addEventListener('change', event => { paused = event.matches; motionButton(); scene?.setPaused(paused); });
     $('voRefresh').addEventListener('click', () => { if (feedUrl) loop.refresh(true); });
     $('voFindMe').addEventListener('click', () => { const me = people.find(p => p.is_me); if (me) select(me.id, true); else text('voSync', 'Akun Anda tidak ditampilkan dalam kehadiran tim. Pengaturan avatar tetap tersedia.'); });
-    $('voChat').addEventListener('click', () => { const person = people.find(p => p.id === selected); if (!config.canChat || !person || person.is_me) return; if (typeof window.SimonOfficeMention !== 'function' || !window.SimonOfficeMention(person)) text('voChatNote', 'Chat belum siap atau draf penuh. Buka Chat Tim melalui tombol chat, lalu coba lagi.'); });
+    $('voCameraMode').addEventListener('change', () => { const id = selected || people.find(p => p.is_me)?.id; if (!id && $('voCameraMode').value !== 'orbit') { text('voLiveStatus', 'Pilih avatar melalui daftar tim terlebih dahulu.'); $('voCameraMode').value = 'orbit'; return; } if (mode !== '3d') switchView('3d'); scene?.setCameraMode?.($('voCameraMode').value, id); });
+    $('voQuality').value = energySaver ? 'low' : 'standard';
+    $('voQuality').addEventListener('change', () => { energySaver = $('voQuality').value === 'low'; scene?.setEnergySaver?.(energySaver); try { localStorage.setItem('simonpr:office:quality', energySaver ? 'low' : 'standard'); } catch {} });
+    $('voInviteMeeting').addEventListener('click', () => { if (selected !== null) { if (mode !== '3d') switchView('3d'); live?.invite(selected); } });
+    $('voChat').addEventListener('click', async () => { const person = people.find(p => p.id === selected), meeting = live?.state(), partner = meeting?.room && (meeting.room.from === Number(config.myId) ? meeting.room.to : meeting.room.from); if (!config.canChat || !person || person.is_me || !meeting?.ready || partner !== selected || person.state === 'offline') return; if (document.fullscreenElement) await document.exitFullscreen(); if (typeof window.SimonOfficeMention !== 'function' || !window.SimonOfficeMention(person)) text('voChatNote', 'Chat belum siap atau draf penuh. Gunakan kolom pesan pertemuan.'); });
     $('voFullscreen').addEventListener('click', async () => {
         const workspace = $('voWorkspace');
         try { if (document.fullscreenElement === workspace) await document.exitFullscreen(); else if (workspace.requestFullscreen) await workspace.requestFullscreen(); else workspace.classList.toggle('vo-expanded'); }
@@ -211,9 +230,12 @@ if (root && !root.dataset.initialized) {
         finally { clearTimeout(deadline); avatarRequest = null; $('voSaveAvatar').disabled = false; }
     });
     document.addEventListener('visibilitychange', lifecycle);
-    window.addEventListener('pagehide', () => { leftPage = true; loop.stop(); stopActivity(); avatarRequest?.abort(); scene?.setVisible(false); });
+    window.addEventListener('pagehide', () => { leftPage = true; loop.stop(); live?.stop(); stopActivity(); avatarRequest?.abort(); scene?.setVisible(false); });
     window.addEventListener('pageshow', event => { if (event.persisted) { leftPage = false; lifecycle(); } });
     if ('IntersectionObserver' in window) { const observer = new IntersectionObserver(entries => { const next = entries[0].isIntersecting; if (next !== inView) { inView = next; lifecycle(); } }, { rootMargin: '120px' }); observer.observe($('voWorkspace')); }
     root.querySelectorAll('[data-vo-room]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.voRoom === requestedRoom)));
-    apply(config.initial); motionButton(); switchView(mode, false); if (feedUrl) loop.start();
+    live = mountOfficeLive({ document, config, visible, getScene: () => scene, getPeople: () => people,
+        onWorld: value => { worldConfig = value; scene?.configureWorld?.(value); },
+        onRoom: value => { scene?.setMeeting?.(value); const person = people.find(p => p.id === selected); if (person) chatActions(person); if (value.room?.status === 'accepted' && mode !== '3d' && !sceneUnavailable) { switchView('3d'); text('voLiveStatus', 'Ruang 3D dibuka agar kedua avatar dapat bertatap muka.'); } } });
+    apply(config.initial); motionButton(); switchView(mode, false); if (feedUrl) loop.start(); live.start();
 }

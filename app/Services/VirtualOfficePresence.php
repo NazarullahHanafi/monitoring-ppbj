@@ -17,7 +17,7 @@ class VirtualOfficePresence
                 ->orderBy('users.id')->limit(122)->get(['users.id', 'name', 'email', 'role', 'department', 'gender', 'profile.avatar', 'profile.share_activity'])
                 ->filter(fn (User $user) => $user->shouldDisplayInPresence())
                 ->map(fn (User $user) => ['id' => $user->id, 'name' => $user->name, 'department' => $user->department,
-                    'avatar' => VirtualOfficeAvatar::sanitize($user->avatar, $user->gender, $user->id), 'share_activity' => $user->share_activity === null || (bool) $user->share_activity])
+                    'avatar' => VirtualOfficeAvatar::sanitize($user->avatar, $user->gender, $user->id), 'can_talk' => ! $user->isReadOnly(), 'share_activity' => $user->share_activity === null || (bool) $user->share_activity])
                 ->values()->all();
         });
         $limited = count($directory) > 120;
@@ -27,6 +27,8 @@ class VirtualOfficePresence
             $keys[] = 'presence:user:'.$person['id'];
             $keys[] = 'presence:mood:'.$person['id'];
             $keys[] = 'office:menu:'.$person['id'];
+            $keys[] = VirtualOfficeMeetings::key($person['id']);
+            $keys[] = VirtualOfficeMeetings::lease($person['id']);
         }
         $presence = $keys === [] ? [] : Cache::many($keys);
         $counts = ['online' => 0, 'idle' => 0, 'offline' => 0];
@@ -36,16 +38,23 @@ class VirtualOfficePresence
             $online = is_array($entry) && (int) ($entry['id'] ?? 0) === (int) $person['id'];
             $state = $online ? (! empty($entry['idle']) ? 'idle' : 'online') : 'offline';
             $counts[$state]++;
+            $room = $presence[VirtualOfficeMeetings::key($person['id'])] ?? null;
+            $partner = is_array($room) ? (($room['from'] ?? null) === (int) $person['id'] ? ($room['to'] ?? 0) : ($room['from'] ?? 0)) : 0;
+            $paired = $online && is_array($room) && ($room['status'] ?? '') === 'accepted' && ($room['expires'] ?? 0) > now()->timestamp
+                && ! empty($presence[VirtualOfficeMeetings::lease($person['id'])]) && ! empty($presence[VirtualOfficeMeetings::lease($partner)])
+                && is_array($presence['presence:user:'.$partner] ?? null);
             $people[] = $person + [
                 'state' => $state,
                 'mood' => mb_substr((string) ($presence['presence:mood:'.$person['id']] ?? $entry['mood'] ?? ''), 0, 20),
                 'is_me' => (int) $person['id'] === (int) $viewer->id,
+                'meeting_with' => $paired ? $partner : null, 'meeting_spot' => $paired ? (int) $room['spot'] : null,
                 'current_menu' => $online && ($person['share_activity'] || (int) $person['id'] === (int) $viewer->id)
                     ? (VirtualOfficeActivity::MENUS[$presence['office:menu:'.$person['id']] ?? ''] ?? null) : null,
             ];
         }
 
         return ['people' => $people, 'counts' => $counts, 'limited' => $limited,
-            'updated_at' => now()->toIso8601String(), 'refresh_seconds' => 45, 'timezone' => 'Asia/Jakarta'];
+            'updated_at' => now()->toIso8601String(), 'refresh_seconds' => 45, 'timezone' => 'Asia/Jakarta',
+            'world' => app(VirtualOfficeWorld::class)->snapshot()];
     }
 }

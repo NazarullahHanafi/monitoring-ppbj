@@ -20,7 +20,9 @@ class VirtualOfficeController extends Controller
         $officeConfig = ['initial' => $presence->snapshot($request->user()),
             'feedUrl' => route('virtual-office.presence', [], false), 'canChat' => ! $request->user()->isReadOnly(),
             'profileUrl' => '/virtual-office/avatar', 'myId' => $request->user()->id,
-            'myProfile' => $this->profile($request->user()), 'avatarOptions' => VirtualOfficeAvatar::options()];
+            'myProfile' => $this->profile($request->user()), 'avatarOptions' => VirtualOfficeAvatar::options(),
+            'canConfigureWorld' => \App\Services\VirtualOfficeWorld::canConfigure($request->user()),
+            'canMeet' => \App\Services\VirtualOfficeMeetings::eligible($request->user())];
 
         return response()->view('virtual-office.index', compact('officeConfig'))
             ->header('Cache-Control', 'private, no-store');

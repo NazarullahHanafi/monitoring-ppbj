@@ -72,7 +72,7 @@ class VirtualOfficeTest extends TestCase
         $this->actingAs($user)->getJson(route('virtual-office.presence'))->assertOk()->assertJsonPath('people.0.state', 'offline');
     }
 
-    public function test_feed_uses_one_bounded_directory_query_then_zero_sql_without_writing_activity(): void
+    public function test_feed_uses_bounded_directory_and_world_queries_then_zero_sql_without_writing_activity(): void
     {
         $user = User::factory()->create(['department' => 'umum']);
         User::factory()->count(30)->create(['department' => 'operasional']);
@@ -81,7 +81,7 @@ class VirtualOfficeTest extends TestCase
             $queries[] = strtolower($query->sql);
         });
         $this->actingAs($user)->getJson(route('virtual-office.presence'))->assertOk()->assertJsonCount(31, 'people');
-        $this->assertCount(1, $queries);
+        $this->assertCount(2, $queries);
         $this->assertStringContainsString('limit 122', $queries[0]);
         $queries = [];
         $this->getJson(route('virtual-office.presence'))->assertOk();
