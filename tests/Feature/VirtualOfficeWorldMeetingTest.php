@@ -65,7 +65,7 @@ class VirtualOfficeWorldMeetingTest extends TestCase
         $this->actingAs($outsider)->postJson(route('virtual-office.meetings.invite'), ['target_id' => $b->id])->assertStatus(409);
     }
 
-    public function test_live_chat_requires_both_face_to_face_acknowledgements_and_uses_existing_public_chat(): void
+    public function test_meeting_chat_requires_face_to_face_acknowledgements_and_stays_private_to_office(): void
     {
         $a = $this->person(); $b = $this->person(); $room = $this->invite($a, $b);
         $this->actingAs($b)->postJson(route('virtual-office.meetings.respond'), ['id' => $room['id'], 'action' => 'accept'])->assertOk();
@@ -75,10 +75,11 @@ class VirtualOfficeWorldMeetingTest extends TestCase
         $this->actingAs($b)->getJson(route('virtual-office.live').'?ready='.$room['id'])->assertOk()->assertJsonPath('ready', false);
         $this->actingAs($a)->getJson(route('virtual-office.live').'?ready='.$room['id'])->assertOk()->assertJsonPath('ready', true);
         $this->postJson(route('virtual-office.meetings.send'), ['id' => $room['id'], 'message' => '<script>alert(1)</script>'])->assertCreated();
-        $this->assertDatabaseCount('chat_messages', 1);
+        $this->assertDatabaseCount('chat_messages', 0);
+        $this->assertDatabaseCount('virtual_office_messages', 1);
         $this->actingAs($b)->getJson(route('virtual-office.live').'?ready='.$room['id'])->assertOk()->assertJsonCount(1, 'messages');
-        $row = DB::table('chat_messages')->first();
-        $this->assertSame($a->id, $row->user_id); $this->assertStringContainsString('@'.$b->name, $row->message);
+        $row = DB::table('virtual_office_messages')->first();
+        $this->assertSame($a->id, $row->user_id); $this->assertSame($b->id, $row->target_id); $this->assertSame('<script>alert(1)</script>', $row->message);
         $this->postJson(route('virtual-office.meetings.respond'), ['id' => $room['id'], 'action' => 'end'])->assertOk();
         $this->actingAs($a)->postJson(route('virtual-office.meetings.send'), ['id' => $room['id'], 'message' => 'Sudah selesai'])->assertNotFound();
     }

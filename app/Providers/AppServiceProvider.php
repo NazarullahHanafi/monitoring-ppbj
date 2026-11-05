@@ -33,6 +33,9 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        \Event::listen(\Illuminate\Auth\Events\Login::class, function ($event) {
+            if ($event->user instanceof User) app(\App\Services\VirtualOfficeRecreation::class)->daily($event->user);
+        });
         // Directory contains presentation fields only; heartbeat's raw SQL last-seen
         // updates do not invalidate it. Account edits/locks do invalidate it.
         User::saved(fn () => Cache::forget(\App\Services\VirtualOfficePresence::DIRECTORY_KEY));

@@ -29,6 +29,7 @@ class VirtualOfficePresence
             $keys[] = 'office:menu:'.$person['id'];
             $keys[] = VirtualOfficeMeetings::key($person['id']);
             $keys[] = VirtualOfficeMeetings::lease($person['id']);
+            $keys[] = 'office:recreation:'.$person['id'];
         }
         $presence = $keys === [] ? [] : Cache::many($keys);
         $counts = ['online' => 0, 'idle' => 0, 'offline' => 0];
@@ -47,6 +48,8 @@ class VirtualOfficePresence
                 'state' => $state,
                 'mood' => mb_substr((string) ($presence['presence:mood:'.$person['id']] ?? $entry['mood'] ?? ''), 0, 20),
                 'is_me' => (int) $person['id'] === (int) $viewer->id,
+                'recreation' => $online && is_array($presence['office:recreation:'.$person['id']] ?? null)
+                    ? array_intersect_key($presence['office:recreation:'.$person['id']], array_flip(['destination', 'kind', 'until'])) : null,
                 'meeting_with' => $paired ? $partner : null, 'meeting_spot' => $paired ? (int) $room['spot'] : null,
                 'current_menu' => $online && ($person['share_activity'] || (int) $person['id'] === (int) $viewer->id)
                     ? (VirtualOfficeActivity::MENUS[$presence['office:menu:'.$person['id']] ?? ''] ?? null) : null,

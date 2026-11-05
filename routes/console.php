@@ -15,6 +15,12 @@ Artisan::command('office:prune-visits', function () {
 
 Schedule::command('office:prune-visits')->dailyAt('02:30')->withoutOverlapping();
 
+Artisan::command('office:prune-messages', function () {
+    $count = \Illuminate\Support\Facades\DB::table('virtual_office_messages')->where('created_at', '<', now()->subDays(7))->delete();
+    $this->info("Pruned {$count} old virtual-office messages.");
+})->purpose('Keep only seven days of private virtual-office conversations');
+Schedule::command('office:prune-messages')->dailyAt('02:40')->withoutOverlapping();
+
 Schedule::command('owner:backup-email')
     ->weeklyOn(5, '02:00')
     ->timezone(config('app.timezone', 'Asia/Jakarta'))

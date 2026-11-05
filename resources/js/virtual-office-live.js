@@ -56,7 +56,7 @@ export function mountOfficeLive({ document: doc, config, visible, getScene, getP
         event.preventDefault(); const input = $('voOfficeChatInput'), message = input.value.trim();
         if (!config.canMeet || !state.ready || !state.room || !message || message.length > 350) return;
         const result = await post('/virtual-office/meetings/send', { id: state.room.id, message });
-        if (result) { input.value = ''; text('voLiveStatus', 'Pesan terkirim ke Chat Tim.'); }
+        if (result) { input.value = ''; getScene()?.say?.(config.myId,message); text('voLiveStatus', 'Pesan langsung terkirim di kawasan.'); }
     });
     if (config.canConfigureWorld && $('voWorldForm')) {
         doc.addEventListener('keydown', event => {

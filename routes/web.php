@@ -91,6 +91,16 @@ Route::post('/virtual-office/avatar', [\App\Http\Controllers\VirtualOfficeContro
     ->middleware(['auth', 'throttle:20,1'])->name('virtual-office.avatar');
 
 Route::middleware(['auth', 'readonly.block'])->group(function () {
+    Route::get('/virtual-office/recreation', [\App\Http\Controllers\VirtualOfficeRecreationController::class, 'account'])->middleware('throttle:15,1')->name('virtual-office.recreation');
+    Route::post('/virtual-office/recreation/order', [\App\Http\Controllers\VirtualOfficeRecreationController::class, 'order'])->middleware('throttle:20,1')->name('virtual-office.order');
+    Route::post('/virtual-office/recreation/consume', [\App\Http\Controllers\VirtualOfficeRecreationController::class, 'consume'])->middleware('throttle:20,1')->name('virtual-office.consume');
+    Route::post('/virtual-office/recreation/move', [\App\Http\Controllers\VirtualOfficeRecreationController::class, 'move'])->middleware('throttle:20,1')->name('virtual-office.move');
+    Route::get('/virtual-office/messages', [\App\Http\Controllers\VirtualOfficeRecreationController::class, 'messages'])->middleware('throttle:40,1')->name('virtual-office.messages');
+    Route::post('/virtual-office/messages', [\App\Http\Controllers\VirtualOfficeRecreationController::class, 'send'])->middleware('throttle:20,1')->name('virtual-office.messages.send');
+    Route::get('/virtual-office/game', [\App\Http\Controllers\VirtualOfficeGameController::class, 'show'])->middleware('throttle:40,1')->name('virtual-office.game');
+    Route::post('/virtual-office/game/invite', [\App\Http\Controllers\VirtualOfficeGameController::class, 'invite'])->middleware('throttle:6,1')->name('virtual-office.game.invite');
+    Route::post('/virtual-office/game/respond', [\App\Http\Controllers\VirtualOfficeGameController::class, 'respond'])->middleware('throttle:20,1')->name('virtual-office.game.respond');
+    Route::post('/virtual-office/game/hit', [\App\Http\Controllers\VirtualOfficeGameController::class, 'hit'])->middleware('throttle:45,1')->name('virtual-office.game.hit');
     Route::post('/virtual-office/world', [\App\Http\Controllers\VirtualOfficeWorldController::class, 'save'])->middleware('throttle:10,1')->name('virtual-office.world');
     Route::get('/virtual-office/live', [\App\Http\Controllers\VirtualOfficeMeetingController::class, 'live'])->middleware('throttle:40,1')->name('virtual-office.live');
     Route::post('/virtual-office/meetings', [\App\Http\Controllers\VirtualOfficeMeetingController::class, 'invite'])->middleware('throttle:6,1')->name('virtual-office.meetings.invite');

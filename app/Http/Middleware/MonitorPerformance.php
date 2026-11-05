@@ -101,6 +101,8 @@ class MonitorPerformance
             'activity-broadcast/feed',
             'virtual-office/presence',
             'virtual-office/live',
+            'virtual-office/messages',
+            'virtual-office/game',
             'archive-gateway',
             'chat/messages',
             'chat/mentions/unread',

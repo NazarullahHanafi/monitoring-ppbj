@@ -12,6 +12,7 @@ export const games = [
     { id: 'darts', name: 'Dart', icon: '🎯', x: 30, z: 28, kind: 'table' },
     { id: 'arcade', name: 'Arcade Racing', icon: '🎮', x: -12, z: 41, kind: 'table' },
     { id: 'bowling', name: 'Bowling', icon: '🎳', x: 12, z: 41, kind: 'court' },
+    { id: 'archery', name: 'Panahan', icon: '🏹', x: 32, z: 45, kind: 'court' },
 ];
 export const poseLabel = { working: 'Di meja kerja', coffee: 'Menikmati kopi', eating: 'Menikmati camilan', resting: 'Bersantai di lounge', sleeping: 'Tidur di rumah pribadi (17.00–07.00 WIB)', playing: 'Bermain di taman rekreasi' };
 export function isOfficeNight(date = new Date()) {
@@ -39,6 +40,7 @@ export function safePeople(payload) {
         state: p.state, mood: String(p.mood || '').slice(0, 40), is_me: p.is_me === true,
         avatar: safeAvatar(p.avatar), share_activity: p.share_activity !== false,
         can_talk: p.can_talk !== false,
+        recreation: p.recreation && ['bar','beach','garden','terrace','lounge','office',...games.map(g=>g.id)].includes(p.recreation.destination) ? { destination: p.recreation.destination, kind: ['drink','food','relax','game'].includes(p.recreation.kind) ? p.recreation.kind : 'relax', until: Number(p.recreation.until) || 0 } : null,
         meeting_with: Number.isSafeInteger(p.meeting_with) && p.meeting_with > 0 ? p.meeting_with : null,
         meeting_spot: Number.isInteger(p.meeting_spot) && p.meeting_spot >= 0 && p.meeting_spot < 12 ? p.meeting_spot : null,
         current_menu: typeof p.current_menu === 'string' ? p.current_menu.slice(0, 60) : null }));

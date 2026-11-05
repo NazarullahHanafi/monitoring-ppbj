@@ -71,8 +71,9 @@ class VirtualOfficeMeetingController extends Controller
             $other = User::findOrFail($room['from'] === (int) $request->user()->id ? $room['to'] : $room['from']);
             abort_unless(VirtualOfficeMeetings::eligible($other), 409, 'Rekan sudah tidak tersedia.');
             $text = trim($data['message']); abort_if($text === '', 422, 'Isi pesan terlebih dahulu.');
-            $request->replace(['message' => '@'.$other->name.' '.$text, 'mentions' => [['id' => $other->id, 'name' => $other->name]]]);
-            return app(ChatController::class)->send($request)->header('Cache-Control', 'private, no-store');
+            $id = \Illuminate\Support\Facades\DB::table('virtual_office_messages')->insertGetId(['user_id' => $request->user()->id,
+                'target_id' => $other->id, 'message' => $text, 'request_id' => (string) \Illuminate\Support\Str::uuid(), 'created_at' => now()]);
+            return response()->json(['id' => $id], 201)->header('Cache-Control', 'private, no-store');
         });
     }
 }

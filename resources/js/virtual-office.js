@@ -1,5 +1,6 @@
 import { safePeople, poseFor, initials, stateLabel, poseLabel, createOfficeReadLoop, games, gameFor, safeAvatar, isOfficeNight } from './virtual-office-state.js';
 import { mountOfficeLive } from './virtual-office-live.js';
+import { mountOfficeClub } from './virtual-office-club.js';
 
 const root = document.getElementById('virtualOffice');
 if (root && !root.dataset.initialized) {
@@ -9,7 +10,7 @@ if (root && !root.dataset.initialized) {
     const palette = ['#dce9df', '#eadfcc', '#dde5f1', '#e8dce5', '#d3e8e4', '#f0dfce'];
     let people = [], filter = 'all', selected = null, scene = null, sceneTicket = 0, sceneLoading = false, inView = true, leftPage = false;
     let requestedRoom = isOfficeNight() ? 'residences' : 'all', requestedHome = null;
-    let worldConfig = config.initial?.world || {}, live = null, sceneUnavailable = false;
+    let worldConfig = config.initial?.world || {}, live = null, club = null, sceneUnavailable = false;
     let energySaver = window.matchMedia('(max-width: 650px)').matches || Number(window.navigator?.hardwareConcurrency || 8) <= 4 || Number(window.navigator?.deviceMemory || 8) <= 4;
     try { const preference = localStorage.getItem('simonpr:office:quality'); if (['low', 'standard'].includes(preference)) energySaver = preference === 'low'; } catch {}
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -32,9 +33,10 @@ if (root && !root.dataset.initialized) {
         const meeting = live?.state();
         const partner = meeting?.room && (meeting.room.from === Number(config.myId) ? meeting.room.to : meeting.room.from);
         const ready = Boolean(meeting?.ready && partner === person.id && person.state !== 'offline');
-        $('voChat').disabled = !config.canChat || person.is_me || !ready;
+        $('voChat').disabled = !config.canMeet || person.is_me || person.state === 'offline' || !person.can_talk;
         $('voInviteMeeting').disabled = !config.canMeet || person.is_me || person.state === 'offline' || !person.can_talk || Boolean(meeting?.room);
-        text('voChatNote', !config.canChat ? 'Mode Viewer: melihat tim tanpa mengirim pesan.' : person.is_me ? 'Ini avatar Anda.' : ready ? 'Kedua avatar siap. Pesan mention terlihat oleh Chat Tim.' : 'Undang rekan online, tunggu diterima dan kedua avatar bertatap muka sebelum chat.');
+        text('voChatNote', !config.canMeet ? 'Akun ini tidak mengirim percakapan pada avatar.' : person.is_me ? 'Ini avatar Anda.' : person.state === 'offline' ? 'Rekan sedang offline. Ajak bermain untuk menghadapi versi komputer.' : 'Ketik langsung di kawasan. Pesan dan gelembung hanya diterima Anda dan rekan ini.');
+        text('voChat', 'Chat langsung 💬');
     }
     function personButton(person) {
         const button = document.createElement('button'); button.type = 'button'; button.className = 'vo-person';
@@ -78,7 +80,7 @@ if (root && !root.dataset.initialized) {
             $('voWorkspace').classList.remove('vo-team-hidden'); $('voWorkspace').classList.add('vo-team-open'); $('voToggleTeam').setAttribute('aria-pressed', 'true');
             if (!document.fullscreenElement && !$('voWorkspace').classList.contains('vo-expanded') && window.matchMedia('(max-width: 950px)').matches) $('voDetail').scrollIntoView?.({ block: 'nearest', behavior: paused ? 'auto' : 'smooth' });
         }
-        scene?.select(id, focus); renderPeople();
+        scene?.select(id, focus); renderPeople(); club?.select(id); if (focus) club?.chat(id, false);
     }
     function apply(snapshot) {
         people = safePeople(snapshot).map(person => person.is_me
@@ -117,6 +119,7 @@ if (root && !root.dataset.initialized) {
             if (selected) scene.select(selected, true);
             if (requestedHome !== null) scene.visitHome?.(requestedHome);
             if (live) scene.setMeeting?.(live.state());
+            club?.syncScene();
             if (['follow', 'portrait'].includes($('voCameraMode').value)) scene.setCameraMode?.($('voCameraMode').value, selected || people.find(p => p.is_me)?.id);
         } catch {
             if (ticket === sceneTicket) { sceneUnavailable = true; switchView('list', false); text('voSync', 'Ruang 3D belum dapat dibuka. Mode ringan tetap tersedia.'); }
@@ -131,8 +134,8 @@ if (root && !root.dataset.initialized) {
         $('voSceneHint').textContent = mode === '3d' ? 'Putar ruang dengan geser · Gulir untuk mendekat' : 'Pilih anggota untuk melihat detail dan membuka chat';
     }
     function lifecycle() {
-        if (!visible()) { loop.stop(); live?.stop(); stopActivity(); scene?.setVisible(false); }
-        else { if (feedUrl) loop.start(true); live?.start(true); scene?.setVisible(mode === '3d'); ensureScene(); }
+        if (!visible()) { loop.stop(); live?.stop(); club?.stop(); stopActivity(); scene?.setVisible(false); }
+        else { if (feedUrl) loop.start(true); live?.start(true); club?.start(true); scene?.setVisible(mode === '3d'); ensureScene(); }
     }
     $('voSearch').addEventListener('input', renderPeople);
     root.querySelectorAll('[data-vo-filter]').forEach(button => button.addEventListener('click', () => { filter = button.dataset.voFilter; root.querySelectorAll('[data-vo-filter]').forEach(b => b.setAttribute('aria-pressed', String(b === button))); renderPeople(); }));
@@ -151,7 +154,7 @@ if (root && !root.dataset.initialized) {
     $('voQuality').value = energySaver ? 'low' : 'standard';
     $('voQuality').addEventListener('change', () => { energySaver = $('voQuality').value === 'low'; scene?.setEnergySaver?.(energySaver); try { localStorage.setItem('simonpr:office:quality', energySaver ? 'low' : 'standard'); } catch {} });
     $('voInviteMeeting').addEventListener('click', () => { if (selected !== null) { if (mode !== '3d') switchView('3d'); live?.invite(selected); } });
-    $('voChat').addEventListener('click', async () => { const person = people.find(p => p.id === selected), meeting = live?.state(), partner = meeting?.room && (meeting.room.from === Number(config.myId) ? meeting.room.to : meeting.room.from); if (!config.canChat || !person || person.is_me || !meeting?.ready || partner !== selected || person.state === 'offline') return; if (document.fullscreenElement) await document.exitFullscreen(); if (typeof window.SimonOfficeMention !== 'function' || !window.SimonOfficeMention(person)) text('voChatNote', 'Chat belum siap atau draf penuh. Gunakan kolom pesan pertemuan.'); });
+    $('voChat').addEventListener('click', () => { if (selected !== null) club?.chat(selected); });
     $('voFullscreen').addEventListener('click', async () => {
         const workspace = $('voWorkspace');
         try { if (document.fullscreenElement === workspace) await document.exitFullscreen(); else if (workspace.requestFullscreen) await workspace.requestFullscreen(); else workspace.classList.toggle('vo-expanded'); }
@@ -171,7 +174,7 @@ if (root && !root.dataset.initialized) {
     document.addEventListener('keydown', event => { if (event.key === 'Escape') { closeEditor(); $('voWorkspace').classList.remove('vo-expanded'); fullscreenState(); } });
     for (const game of games) {
         const button = document.createElement('button'); button.type = 'button'; button.textContent = `${game.icon} ${game.name}`; button.setAttribute('aria-pressed', 'false');
-        button.addEventListener('click', () => { focusArea(game.id); $('voGames').querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b === button))); text('voSceneHint', `${game.name} · animasi rekreasi avatar; status online tetap mengikuti aplikasi`); }); $('voGames').append(button);
+        button.addEventListener('click', () => { focusArea(game.id); club?.openGame(game.id); $('voGames').querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b === button))); text('voSceneHint', `${game.name} · pilih Mulai untuk bermain`); }); $('voGames').append(button);
     }
     $('voActivityDate').addEventListener('change', () => { stopActivity(); $('voActivityList').replaceChildren(); text('voActivityStatus', 'Tekan Lihat aktivitas menu untuk tanggal ini.'); });
     $('voLoadActivity').addEventListener('click', async () => {
@@ -230,12 +233,13 @@ if (root && !root.dataset.initialized) {
         finally { clearTimeout(deadline); avatarRequest = null; $('voSaveAvatar').disabled = false; }
     });
     document.addEventListener('visibilitychange', lifecycle);
-    window.addEventListener('pagehide', () => { leftPage = true; loop.stop(); live?.stop(); stopActivity(); avatarRequest?.abort(); scene?.setVisible(false); });
+    window.addEventListener('pagehide', () => { leftPage = true; loop.stop(); live?.stop(); club?.stop(); stopActivity(); avatarRequest?.abort(); scene?.setVisible(false); });
     window.addEventListener('pageshow', event => { if (event.persisted) { leftPage = false; lifecycle(); } });
     if ('IntersectionObserver' in window) { const observer = new IntersectionObserver(entries => { const next = entries[0].isIntersecting; if (next !== inView) { inView = next; lifecycle(); } }, { rootMargin: '120px' }); observer.observe($('voWorkspace')); }
     root.querySelectorAll('[data-vo-room]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.voRoom === requestedRoom)));
     live = mountOfficeLive({ document, config, visible, getScene: () => scene, getPeople: () => people,
         onWorld: value => { worldConfig = value; scene?.configureWorld?.(value); },
         onRoom: value => { scene?.setMeeting?.(value); const person = people.find(p => p.id === selected); if (person) chatActions(person); if (value.room?.status === 'accepted' && mode !== '3d' && !sceneUnavailable) { switchView('3d'); text('voLiveStatus', 'Ruang 3D dibuka agar kedua avatar dapat bertatap muka.'); } } });
-    apply(config.initial); motionButton(); switchView(mode, false); if (feedUrl) loop.start(); live.start();
+    club = mountOfficeClub({ document, config, visible, getPeople: () => people, getScene: () => scene, focusArea });
+    apply(config.initial); motionButton(); switchView(mode, false); if (feedUrl) loop.start(); live.start(); club.start();
 }

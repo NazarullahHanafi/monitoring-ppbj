@@ -39,7 +39,7 @@ async function fixture({ canChat = true, meetingReady = false } = {}) {
     const window = { location: { origin: 'https://simon.example.test' }, matchMedia: () => ({ matches: false, addEventListener() {} }),
         addEventListener: (name, fn) => (events[name] ??= []).push(fn), SimonOfficeMention: person => { calls.push(person); return true; },
         __loadOfficeScene: () => scenePromise };
-    const sandbox = { ...state, mountOfficeLive: () => ({ start() {}, stop() {}, state: () => ({ ready: meetingReady, room: meetingReady ? { from: 2, to: 1 } : null }), invite() {} }), window, document, localStorage: { getItem: () => 'list', setItem() {} }, URL, Date, AbortController,
+    const sandbox = { ...state, mountOfficeClub: () => ({start(){},stop(){},select(){},syncScene(){},openGame(){},chat(id){if(canChat)calls.push(id);}}), mountOfficeLive: () => ({ start() {}, stop() {}, state: () => ({ ready: meetingReady, room: meetingReady ? { from: 2, to: 1 } : null }), invite() {} }), window, document, localStorage: { getItem: () => 'list', setItem() {} }, URL, Date, AbortController,
         setTimeout: (fn, delay) => { const id = ++timerId; timers.set(id, { fn, delay }); return id; }, clearTimeout: id => timers.delete(id),
         fetch: (url, options) => new Promise(resolve => requests.push({ url, options, resolve })), console };
     let code = fs.readFileSync(path.resolve(__dirname, '../../resources/js/virtual-office.js'), 'utf8');
@@ -54,14 +54,14 @@ test('office displays hostile names as inert text, filters locally and never sen
     const f = await fixture(); assert.equal(f.requests.length, 0); assert.equal(f.get('voPeople').children.length, 2);
     f.search('<svg'); assert.equal(f.get('voPeople').children.length, 1);
     const person = f.get('voPeople').children[0]; assert.equal(person.children[1].children[0].textContent, f.people[0].name);
-    person.click(); assert.equal(f.get('voDetailName').textContent, f.people[0].name); assert.equal(f.calls.length, 0);
-    f.get('voChat').click(); assert.equal(f.calls.length, 0, 'Office chat must wait for a mutually accepted face-to-face meeting.'); assert.equal(f.requests.length, 0);
+    person.click(); assert.equal(f.get('voDetailName').textContent, f.people[0].name); assert.equal(f.calls.length, 1, 'Selecting an online avatar opens the in-world composer without sending.');
+    f.get('voChat').click(); assert.equal(f.calls.length, 2); assert.equal(f.requests.length, 0);
     f.filters[2].click(); assert.equal(f.requests.length, 0); f.hide(true);
 });
 
-test('office mention shortcut opens a draft only after mutual face-to-face readiness', async () => {
+test('office shortcut opens the avatar composer directly without leaving fullscreen', async () => {
     const f = await fixture({ meetingReady: true }); f.get('voPeople').children.find(p => p.dataset.personId === 1).click();
-    f.get('voChat').click(); assert.equal(f.calls.length, 1); assert.equal(f.requests.length, 0); f.hide(true);
+    f.get('voChat').click(); assert.equal(f.calls.length, 2); assert.equal(f.calls[0], 1); assert.equal(f.requests.length, 0); f.hide(true);
 });
 test('read-only office cannot invoke chat even if its button handler is called', async () => {
     const f = await fixture({ canChat: false }); f.get('voPeople').children.find(p => p.dataset.personId === 1).click();
@@ -78,7 +78,7 @@ test('loaded scene is paused on hiding and disposed when selecting lightweight v
 });
 
 test('selecting a game from lightweight mode retains the requested focus after lazy scene loading', async () => {
-    const f = await fixture(); assert.equal(f.get('voGames').children.length, 12);
+    const f = await fixture(); assert.equal(f.get('voGames').children.length, 13);
     f.get('voGames').children[1].click(); f.resolveScene(); await tick();
     assert.equal(f.sceneState.rooms.at(-1), 'badminton'); f.hide(true);
 });

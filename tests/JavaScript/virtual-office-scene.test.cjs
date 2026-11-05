@@ -11,7 +11,7 @@ test('procedural 3D office builds valid batched geometry, bounds avatars and rel
     const frames = new Map(); let frameId = 0, rendered = null, disposed = false;
     class Node {
         constructor() { this.style = {}; this.children = []; this.events = {}; this.clientWidth = 1000; this.clientHeight = 600; }
-        append(node) { this.children.push(node); node.parent = this; }
+        append(...nodes) { for(const node of nodes){this.children.push(node);node.parent=this;} }
         addEventListener(name, fn) { this.events[name] = fn; }
         removeEventListener(name) { delete this.events[name]; }
         setAttribute() {}
@@ -49,7 +49,7 @@ test('procedural 3D office builds valid batched geometry, bounds avatars and rel
         scene.setPaused(true); draw(200); assert.equal(frames.size, 0, 'Paused scene must not leave an animation loop.');
         host.clientWidth = 350; host.clientHeight = 430; scene.resize(); scene.focusRoom('all'); draw(300);
         rendered.camera.updateMatrixWorld(true);
-        for (const corner of [[-43, 0, -180], [43, 0, -180], [-43, 0, 50], [43, 0, 50]]) {
+        for (const corner of [[-43, 0, -180], [43, 0, -180], [-43, 0, 76], [43, 0, 76]]) {
             const projected = new THREE.Vector3(...corner).project(rendered.camera);
             assert.ok(Math.abs(projected.x) < 1 && Math.abs(projected.y) < 1, `Default mobile camera must contain the office floor: ${projected.toArray()}`);
         }
@@ -87,6 +87,19 @@ test('procedural 3D office builds valid batched geometry, bounds avatars and rel
             const positions = []; rendered.world.children.filter(n => n.isGroup).forEach(g => { let id = null; g.traverse(n => { if (n.userData.personId) id = n.userData.personId; }); if (id) positions.push([id, g.position.toArray(), g.rotation.y]); });
             assert.equal(scene.meetingReady(), true, `Both avatars must reach meeting spot ${spot}: ${JSON.stringify(positions)}`);
         }
+        scene.setMeeting({room:null,connected:false});
+        scene.setPeople([{...people[0],state:'online',is_me:true},{...people[1],state:'offline'}]);
+        const positionFor = id => rendered.world.children.find(g=>{if(!g.isGroup)return false;let found=false;g.traverse(n=>{if(n.userData.personId===id)found=true;});return found;})?.position;
+        let stamp=700000;
+        for(const [destination,x,z]of [['bar',-30.5,50.5],['beach',-33.5,69],['garden',-6.5,61],['terrace',18.5,67],['lounge',-12.5,10]]){
+            scene.setRecreation(1,{destination,kind:'drink'});
+            for(let i=0;i<2200;i++)draw(stamp+i*40);stamp+=100000;
+            const p=positionFor(1);assert.ok(Math.hypot(p.x-x,p.z-z)<1.1,`Avatar must actually reach ${destination}, got ${p.toArray()}`);
+        }
+        scene.setGame({from:1,to:2,kind:'archery',bot:true,status:'playing'});
+        for(let i=0;i<2200;i++)draw(stamp+i*40);
+        const npc=positionFor(2);assert.ok(npc.z>37&&npc.x>20,`Offline NPC must arrive from home to the archery range: ${npc.toArray()}`);
+        scene.say(1,'<script>inert speech</script>');assert.equal(labels.children.find(l=>l.children[1].textContent===people[0].name).children.at(-1).textContent,'<script>inert speech</script>');
         scene.setVisible(false); assert.equal(frames.size, 0);
         scene.dispose(); assert.equal(disposed, true); assert.equal(host.children.length, 0); assert.equal(labels.children.length, 0); assert.equal(frames.size, 0);
     } finally { for (const [key, value] of Object.entries(previous)) { if (value === undefined) delete global[key]; else global[key] = value; } }

@@ -88,15 +88,9 @@ class VirtualOfficeMeetings
     public function messages(array $room, User $viewer): array
     {
         $other = $room['from'] === (int) $viewer->id ? $room['to'] : $room['from'];
-        // These are public Chat Tim mentions, not a new private message store.
-        return DB::table('chat_messages')->whereIn('user_id', [$viewer->id, $other])->where('created_at', '>=', $room['started_at'])
-            ->whereNull('share_type')->whereNotExists(function ($q) use ($viewer) {
-                $q->selectRaw('1')->from('chat_message_deletions')->whereColumn('chat_message_deletions.message_id', 'chat_messages.id')->where('chat_message_deletions.user_id', $viewer->id);
-            })->orderByDesc('id')->limit(60)->get(['id', 'user_id', 'message', 'mentions', 'created_at'])
-            ->filter(function ($message) use ($viewer, $other) {
-                $target = (int) $message->user_id === (int) $viewer->id ? $other : (int) $viewer->id;
-                return collect(json_decode($message->mentions ?: '[]', true))->contains(fn ($mention) => (int) ($mention['id'] ?? 0) === $target);
-            })->take(30)->reverse()->values()->map(fn ($message) => ['id' => (int) $message->id, 'user_id' => (int) $message->user_id,
+        return DB::table('virtual_office_messages')->whereIn('user_id', [$viewer->id, $other])->whereIn('target_id', [$viewer->id, $other])
+            ->where('created_at', '>=', $room['started_at'])->orderByDesc('id')->limit(30)->get(['id', 'user_id', 'message', 'created_at'])
+            ->reverse()->values()->map(fn ($message) => ['id' => (int) $message->id, 'user_id' => (int) $message->user_id,
                 'message' => $message->message, 'at' => $message->created_at])->all();
     }
 }

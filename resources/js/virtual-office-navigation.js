@@ -1,7 +1,7 @@
 // Small 2D navigation grid for walking avatars. Segment tests prevent tunnelling
 // through thin nets/walls; seats/beds remain intentional stationary poses.
 export function createOfficeNavigation() {
-    const obstacles = [], minX = -43, maxX = 43, minZ = -14, maxZ = 50, cell = .5, radius = .3;
+    const obstacles = [], minX = -43, maxX = 43, minZ = -14, maxZ = 76, cell = .5, radius = .3;
     const width = Math.round((maxX - minX) / cell) + 1, height = Math.round((maxZ - minZ) / cell) + 1;
     let grid = null;
     function free(x, z) {
