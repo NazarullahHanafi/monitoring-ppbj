@@ -1,5 +1,5 @@
 {
-  "bounds": {"minX": -100, "maxX": 100, "minZ": -22, "maxZ": 92},
+  "bounds": {"minX": -100, "maxX": 100, "minZ": -216, "maxZ": 92},
   "spawn": {"x": 0, "y": -0.12, "z": 20},
   "venues": {
     "tennis": {"x": -32, "z": -5, "radius": 9}, "badminton": {"x": -32, "z": 12, "radius": 9},

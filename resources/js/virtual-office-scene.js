@@ -10,10 +10,13 @@ import { createRivageBar } from './virtual-office-bar.js';
 import { createPilotPhysics, nearVenue, officeLayout } from './virtual-office-pilot-physics.js';
 import { costumeFor } from './virtual-office-costumes.js';
 import { costumeGeometry } from './virtual-office-costume-geometry.js';
+import { officeCameraPosition } from './virtual-office-camera.js';
+import { homeLocation,insideHome } from './virtual-office-home-layout.js';
+import { createOfficeHospitality } from './virtual-office-hospitality.js';
 
 // Original procedural scene: no models, textures, or code from the reference site.
 // Static furniture is batched by material; animation is capped at 30fps / 24 avatars.
-export function createOfficeScene({ host, labels, onSelect, onFailure, onVenue = () => {}, onGame = () => {}, onPilotState = () => {},
+export function createOfficeScene({ host, labels, onSelect, onFailure, onVenue = () => {}, onGame = () => {}, onDoor=()=>{},onPilotState = () => {},
     rendererFactory = options => new THREE.WebGLRenderer(options), controlsFactory = (camera, element) => new OrbitControls(camera, element), getDate = () => new Date() }) {
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(36, 1, .1, 1200);
@@ -39,6 +42,9 @@ export function createOfficeScene({ host, labels, onSelect, onFailure, onVenue =
             ...(key === 'glass' ? { transparent: true, opacity: .16, depthWrite: false, side: THREE.DoubleSide } : {}) }));
         return materials.get(key);
     }
+    const restGeometry=new THREE.BoxGeometry(1.1,.035,2.2);ownedGeometries.add(restGeometry);
+    const restMats=new THREE.InstancedMesh(restGeometry,material('#c9b384'),24);restMats.instanceMatrix.setUsage(THREE.DynamicDrawUsage);restMats.count=0;restMats.frustumCulled=false;scene.add(restMats);
+    const restMatrix=new THREE.Matrix4();
     const quaternion = new THREE.Quaternion();
     function bake(geometry, key, x, y, z, rx = 0, ry = 0, rz = 0) {
         let g = geometry;
@@ -80,7 +86,7 @@ export function createOfficeScene({ host, labels, onSelect, onFailure, onVenue =
         sign('SCENIC WALK','BOUNDED EXPLORATION / CAMPUS GATE',7,side*58,1.7,18);
     }
     navigation.addBox(160,40,0,97,'water-boundary',.1);
-    navigation.addBox(202,.3,0,-21.8,'residential-boundary',1.2);
+    navigation.configureHomes(true);
     for(const x of[-99,99])navigation.addBox(.2,114,x,35,'scenic-fence',1.2);
     navigation.addBox(202,.2,0,91,'scenic-boundary',1.2);
     // Waterfront furnishings share the existing static geometry batches.
@@ -88,6 +94,7 @@ export function createOfficeScene({ host, labels, onSelect, onFailure, onVenue =
     for(let n=0;n<8;n++)box(120-n*8,.02,.13,0,-.57,79+n*2.8,'#c4ddd4',0);
     box(7,.07,24,0,-.4,60,'#e6dfcc',.1);
     const rivageBar=createRivageBar({scene,box,cylinder,orb,bake,sign,material,navigation,ownedGeometries,materials});
+    const hospitality=createOfficeHospitality({scene,navigation,ownedGeometries,materials,sign});
     for(let n=0;n<8;n++){const x=-36+n*3.7;box(1.5,.25,2.8,x,-.1,67,'white',.1);box(1.4,.17,1,x,.26,66,'sofa',.08);navigation.addBox(1.5,2.8,x,67,'beach-chair',.6);if(n%2===0){cylinder(.05,3,x+1.2,1,65,'gold');bake(new THREE.ConeGeometry(1.8,.6,10),'white',x+1.2,2.7,65);navigation.addBox(.2,.2,x+1.2,65,'parasol',2.8);}}
     box(19,.15,10,22,-.3,65,'wood',.1);sign('LE BELVÉDÈRE','MOUNTAIN TERRACE',9,22,1.6,60.8);
     for(const x of [16,22,28]){cylinder(1.2,.13,x,.8,63,'white');cylinder(.1,1,x,.2,63,'gold');navigation.addBox(2.4,2.4,x,63,'terrace-table',.9);}
@@ -351,10 +358,10 @@ export function createOfficeScene({ host, labels, onSelect, onFailure, onVenue =
         return { group, body, head, arms, legs, shoes, eyes, skirt, cup, plate, racket, tool, bubble, label, dot, name, icon, ring, person, appearance: JSON.stringify(person.avatar),
             privateGeometry: racketGeometry, target: new THREE.Vector3(), phase: person.id * 1.75 };
     }
-    let selected = null, paused = false, visible = true, disposed = false, frame = null, lastFrame = 0, lastLabels = 0;
+    let selected = null, paused = false, visible = true, disposed = false, frame = null, lastFrame = 0, lastLabels = 0,lastDrawCamera=null;
     let roster = [], visitingHome = null, localMeeting = null, cameraMode = 'orbit', followId = null, energySaver = false, worldConfig = {};
     const recreation=new Map(),speechTimers=new Map();let localGame=null;
-    let controlledId=null,privatePilotSelf=null,pilotPhysics=null,pilotInput={},pilotReporter=onPilotState,guide=null,pilotGate=()=>false,pilotActivity=null;
+    let controlledId=null,privatePilotSelf=null,pilotPhysics=null,pilotInput={},pilotReporter=onPilotState,guide=null,pilotGate=()=>false,pilotActivity=null,myHome=null,homeOwner=null,homeDoorOpen=false,homePlots=null;
     const guideGeometry=new THREE.RingGeometry(1.2,1.4,32);ownedGeometries.add(guideGeometry);
     const guideMaterial=new THREE.MeshBasicMaterial({color:'#e9be69',side:THREE.DoubleSide,transparent:true,opacity:.85});materials.set('pilot-guide',guideMaterial);
     const guideMarker=new THREE.Mesh(guideGeometry,guideMaterial);guideMarker.rotation.x=-Math.PI/2;guideMarker.visible=false;guideMarker.userData.pilotGuide=true;scene.add(guideMarker);
@@ -362,7 +369,8 @@ export function createOfficeScene({ host, labels, onSelect, onFailure, onVenue =
     const destinations={bar:[-32,-.12,49],disco:[-33,-.12,56],beach:[-35,-.12,69],garden:[-8,-.12,61],terrace:[17,-.12,67],lounge:[-14,.12,10]};
     const targetFocus = new THREE.Vector3(), cameraGoal = new THREE.Vector3(); let easingCamera = false;
     function setPeople(people) {
-        if(controlledId&&privatePilotSelf&&!people.some(p=>p.id===controlledId))people=[...people,privatePilotSelf];
+        if(controlledId&&privatePilotSelf&&!people.some(p=>p.id===controlledId))people=[...people,{...privatePilotSelf,home_slot:myHome?.slot??privatePilotSelf.home_slot}];
+        navigation.configureHomes(true,homeDoorOpen?myHome?.slot:null,homePlots??Math.max(people.length,...people.map(p=>(p.home_slot??-1)+1)));
         roster = people; residences.sync(people); environment.extent(residences.bounds().back);
         const presented = people.map(person => {
             if (!localMeeting?.connected || !localMeeting.room || ![localMeeting.room.from, localMeeting.room.to].includes(person.id)) {
@@ -428,7 +436,7 @@ export function createOfficeScene({ host, labels, onSelect, onFailure, onVenue =
             if (fresh || (previousPose !== f.pose && f.pose !== 'meeting'&&!destination&&!invitedGame)) f.group.position.copy(f.target);
             if (!f.manual&&!fresh && ((f.pose === 'playing'&&(previousGame!==f.game.id||previousPose!=='playing')) || ((destination||f.pose === 'meeting') && (!oldHome || oldHome.distanceTo(f.home) > .1)))) {
                 if (!navigation.free(f.group.position.x, f.group.position.z)) { const safe = navigation.nearest(f.group.position)||navigation.nearest({x:0,z:21.5}); if (safe) f.group.position.set(safe.x, placement[1], safe.z); }
-                f.waypoints = navigation.path(f.group.position, f.home).map(p => new THREE.Vector3(p.x, placement[1], p.z));
+                f.waypoints = navigation.withHomeAccess(residences.slotFor(person.id),()=>navigation.path(f.group.position, f.home)).map(p => new THREE.Vector3(p.x, placement[1], p.z));
             } else if (!['playing', 'meeting'].includes(f.pose)&&!destination) f.waypoints = [];
             if (paused && f.pose === 'meeting') { f.group.position.copy(f.home); f.group.rotation.y = f.facing; f.waypoints = []; }
             f.dot.className = `vo-dot ${person.state}`; f.name.textContent = person.name;
@@ -466,6 +474,7 @@ export function createOfficeScene({ host, labels, onSelect, onFailure, onVenue =
         if (now - lastFrame < 1000 / 30 && !paused) { frame = requestAnimationFrame(render); return; }
         const frameStep = Math.min(.06, Math.max(.001, (now - lastFrame) / 1000)); lastFrame = now;
         if (easingCamera) { camera.position.lerp(cameraGoal, .12); controls.target.lerp(targetFocus, .12); if (camera.position.distanceTo(cameraGoal) < .04) { camera.position.copy(cameraGoal); controls.target.copy(targetFocus); easingCamera = false; } }
+        let restCount=0;
         for (const f of figures.values()) {
             const t = paused ? 0 : now / 1000 + f.phase;
             if(f.person.id===controlledId&&pilotPhysics){
@@ -473,7 +482,8 @@ export function createOfficeScene({ host, labels, onSelect, onFailure, onVenue =
                 const others=[...figures.values()].filter(other=>other!==f&&other.pose!=='sleeping').map(other=>other.group.position);
                 const state=pilotPhysics.step(frameStep,pilotGate()?{}:pilotInput,yaw,others);if(['walk','run','jump'].includes(state.action))pilotActivity=null;if(pilotActivity){state.action=pilotActivity.action;state.venue=pilotActivity.venue;}
                 f.group.position.set(state.x,state.y,state.z);f.group.rotation.y=state.yaw;f.manual=true;f.pose='manual';f.home.copy(f.group.position);f.target.copy(f.group.position);
-                if(guide){const place=officeLayout.venues[guide];state.target=guide;state.distance=Math.round(Math.hypot(state.x-place.x,state.z-place.z));}pilotReporter(state);
+                if(guide){const place=guide==='home'&&myHome?{x:myHome.x,z:myHome.z+5}:officeLayout.venues[guide];if(place){state.target=guide;state.distance=Math.round(Math.hypot(state.x-place.x,state.z-place.z));}}state.atHome=insideHome(state,myHome);state.nearDoor=Boolean(myHome&&Math.hypot(state.x-myHome.x,state.z-myHome.z-3.9)<=2.8);state.doorOpen=homeDoorOpen;pilotReporter(state);
+                if(myHome){const show=insideHome(state,myHome);if(show!==Boolean(f.insideOwnHome)){f.insideOwnHome=show;residences.select(show?homeOwner:null);}}
                 f.icon.textContent=(f.person.private?'PRIVAT · ':'ONLINE · ')+(state.action==='run'?'BOOST':state.action==='jump'?'LOMPAT':'KENDALI SENDIRI');
             }
             if(f.manual){
@@ -486,6 +496,12 @@ export function createOfficeScene({ host, labels, onSelect, onFailure, onVenue =
                 f.cup.visible=state?.action==='drink';f.plate.visible=state?.action==='eat';if(played)f.arms[1].rotation.x=-.8+(paused?0:Math.sin(t*2.3)*.45);
                 if(state?.action==='drink')f.arms[1].rotation.x=-1.2;if(state?.action==='eat')f.arms[0].rotation.x=-1;
                 if(state?.action==='dance'){f.body.rotation.z=paused?0:Math.sin(t*2.4)*.12;f.arms[1].rotation.x=-.8;f.arms[0].rotation.x=-.6;}
+                if(state?.action==='rest'){
+                    const lying=['recline','nap'].includes(state.pose);f.body.rotation.x=lying?-Math.PI/2:0;f.body.position.y=lying?.4:-.55;
+                    f.legs.forEach(leg=>leg.rotation.x=lying?0:-1.2);f.arms.forEach(arm=>arm.rotation.x=state.pose==='meditate'?-.4:lying?-.1:-.65);
+                    f.eyes.forEach(eye=>eye.scale.y=state.pose==='nap'?.15:1);f.icon.textContent=state.pose==='nap'?'ONLINE · TIDUR SANTAI':state.pose==='recline'?'ONLINE · REBAHAN':state.pose==='meditate'?'ONLINE · MEDITASI':'ONLINE · BERSANTAI';
+                }else f.eyes.forEach(eye=>eye.scale.y=1);
+                if(state?.action==='rest'&&['recline','nap'].includes(state.pose)){restMatrix.compose(new THREE.Vector3(f.group.position.x-Math.sin(f.group.rotation.y)*.7,f.group.position.y+.035,f.group.position.z-Math.cos(f.group.rotation.y)*.7),f.group.quaternion,new THREE.Vector3(1,1,1));restMats.setMatrixAt(restCount++,restMatrix);}
                 continue;
             }
             const playing = f.pose === 'playing', walking = !paused && (playing || f.waypoints?.length > 0);
@@ -510,6 +526,7 @@ export function createOfficeScene({ host, labels, onSelect, onFailure, onVenue =
             if (f.pose === 'meeting') { f.arms[1].rotation.x = -.2 + Math.sin(t * 1.7) * (paused || walking ? 0 : .18); f.head.rotation.y = Math.sin(t * .7) * (paused ? 0 : .06); }
             else f.head.rotation.y = 0;
         }
+        restMats.count=restCount;restMats.instanceMatrix.needsUpdate=true;
         const followed = figures.get(followId);
         if (cameraMode !== 'orbit' && followed && !easingCamera) {
             const nextTarget = followed.group.position.clone().add(new THREE.Vector3(0, followed.pose === 'sleeping' ? .25 : 1.3, followed.pose === 'sleeping' ? -1.3 : 0));
@@ -517,6 +534,7 @@ export function createOfficeScene({ host, labels, onSelect, onFailure, onVenue =
         }
         environment.update(now, { paused, dark: document.documentElement.classList.contains('dark'), center: controls.target });
         rivageBar.update(now,{paused,energySaver});
+        hospitality.update(now,paused);
         for (const { mesh, game } of gameBalls) {
             const t = paused ? 0 : now / 1000;
             const active = !isOfficeNight(getDate()) && [...figures.values()].some(f => f.pose === 'playing' && f.game.id === game.id);
@@ -524,13 +542,17 @@ export function createOfficeScene({ host, labels, onSelect, onFailure, onVenue =
             mesh.position.set(game.x + (game.id === 'golf' ? wave * 4 : wave * 1.5), game.id === 'pingpong' ? 1.45 + Math.abs(wave) * .65 : game.id === 'basketball' ? .15 + Math.abs(wave) * 2.2 : game.id === 'bowling' || game.id === 'golf' ? .06 : .4 + Math.abs(wave) * 2, game.z + wave * (game.kind === 'court' ? 4 : 1.3));
         }
         controls.update();
-        if (cameraMode !== 'orbit' && followed) { const fraction = navigation.cameraLimit(controls.target, camera.position, residences.cameraBoxes(followId)); if (fraction < 1) camera.position.lerpVectors(controls.target, camera.position, fraction); }
+        const desiredCamera=camera.position.clone(),desiredOrientation=camera.quaternion.clone();
+        if (cameraMode !== 'orbit' && followed)camera.position.copy(officeCameraPosition(navigation,controls.target,desiredCamera,residences.cameraBoxes(followId),cameraMode==='portrait'?2.8:3.8));
+        camera.lookAt(controls.target);camera.updateMatrixWorld(true);if(!lastDrawCamera)lastDrawCamera=camera.clone();else lastDrawCamera.copy(camera);
         renderer.render(scene, camera);
         if (paused || now - lastLabels > 120 || easingCamera) { drawLabels(); lastLabels = now; }
+        camera.position.copy(desiredCamera);camera.quaternion.copy(desiredOrientation);camera.updateMatrixWorld(true);
         if (!paused || easingCamera || pilotPhysics?.moving() || pilotPhysics&&pilotPhysics.state().stamina<100 || !pilotGate()&&(Math.abs(pilotInput.x||0)+Math.abs(pilotInput.z||0)>0 || pilotInput.jump)) requestDraw();
     }
     function requestDraw() { if (!disposed && visible && frame === null) frame = requestAnimationFrame(render); }
-    function moveFigure(f, target, step) {
+    function moveFigure(f,target,step){const home=residences.location(f.person.id),near=home&&Math.abs(f.group.position.x-home.x)<4.8&&Math.abs(f.group.position.z-home.z)<5;if(Boolean(near)!==Boolean(f.npcDoorOpen)){f.npcDoorOpen=Boolean(near);residences.setDoor(f.person.id,Boolean(near));}return navigation.withHomeAccess(residences.slotFor(f.person.id),()=>moveFigureInner(f,target,step));}
+    function moveFigureInner(f, target, step) {
         const next = navigation.move(f.group.position, target, step);
         const progress = Math.hypot(next.x - f.group.position.x, next.z - f.group.position.z);
         const blocked = [...figures.values()].some(other => other !== f && other.pose !== 'sleeping' && Math.hypot(next.x - other.group.position.x, next.z - other.group.position.z) < .62);
@@ -575,7 +597,7 @@ export function createOfficeScene({ host, labels, onSelect, onFailure, onVenue =
         if (mode === 'orbit') { cameraMode = 'orbit'; followId = null; controls.enablePan = true; controls.minDistance = 5; controls.maxDistance = 650; return; }
         if (!figures.has(id) && roster.some(p => p.id === id)) { selected = id; setPeople(roster); }
         const f = figures.get(id); if (!f) return;
-        cameraMode = mode === 'portrait' ? 'portrait' : 'follow'; followId = id; controls.enablePan = false; controls.minDistance = 1.8; controls.maxDistance = 35;
+        cameraMode = mode === 'portrait' ? 'portrait' : 'follow'; followId = id; controls.enablePan = false; controls.minDistance = cameraMode==='portrait'?2.8:3.8; controls.maxDistance = 35;
         camera.fov = 44; camera.updateProjectionMatrix(); targetFocus.copy(f.group.position).add(new THREE.Vector3(0, f.pose === 'sleeping' ? .25 : 1.3, f.pose === 'sleeping' ? -1.3 : 0));
         cameraGoal.copy(targetFocus).add(cameraMode === 'portrait' ? new THREE.Vector3(1.8, .9, 2.7) : new THREE.Vector3(4, 2.5, 5));
         if (paused) { camera.position.copy(cameraGoal); controls.target.copy(targetFocus); easingCamera = false; } else easingCamera = true; requestDraw();
@@ -588,9 +610,10 @@ export function createOfficeScene({ host, labels, onSelect, onFailure, onVenue =
     const up = e => {
         if (!dragStart || Math.hypot(e.clientX - dragStart[0], e.clientY - dragStart[1]) > 6) return; dragStart = null;
         const rect = renderer.domElement.getBoundingClientRect(); pointer.set((e.clientX - rect.left) / rect.width * 2 - 1, -(e.clientY - rect.top) / rect.height * 2 + 1);
-        raycaster.setFromCamera(pointer, camera);
-        const hit = raycaster.intersectObjects([...figures.values()].map(f => f.group).concat(residences.meshes,rivageBar.targets,gameTargets), true)[0];
+        raycaster.setFromCamera(pointer, lastDrawCamera||camera);
+        const hit = raycaster.intersectObjects([...figures.values()].map(f => f.group).concat(residences.meshes,rivageBar.targets,hospitality.targets,gameTargets), true)[0];
         const resident = residences.personForHit(hit);
+        if(resident===homeOwner&&hit?.object.userData.residenceLayer==='door'){onDoor();return;}
         if (resident) { onSelect(resident); visitHome(resident); }
         else if (hit?.object.userData.personId) onSelect(hit.object.userData.personId);
         else if(hit?.object.userData.officeVenue)onVenue(hit.object.userData.officeVenue);
@@ -611,15 +634,23 @@ export function createOfficeScene({ host, labels, onSelect, onFailure, onVenue =
         setPilotReporter(fn){pilotReporter=fn;},
         setPrivatePilotProfile(avatar){if(privatePilotSelf){privatePilotSelf={...privatePilotSelf,avatar};setPeople(roster.map(p=>p.id===privatePilotSelf.id?privatePilotSelf:p));}},
         setPilotGate(fn){pilotGate=fn;},
+        reconcilePilot(state){if(pilotPhysics){pilotPhysics.reset(state);pilotActivity=null;pilotInput={};requestDraw();}},
+        configureHome(id,value,plots=null){homeOwner=id;myHome=value?homeLocation(value.slot):null;homePlots=Number.isInteger(plots)?Math.min(128,plots):null;residences.setPlots(homePlots??0);},
+        canUseDoor(){const p=pilotPhysics?.state();return Boolean(myHome&&p&&(insideHome(p,myHome)||Math.hypot(p.x-myHome.x,p.z-myHome.z-3.9)<=2.8));},
+        homeDoorOpen:()=>homeDoorOpen,
+        setHomeDoor(open){if(homeDoorOpen===Boolean(open))return;homeDoorOpen=Boolean(open);navigation.configureHomes(true,homeDoorOpen?myHome?.slot:null);if(homeOwner)residences.setDoor(homeOwner,homeDoorOpen);requestDraw();},
+        setRestPose(pose){if(!pilotPhysics)return false;if(!pose){pilotActivity=null;requestDraw();return true;}const p=pilotPhysics.state();const venue=insideHome(p,myHome)?'home':['beach','garden','terrace','lounge','bar'].find(id=>nearVenue(p,id));if(!venue)return false;
+            if(['recline','nap'].includes(pose)&&![.7,1.3,1.8].every(d=>[-.25,0,.25].every(side=>navigation.free(p.x-Math.sin(p.yaw)*d+Math.cos(p.yaw)*side,p.z-Math.cos(p.yaw)*d-Math.sin(p.yaw)*side))))return false;
+            pilotActivity={action:'rest',pose,venue};requestDraw();return true;},
         setPilot(id,state,privateSelf=null){controlledId=id;privatePilotSelf=privateSelf;pilotPhysics=createPilotPhysics(navigation,state);setPeople(roster);setCameraMode('follow',id);requestDraw();},
         releasePilot(){const privateId=privatePilotSelf?.id;controlledId=null;privatePilotSelf=null;pilotPhysics=null;pilotInput={};pilotActivity=null;guide=null;guideMarker.visible=false;setPeople(roster.filter(p=>p.id!==privateId));},
         setPilotInput(value){pilotInput=value||{};requestDraw();},pilotState(){return pilotPhysics?{...pilotPhysics.state(),...(pilotActivity||{})}:null;},
         focusPilot(){host.focus?.({preventScroll:true});},followPilot(){if(controlledId){setCameraMode('follow',controlledId);host.focus?.({preventScroll:true});}},
         setPeerPilots(values){peerPilots.clear();for(const state of values)if(state.id!==controlledId)peerPilots.set(state.id,state);setPeople(roster.map(p=>({...p,pilot:peerPilots.get(p.id)||null,in_office:peerPilots.has(p.id)||p.id===controlledId})));},
         canInteract(id){return nearVenue(pilotPhysics?.state(),id);},
-        guideTo(id){const point=officeLayout.venues[id];guide=point?id:null;guideMarker.visible=Boolean(point);if(point){guideMarker.position.set(point.x,.025,point.z);const me=pilotPhysics?.state();pilotReporter({...me,target:id,distance:me?Math.round(Math.hypot(point.x-me.x,point.z-me.z)):null});requestDraw();}return point;},
-        interactNearest(){const point=pilotPhysics?.state();if(!point)return;const id=Object.keys(officeLayout.venues).filter(id=>nearVenue(point,id)).sort((a,b)=>Math.hypot(point.x-officeLayout.venues[a].x,point.z-officeLayout.venues[a].z)-Math.hypot(point.x-officeLayout.venues[b].x,point.z-officeLayout.venues[b].z))[0];if(games.some(g=>g.id===id))onGame(id);else if(['bar','disco','beach','garden','terrace','lounge'].includes(id))onVenue(id);},
-        setRecreation(id,value){if(Number(id)===controlledId&&value)pilotActivity={action:({drink:'drink',food:'eat',dance:'dance'})[value.kind]||'idle',venue:value.destination};recreation.set(Number(id),value?{...value,until:value.until||Date.now()/1000+900}:null);setPeople(roster);},
+        guideTo(id){const point=id==='home'&&myHome?{x:myHome.x,z:myHome.z+5}:officeLayout.venues[id];guide=point?id:null;guideMarker.visible=Boolean(point);if(point){guideMarker.position.set(point.x,.025,point.z);const me=pilotPhysics?.state();pilotReporter({...me,target:id,distance:me?Math.round(Math.hypot(point.x-me.x,point.z-me.z)):null});requestDraw();}return point;},
+        interactNearest(){const point=pilotPhysics?.state();if(!point)return;if(myHome&&(insideHome(point,myHome)||Math.hypot(point.x-myHome.x,point.z-myHome.z-3.9)<=2.8)){onDoor();return;}const id=Object.keys(officeLayout.venues).filter(id=>nearVenue(point,id)).sort((a,b)=>Math.hypot(point.x-officeLayout.venues[a].x,point.z-officeLayout.venues[a].z)-Math.hypot(point.x-officeLayout.venues[b].x,point.z-officeLayout.venues[b].z))[0];if(games.some(g=>g.id===id))onGame(id);else if(['bar','disco','beach','garden','terrace','lounge'].includes(id))onVenue(id);},
+        setRecreation(id,value){if(Number(id)===controlledId&&value)pilotActivity={action:({drink:'drink',food:'eat',dance:'dance',relax:'rest'})[value.kind]||'idle',venue:value.destination,pose:value.kind==='relax'?'sit':null};recreation.set(Number(id),value?{...value,until:value.until||Date.now()/1000+900}:null);setPeople(roster);},
         setVenueEffects(value){rivageBar.setEnabled(value);requestDraw();},
         setGame(value){if(JSON.stringify(localGame)===JSON.stringify(value))return;localGame=value;if(controlledId&&value?.status==='playing'&&[value.from,value.to].includes(controlledId))pilotActivity={action:'play',venue:value.kind};else if(pilotActivity?.action==='play')pilotActivity=null;setPeople(roster);},
         say(id,message){const f=figures.get(Number(id));if(!f)return;f.bubble.textContent=String(message||'').slice(0,350);f.bubble.hidden=false;if(speechTimers.has(id))clearTimeout(speechTimers.get(id));speechTimers.set(id,setTimeout(()=>{f.bubble.hidden=true;speechTimers.delete(id);requestDraw();},10000));requestDraw();},
@@ -637,13 +668,13 @@ export function createOfficeScene({ host, labels, onSelect, onFailure, onVenue =
             if (f && focus && f.pose === 'sleeping') { visitHome(id); return; }
             if (f && focus) { targetFocus.copy(f.target).add(new THREE.Vector3(0, 1, 0)); cameraGoal.copy(targetFocus).add(new THREE.Vector3(11, 11, 14)); if (paused) { camera.position.copy(cameraGoal); controls.target.copy(targetFocus); } else easingCamera = true; } requestDraw();
         },
-        zoom(factor) { camera.position.sub(controls.target).multiplyScalar(factor).add(controls.target); controls.update(); requestDraw(); },
+        zoom(factor) { if(!Number.isFinite(factor)||factor<=0)return;easingCamera=false;const offset=camera.position.clone().sub(controls.target);offset.setLength(THREE.MathUtils.clamp(offset.length()*factor,controls.minDistance,controls.maxDistance));camera.position.copy(controls.target).add(offset);controls.update();requestDraw(); },
         setPaused(value) { paused = value; if (paused) for (const f of figures.values()) if (f.pose === 'meeting') { f.group.position.copy(f.home); f.group.rotation.y = f.facing; f.waypoints = []; } if (frame !== null) cancelAnimationFrame(frame); frame = null; requestDraw(); },
         setVisible(value) { visible = value; if (!value && frame !== null) { cancelAnimationFrame(frame); frame = null; } else if (value) { lastFrame = 0; resize(); requestDraw(); } },
         dispose() { disposed = true; if (frame !== null) cancelAnimationFrame(frame); frame = null; observer.disconnect(); themeObserver.disconnect(); controls.dispose();
             for(const timer of speechTimers.values())clearTimeout(timer);speechTimers.clear();recreation.clear();
             renderer.domElement.removeEventListener('pointerdown', down); renderer.domElement.removeEventListener('pointerup', up); renderer.domElement.removeEventListener('webglcontextlost', lost);
-            residences.dispose(); environment.dispose(); for (const geometry of ownedGeometries) geometry.dispose(); for (const mat of materials.values()) mat.dispose(); for (const texture of textures) texture.dispose();
+            residences.dispose();restMats.dispose(); environment.dispose(); for (const geometry of ownedGeometries) geometry.dispose(); for (const mat of materials.values()) mat.dispose(); for (const texture of textures) texture.dispose();
             figures.forEach(f => f.label.remove()); figures.clear(); scene.clear(); renderer.dispose(); renderer.forceContextLoss(); renderer.domElement.remove(); }
     };
 }

@@ -117,6 +117,11 @@ test('procedural 3D office builds valid batched geometry, bounds avatars and rel
         scene.setPilotGate(()=>true);const frozen=manual.x;draw(stamp+100600);assert.equal(scene.pilotState().x,frozen,'A modal must gate motion at render time.');
         scene.guideTo('archery');assert.equal(rendered.world.children.find(n=>n.userData.pilotGuide).position.x,32);
         assert.equal(scene.canInteract('archery'),false);
+        scene.setPilotGate(()=>false);scene.setPilotInput({});scene.setGame(null);scene.reconcilePilot({x:-10,y:-.12,z:73,yaw:0});
+        for(const pose of['sit','recline','nap','meditate']){assert.equal(scene.setRestPose(pose),true);draw(stamp+100610);assert.equal(scene.pilotState().pose,pose);assert.equal(scene.pilotState().action,'rest');const group=rendered.world.children.find(g=>{if(!g.isGroup)return false;let match=false;g.traverse(n=>{if(n.userData.personId===1)match=true;});return match;});assert.equal(group.children[0].rotation.x,['recline','nap'].includes(pose)?-Math.PI/2:0);}
+        scene.setPilotInput({x:1});draw(stamp+100650);assert.equal(scene.pilotState().action,'walk','Walking stands up without moving to a computer.');
+        assert.equal(rendered.world.children.filter(n=>n.userData.hospitality==='hostess').length,2);assert.equal(rendered.world.children.filter(n=>n.userData.hospitality).length,6);
+        scene.configureHome(1,{slot:0},2);scene.setHomeDoor(true);scene.setPilotInput({});scene.reconcilePilot({x:-36.75,y:.22,z:-25.2,yaw:0});draw(stamp+100690);assert.equal(scene.canUseDoor(),true);assert.equal(scene.homeDoorOpen(),true);assert.equal(scene.pilotState().y,.22);scene.setHomeDoor(false);
         scene.releasePilot();scene.setPilotGate(()=>false);scene.setGame(null);
         scene.setPilot(777,{x:0,y:-.12,z:21,yaw:0},{id:777,name:'Private self',state:'online',department:'umum',is_me:true,private:true});
         scene.setPeople(people.slice(0,2));draw(stamp+100640);assert.ok(positionFor(777),'Own private avatar survives directory refresh without entering the public roster.');

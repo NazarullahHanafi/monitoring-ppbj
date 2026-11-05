@@ -24,6 +24,8 @@ class VirtualOfficeController extends Controller
             'myProfile' => $profile, 'avatarOptions' => VirtualOfficeAvatar::options(),
             'costumes'=>VirtualOfficeAvatar::costumes(),
             'canPilot'=>\App\Services\VirtualOfficePilot::allowed($request->user()),
+            'myHome'=>\App\Services\VirtualOfficeHomes::own($request->user()),
+            'homePlots'=>count(\App\Services\VirtualOfficeHomes::slots()),
             'privateSelf'=>!$request->user()->shouldDisplayInPresence()?['id'=>$request->user()->id,'name'=>'Anda · privat','department'=>$request->user()->department,'state'=>'online','is_me'=>true,'avatar'=>$profile['avatar'],'private'=>true]:null,
             'canConfigureWorld' => \App\Services\VirtualOfficeWorld::canConfigure($request->user()),
             'canMeet' => \App\Services\VirtualOfficeMeetings::eligible($request->user())];

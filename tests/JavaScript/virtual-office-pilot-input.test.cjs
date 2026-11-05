@@ -1,15 +1,15 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),path=require('node:path');
 const tick=()=>new Promise(setImmediate);
 function fixture(){
-    const timers=new Map(),requests=[],events={},windowEvents={},inputs=[],beacons=[],nodes=new Map();let timerId=0,modal=false,show=true,sets=0,releases=0,gate;
+    const timers=new Map(),requests=[],events={},windowEvents={},inputs=[],beacons=[],nodes=new Map();let timerId=0,modal=false,show=true,sets=0,releases=0,corrections=[],gate;
     const node=id=>{if(!nodes.has(id))nodes.set(id,{events:{},addEventListener(k,f){this.events[k]=f;},value:0});return nodes.get(id);};
     const doc={hidden:false,activeElement:null,getElementById:node,querySelector:s=>s.startsWith('meta')?{content:'csrf'}:modal?{}:null,querySelectorAll:()=>[],addEventListener(k,f){events[k]=f;}};
     const win={addEventListener(k,f){windowEvents[k]=f;},navigator:{sendBeacon:(...v)=>beacons.push(v)}};
-    const scene={setPilotInput:v=>inputs.push(v),setPilotReporter(){},setPilotGate:v=>{gate=v;},setPilot(){sets++;},releasePilot(){releases++;},pilotState:()=>({x:0,y:-.12,z:21,yaw:0,action:'idle'}),setPeerPilots(){},canInteract:()=>false,guideTo(){}};
+    const scene={reconcilePilot:v=>corrections.push(v),setPilotInput:v=>inputs.push(v),setPilotReporter(){},setPilotGate:v=>{gate=v;},setPilot(){sets++;},releasePilot(){releases++;},pilotState:()=>({x:0,y:-.12,z:21,yaw:0,action:'idle'}),setPeerPilots(){},canInteract:()=>false,guideTo(){}};
     const context={crypto:require('node:crypto').webcrypto,Blob,AbortController,Date,fetch:(url,options)=>new Promise(resolve=>requests.push({url,options,resolve})),setTimeout:(fn,delay)=>{const id=++timerId;timers.set(id,{fn,delay});return id;},clearTimeout:id=>timers.delete(id)};
     const code=fs.readFileSync(path.resolve(__dirname,'../../resources/js/virtual-office-pilot.js'),'utf8').replace('export function mountOfficePilot','function mountOfficePilot');vm.createContext(context);vm.runInContext(code,context);
     const pilot=context.mountOfficePilot({document:doc,window:win,config:{canPilot:true,myId:1},visible:()=>show,getScene:()=>scene});
-    return {pilot,doc,requests,inputs,beacons,timers,get sets(){return sets;},get releases(){return releases;},get gate(){return gate;},modal(v){modal=v;},key(code,type='keydown'){let prevented=false;events[type]({code,preventDefault(){prevented=true;}});return prevented;},blur:()=>windowEvents.blur(),accept(i=0){requests[i].resolve({ok:true,json:async()=>({self:{x:0,y:-.12,z:21,yaw:0},peers:[]})});},pulse(){const [id,t]=[...timers].find(([,v])=>v.delay===1200);timers.delete(id);t.fn();}};
+    return {pilot,doc,requests,inputs,beacons,timers,corrections,get:node,get sets(){return sets;},get releases(){return releases;},get gate(){return gate;},modal(v){modal=v;},key(code,type='keydown'){let prevented=false;events[type]({code,preventDefault(){prevented=true;}});return prevented;},blur:()=>windowEvents.blur(),accept(i=0){requests[i].resolve({ok:true,json:async()=>({self:{x:0,y:-.12,z:21,yaw:0},peers:[]})});},pulse(){const [id,t]=[...timers].find(([,v])=>v.delay===1200);timers.delete(id);t.fn();}};
 }
 test('keyboard ignores editors and modals, supports arrows/jump/boost, clears held keys on blur',async()=>{
     const f=fixture();f.pilot.start();f.accept();await tick();assert.equal(f.sets,1);
@@ -27,4 +27,14 @@ test('the first walking frame accelerates idle sync before a legitimate sprint e
     const f=fixture();f.pilot.start();f.accept();await tick();assert.equal([...f.timers.values()].filter(t=>t.delay===1200).length,1);
     f.pilot.state({x:0,y:-.12,z:20.7,yaw:0,action:'run',stamina:99});
     assert.equal([...f.timers.values()].filter(t=>t.delay===1200).length,0);assert.equal([...f.timers.values()].filter(t=>t.delay===300).length,1);f.pilot.stop();
+});
+test('a rejected movement reconciles the same avatar without releasing it to a computer or resetting the camera',async()=>{
+    const f=fixture();f.pilot.start();f.accept();await tick();f.pulse();const self={x:2,y:-.12,z:21,yaw:0,action:'idle'};
+    f.requests[1].resolve({ok:false,status:422,json:async()=>({self,message:'Posisi dikoreksi'})});await tick();
+    assert.equal(f.releases,0);assert.equal(f.sets,1);assert.equal(f.corrections.length,1);assert.equal(f.corrections[0].x,2);
+    f.get('voPilotTakeControl').events.click();f.pulse();assert.equal(JSON.parse(f.requests[2].options.body).mode,'move');f.pilot.stop();
+});
+test('slow requests freeze prediction before the server distance allowance is exhausted',async()=>{
+    const f=fixture();f.pilot.start();f.accept();await tick();f.pulse();for(let i=1;i<=9;i++)f.pilot.state({x:i*.5,y:-.12,z:21,yaw:0,action:'run'});
+    assert.equal(Object.keys(f.inputs.at(-1)).length,0);assert.equal(f.releases,0);assert.equal(f.requests.length,2);f.pilot.stop();
 });

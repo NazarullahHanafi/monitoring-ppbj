@@ -7,17 +7,18 @@ use Illuminate\Support\Facades\Cache;
 
 class VirtualOfficePresence
 {
-    public const DIRECTORY_KEY = 'virtual-office:directory:v3';
+    public const DIRECTORY_KEY = 'virtual-office:directory:v4';
 
     public function snapshot(User $viewer): array
     {
         $directory = Cache::remember(self::DIRECTORY_KEY, 60, function (): array {
+            $homeSlots=VirtualOfficeHomes::slots();
             return User::query()->leftJoin('virtual_office_profiles as profile', 'users.id', '=', 'profile.user_id')
                 ->where('users.is_active', true)->whereIn('department', ['umum', 'operasional'])
                 ->orderBy('users.id')->limit(122)->get(['users.id', 'name', 'email', 'role', 'department', 'gender', 'profile.avatar', 'profile.share_activity'])
                 ->filter(fn (User $user) => $user->shouldDisplayInPresence())
                 ->map(fn (User $user) => ['id' => $user->id, 'name' => $user->name, 'department' => $user->department,
-                    'avatar' => VirtualOfficeAvatar::sanitize($user->avatar, $user->gender, $user->id), 'can_talk' => ! $user->isReadOnly(), 'share_activity' => $user->share_activity === null || (bool) $user->share_activity])
+                    'avatar' => VirtualOfficeAvatar::sanitize($user->avatar, $user->gender, $user->id),'home_slot'=>$homeSlots[$user->id]??null, 'can_talk' => ! $user->isReadOnly(), 'share_activity' => $user->share_activity === null || (bool) $user->share_activity])
                 ->values()->all();
         });
         $limited = count($directory) > 120;

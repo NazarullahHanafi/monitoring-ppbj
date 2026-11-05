@@ -1,0 +1,22 @@
+{
+  "capacity":128,"columns":8,"startX":-36.75,"startZ":-28,"spacingX":10.5,"spacingZ":12,
+  "boxes":[
+    {"x":0,"z":-3.9,"w":9.4,"d":0.18,"top":3.6,"tag":"home-back"},
+    {"x":-4.6,"z":0,"w":0.18,"d":7.8,"top":3.6,"tag":"home-side"},
+    {"x":4.6,"z":0,"w":0.18,"d":7.8,"top":3.6,"tag":"home-side"},
+    {"x":-2.7,"z":3.9,"w":4,"d":0.18,"top":3.6,"tag":"home-front"},
+    {"x":2.7,"z":3.9,"w":4,"d":0.18,"top":3.6,"tag":"home-front"},
+    {"x":0,"z":3.9,"w":1.3,"d":0.18,"top":2.8,"tag":"home-door"},
+    {"x":-2.05,"z":-1.35,"w":2.85,"d":3.5,"top":1.2,"tag":"home-bed"},
+    {"x":-3.85,"z":-2.4,"w":0.8,"d":0.75,"top":1.6,"tag":"home-nightstand"},
+    {"x":3.65,"z":-2.78,"w":1.05,"d":0.92,"top":2.3,"tag":"home-fridge"},
+    {"x":2.95,"z":-0.75,"w":2.62,"d":0.95,"top":1.3,"tag":"home-kitchen"},
+    {"x":0.95,"z":-2.75,"w":1.6,"d":2.2,"top":1.4,"tag":"home-bathroom"},
+    {"x":2.8,"z":2.45,"w":2.8,"d":1.15,"top":1.4,"tag":"home-sofa"},
+    {"x":1.2,"z":1.4,"w":1.4,"d":0.8,"top":0.9,"tag":"home-table"},
+    {"x":-0.05,"z":1.2,"w":0.2,"d":1.8,"top":2.2,"tag":"home-tv"},
+    {"x":-2.6,"z":3.45,"w":1.5,"d":0.4,"top":2,"tag":"home-books"},
+    {"x":-4.9,"z":0.1,"w":0.08,"d":10,"top":1.1,"tag":"home-fence"},
+    {"x":4.9,"z":0.1,"w":0.08,"d":10,"top":1.1,"tag":"home-fence"}
+  ]
+}

@@ -90,6 +90,7 @@ Route::post('/procurement-workspace/{page}', [\App\Http\Controllers\ProcurementW
 Route::post('/virtual-office/avatar', [\App\Http\Controllers\VirtualOfficeController::class, 'saveAvatar'])
     ->middleware(['auth', 'throttle:virtual-office'])->name('virtual-office.avatar');
 Route::post('/virtual-office/pilot', [\App\Http\Controllers\VirtualOfficePilotController::class, 'pulse'])->middleware(['auth','throttle:virtual-office'])->name('virtual-office.pilot');
+Route::post('/virtual-office/home/door', [\App\Http\Controllers\VirtualOfficePilotController::class, 'door'])->middleware(['auth','throttle:virtual-office'])->name('virtual-office.home.door');
 Route::post('/virtual-office/pilot/leave', [\App\Http\Controllers\VirtualOfficePilotController::class, 'leave'])->middleware(['auth','throttle:virtual-office'])->name('virtual-office.pilot.leave');
 
 Route::middleware(['auth', 'readonly.block'])->group(function () {

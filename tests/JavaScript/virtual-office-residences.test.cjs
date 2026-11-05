@@ -30,14 +30,15 @@ test('each account has a stable private home; only the selected roof/front open 
     for (const person of people) assert.deepEqual(homes.location(person.id), positions.get(person.id), 'Changing presence order must not exchange owners.');
     assert.deepEqual(homes.bed(5), [positions.get(5).x - 2.05, .92, positions.get(5).z - .5]);
     homes.select(null); assert.equal(visible(roof, 0), true); assert.equal(visible(front, 0), true);
+    const door=homes.meshes.find(mesh=>mesh.userData.residenceLayer==='door');homes.setDoor(5,true);door.getMatrixAt(0,matrix);assert.ok(Math.abs(matrix.elements[0])<.001,'The door swings around its hinge.');homes.setDoor(5,false);door.getMatrixAt(0,matrix);assert.ok(Math.abs(matrix.elements[0]-1)<.001);
     homes.sync(Array.from({ length: 200 }, (_, id) => ({ id: id + 1 })));
     assert.ok(homes.meshes.length < 45, '120 furnished houses should share a small fixed number of instanced draw calls.');
     for (const mesh of homes.meshes) {
-        assert.equal(mesh.count, 120);
+        assert.equal(mesh.count, 128);
         assert.ok([...mesh.instanceMatrix.array].every(Number.isFinite));
         assert.ok([...mesh.geometry.getAttribute('position').array].every(Number.isFinite));
     }
-    assert.equal(homes.location(121), null);
+    assert.equal(homes.location(129), null);
     homes.sync([]); homes.meshes.forEach(mesh => assert.equal(mesh.count, 0));
     homes.dispose(); assert.equal(scene.children.length, 0);
     geometries.forEach(geometry => geometry.dispose()); materials.forEach(material => material.dispose());

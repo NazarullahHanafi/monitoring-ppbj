@@ -56,6 +56,8 @@ class AppServiceProvider extends ServiceProvider
         // updates do not invalidate it. Account edits/locks do invalidate it.
         User::saved(fn () => Cache::forget(\App\Services\VirtualOfficePresence::DIRECTORY_KEY));
         User::deleted(fn () => Cache::forget(\App\Services\VirtualOfficePresence::DIRECTORY_KEY));
+        User::created(fn () => Cache::forget(\App\Services\VirtualOfficeHomes::KEY));
+        User::deleted(fn () => Cache::forget(\App\Services\VirtualOfficeHomes::KEY));
         // ✅ Hapus presence saat user logout
         \Event::listen(Logout::class, function (Logout $event) {
             if ($event->user && isset($event->user->id)) {

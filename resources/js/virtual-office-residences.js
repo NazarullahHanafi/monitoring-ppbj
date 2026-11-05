@@ -1,13 +1,14 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { homeLocation } from './virtual-office-home-layout.js';
 
 // Shared, original house geometry. Instancing keeps an entire neighbourhood
 // inexpensive; only the chosen home's roof and two camera-facing walls open.
 export function createResidences({ scene, material, ownedGeometries }) {
-    const capacity = 120, owners = Array(capacity).fill(null), slots = new Map(), parts = new Map(), meshes = [];
+    const capacity = 128, owners = Array(capacity).fill(null), slots = new Map(), parts = new Map(), meshes = [],doors=new Set();
     const matrix = new THREE.Matrix4(), rotation = new THREE.Quaternion(), unit = new THREE.Vector3(1, 1, 1);
     const hidden = new THREE.Matrix4().makeScale(0, 0, 0);
-    let selected = null, rows = 1;
+    let selected = null, rows = 1,plots=0;
     const palette = {
         '#cbbb9d': '#c1a771', '#c8a178': '#a78a63', '#ab8965': '#8c7055', '#d7c5a7': '#e4dcc9', '#e9dfca': '#e4dcc9',
         '#ba9f6b': '#c1a771', '#cfbb8c': '#c1a771', '#f0cb83': '#edcd8a', '#bca375': '#c1a771',
@@ -42,9 +43,10 @@ export function createResidences({ scene, material, ownedGeometries }) {
     box(9.4, 3.45, .18, 0, 1.9, -3.9, '#e7dec9', 'shell');
     box(.18, 3.45, 7.8, -4.6, 1.9, 0, '#e7dec9', 'shell');
     box(.18, 3.45, 7.8, 4.6, 1.9, 0, '#e7dec9', 'front');
-    box(9.4, 3.45, .18, 0, 1.9, 3.9, '#e7dec9', 'front');
-    box(1.25, 2.5, .1, 0, 1.48, 4.03, '#647d70', 'front');
-    box(.08, .36, .1, .43, 1.45, 4.11, '#ba9f6b', 'front');
+    for(const x of[-2.7,2.7])box(4,3.45,.18,x,1.9,3.9,'#e7dec9','front');
+    box(1.4,.78,.18,0,3.25,3.9,'#e7dec9','front');
+    box(1.25, 2.5, .1, .65, 1.48, 0, '#647d70', 'door');
+    box(.08, .36, .1, 1.08, 1.45, .08, '#ba9f6b', 'door');
     for (const x of [-2.85, 2.85]) {
         box(2.35, 1.55, .12, x, 2.05, 4.04, '#71948d', 'front');
         for (const dx of [-1.2, 0, 1.2]) box(.055, 1.65, .14, x + dx, 2.05, 4.12, '#cfbb8c', 'front');
@@ -115,15 +117,16 @@ export function createResidences({ scene, material, ownedGeometries }) {
     const groundGeometry = new THREE.BoxGeometry(1, 1, 1); ownedGeometries.add(groundGeometry);
     const ground = new THREE.Mesh(groundGeometry, material('#b4c5ab')); ground.userData.residenceGround = true; scene.add(ground);
     const avenue = new THREE.Mesh(groundGeometry, material('#e4dcc9')); scene.add(avenue);
-    function at(index) { return { x: -36.75 + index % 8 * 10.5, z: -28 - Math.floor(index / 8) * 12 }; }
+    function at(index) { const p=homeLocation(index);return{x:p.x,z:p.z}; }
     function update() {
-        const count = owners.reduce((last, id, index) => id === null ? last : index + 1, 0);
+        const count = Math.max(plots,owners.reduce((last, id, index) => id === null ? last : index + 1, 0));
         rows = Math.max(1, Math.ceil(count / 8));
         for (const mesh of meshes) {
             mesh.count = count;
             for (let index = 0; index < count; index++) {
                 const id = owners[index], location = at(index);
-                if (id === null || id === selected && ['roof', 'front'].includes(mesh.userData.residenceLayer)) mesh.setMatrixAt(index, hidden);
+                if (id === null&&index>=plots || id!==null&&id === selected && ['roof', 'front'].includes(mesh.userData.residenceLayer)) mesh.setMatrixAt(index, hidden);
+                else if(mesh.userData.residenceLayer==='door')mesh.setMatrixAt(index,matrix.compose(new THREE.Vector3(location.x-.65,0,location.z+3.99),new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,1,0),doors.has(id)?-Math.PI/2:0),unit));
                 else mesh.setMatrixAt(index, matrix.compose(new THREE.Vector3(location.x, 0, location.z), new THREE.Quaternion(), unit));
             }
             mesh.instanceMatrix.needsUpdate = true; mesh.computeBoundingSphere();
@@ -135,14 +138,19 @@ export function createResidences({ scene, material, ownedGeometries }) {
     }
     return {
         meshes,
+        slotFor:id=>slots.get(id),
+        setPlots(value){plots=Math.min(capacity,Math.max(0,Number(value)||0));update();},
         sync(people) {
             const ids = new Set(people.slice(0, capacity).map(p => p.id));
             for (const [id, slot] of slots) if (!ids.has(id)) { owners[slot] = null; slots.delete(id); }
+            for(const person of people.slice(0,capacity)){const slot=person.home_slot;if(Number.isInteger(slot)&&slot>=0&&slot<capacity&&slots.get(person.id)!==slot){if(slots.has(person.id))owners[slots.get(person.id)]=null;slots.delete(person.id);}}
+            for(const person of people.slice(0,capacity)){const slot=person.home_slot;if(Number.isInteger(slot)&&slot>=0&&slot<capacity&&owners[slot]===null){owners[slot]=person.id;slots.set(person.id,slot);}}
             for (const id of [...ids].sort((a, b) => a - b)) if (!slots.has(id)) { const slot = owners.indexOf(null); owners[slot] = id; slots.set(id, slot); }
             if (!slots.has(selected)) selected = null;
             update();
         },
         select(id) { selected = slots.has(id) ? id : null; update(); },
+        setDoor(id,open){if(open)doors.add(id);else doors.delete(id);update();},
         location(id) { const slot = slots.get(id); return slot === undefined ? null : at(slot); },
         bed(id) { const location = this.location(id); return location ? [location.x - 2.05, .92, location.z - .5] : null; },
         cameraBoxes(id) {

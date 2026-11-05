@@ -81,8 +81,8 @@ class VirtualOfficeTest extends TestCase
             $queries[] = strtolower($query->sql);
         });
         $this->actingAs($user)->getJson(route('virtual-office.presence'))->assertOk()->assertJsonCount(31, 'people');
-        $this->assertCount(2, $queries);
-        $this->assertStringContainsString('limit 122', $queries[0]);
+        $this->assertCount(3, $queries);
+        $this->assertTrue(collect($queries)->contains(fn($sql)=>str_contains($sql,'limit 122')));
         $queries = [];
         $this->getJson(route('virtual-office.presence'))->assertOk();
         $this->assertSame([], $queries);

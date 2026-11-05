@@ -1,17 +1,19 @@
 // Small 2D navigation grid for walking avatars. Segment tests prevent tunnelling
 // through thin nets/walls; seats/beds remain intentional stationary poses.
 import layout from '../data/virtual-office-layout.json' with { type: 'json' };
+import { homeBoxes,homeLocation,insideHome } from './virtual-office-home-layout.js';
 export function createOfficeNavigation() {
     const obstacles = [], {minX,maxX,minZ,maxZ}=layout.bounds, cell = .5, radius = .3;
     const width = Math.round((maxX - minX) / cell) + 1, height = Math.round((maxZ - minZ) / cell) + 1;
-    let grid = null;
+    let grid = null,homesEnabled=false,openHome=null,homePlots=128;
+    const extra=(a,b=a)=>homesEnabled?homeBoxes(a,b,openHome,homePlots):[];
     function free(x, z) {
         return x >= minX + radius && x <= maxX - radius && z >= minZ + radius && z <= maxZ - radius
-            && !obstacles.some(b => x > b.left - radius && x < b.right + radius && z > b.back - radius && z < b.front + radius);
+            && !obstacles.concat(extra({x,z})).some(b => x > b.left - radius && x < b.right + radius && z > b.back - radius && z < b.front + radius);
     }
     function segment(a, b) {
         if (!free(b.x, b.z)) return false;
-        for (const box of obstacles) {
+        for (const box of obstacles.concat(extra(a,b))) {
             let low = 0, high = 1;
             for (const [axis, start, end] of [['x', box.left - radius, box.right + radius], ['z', box.back - radius, box.front + radius]]) {
                 const delta = b[axis] - a[axis];
@@ -26,7 +28,7 @@ export function createOfficeNavigation() {
         if (grid) return;
         grid = new Uint8Array(width * height).fill(1);
         for(let z=0;z<height;z++)for(let x=0;x<width;x++)if(x===0||z===0||x===width-1||z===height-1)grid[z*width+x]=0;
-        for(const b of obstacles){const left=Math.max(0,Math.ceil((b.left-.4-minX)/cell)),right=Math.min(width-1,Math.floor((b.right+.4-minX)/cell)),back=Math.max(0,Math.ceil((b.back-.4-minZ)/cell)),front=Math.min(height-1,Math.floor((b.front+.4-minZ)/cell));
+        for(const b of obstacles.concat(extra({x:minX,z:minZ},{x:maxX,z:maxZ}))){const left=Math.max(0,Math.ceil((b.left-.4-minX)/cell)),right=Math.min(width-1,Math.floor((b.right+.4-minX)/cell)),back=Math.max(0,Math.ceil((b.back-.4-minZ)/cell)),front=Math.min(height-1,Math.floor((b.front+.4-minZ)/cell));
             for(let z=back;z<=front;z++)for(let x=left;x<=right;x++)grid[z*width+x]=0;}
     }
     function avoids(a, b, people) {
@@ -78,8 +80,11 @@ export function createOfficeNavigation() {
         return [];
     }
     return {
+        configureHomes(enabled,slot=null,plots=homePlots){if(homesEnabled===Boolean(enabled)&&slot===openHome&&plots===homePlots)return;homesEnabled=Boolean(enabled);openHome=slot;homePlots=plots;grid=null;},
+        withHomeAccess(slot,callback){if(!homesEnabled||slot===undefined||slot===openHome)return callback();const previous=openHome,previousGrid=grid;openHome=slot;grid=null;try{return callback();}finally{openHome=previous;grid=previousGrid;}},
+        groundHeight(point){if(!homesEnabled)return -.12;const col=Math.round((point.x+36.75)/10.5),row=Math.round((-28-point.z)/12);return col>=0&&col<8&&row>=0&&insideHome(point,homeLocation(row*8+col)) ? .22 : -.12;},
         boxes:()=>obstacles.map(b=>({...b})),
-        slide(from,to){if(segment(from,to))return{x:to.x,z:to.z};let next={x:from.x,z:from.z};if(segment(next,{x:to.x,z:next.z}))next.x=to.x;if(segment(next,{x:next.x,z:to.z}))next.z=to.z;return next;},
+        slide(from,to){if(segment(from,to))return{x:to.x,z:to.z};if(segment(from,{x:to.x,z:from.z}))return{x:to.x,z:from.z};if(segment(from,{x:from.x,z:to.z}))return{x:from.x,z:to.z};return{x:from.x,z:from.z};},
         addBox(w, d, x, z, tag = '', top = 2) { obstacles.push({ left: x - w / 2, right: x + w / 2, back: z - d / 2, front: z + d / 2, top, tag }); grid = null; },
         cameraLimit(from, to, extra = []) {
             let limit = 1;

@@ -43,7 +43,7 @@ export function safePeople(payload) {
     }).map(p => ({ id: p.id, name: String(p.name || 'Anggota tim').slice(0, 150), department: p.department,
         state: p.state, mood: String(p.mood || '').slice(0, 40), is_me: p.is_me === true,
         avatar: safeAvatar(p.avatar), share_activity: p.share_activity !== false,
-        can_talk: p.can_talk !== false,
+        can_talk: p.can_talk !== false,home_slot:Number.isInteger(p.home_slot)&&p.home_slot>=0&&p.home_slot<128?p.home_slot:null,
         in_office:typeof p.in_office==='boolean'?p.in_office:undefined,pilot:p.pilot&&['x','y','z','yaw'].every(k=>Number.isFinite(p.pilot[k]))?{...p.pilot}:null,
         recreation: p.recreation && ['bar','disco','beach','garden','terrace','lounge','office',...games.map(g=>g.id)].includes(p.recreation.destination) ? { destination: p.recreation.destination, kind: ['drink','food','relax','game','dance'].includes(p.recreation.kind) ? p.recreation.kind : 'relax', until: Number(p.recreation.until) || 0 } : null,
         meeting_with: Number.isSafeInteger(p.meeting_with) && p.meeting_with > 0 ? p.meeting_with : null,

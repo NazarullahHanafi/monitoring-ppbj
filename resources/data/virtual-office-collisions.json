@@ -104,14 +104,6 @@
     "tag": "water-boundary"
   },
   {
-    "left": -101,
-    "right": 101,
-    "back": -21.95,
-    "front": -21.650000000000002,
-    "top": 1.2,
-    "tag": "residential-boundary"
-  },
-  {
     "left": -99.1,
     "right": -98.9,
     "back": -22,
@@ -318,6 +310,54 @@
     "front": 51.4,
     "top": 2.2,
     "tag": "club-speaker"
+  },
+  {
+    "left": -39.040000000000006,
+    "right": -38.36,
+    "back": 48.66,
+    "front": 49.34,
+    "top": 2.1,
+    "tag": "hospitality-npc"
+  },
+  {
+    "left": -21.64,
+    "right": -20.96,
+    "back": 48.66,
+    "front": 49.34,
+    "top": 2.1,
+    "tag": "hospitality-npc"
+  },
+  {
+    "left": -30.34,
+    "right": -29.66,
+    "back": 42.86,
+    "front": 43.540000000000006,
+    "top": 2.1,
+    "tag": "hospitality-npc"
+  },
+  {
+    "left": -30.34,
+    "right": -29.66,
+    "back": 49.36,
+    "front": 50.040000000000006,
+    "top": 2.1,
+    "tag": "hospitality-npc"
+  },
+  {
+    "left": -36.34,
+    "right": -35.66,
+    "back": 59.059999999999995,
+    "front": 59.74,
+    "top": 2.1,
+    "tag": "hospitality-npc"
+  },
+  {
+    "left": -24.34,
+    "right": -23.66,
+    "back": 59.059999999999995,
+    "front": 59.74,
+    "top": 2.1,
+    "tag": "hospitality-npc"
   },
   {
     "left": -36.75,

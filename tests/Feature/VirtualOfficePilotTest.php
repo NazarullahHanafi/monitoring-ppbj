@@ -77,4 +77,32 @@ class VirtualOfficePilotTest extends TestCase
         $this->postJson(route('virtual-office.avatar'),$data)->assertOk()->assertJsonPath('avatar.costume','sakura');
         $data['version']=1;$data['avatar']['costume']='https://untrusted.example/model.glb';$this->postJson(route('virtual-office.avatar'),$data)->assertUnprocessable();
     }
+    public function test_corrections_return_only_safe_canonical_position_and_keep_the_active_session(): void
+    {
+        $user=$this->person();$body=$this->packet();$self=$this->actingAs($user)->postJson(route('virtual-office.pilot'),$body)->assertOk()->json('self');
+        $response=$this->postJson(route('virtual-office.pilot'),array_replace($body,['mode'=>'move','seq'=>1,'x'=>90,'z'=>75]))->assertUnprocessable()->assertJsonPath('self.x',$self['x']);
+        $this->assertArrayNotHasKey('session_id',$response->json('self'));$this->assertNotNull(VirtualOfficePilot::current($user->id));
+        $this->travel(12)->seconds();$this->assertNotNull(VirtualOfficePilot::current($user->id));
+    }
+    public function test_home_door_is_owned_requires_proximity_and_blocks_walking_when_closed(): void
+    {
+        $user=$this->person();$other=$this->person();$body=$this->packet();$this->actingAs($user)->postJson(route('virtual-office.pilot'),$body)->assertOk();
+        $door=['session_id'=>$body['session_id'],'open'=>true];$this->postJson(route('virtual-office.home.door'),$door)->assertStatus(409);
+        $home=\App\Services\VirtualOfficeHomes::own($user);$state=VirtualOfficePilot::current($user->id);$state['x']=$home['x'];$state['z']=$home['z']+5;Cache::put(VirtualOfficePilot::key($user->id),$state,900);
+        $this->travel(1)->seconds();$move=array_replace($body,['mode'=>'move','seq'=>1,'x'=>$home['x'],'z'=>$home['z']+2.8]);
+        $this->postJson(route('virtual-office.pilot'),$move)->assertUnprocessable();
+        $this->postJson(route('virtual-office.home.door'),$door+['home_id'=>$other->id])->assertUnprocessable();
+        $this->postJson(route('virtual-office.home.door'),$door)->assertOk()->assertJsonPath('self.door_open',true);
+        $this->postJson(route('virtual-office.pilot'),$move)->assertOk();
+        $this->postJson(route('virtual-office.home.door'),array_replace($door,['open'=>false]))->assertOk()->assertJsonPath('self.door_open',false);
+        $this->travel(1)->seconds();$this->postJson(route('virtual-office.pilot'),array_replace($move,['seq'=>2,'z'=>$home['z']+5]))->assertUnprocessable();
+        $next=\App\Services\VirtualOfficeHomes::own($other);$this->assertFalse(app(VirtualOfficePilot::class)->segment(['x'=>$next['x'],'z'=>$next['z']+5],['x'=>$next['x'],'z'=>$next['z']+2.8],$home['slot']));
+        $this->assertDatabaseCount('virtual_office_visits',0);
+    }
+    public function test_rest_poses_are_synced_at_beach_and_invalid_poses_are_rejected(): void
+    {
+        $user=$this->person();$this->placeAvatar($user,'beach');$state=VirtualOfficePilot::current($user->id);$body=$this->packet(['session_id'=>$state['session_id'],'mode'=>'move','x'=>$state['x'],'z'=>$state['z'],'venue'=>'beach','action'=>'rest']);
+        $this->actingAs($user);foreach(['sit','recline','nap','meditate']as$i=>$pose)$this->postJson(route('virtual-office.pilot'),array_replace($body,['seq'=>$i+1,'pose'=>$pose]))->assertOk()->assertJsonPath('self.pose',$pose)->assertJsonPath('self.action','rest');
+        $this->postJson(route('virtual-office.pilot'),array_replace($body,['seq'=>5,'pose'=>'javascript:alert(1)']))->assertUnprocessable();
+    }
 }
