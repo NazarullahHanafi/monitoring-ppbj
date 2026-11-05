@@ -17,17 +17,19 @@ class VirtualOfficePilot
     public static function lease(int $id): string { return 'office:pilot:lease:'.$id; }
     public static function layout(): array { static $data; return $data ??= json_decode(file_get_contents(resource_path('data/virtual-office-layout.json')), true, 512, JSON_THROW_ON_ERROR); }
     public static function motion(): array { static $data;return $data??=json_decode(file_get_contents(resource_path('data/virtual-office-motion.json')),true,512,JSON_THROW_ON_ERROR); }
+    public static function abilities(): array { static $data;return $data??=json_decode(file_get_contents(resource_path('data/virtual-office-abilities.json')),true,512,JSON_THROW_ON_ERROR); }
     public static function allowed(User $user): bool { return $user->is_active && in_array($user->department, ['umum','operasional'], true); }
     public static function current(int $id): ?array
     {
         $state=Cache::get(self::key($id));return is_array($state)&&Cache::get(self::lease($id))===($state['session_id']??null)?$state:null;
     }
-    public static function publicState(?array $state): ?array { return $state ? array_intersect_key($state,array_flip(['x','y','z','yaw','action','venue','pose','door_open','seq','updated_ms'])) : null; }
-    public function free(float $x,float $z,?int $openSlot=null): bool
+    public static function publicState(?array $state): ?array { return $state ? array_intersect_key($state,array_flip(['x','y','z','yaw','action','venue','pose','door_open','seq','updated_ms','skill','skill_at'])) : null; }
+    private static function vaultable(array $box): bool { return $box['top']<=self::motion()['vault_height']&&in_array($box['tag'],self::motion()['vault_tags'],true); }
+    public function free(float $x,float $z,?int $openSlot=null,float $y=-.12): bool
     {
         $bounds=self::layout()['bounds'];$r=.3;
         if($x<$bounds['minX']+$r||$x>$bounds['maxX']-$r||$z<$bounds['minZ']+$r||$z>$bounds['maxZ']-$r)return false;
-        foreach(array_merge($this->obstacles(),$this->neighbourhood(['x'=>$x,'z'=>$z],null,$openSlot))as$b)if($x>$b['left']-$r&&$x<$b['right']+$r&&$z>$b['back']-$r&&$z<$b['front']+$r)return false;
+        foreach(array_merge($this->obstacles(),$this->neighbourhood(['x'=>$x,'z'=>$z],null,$openSlot))as$b)if(!(self::vaultable($b)&&$y>=$b['top']+.075)&&$x>$b['left']-$r&&$x<$b['right']+$r&&$z>$b['back']-$r&&$z<$b['front']+$r)return false;
         return true;
     }
     public function obstacles(): array
@@ -36,14 +38,17 @@ class VirtualOfficePilot
     }
     public function segment(array $a,array $b,?int $openSlot=null): bool
     {
-        if(!$this->free($b['x'],$b['z'],$openSlot))return false;
+        if(!$this->free($b['x'],$b['z'],$openSlot,$b['y']??-.12))return false;
         foreach(array_merge($this->obstacles(),$this->neighbourhood($a,$b,$openSlot))as$box){$low=0;$high=1;
             foreach([['x',$box['left']-.3,$box['right']+.3],['z',$box['back']-.3,$box['front']+.3]]as[$axis,$start,$end]){
                 $delta=$b[$axis]-$a[$axis];
                 if(abs($delta)<1e-8){if($a[$axis]<=$start||$a[$axis]>=$end){$low=2;break;}}
                 else{$t1=($start-$a[$axis])/$delta;$t2=($end-$a[$axis])/$delta;$low=max($low,min($t1,$t2));$high=min($high,max($t1,$t2));}
             }
-            if($low<=$high&&$high>0&&$low<1)return false;
+            if($low<=$high&&$high>0&&$low<1){$ay=$a['y']??-.12;$by=$b['y']??-.12;
+                if(self::vaultable($box)&&min($ay+($by-$ay)*max(0,$low),$ay+($by-$ay)*min(1,$high))>=$box['top']+.075)continue;
+                return false;
+            }
         }return true;
     }
     public function pulse(User $user,array $data): array
@@ -61,9 +66,14 @@ class VirtualOfficePilot
                 if($data['seq']<=$state['seq'])return $state;
                 $elapsed=max(0,($now-$state['updated_ms'])/1000);$motion=self::motion();$credit=min($motion['distance_credit'],($state['credit']??.7)+$elapsed*$motion['maximum_speed']);
                 $distance=0;$previous=$state;$trail=$data['trail']??[];
-                if(!$trail||hypot($trail[count($trail)-1]['x']-$data['x'],$trail[count($trail)-1]['z']-$data['z'])>.001)$trail[]=$data;
+                if(!$trail||hypot($trail[count($trail)-1]['x']-$data['x'],$trail[count($trail)-1]['z']-$data['z'])>.001||abs(($trail[count($trail)-1]['y']??-.12)-$data['y'])>.001)$trail[]=$data;
                 $home=VirtualOfficeHomes::own($user);$openSlot=!empty($state['door_open'])?($home['slot']??null):null;
-                foreach($trail as$point){$distance+=hypot($point['x']-$previous['x'],$point['z']-$previous['z']);abort_unless($this->segment($previous,$point,$openSlot),422,'Gerakan dikoreksi: batas kawasan atau penghalang.');$previous=$point;}
+                $vertical=0;foreach($trail as$point){$point['y']=$point['y']??($previous['y']??-.12);$vertical+=abs($point['y']-($previous['y']??-.12));$distance+=hypot($point['x']-$previous['x'],$point['z']-$previous['z']);abort_unless($this->segment($previous,$point,$openSlot),422,'Gerakan dikoreksi: batas kawasan atau penghalang.');$previous=$point;}
+                abort_if($vertical>($elapsed*15+.5),422,'Lompatan terlalu cepat.');
+                $ground=VirtualOfficeHomes::inside($data,$home)?.22:-.12;
+                foreach(array_merge($this->obstacles(),$this->neighbourhood($data,null,$openSlot))as$box)if(self::vaultable($box)&&$data['x']>$box['left']-.3&&$data['x']<$box['right']+.3&&$data['z']>$box['back']-.3&&$data['z']<$box['front']+.3&&$data['y']>=$box['top']+.07)$ground=max($ground,$box['top']+.08);
+                $air=$data['y']>$ground+.12?($state['air_started_ms']??$now):null;
+                abort_if($air!==null&&$now-$air>self::motion()['maximum_air_ms'],422,'Lompatan berakhir. Kembali ke tanah.');
                 // Reject teleports and continuous sweeps through even thin nets.
                 abort_if($distance>$credit+.08,422,'Gerakan terlalu jauh. Posisi disinkronkan kembali.');
                 if(in_array($data['action'],['play','drink','eat','dance','rest'],true)){
@@ -71,7 +81,15 @@ class VirtualOfficePilot
                     $outdoors=$data['action']==='rest'&&($data['venue']??null)==='campus'&&$this->free($data['x'],$data['z'],$openSlot);
                     abort_unless($outdoors||$atHome||$venue&&hypot($data['x']-$venue['x'],$data['z']-$venue['z'])<=$venue['radius'],422,'Datangi lokasi sebelum beraktivitas.');
                 }
-                $state=array_merge($state,array_intersect_key($data,array_flip(['x','y','z','yaw','seq','action','venue','pose'])),['credit'=>max(0,$credit-$distance),'updated_ms'=>$now]);
+                $state=array_merge($state,array_intersect_key($data,array_flip(['x','y','z','yaw','seq','action','venue','pose'])),['credit'=>max(0,$credit-$distance),'updated_ms'=>$now,'air_started_ms'=>$air]);
+            }
+            if(!empty($data['skill'])&&($state['skill_id']??null)!==($data['skill_id']??null)){
+                $profile=\Illuminate\Support\Facades\DB::table('virtual_office_profiles')->where('user_id',$user->id)->value('avatar');
+                $costume=VirtualOfficeAvatar::sanitize($profile,$user->gender,$user->id)['costume'];$catalog=self::abilities();
+                abort_unless(in_array($data['skill'],$catalog['characters'][$costume]??$catalog['characters']['none'],true),422,'Jurus tidak sesuai kostum tersimpan.');
+                $cooldown=$catalog['skills'][$state['skill']??'']['cooldown']??6;
+                abort_if(isset($state['skill_at'])&&$now-$state['skill_at']<$cooldown*1000,422,'Jurus sedang memulihkan energi.');
+                $state['skill']=$data['skill'];$state['skill_id']=$data['skill_id'];$state['skill_at']=$now;
             }
             abort_if(Cache::has($left),409,'Kendali sudah dihentikan.');
             Cache::put(self::key($user->id),$state,900);Cache::put(self::lease($user->id),$data['session_id'],20);

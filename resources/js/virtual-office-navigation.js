@@ -2,17 +2,19 @@
 // through thin nets/walls; seats/beds remain intentional stationary poses.
 import layout from '../data/virtual-office-layout.json' with { type: 'json' };
 import { homeBoxes,homeLocation,insideHome } from './virtual-office-home-layout.js';
+import motion from '../data/virtual-office-motion.json' with {type:'json'};
 export function createOfficeNavigation() {
     const obstacles = [], {minX,maxX,minZ,maxZ}=layout.bounds, cell = .5, radius = .3;
     const width = Math.round((maxX - minX) / cell) + 1, height = Math.round((maxZ - minZ) / cell) + 1;
     let grid = null,homesEnabled=false,openHome=null,homePlots=128;
     const extra=(a,b=a)=>homesEnabled?homeBoxes(a,b,openHome,homePlots):[];
-    function free(x, z) {
+    const vaultable=box=>box.top<=motion.vault_height&&motion.vault_tags.includes(box.tag);
+    function free(x, z, y=-.12) {
         return x >= minX + radius && x <= maxX - radius && z >= minZ + radius && z <= maxZ - radius
-            && !obstacles.concat(extra({x,z})).some(b => x > b.left - radius && x < b.right + radius && z > b.back - radius && z < b.front + radius);
+            && !obstacles.concat(extra({x,z})).some(b => !(vaultable(b)&&y>=b.top+.075)&&x > b.left - radius && x < b.right + radius && z > b.back - radius && z < b.front + radius);
     }
     function segment(a, b) {
-        if (!free(b.x, b.z)) return false;
+        if (!free(b.x, b.z,b.y??-.12)) return false;
         for (const box of obstacles.concat(extra(a,b))) {
             let low = 0, high = 1;
             for (const [axis, start, end] of [['x', box.left - radius, box.right + radius], ['z', box.back - radius, box.front + radius]]) {
@@ -20,7 +22,11 @@ export function createOfficeNavigation() {
                 if (Math.abs(delta) < 1e-8) { if (a[axis] <= start || a[axis] >= end) { low = 2; break; } }
                 else { const t1 = (start - a[axis]) / delta, t2 = (end - a[axis]) / delta; low = Math.max(low, Math.min(t1, t2)); high = Math.min(high, Math.max(t1, t2)); }
             }
-            if (low <= high && high > 0 && low < 1) return false;
+            if (low <= high && high > 0 && low < 1) {
+                const ay=a.y??-.12,by=b.y??-.12;
+                if(vaultable(box)&&Math.min(ay+(by-ay)*Math.max(0,low),ay+(by-ay)*Math.min(1,high))>=box.top+.075)continue;
+                return false;
+            }
         }
         return true;
     }
@@ -82,9 +88,10 @@ export function createOfficeNavigation() {
     return {
         configureHomes(enabled,slot=null,plots=homePlots){if(homesEnabled===Boolean(enabled)&&slot===openHome&&plots===homePlots)return;homesEnabled=Boolean(enabled);openHome=slot;homePlots=plots;grid=null;},
         withHomeAccess(slot,callback){if(!homesEnabled||slot===undefined||slot===openHome)return callback();const previous=openHome,previousGrid=grid;openHome=slot;grid=null;try{return callback();}finally{openHome=previous;grid=previousGrid;}},
-        groundHeight(point){if(!homesEnabled)return -.12;const col=Math.round((point.x+36.75)/10.5),row=Math.round((-28-point.z)/12);return col>=0&&col<8&&row>=0&&insideHome(point,homeLocation(row*8+col)) ? .22 : -.12;},
+        groundHeight(point){const col=Math.round((point.x+36.75)/10.5),row=Math.round((-28-point.z)/12);let ground=homesEnabled&&col>=0&&col<8&&row>=0&&insideHome(point,homeLocation(row*8+col))?.22:-.12;
+            for(const b of obstacles.concat(extra(point)))if(vaultable(b)&&(point.y??-.12)>=b.top+.07&&point.x>b.left-radius&&point.x<b.right+radius&&point.z>b.back-radius&&point.z<b.front+radius)ground=Math.max(ground,b.top+.08);return ground;},
         boxes:()=>obstacles.map(b=>({...b})),
-        slide(from,to){if(segment(from,to))return{x:to.x,z:to.z};if(segment(from,{x:to.x,z:from.z}))return{x:to.x,z:from.z};if(segment(from,{x:from.x,z:to.z}))return{x:from.x,z:to.z};return{x:from.x,z:from.z};},
+        slide(from,to){const end={...to,y:to.y??from.y};if(segment(from,end))return{x:to.x,z:to.z};if(segment(from,{...end,z:from.z}))return{x:to.x,z:from.z};if(segment(from,{...end,x:from.x}))return{x:from.x,z:to.z};return{x:from.x,z:from.z};},
         addBox(w, d, x, z, tag = '', top = 2) { obstacles.push({ left: x - w / 2, right: x + w / 2, back: z - d / 2, front: z + d / 2, top, tag }); grid = null; },
         cameraLimit(from, to, extra = []) {
             let limit = 1;

@@ -8,7 +8,7 @@ export function createResidences({ scene, material, ownedGeometries }) {
     const capacity = 128, owners = Array(capacity).fill(null), slots = new Map(), parts = new Map(), meshes = [],doors=new Set();
     const matrix = new THREE.Matrix4(), rotation = new THREE.Quaternion(), unit = new THREE.Vector3(1, 1, 1);
     const hidden = new THREE.Matrix4().makeScale(0, 0, 0);
-    let selected = null, rows = 1,plots=0;
+    let selected = null, rows = 1,plots=0,interior=null;
     const palette = {
         '#cbbb9d': '#c1a771', '#c8a178': '#a78a63', '#ab8965': '#8c7055', '#d7c5a7': '#e4dcc9', '#e9dfca': '#e4dcc9',
         '#ba9f6b': '#c1a771', '#cfbb8c': '#c1a771', '#f0cb83': '#edcd8a', '#bca375': '#c1a771',
@@ -125,7 +125,7 @@ export function createResidences({ scene, material, ownedGeometries }) {
             mesh.count = count;
             for (let index = 0; index < count; index++) {
                 const id = owners[index], location = at(index);
-                if (id === null&&index>=plots || id!==null&&id === selected && ['roof', 'front'].includes(mesh.userData.residenceLayer)) mesh.setMatrixAt(index, hidden);
+                if (interior!==null&&id!==interior || id === null&&index>=plots || id!==null&&id === (interior??selected) && ['roof', 'front'].includes(mesh.userData.residenceLayer)) mesh.setMatrixAt(index, hidden);
                 else if(mesh.userData.residenceLayer==='door')mesh.setMatrixAt(index,matrix.compose(new THREE.Vector3(location.x-.65,0,location.z+3.99),new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,1,0),doors.has(id)?-Math.PI/2:0),unit));
                 else mesh.setMatrixAt(index, matrix.compose(new THREE.Vector3(location.x, 0, location.z), new THREE.Quaternion(), unit));
             }
@@ -134,10 +134,11 @@ export function createResidences({ scene, material, ownedGeometries }) {
         const depth = rows * 12 + 4;
         ground.scale.set(86, .3, depth); ground.position.set(0, -.55, -20 - depth / 2);
         avenue.scale.set(1.5, .04, depth); avenue.position.set(0, -.12, -20 - depth / 2);
-        ground.visible = avenue.visible = count > 0;
+        ground.visible = avenue.visible = count > 0&&interior===null;
     }
     return {
         meshes,
+        interior(id){interior=slots.has(id)?id:null;update();},
         slotFor:id=>slots.get(id),
         setPlots(value){plots=Math.min(capacity,Math.max(0,Number(value)||0));update();},
         sync(people) {

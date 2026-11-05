@@ -116,4 +116,30 @@ class VirtualOfficePilotTest extends TestCase
         $user=$this->person();$body=$this->packet();$self=$this->actingAs($user)->postJson(route('virtual-office.pilot'),$body)->assertOk()->json('self');
         foreach(['sit','recline','nap','meditate']as$i=>$pose)$this->postJson(route('virtual-office.pilot'),array_replace($body,['mode'=>'move','seq'=>$i+1,'x'=>$self['x'],'z'=>$self['z'],'action'=>'rest','venue'=>'campus','pose'=>$pose]))->assertOk()->assertJsonPath('self.pose',$pose);
     }
+    public function test_real_client_double_jump_trace_crosses_low_fence_and_preserves_server_position(): void
+    {
+        $trace=json_decode(file_get_contents(base_path('tests/Fixtures/virtual-office-double-jump.json')),true,512,JSON_THROW_ON_ERROR);$user=$this->person();$body=$this->packet();$this->actingAs($user)->postJson(route('virtual-office.pilot'),$body)->assertOk();
+        $state=array_merge(VirtualOfficePilot::current($user->id),$trace['initial']);Cache::put(VirtualOfficePilot::key($user->id),$state,900);$start=now();
+        foreach($trace['packets']as$i=>$packet){$this->travelTo($start->copy()->addMilliseconds($packet['ms']));unset($packet['ms']);$this->postJson(route('virtual-office.pilot'),array_replace($body,$packet,['mode'=>'move','seq'=>$i+1]))->assertOk()->assertJsonPath('self.seq',$i+1);}
+        $this->assertGreaterThan(-41,VirtualOfficePilot::current($user->id)['x']);$this->assertEquals(-.12,VirtualOfficePilot::current($user->id)['y']);
+        $pilot=app(VirtualOfficePilot::class);$this->assertFalse($pilot->segment(['x'=>-32,'y'=>2,'z'=>10],['x'=>-32,'y'=>2,'z'=>14]),'A high jump must not bypass the badminton net.');
+    }
+    public function test_jump_height_vertical_speed_and_airtime_are_bounded(): void
+    {
+        $user=$this->person();$body=$this->packet();$self=$this->actingAs($user)->postJson(route('virtual-office.pilot'),$body)->assertOk()->json('self');$move=array_replace($body,$self,['mode'=>'move','seq'=>1,'action'=>'jump','y'=>1]);
+        $this->postJson(route('virtual-office.pilot'),$move)->assertUnprocessable();$this->travel(200)->milliseconds();$this->postJson(route('virtual-office.pilot'),$move)->assertOk();
+        $this->travel(1800)->milliseconds();$this->postJson(route('virtual-office.pilot'),array_replace($move,['seq'=>2]))->assertUnprocessable()->assertJsonPath('self.seq',1);
+        $this->postJson(route('virtual-office.pilot'),array_replace($move,['seq'=>2,'y'=>3.3]))->assertUnprocessable();
+    }
+    public function test_skill_casts_use_saved_costume_are_idempotent_and_have_server_cooldown(): void
+    {
+        $user=$this->person();$this->actingAs($user);$avatar=\App\Services\VirtualOfficeAvatar::defaults();$avatar['costume']='naruto';$this->postJson(route('virtual-office.avatar'),['avatar'=>$avatar,'share_activity'=>true,'version'=>0])->assertOk();
+        $body=$this->packet();$self=$this->postJson(route('virtual-office.pilot'),$body)->assertOk()->json('self');$cast=array_replace($body,$self,['mode'=>'move','seq'=>1,'skill'=>'rasengan','skill_id'=>(string)Str::uuid()]);
+        $first=$this->postJson(route('virtual-office.pilot'),$cast)->assertOk()->assertJsonPath('self.skill','rasengan')->json('self');$this->assertArrayNotHasKey('skill_id',$first);
+        $this->postJson(route('virtual-office.pilot'),array_replace($cast,['seq'=>2]))->assertOk()->assertJsonPath('self.skill_at',$first['skill_at']);
+        $this->postJson(route('virtual-office.pilot'),array_replace($cast,['seq'=>3,'skill_id'=>(string)Str::uuid()]))->assertUnprocessable();
+        $this->travel(7)->seconds();$this->postJson(route('virtual-office.pilot'),array_replace($cast,['seq'=>3,'skill'=>'kamehameha','skill_id'=>(string)Str::uuid()]))->assertUnprocessable();
+        $this->postJson(route('virtual-office.pilot'),array_replace($cast,['seq'=>3,'skill'=>'clones','skill_id'=>(string)Str::uuid()]))->assertOk()->assertJsonPath('self.skill','clones');
+        $this->assertDatabaseCount('virtual_office_orders',0);
+    }
 }
