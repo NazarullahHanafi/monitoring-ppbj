@@ -37,3 +37,19 @@ Feed cold-cache memakai dua query terbatas (direktori dan pengaturan kawasan), l
 Pengujian mencakup role/departemen pengelola, read-only, konflik versi, enum, undangan online, penerima, pihak luar, Viewer, owner tersembunyi, lease, kesiapan kedua peserta, integrasi Chat Tim, kedaluwarsa, rendering teks berbahaya, lifecycle request, siklus cuaca, resource grafis, penghalang tipis, posisi kamera, dan seluruh 12 tempat pertemuan. Pengujian Three.js memakai geometri asli dan renderer pengujian. Browser langsung pada sesi ini masih gagal membaca halaman; belum ada pengukuran FPS GPU nyata atau verifikasi screenshot pada perangkat pengguna.
 
 Validasi lokal: seluruh **467 tes PHP (2.950 assertion)** dan **108 tes JavaScript** lolos. Build Vite berhasil. Entry office sekitar 30 KB minified / 11 KB gzip; chunk 3D sekitar 604 KB / 157 KB gzip dan tetap lazy. Pemeriksaan role/pertemuan dan build diulang setelah perbaikan akhir yang relevan.
+
+## Hasil pemasangan hosting
+
+Rilis `ed2a2b4` telah dipasang pada PHP 8.3.36. Backup privat sebelum migrasi ada di `deployment-artifacts/office-world-20261105-085928`: kode, aset, cache dan dump database 4.582.541 byte. Mode direktori 0700 dan dump 0600; kredensial backup sementara sudah dihapus. Migrasi tabel tambahan selesai sebelum kode baru diterbitkan. Cache config/routes/views dan autoload dibangun ulang; aset lama tetap tersedia untuk tab lama.
+
+Health HTTP 200. Feed kehadiran dan endpoint live tanpa login mengembalikan 401. SHA-256 CSS office, entry module serta chunk grafis yang disajikan lewat HTTP cocok dengan repository production. Sembilan route office terdaftar, dan cache lock yang dipakai undangan tersedia.
+
+| Sampel baca controller/service | Waktu (ms) | SQL | Hasil |
+| --- | ---: | ---: | --- |
+| Feed cold-cache | 8,38 | 2 | 22 anggota, 7.420 byte, cuaca auto / 3 jam |
+| Feed warm-cache | 1,54 | 0 | Payload yang sama |
+| Halaman Umum | 36,13 | 2 | Panel admin sesuai role; kamera dan pertemuan tersedia |
+| Halaman Operasional | 10,80 | 1 | Panel pengelola tersembunyi; kamera dan pertemuan tersedia |
+| Live akun pasif | 14,83 | 0 | Tidak ada undangan/pesan, tidak membuat lease pertemuan |
+
+Sampel tidak mencakup bootstrap HTTP penuh, jaringan, terminating middleware, maupun GPU. Profil live memakai akun yang tidak memenuhi syarat pertemuan sehingga tidak memalsukan lease/kehadiran peserta aktif. Tidak ada undangan, perubahan pengaturan, atau pesan production yang dibuat untuk pengujian. Render kedua departemen memakai entry module terbaru dan tidak mem-preload chunk Three.js.
