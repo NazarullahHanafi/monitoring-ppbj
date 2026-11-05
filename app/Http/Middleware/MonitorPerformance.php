@@ -103,6 +103,8 @@ class MonitorPerformance
             'virtual-office/live',
             'virtual-office/messages',
             'virtual-office/game',
+            'virtual-office/pilot',
+            'virtual-office/pilot/leave',
             'archive-gateway',
             'chat/messages',
             'chat/mentions/unread',

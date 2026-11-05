@@ -57,6 +57,7 @@ class VirtualOfficeGames
                 return null;
             }
             abort_unless($game['to'] === (int) $user->id && $game['status'] === 'pending', 403);
+            app(VirtualOfficePilot::class)->requireVenue($user,$game['kind']);
             $other = User::findOrFail($game['from']);
             abort_unless(VirtualOfficeMeetings::eligible($other) && app(VirtualOfficeMeetings::class)->online($other->id), 409, 'Pengundang sudah tidak tersedia.');
             $game['status'] = 'playing'; $game['expires'] = now()->addMinutes(30)->timestamp; $game['revision']++;

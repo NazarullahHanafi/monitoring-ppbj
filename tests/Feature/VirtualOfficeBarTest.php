@@ -13,11 +13,12 @@ use Tests\TestCase;
 class VirtualOfficeBarTest extends TestCase
 {
     use RefreshDatabase;
+    use \Tests\Concerns\PlacesOfficeAvatar;
 
     private function person(array $data = []): User
     {
         $user=User::factory()->create($data+['department'=>'umum','role'=>'user','is_active'=>true]);
-        Cache::put('presence:user:'.$user->id,['id'=>$user->id],300);return $user;
+        Cache::put('presence:user:'.$user->id,['id'=>$user->id],300);$this->placeAvatar($user);return $user;
     }
     private function checkout(array $data = []): array
     {
@@ -29,12 +30,14 @@ class VirtualOfficeBarTest extends TestCase
         // Reproduce an already exhausted numeric throttle from another app page.
         for($i=0;$i<80;$i++)RateLimiter::hit(sha1((string)$user->id),60);
         $this->actingAs($user)->getJson(route('virtual-office.recreation'))->assertOk();
+        $this->placeAvatar($user,'badminton');
         $game=$this->postJson(route('virtual-office.game.invite'),['target_id'=>$npc->id,'kind'=>'badminton'])->assertCreated()->json('game');
         for($i=0;$i<60;$i++){
             $this->getJson(route('virtual-office.game'))->assertOk();
             $this->getJson(route('virtual-office.messages'))->assertOk();
             $game=$this->postJson(route('virtual-office.game.hit'),['id'=>$game['id'],'request_id'=>(string)Str::uuid(),'revision'=>$game['revision'],'racket'=>$game['target'],'aim'=>.5,'power'=>.6])->assertOk()->json('game');
         }
+        $this->placeAvatar($user,'bar');
         for($i=0;$i<25;$i++)$this->postJson(route('virtual-office.order'),['request_id'=>(string)Str::uuid(),'item'=>'mineral','quantity'=>1,'destination'=>'bar'])->assertCreated();
         $this->getJson(route('virtual-office.recreation'))->assertOk()->assertJsonPath('balance',750)->assertHeader('X-RateLimit-Remaining','598');
         $this->postJson(route('virtual-office.checkout'),$this->checkout())->assertCreated()->assertJsonPath('balance',608);
@@ -45,7 +48,7 @@ class VirtualOfficeBarTest extends TestCase
         for($i=0;$i<180;$i++)$this->postJson(route('virtual-office.move'),['destination'=>'bar'])->assertOk();
         $response=$this->postJson(route('virtual-office.move'),['destination'=>'bar'])->assertStatus(429)->assertHeader('Retry-After');
         $this->assertStringNotContainsString('Too Many Attempts',$response->getContent());
-        $this->getJson(route('virtual-office.game'))->assertOk();$this->actingAs($b)->postJson(route('virtual-office.move'),['destination'=>'disco'])->assertOk();
+        $this->getJson(route('virtual-office.game'))->assertOk();$this->placeAvatar($b,'disco');$this->actingAs($b)->postJson(route('virtual-office.move'),['destination'=>'disco'])->assertOk();
         $this->assertSame('dance',Cache::get('office:recreation:'.$b->id)['kind']);
     }
     public function test_cart_checkout_is_atomic_server_priced_idempotent_and_has_a_private_receipt(): void

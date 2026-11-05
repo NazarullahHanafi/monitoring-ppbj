@@ -33,6 +33,10 @@ class VirtualOfficeActivity
             return;
         }
         Cache::put('office:menu:'.$user->id, $menu, 300);
+        if($menu!=='virtual-office'){
+            $pilot=Cache::get(VirtualOfficePilot::key($user->id));
+            if(is_array($pilot)&&!empty($pilot['session_id']))app(VirtualOfficePilot::class)->leave($user,$pilot['session_id']);
+        }
         $key = 'office:visit:'.$user->id;
         if (Cache::get($key) === $menu) {
             return;

@@ -21,6 +21,7 @@ class VirtualOfficeGameController extends Controller
     {
         $user = $this->user($request); $data = $request->validate(['target_id' => ['required', 'integer', 'min:1'], 'kind' => ['required', Rule::in($games::NETWORK)]]);
         $target = User::findOrFail($data['target_id']); abort_unless($target->shouldDisplayInPresence(), 404);
+        app(\App\Services\VirtualOfficePilot::class)->requireVenue($user,$data['kind']);
         return $this->json($games->invite($user, $target, $data['kind']), 201);
     }
     public function respond(Request $request, VirtualOfficeGames $games)
@@ -31,6 +32,7 @@ class VirtualOfficeGameController extends Controller
     public function hit(Request $request, VirtualOfficeGames $games)
     {
         $user = $this->user($request); $data = $request->validate(['id' => ['required', 'uuid'], 'request_id' => ['required', 'uuid'], 'revision' => ['required', 'integer', 'min:0'], 'racket' => ['required', 'numeric', 'between:0,1'], 'aim' => ['required', 'numeric', 'between:0,1'], 'power' => ['required', 'numeric', 'between:0,1']]);
+        $game=$games->current($user->id);if($game)app(\App\Services\VirtualOfficePilot::class)->requireVenue($user,$game['kind']);
         return $this->json($games->hit($user, $data));
     }
 }

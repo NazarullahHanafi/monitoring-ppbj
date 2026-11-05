@@ -17,10 +17,14 @@ class VirtualOfficeController extends Controller
     {
         $this->authorizeDepartment($request);
 
+        $profile=$this->profile($request->user());
         $officeConfig = ['initial' => $presence->snapshot($request->user()),
             'feedUrl' => route('virtual-office.presence', [], false), 'canChat' => ! $request->user()->isReadOnly(),
             'profileUrl' => '/virtual-office/avatar', 'myId' => $request->user()->id,
-            'myProfile' => $this->profile($request->user()), 'avatarOptions' => VirtualOfficeAvatar::options(),
+            'myProfile' => $profile, 'avatarOptions' => VirtualOfficeAvatar::options(),
+            'costumes'=>VirtualOfficeAvatar::costumes(),
+            'canPilot'=>\App\Services\VirtualOfficePilot::allowed($request->user()),
+            'privateSelf'=>!$request->user()->shouldDisplayInPresence()?['id'=>$request->user()->id,'name'=>'Anda · privat','department'=>$request->user()->department,'state'=>'online','is_me'=>true,'avatar'=>$profile['avatar'],'private'=>true]:null,
             'canConfigureWorld' => \App\Services\VirtualOfficeWorld::canConfigure($request->user()),
             'canMeet' => \App\Services\VirtualOfficeMeetings::eligible($request->user())];
 
@@ -48,9 +52,10 @@ class VirtualOfficeController extends Controller
         $rules = ['user_id' => ['prohibited'], 'id' => ['prohibited'], 'version' => ['required', 'integer', 'min:0'],
             'share_activity' => ['required', 'boolean'], 'avatar' => ['required', 'array:'.implode(',', array_keys(VirtualOfficeAvatar::options()))]];
         foreach (VirtualOfficeAvatar::options() as $key => $options) {
-            $rules['avatar.'.$key] = ['required', Rule::in($options)];
+            $rules['avatar.'.$key] = [$key==='costume'?'sometimes':'required', Rule::in($options)];
         }
         $data = $request->validate($rules);
+        $data['avatar']['costume']??='none';
         $id = $request->user()->id;
         // A row lock plus insertOrIgnore serializes concurrent first saves.
         DB::transaction(function () use ($data, $id): void {

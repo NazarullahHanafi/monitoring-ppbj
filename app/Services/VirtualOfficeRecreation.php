@@ -115,6 +115,7 @@ class VirtualOfficeRecreation
         $activity = DB::transaction(function () use ($user, $id, $destination, $requestId) {
             $row = DB::table('virtual_office_orders')->where('id', $id)->where('user_id', $user->id)->lockForUpdate()->first();
             abort_unless($row, 404);
+            app(VirtualOfficePilot::class)->requireVenue($user,$destination);
             $previous = DB::table('virtual_office_servings')->where('id', $requestId)->first();
             if ($previous) abort_unless((int) $previous->user_id === (int) $user->id && $previous->order_id === $id && $previous->destination === $destination, 409);
             else {

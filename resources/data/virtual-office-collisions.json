@@ -1,0 +1,1586 @@
+[
+  {
+    "left": -93.5,
+    "right": -90.5,
+    "back": 33.55,
+    "front": 34.45,
+    "top": 0.7,
+    "tag": "trail-bench"
+  },
+  {
+    "left": -80.425,
+    "right": -79.575,
+    "back": 33.575,
+    "front": 34.425,
+    "top": 2,
+    "tag": "plant"
+  },
+  {
+    "left": -93.5,
+    "right": -90.5,
+    "back": 57.55,
+    "front": 58.45,
+    "top": 0.7,
+    "tag": "trail-bench"
+  },
+  {
+    "left": -80.425,
+    "right": -79.575,
+    "back": 57.575,
+    "front": 58.425,
+    "top": 2,
+    "tag": "plant"
+  },
+  {
+    "left": -93.5,
+    "right": -90.5,
+    "back": 79.55,
+    "front": 80.45,
+    "top": 0.7,
+    "tag": "trail-bench"
+  },
+  {
+    "left": -80.425,
+    "right": -79.575,
+    "back": 79.575,
+    "front": 80.425,
+    "top": 2,
+    "tag": "plant"
+  },
+  {
+    "left": 90.5,
+    "right": 93.5,
+    "back": 33.55,
+    "front": 34.45,
+    "top": 0.7,
+    "tag": "trail-bench"
+  },
+  {
+    "left": 79.575,
+    "right": 80.425,
+    "back": 33.575,
+    "front": 34.425,
+    "top": 2,
+    "tag": "plant"
+  },
+  {
+    "left": 90.5,
+    "right": 93.5,
+    "back": 57.55,
+    "front": 58.45,
+    "top": 0.7,
+    "tag": "trail-bench"
+  },
+  {
+    "left": 79.575,
+    "right": 80.425,
+    "back": 57.575,
+    "front": 58.425,
+    "top": 2,
+    "tag": "plant"
+  },
+  {
+    "left": 90.5,
+    "right": 93.5,
+    "back": 79.55,
+    "front": 80.45,
+    "top": 0.7,
+    "tag": "trail-bench"
+  },
+  {
+    "left": 79.575,
+    "right": 80.425,
+    "back": 79.575,
+    "front": 80.425,
+    "top": 2,
+    "tag": "plant"
+  },
+  {
+    "left": -80,
+    "right": 80,
+    "back": 77,
+    "front": 117,
+    "top": 0.1,
+    "tag": "water-boundary"
+  },
+  {
+    "left": -101,
+    "right": 101,
+    "back": -21.95,
+    "front": -21.650000000000002,
+    "top": 1.2,
+    "tag": "residential-boundary"
+  },
+  {
+    "left": -99.1,
+    "right": -98.9,
+    "back": -22,
+    "front": 92,
+    "top": 1.2,
+    "tag": "scenic-fence"
+  },
+  {
+    "left": 98.9,
+    "right": 99.1,
+    "back": -22,
+    "front": 92,
+    "top": 1.2,
+    "tag": "scenic-fence"
+  },
+  {
+    "left": -101,
+    "right": 101,
+    "back": 90.9,
+    "front": 91.1,
+    "top": 1.2,
+    "tag": "scenic-boundary"
+  },
+  {
+    "left": -41.474999999999994,
+    "right": -41.125,
+    "back": 41.1,
+    "front": 60.9,
+    "top": 1.3,
+    "tag": "grand-bar-wall"
+  },
+  {
+    "left": -18.875,
+    "right": -18.525,
+    "back": 41.1,
+    "front": 60.9,
+    "top": 1.3,
+    "tag": "grand-bar-wall"
+  },
+  {
+    "left": -41.5,
+    "right": -18.5,
+    "back": 40.85,
+    "front": 41.15,
+    "top": 4.2,
+    "tag": "bar-back-wall"
+  },
+  {
+    "left": -40.375,
+    "right": -39.625,
+    "back": 42.125,
+    "front": 42.875,
+    "top": 4.9,
+    "tag": "grand-bar-column"
+  },
+  {
+    "left": -40.375,
+    "right": -39.625,
+    "back": 50.125,
+    "front": 50.875,
+    "top": 4.9,
+    "tag": "grand-bar-column"
+  },
+  {
+    "left": -40.375,
+    "right": -39.625,
+    "back": 59.125,
+    "front": 59.875,
+    "top": 4.9,
+    "tag": "grand-bar-column"
+  },
+  {
+    "left": -20.375,
+    "right": -19.625,
+    "back": 42.125,
+    "front": 42.875,
+    "top": 4.9,
+    "tag": "grand-bar-column"
+  },
+  {
+    "left": -20.375,
+    "right": -19.625,
+    "back": 50.125,
+    "front": 50.875,
+    "top": 4.9,
+    "tag": "grand-bar-column"
+  },
+  {
+    "left": -20.375,
+    "right": -19.625,
+    "back": 59.125,
+    "front": 59.875,
+    "top": 4.9,
+    "tag": "grand-bar-column"
+  },
+  {
+    "left": -38.25,
+    "right": -21.75,
+    "back": 44.05,
+    "front": 45.95,
+    "top": 1.3,
+    "tag": "marble-bar-counter"
+  },
+  {
+    "left": -37.375,
+    "right": -36.625,
+    "back": 47.025,
+    "front": 47.775,
+    "top": 0.7,
+    "tag": "bar-stool"
+  },
+  {
+    "left": -34.375,
+    "right": -33.625,
+    "back": 47.025,
+    "front": 47.775,
+    "top": 0.7,
+    "tag": "bar-stool"
+  },
+  {
+    "left": -31.375,
+    "right": -30.625,
+    "back": 47.025,
+    "front": 47.775,
+    "top": 0.7,
+    "tag": "bar-stool"
+  },
+  {
+    "left": -28.375,
+    "right": -27.625,
+    "back": 47.025,
+    "front": 47.775,
+    "top": 0.7,
+    "tag": "bar-stool"
+  },
+  {
+    "left": -25.375,
+    "right": -24.625,
+    "back": 47.025,
+    "front": 47.775,
+    "top": 0.7,
+    "tag": "bar-stool"
+  },
+  {
+    "left": -22.375,
+    "right": -21.625,
+    "back": 47.025,
+    "front": 47.775,
+    "top": 0.7,
+    "tag": "bar-stool"
+  },
+  {
+    "left": -39.05,
+    "right": -36.95,
+    "back": 51.45,
+    "front": 56.55,
+    "top": 1.3,
+    "tag": "velvet-booth"
+  },
+  {
+    "left": -36.900000000000006,
+    "right": -35.5,
+    "back": 53.3,
+    "front": 54.7,
+    "top": 0.9,
+    "tag": "salon-table"
+  },
+  {
+    "left": -23.05,
+    "right": -20.95,
+    "back": 51.45,
+    "front": 56.55,
+    "top": 1.3,
+    "tag": "velvet-booth"
+  },
+  {
+    "left": -24.5,
+    "right": -23.1,
+    "back": 53.3,
+    "front": 54.7,
+    "top": 0.9,
+    "tag": "salon-table"
+  },
+  {
+    "left": -32.75,
+    "right": -27.25,
+    "back": 50.5,
+    "front": 51.7,
+    "top": 1.3,
+    "tag": "dj-console"
+  },
+  {
+    "left": -35,
+    "right": -34,
+    "back": 50.6,
+    "front": 51.4,
+    "top": 2.2,
+    "tag": "club-speaker"
+  },
+  {
+    "left": -26,
+    "right": -25,
+    "back": 50.6,
+    "front": 51.4,
+    "top": 2.2,
+    "tag": "club-speaker"
+  },
+  {
+    "left": -36.75,
+    "right": -35.25,
+    "back": 65.6,
+    "front": 68.4,
+    "top": 0.6,
+    "tag": "beach-chair"
+  },
+  {
+    "left": -34.9,
+    "right": -34.699999999999996,
+    "back": 64.9,
+    "front": 65.1,
+    "top": 2.8,
+    "tag": "parasol"
+  },
+  {
+    "left": -33.05,
+    "right": -31.549999999999997,
+    "back": 65.6,
+    "front": 68.4,
+    "top": 0.6,
+    "tag": "beach-chair"
+  },
+  {
+    "left": -29.35,
+    "right": -27.85,
+    "back": 65.6,
+    "front": 68.4,
+    "top": 0.6,
+    "tag": "beach-chair"
+  },
+  {
+    "left": -27.500000000000004,
+    "right": -27.3,
+    "back": 64.9,
+    "front": 65.1,
+    "top": 2.8,
+    "tag": "parasol"
+  },
+  {
+    "left": -25.65,
+    "right": -24.15,
+    "back": 65.6,
+    "front": 68.4,
+    "top": 0.6,
+    "tag": "beach-chair"
+  },
+  {
+    "left": -21.95,
+    "right": -20.45,
+    "back": 65.6,
+    "front": 68.4,
+    "top": 0.6,
+    "tag": "beach-chair"
+  },
+  {
+    "left": -20.1,
+    "right": -19.9,
+    "back": 64.9,
+    "front": 65.1,
+    "top": 2.8,
+    "tag": "parasol"
+  },
+  {
+    "left": -18.25,
+    "right": -16.75,
+    "back": 65.6,
+    "front": 68.4,
+    "top": 0.6,
+    "tag": "beach-chair"
+  },
+  {
+    "left": -14.549999999999997,
+    "right": -13.049999999999997,
+    "back": 65.6,
+    "front": 68.4,
+    "top": 0.6,
+    "tag": "beach-chair"
+  },
+  {
+    "left": -12.699999999999998,
+    "right": -12.499999999999998,
+    "back": 64.9,
+    "front": 65.1,
+    "top": 2.8,
+    "tag": "parasol"
+  },
+  {
+    "left": -10.849999999999998,
+    "right": -9.349999999999998,
+    "back": 65.6,
+    "front": 68.4,
+    "top": 0.6,
+    "tag": "beach-chair"
+  },
+  {
+    "left": 14.8,
+    "right": 17.2,
+    "back": 61.8,
+    "front": 64.2,
+    "top": 0.9,
+    "tag": "terrace-table"
+  },
+  {
+    "left": 20.8,
+    "right": 23.2,
+    "back": 61.8,
+    "front": 64.2,
+    "top": 0.9,
+    "tag": "terrace-table"
+  },
+  {
+    "left": 26.8,
+    "right": 29.2,
+    "back": 61.8,
+    "front": 64.2,
+    "top": 0.9,
+    "tag": "terrace-table"
+  },
+  {
+    "left": -10.3825,
+    "right": -9.6175,
+    "back": 57.6175,
+    "front": 58.3825,
+    "top": 1.8,
+    "tag": "plant"
+  },
+  {
+    "left": -6.3825,
+    "right": -5.6175,
+    "back": 57.6175,
+    "front": 58.3825,
+    "top": 1.8,
+    "tag": "plant"
+  },
+  {
+    "left": -2.3825,
+    "right": -1.6175,
+    "back": 57.6175,
+    "front": 58.3825,
+    "top": 1.8,
+    "tag": "plant"
+  },
+  {
+    "left": -41.7225,
+    "right": -40.2775,
+    "back": -15.7225,
+    "front": -14.2775,
+    "top": 3.4,
+    "tag": "plant"
+  },
+  {
+    "left": -41.7225,
+    "right": -40.2775,
+    "back": -2.7225,
+    "front": -1.2775,
+    "top": 3.4,
+    "tag": "plant"
+  },
+  {
+    "left": -41.7225,
+    "right": -40.2775,
+    "back": 13.2775,
+    "front": 14.7225,
+    "top": 3.4,
+    "tag": "plant"
+  },
+  {
+    "left": -41.7225,
+    "right": -40.2775,
+    "back": 30.2775,
+    "front": 31.7225,
+    "top": 3.4,
+    "tag": "plant"
+  },
+  {
+    "left": -41.7225,
+    "right": -40.2775,
+    "back": 45.2775,
+    "front": 46.7225,
+    "top": 3.4,
+    "tag": "plant"
+  },
+  {
+    "left": 40.2775,
+    "right": 41.7225,
+    "back": -15.7225,
+    "front": -14.2775,
+    "top": 3.4,
+    "tag": "plant"
+  },
+  {
+    "left": 40.2775,
+    "right": 41.7225,
+    "back": -2.7225,
+    "front": -1.2775,
+    "top": 3.4,
+    "tag": "plant"
+  },
+  {
+    "left": 40.2775,
+    "right": 41.7225,
+    "back": 13.2775,
+    "front": 14.7225,
+    "top": 3.4,
+    "tag": "plant"
+  },
+  {
+    "left": 40.2775,
+    "right": 41.7225,
+    "back": 30.2775,
+    "front": 31.7225,
+    "top": 3.4,
+    "tag": "plant"
+  },
+  {
+    "left": 40.2775,
+    "right": 41.7225,
+    "back": 45.2775,
+    "front": 46.7225,
+    "top": 3.4,
+    "tag": "plant"
+  },
+  {
+    "left": -35,
+    "right": -29,
+    "back": -11.07,
+    "front": -10.93,
+    "top": 1.2,
+    "tag": "sign"
+  },
+  {
+    "left": -39,
+    "right": -25,
+    "back": -5.06,
+    "front": -4.94,
+    "top": 1.15,
+    "tag": "net"
+  },
+  {
+    "left": -35,
+    "right": -29,
+    "back": 5.93,
+    "front": 6.07,
+    "top": 1.2,
+    "tag": "sign"
+  },
+  {
+    "left": -39,
+    "right": -25,
+    "back": 11.94,
+    "front": 12.06,
+    "top": 1.7,
+    "tag": "net"
+  },
+  {
+    "left": 29,
+    "right": 35,
+    "back": -11.07,
+    "front": -10.93,
+    "top": 1.2,
+    "tag": "sign"
+  },
+  {
+    "left": 29,
+    "right": 35,
+    "back": 5.93,
+    "front": 6.07,
+    "top": 1.2,
+    "tag": "sign"
+  },
+  {
+    "left": 25.4,
+    "right": 25.6,
+    "back": 8,
+    "front": 16,
+    "top": 0.5,
+    "tag": "golf-edge"
+  },
+  {
+    "left": 38.4,
+    "right": 38.6,
+    "back": 8,
+    "front": 16,
+    "top": 0.5,
+    "tag": "golf-edge"
+  },
+  {
+    "left": -33,
+    "right": -27,
+    "back": 23.73,
+    "front": 23.87,
+    "top": 1.2,
+    "tag": "sign"
+  },
+  {
+    "left": -32.75,
+    "right": -27.25,
+    "back": 26.25,
+    "front": 29.75,
+    "top": 1.3,
+    "tag": "game-table"
+  },
+  {
+    "left": -32,
+    "right": -28,
+    "back": 23.8,
+    "front": 24.599999999999998,
+    "top": 0.5,
+    "tag": "bench"
+  },
+  {
+    "left": -32,
+    "right": -28,
+    "back": 31.400000000000002,
+    "front": 32.2,
+    "top": 0.5,
+    "tag": "bench"
+  },
+  {
+    "left": -21,
+    "right": -15,
+    "back": 23.73,
+    "front": 23.87,
+    "top": 1.2,
+    "tag": "sign"
+  },
+  {
+    "left": -20.75,
+    "right": -15.25,
+    "back": 26.25,
+    "front": 29.75,
+    "top": 1.3,
+    "tag": "game-table"
+  },
+  {
+    "left": -20.75,
+    "right": -15.25,
+    "back": 27.94,
+    "front": 28.06,
+    "top": 1.45,
+    "tag": "net"
+  },
+  {
+    "left": -20,
+    "right": -16,
+    "back": 23.8,
+    "front": 24.599999999999998,
+    "top": 0.5,
+    "tag": "bench"
+  },
+  {
+    "left": -20,
+    "right": -16,
+    "back": 31.400000000000002,
+    "front": 32.2,
+    "top": 0.5,
+    "tag": "bench"
+  },
+  {
+    "left": -9,
+    "right": -3,
+    "back": 23.73,
+    "front": 23.87,
+    "top": 1.2,
+    "tag": "sign"
+  },
+  {
+    "left": -8.75,
+    "right": -3.25,
+    "back": 26.25,
+    "front": 29.75,
+    "top": 1.3,
+    "tag": "game-table"
+  },
+  {
+    "left": -8,
+    "right": -4,
+    "back": 23.8,
+    "front": 24.599999999999998,
+    "top": 0.5,
+    "tag": "bench"
+  },
+  {
+    "left": -8,
+    "right": -4,
+    "back": 31.400000000000002,
+    "front": 32.2,
+    "top": 0.5,
+    "tag": "bench"
+  },
+  {
+    "left": 3,
+    "right": 9,
+    "back": 23.73,
+    "front": 23.87,
+    "top": 1.2,
+    "tag": "sign"
+  },
+  {
+    "left": 3.25,
+    "right": 8.75,
+    "back": 26.25,
+    "front": 29.75,
+    "top": 1.3,
+    "tag": "game-table"
+  },
+  {
+    "left": 4,
+    "right": 8,
+    "back": 23.8,
+    "front": 24.599999999999998,
+    "top": 0.5,
+    "tag": "bench"
+  },
+  {
+    "left": 4,
+    "right": 8,
+    "back": 31.400000000000002,
+    "front": 32.2,
+    "top": 0.5,
+    "tag": "bench"
+  },
+  {
+    "left": 15,
+    "right": 21,
+    "back": 23.73,
+    "front": 23.87,
+    "top": 1.2,
+    "tag": "sign"
+  },
+  {
+    "left": 15.25,
+    "right": 20.75,
+    "back": 26.25,
+    "front": 29.75,
+    "top": 1.3,
+    "tag": "game-table"
+  },
+  {
+    "left": 16,
+    "right": 20,
+    "back": 23.8,
+    "front": 24.599999999999998,
+    "top": 0.5,
+    "tag": "bench"
+  },
+  {
+    "left": 16,
+    "right": 20,
+    "back": 31.400000000000002,
+    "front": 32.2,
+    "top": 0.5,
+    "tag": "bench"
+  },
+  {
+    "left": 27,
+    "right": 33,
+    "back": 23.73,
+    "front": 23.87,
+    "top": 1.2,
+    "tag": "sign"
+  },
+  {
+    "left": 27.5,
+    "right": 32.5,
+    "back": 26.09,
+    "front": 26.31,
+    "top": 2.8,
+    "tag": "dart-board"
+  },
+  {
+    "left": -15,
+    "right": -9,
+    "back": 36.73,
+    "front": 36.87,
+    "top": 1.2,
+    "tag": "sign"
+  },
+  {
+    "left": -15.25,
+    "right": -13.149999999999999,
+    "back": 40.2,
+    "front": 41.8,
+    "top": 2.5,
+    "tag": "arcade"
+  },
+  {
+    "left": -14.799999999999999,
+    "right": -13.6,
+    "back": 42.4,
+    "front": 43.6,
+    "top": 0.7,
+    "tag": "seat"
+  },
+  {
+    "left": -10.850000000000001,
+    "right": -8.75,
+    "back": 40.2,
+    "front": 41.8,
+    "top": 2.5,
+    "tag": "arcade"
+  },
+  {
+    "left": -10.4,
+    "right": -9.200000000000001,
+    "back": 42.4,
+    "front": 43.6,
+    "top": 0.7,
+    "tag": "seat"
+  },
+  {
+    "left": 9,
+    "right": 15,
+    "back": 34.93,
+    "front": 35.07,
+    "top": 1.2,
+    "tag": "sign"
+  },
+  {
+    "left": 9.125,
+    "right": 9.475000000000001,
+    "back": 35.5,
+    "front": 46.5,
+    "top": 0.4,
+    "tag": "bowling-edge"
+  },
+  {
+    "left": 14.524999999999999,
+    "right": 14.875,
+    "back": 35.5,
+    "front": 46.5,
+    "top": 0.4,
+    "tag": "bowling-edge"
+  },
+  {
+    "left": 29,
+    "right": 35,
+    "back": 38.93,
+    "front": 39.07,
+    "top": 1.2,
+    "tag": "sign"
+  },
+  {
+    "left": 29.5,
+    "right": 34.5,
+    "back": 42.85,
+    "front": 43.15,
+    "top": 3.2,
+    "tag": "archery-backstop"
+  },
+  {
+    "left": -16.3,
+    "right": -13.7,
+    "back": -10.940000000000001,
+    "front": -9.66,
+    "top": 2.3,
+    "tag": "desk"
+  },
+  {
+    "left": -12.55,
+    "right": -9.95,
+    "back": -10.940000000000001,
+    "front": -9.66,
+    "top": 2.3,
+    "tag": "desk"
+  },
+  {
+    "left": -8.8,
+    "right": -6.2,
+    "back": -10.940000000000001,
+    "front": -9.66,
+    "top": 2.3,
+    "tag": "desk"
+  },
+  {
+    "left": -5.05,
+    "right": -2.45,
+    "back": -10.940000000000001,
+    "front": -9.66,
+    "top": 2.3,
+    "tag": "desk"
+  },
+  {
+    "left": -16.3,
+    "right": -13.7,
+    "back": -7.79,
+    "front": -6.510000000000001,
+    "top": 2.3,
+    "tag": "desk"
+  },
+  {
+    "left": -12.55,
+    "right": -9.95,
+    "back": -7.79,
+    "front": -6.510000000000001,
+    "top": 2.3,
+    "tag": "desk"
+  },
+  {
+    "left": -8.8,
+    "right": -6.2,
+    "back": -7.79,
+    "front": -6.510000000000001,
+    "top": 2.3,
+    "tag": "desk"
+  },
+  {
+    "left": -5.05,
+    "right": -2.45,
+    "back": -7.79,
+    "front": -6.510000000000001,
+    "top": 2.3,
+    "tag": "desk"
+  },
+  {
+    "left": -16.3,
+    "right": -13.7,
+    "back": -4.640000000000001,
+    "front": -3.3600000000000008,
+    "top": 2.3,
+    "tag": "desk"
+  },
+  {
+    "left": -12.55,
+    "right": -9.95,
+    "back": -4.640000000000001,
+    "front": -3.3600000000000008,
+    "top": 2.3,
+    "tag": "desk"
+  },
+  {
+    "left": -8.8,
+    "right": -6.2,
+    "back": -4.640000000000001,
+    "front": -3.3600000000000008,
+    "top": 2.3,
+    "tag": "desk"
+  },
+  {
+    "left": -5.05,
+    "right": -2.45,
+    "back": -4.640000000000001,
+    "front": -3.3600000000000008,
+    "top": 2.3,
+    "tag": "desk"
+  },
+  {
+    "left": -16.3,
+    "right": -13.7,
+    "back": -1.4900000000000015,
+    "front": -0.2100000000000014,
+    "top": 2.3,
+    "tag": "desk"
+  },
+  {
+    "left": -12.55,
+    "right": -9.95,
+    "back": -1.4900000000000015,
+    "front": -0.2100000000000014,
+    "top": 2.3,
+    "tag": "desk"
+  },
+  {
+    "left": -8.8,
+    "right": -6.2,
+    "back": -1.4900000000000015,
+    "front": -0.2100000000000014,
+    "top": 2.3,
+    "tag": "desk"
+  },
+  {
+    "left": -5.05,
+    "right": -2.45,
+    "back": -1.4900000000000015,
+    "front": -0.2100000000000014,
+    "top": 2.3,
+    "tag": "desk"
+  },
+  {
+    "left": 2.0999999999999996,
+    "right": 4.7,
+    "back": -10.940000000000001,
+    "front": -9.66,
+    "top": 2.3,
+    "tag": "desk"
+  },
+  {
+    "left": 5.8500000000000005,
+    "right": 8.450000000000001,
+    "back": -10.940000000000001,
+    "front": -9.66,
+    "top": 2.3,
+    "tag": "desk"
+  },
+  {
+    "left": 9.6,
+    "right": 12.200000000000001,
+    "back": -10.940000000000001,
+    "front": -9.66,
+    "top": 2.3,
+    "tag": "desk"
+  },
+  {
+    "left": 13.35,
+    "right": 15.950000000000001,
+    "back": -10.940000000000001,
+    "front": -9.66,
+    "top": 2.3,
+    "tag": "desk"
+  },
+  {
+    "left": 2.0999999999999996,
+    "right": 4.7,
+    "back": -7.79,
+    "front": -6.510000000000001,
+    "top": 2.3,
+    "tag": "desk"
+  },
+  {
+    "left": 5.8500000000000005,
+    "right": 8.450000000000001,
+    "back": -7.79,
+    "front": -6.510000000000001,
+    "top": 2.3,
+    "tag": "desk"
+  },
+  {
+    "left": 9.6,
+    "right": 12.200000000000001,
+    "back": -7.79,
+    "front": -6.510000000000001,
+    "top": 2.3,
+    "tag": "desk"
+  },
+  {
+    "left": 13.35,
+    "right": 15.950000000000001,
+    "back": -7.79,
+    "front": -6.510000000000001,
+    "top": 2.3,
+    "tag": "desk"
+  },
+  {
+    "left": 2.0999999999999996,
+    "right": 4.7,
+    "back": -4.640000000000001,
+    "front": -3.3600000000000008,
+    "top": 2.3,
+    "tag": "desk"
+  },
+  {
+    "left": 5.8500000000000005,
+    "right": 8.450000000000001,
+    "back": -4.640000000000001,
+    "front": -3.3600000000000008,
+    "top": 2.3,
+    "tag": "desk"
+  },
+  {
+    "left": 9.6,
+    "right": 12.200000000000001,
+    "back": -4.640000000000001,
+    "front": -3.3600000000000008,
+    "top": 2.3,
+    "tag": "desk"
+  },
+  {
+    "left": 13.35,
+    "right": 15.950000000000001,
+    "back": -4.640000000000001,
+    "front": -3.3600000000000008,
+    "top": 2.3,
+    "tag": "desk"
+  },
+  {
+    "left": 2.0999999999999996,
+    "right": 4.7,
+    "back": -1.4900000000000015,
+    "front": -0.2100000000000014,
+    "top": 2.3,
+    "tag": "desk"
+  },
+  {
+    "left": 5.8500000000000005,
+    "right": 8.450000000000001,
+    "back": -1.4900000000000015,
+    "front": -0.2100000000000014,
+    "top": 2.3,
+    "tag": "desk"
+  },
+  {
+    "left": 9.6,
+    "right": 12.200000000000001,
+    "back": -1.4900000000000015,
+    "front": -0.2100000000000014,
+    "top": 2.3,
+    "tag": "desk"
+  },
+  {
+    "left": 13.35,
+    "right": 15.950000000000001,
+    "back": -1.4900000000000015,
+    "front": -0.2100000000000014,
+    "top": 2.3,
+    "tag": "desk"
+  },
+  {
+    "left": -18.4675,
+    "right": -17.5325,
+    "back": -12.067499999999999,
+    "front": -11.1325,
+    "top": 2.2,
+    "tag": "plant"
+  },
+  {
+    "left": 17.5325,
+    "right": 18.4675,
+    "back": -12.067499999999999,
+    "front": -11.1325,
+    "top": 2.2,
+    "tag": "plant"
+  },
+  {
+    "left": -1.9400000000000002,
+    "right": -1.26,
+    "back": -12.34,
+    "front": -11.66,
+    "top": 1.6,
+    "tag": "plant"
+  },
+  {
+    "left": 1.26,
+    "right": 1.9400000000000002,
+    "back": -12.34,
+    "front": -11.66,
+    "top": 1.6,
+    "tag": "plant"
+  },
+  {
+    "left": -18.4675,
+    "right": -17.5325,
+    "back": 1.0325,
+    "front": 1.9675,
+    "top": 2.2,
+    "tag": "plant"
+  },
+  {
+    "left": 17.5325,
+    "right": 18.4675,
+    "back": 1.0325,
+    "front": 1.9675,
+    "top": 2.2,
+    "tag": "plant"
+  },
+  {
+    "left": -18.5525,
+    "right": -17.4475,
+    "back": 10.9475,
+    "front": 12.0525,
+    "top": 2.6,
+    "tag": "plant"
+  },
+  {
+    "left": 17.49,
+    "right": 18.51,
+    "back": 10.99,
+    "front": 12.01,
+    "top": 2.4,
+    "tag": "plant"
+  },
+  {
+    "left": 2.6175,
+    "right": 3.3825,
+    "back": 2.6175,
+    "front": 3.3825,
+    "top": 1.8,
+    "tag": "plant"
+  },
+  {
+    "left": 2.6175,
+    "right": 3.3825,
+    "back": 10.6175,
+    "front": 11.3825,
+    "top": 1.8,
+    "tag": "plant"
+  },
+  {
+    "left": -19.7,
+    "right": 19.7,
+    "back": -13.41,
+    "front": -13.09,
+    "top": 4.8,
+    "tag": "wall"
+  },
+  {
+    "left": -0.065,
+    "right": 0.065,
+    "back": -11.8,
+    "front": -1,
+    "top": 2.9,
+    "tag": "partition"
+  },
+  {
+    "left": -19.6,
+    "right": -19.4,
+    "back": -12.95,
+    "front": 12.75,
+    "top": 2.8,
+    "tag": "glass-wall"
+  },
+  {
+    "left": 19.4,
+    "right": 19.6,
+    "back": -12.95,
+    "front": 12.75,
+    "top": 2.8,
+    "tag": "glass-wall"
+  },
+  {
+    "left": -16.75,
+    "right": -0.6499999999999986,
+    "back": 3.95,
+    "front": 5.45,
+    "top": 1.4,
+    "tag": "sofa"
+  },
+  {
+    "left": -16.75,
+    "right": -0.6499999999999986,
+    "back": 7.25,
+    "front": 8.75,
+    "top": 1.4,
+    "tag": "sofa"
+  },
+  {
+    "left": -16.75,
+    "right": -0.6499999999999986,
+    "back": 10.55,
+    "front": 12.05,
+    "top": 1.4,
+    "tag": "sofa"
+  },
+  {
+    "left": -12.4,
+    "right": -5.6,
+    "back": 2.775,
+    "front": 2.9250000000000003,
+    "top": 1.8,
+    "tag": "lounge-sign"
+  },
+  {
+    "left": 7.5,
+    "right": 17.3,
+    "back": 0.8500000000000001,
+    "front": 2.35,
+    "top": 2.4,
+    "tag": "coffee-counter"
+  },
+  {
+    "left": 6.55,
+    "right": 9.45,
+    "back": 3.6499999999999995,
+    "front": 6.55,
+    "top": 1.3,
+    "tag": "cafe-table"
+  },
+  {
+    "left": 6.55,
+    "right": 9.45,
+    "back": 8.25,
+    "front": 11.149999999999999,
+    "top": 1.3,
+    "tag": "cafe-table"
+  },
+  {
+    "left": 12.350000000000001,
+    "right": 15.25,
+    "back": 3.6499999999999995,
+    "front": 6.55,
+    "top": 1.3,
+    "tag": "cafe-table"
+  },
+  {
+    "left": 12.350000000000001,
+    "right": 15.25,
+    "back": 8.25,
+    "front": 11.149999999999999,
+    "top": 1.3,
+    "tag": "cafe-table"
+  },
+  {
+    "left": -18.95,
+    "right": -18.05,
+    "back": -10.8,
+    "front": -6,
+    "top": 2.6,
+    "tag": "shelf"
+  },
+  {
+    "left": 18.05,
+    "right": 18.95,
+    "back": -10.8,
+    "front": -6,
+    "top": 2.6,
+    "tag": "shelf"
+  },
+  {
+    "left": -12.85,
+    "right": -10.15,
+    "back": 6,
+    "front": 7.199999999999999,
+    "top": 0.8,
+    "tag": "lounge-table"
+  },
+  {
+    "left": -6.35,
+    "right": -3.65,
+    "back": 6,
+    "front": 7.199999999999999,
+    "top": 0.8,
+    "tag": "lounge-table"
+  },
+  {
+    "left": 77.7,
+    "right": 80.3,
+    "back": -22.3,
+    "front": -19.7,
+    "top": 5.5,
+    "tag": "forest-tree"
+  },
+  {
+    "left": -84.3,
+    "right": -81.7,
+    "back": -22.3,
+    "front": -19.7,
+    "top": 6.5,
+    "tag": "forest-tree"
+  },
+  {
+    "left": 49.7,
+    "right": 52.3,
+    "back": -16.899999999999995,
+    "front": -14.299999999999994,
+    "top": 3.5,
+    "tag": "forest-tree"
+  },
+  {
+    "left": -56.3,
+    "right": -53.7,
+    "back": -16.899999999999995,
+    "front": -14.299999999999994,
+    "top": 4.5,
+    "tag": "forest-tree"
+  },
+  {
+    "left": 57.7,
+    "right": 60.3,
+    "back": -11.49999999999999,
+    "front": -8.899999999999988,
+    "top": 5.5,
+    "tag": "forest-tree"
+  },
+  {
+    "left": -64.3,
+    "right": -61.7,
+    "back": -11.49999999999999,
+    "front": -8.899999999999988,
+    "top": 6.5,
+    "tag": "forest-tree"
+  },
+  {
+    "left": 65.7,
+    "right": 68.3,
+    "back": -6.099999999999983,
+    "front": -3.499999999999983,
+    "top": 3.5,
+    "tag": "forest-tree"
+  },
+  {
+    "left": -72.3,
+    "right": -69.7,
+    "back": -6.099999999999983,
+    "front": -3.499999999999983,
+    "top": 4.5,
+    "tag": "forest-tree"
+  },
+  {
+    "left": 73.7,
+    "right": 76.3,
+    "back": -0.6999999999999773,
+    "front": 1.9000000000000228,
+    "top": 5.5,
+    "tag": "forest-tree"
+  },
+  {
+    "left": -80.3,
+    "right": -77.7,
+    "back": -0.6999999999999773,
+    "front": 1.9000000000000228,
+    "top": 6.5,
+    "tag": "forest-tree"
+  },
+  {
+    "left": 81.7,
+    "right": 84.3,
+    "back": 4.7,
+    "front": 7.3,
+    "top": 3.5,
+    "tag": "forest-tree"
+  },
+  {
+    "left": -52.3,
+    "right": -49.7,
+    "back": 4.7,
+    "front": 7.3,
+    "top": 4.5,
+    "tag": "forest-tree"
+  },
+  {
+    "left": 53.7,
+    "right": 56.3,
+    "back": 10.100000000000005,
+    "front": 12.700000000000006,
+    "top": 5.5,
+    "tag": "forest-tree"
+  },
+  {
+    "left": -60.3,
+    "right": -57.7,
+    "back": 10.100000000000005,
+    "front": 12.700000000000006,
+    "top": 6.5,
+    "tag": "forest-tree"
+  },
+  {
+    "left": 61.7,
+    "right": 64.3,
+    "back": 15.50000000000001,
+    "front": 18.100000000000012,
+    "top": 3.5,
+    "tag": "forest-tree"
+  },
+  {
+    "left": -68.3,
+    "right": -65.7,
+    "back": 15.50000000000001,
+    "front": 18.100000000000012,
+    "top": 4.5,
+    "tag": "forest-tree"
+  },
+  {
+    "left": 69.7,
+    "right": 72.3,
+    "back": 20.900000000000016,
+    "front": 23.500000000000018,
+    "top": 5.5,
+    "tag": "forest-tree"
+  },
+  {
+    "left": -76.3,
+    "right": -73.7,
+    "back": 20.900000000000016,
+    "front": 23.500000000000018,
+    "top": 6.5,
+    "tag": "forest-tree"
+  },
+  {
+    "left": 77.7,
+    "right": 80.3,
+    "back": 26.300000000000022,
+    "front": 28.900000000000023,
+    "top": 3.5,
+    "tag": "forest-tree"
+  },
+  {
+    "left": -84.3,
+    "right": -81.7,
+    "back": 26.300000000000022,
+    "front": 28.900000000000023,
+    "top": 4.5,
+    "tag": "forest-tree"
+  },
+  {
+    "left": 49.7,
+    "right": 52.3,
+    "back": 31.700000000000028,
+    "front": 34.300000000000026,
+    "top": 5.5,
+    "tag": "forest-tree"
+  },
+  {
+    "left": -56.3,
+    "right": -53.7,
+    "back": 31.700000000000028,
+    "front": 34.300000000000026,
+    "top": 6.5,
+    "tag": "forest-tree"
+  },
+  {
+    "left": 57.7,
+    "right": 60.3,
+    "back": 37.10000000000001,
+    "front": 39.7,
+    "top": 3.5,
+    "tag": "forest-tree"
+  },
+  {
+    "left": -64.3,
+    "right": -61.7,
+    "back": 37.10000000000001,
+    "front": 39.7,
+    "top": 4.5,
+    "tag": "forest-tree"
+  },
+  {
+    "left": 65.7,
+    "right": 68.3,
+    "back": 42.500000000000014,
+    "front": 45.10000000000001,
+    "top": 5.5,
+    "tag": "forest-tree"
+  },
+  {
+    "left": -72.3,
+    "right": -69.7,
+    "back": 42.500000000000014,
+    "front": 45.10000000000001,
+    "top": 6.5,
+    "tag": "forest-tree"
+  },
+  {
+    "left": 73.7,
+    "right": 76.3,
+    "back": 47.90000000000005,
+    "front": 50.50000000000004,
+    "top": 3.5,
+    "tag": "forest-tree"
+  },
+  {
+    "left": -80.3,
+    "right": -77.7,
+    "back": 47.90000000000005,
+    "front": 50.50000000000004,
+    "top": 4.5,
+    "tag": "forest-tree"
+  },
+  {
+    "left": 81.7,
+    "right": 84.3,
+    "back": 53.300000000000026,
+    "front": 55.90000000000002,
+    "top": 5.5,
+    "tag": "forest-tree"
+  },
+  {
+    "left": -52.3,
+    "right": -49.7,
+    "back": 53.300000000000026,
+    "front": 55.90000000000002,
+    "top": 6.5,
+    "tag": "forest-tree"
+  }
+]

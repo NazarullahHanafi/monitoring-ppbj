@@ -17,7 +17,7 @@ class VirtualOfficeWorld
 
     public static function defaults(): array
     {
-        return ['landscape' => 'alps', 'weather' => 'auto', 'cycle_hours' => 3, 'particles' => 'low', 'mountains' => true, 'clouds' => true];
+        return ['landscape' => 'alps', 'weather' => 'auto', 'cycle_hours' => 3, 'particles' => 'low', 'precipitation'=>'heavy', 'mountains' => true, 'clouds' => true];
     }
 
     public function snapshot(): array
@@ -26,6 +26,7 @@ class VirtualOfficeWorld
             $row = DB::table('virtual_office_world')->where('id', 1)->first();
             return ['settings' => $row ? (json_decode($row->settings, true) ?: self::defaults()) : self::defaults(), 'version' => $row?->version ?? 0];
         });
+        $data['settings']=array_replace(self::defaults(),$data['settings']);
         return $data + ['server_ms' => now()->getTimestampMs()];
     }
 }

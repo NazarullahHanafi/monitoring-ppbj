@@ -1,0 +1,16 @@
+{
+  "bounds": {"minX": -100, "maxX": 100, "minZ": -22, "maxZ": 92},
+  "spawn": {"x": 0, "y": -0.12, "z": 20},
+  "venues": {
+    "tennis": {"x": -32, "z": -5, "radius": 9}, "badminton": {"x": -32, "z": 12, "radius": 9},
+    "basketball": {"x": 32, "z": -5, "radius": 9}, "golf": {"x": 32, "z": 12, "radius": 9},
+    "uno": {"x": -30, "z": 28, "radius": 5.5}, "pingpong": {"x": -18, "z": 28, "radius": 5.5},
+    "billiards": {"x": -6, "z": 28, "radius": 5.5}, "chess": {"x": 6, "z": 28, "radius": 5.5},
+    "foosball": {"x": 18, "z": 28, "radius": 5.5}, "darts": {"x": 30, "z": 28, "radius": 5.5},
+    "arcade": {"x": -12, "z": 41, "radius": 5.5}, "bowling": {"x": 12, "z": 41, "radius": 8},
+    "archery": {"x": 32, "z": 45, "radius": 8}, "bar": {"x": -30, "z": 49, "radius": 15},
+    "disco": {"x": -30, "z": 56, "radius": 6}, "beach": {"x": -25, "z": 69, "radius": 20},
+    "garden": {"x": -8, "z": 61, "radius": 7}, "terrace": {"x": 22, "z": 67, "radius": 10},
+    "lounge": {"x": -12, "z": 9, "radius": 7}, "office": {"x": 0, "z": 0, "radius": 20}
+  }
+}

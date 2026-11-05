@@ -33,6 +33,7 @@ test('procedural 3D office builds valid batched geometry, bounds avatars and rel
             controlsFactory: camera => ({ target: new THREE.Vector3(), addEventListener() {}, update() { camera.lookAt(this.target); camera.updateMatrixWorld(true); }, dispose() {} }) });
         const people = Array.from({ length: 100 }, (_, index) => ({ id: index + 1, name: `User ${index}`, department: index % 2 ? 'umum' : 'operasional', state: index % 3 === 0 ? 'online' : index % 3 === 1 ? 'idle' : 'offline' }));
         scene.setPeople(people);
+        assert.deepEqual(scene.collisionBoxes(),JSON.parse(require('node:fs').readFileSync(path.resolve(__dirname,'../../resources/data/virtual-office-collisions.json'),'utf8')),'Server collision metadata must match every physical scene obstacle.');
         assert.equal(labels.children.length, 24);
         assert.equal(ratio, 1.5, 'GPU resolution must be bounded on high-DPI screens.');
         const draw = now => { const [id, fn] = frames.entries().next().value; frames.delete(id); fn(now); };
@@ -103,6 +104,23 @@ test('procedural 3D office builds valid batched geometry, bounds avatars and rel
         for(let i=0;i<2200;i++)draw(stamp+i*40);
         const npc=positionFor(2);assert.ok(npc.z>37&&npc.x>20,`Offline NPC must arrive from home to the archery range: ${npc.toArray()}`);
         scene.say(1,'<script>inert speech</script>');assert.equal(labels.children.find(l=>l.children[1].textContent===people[0].name).children.at(-1).textContent,'<script>inert speech</script>');
+        scene.setGame(null);scene.setMeeting(null);
+        scene.setPeople([{...people[0],is_me:true,state:'online',in_office:true},{...people[1],state:'online',in_office:false}]);
+        scene.setPilot(1,{x:0,y:-.12,z:21,yaw:0});scene.setPaused(true);
+        draw(stamp+100000);let manual=scene.pilotState();assert.equal(manual.z,21);
+        scene.setGame({from:1,to:2,kind:'badminton',status:'playing'});draw(stamp+100040);
+        assert.equal(scene.pilotState().z,21,'Starting a game cannot move the controlled avatar automatically.');
+        assert.ok(positionFor(2).z<0,'A colleague on a business menu remains seated at a computer despite an old invitation.');
+        scene.setPilotInput({x:1,boost:true,jump:true});
+        for(let i=0;i<12;i++)draw(stamp+100080+i*40);
+        manual=scene.pilotState();assert.ok(manual.x>2);assert.ok(manual.y>-.12);
+        scene.setPilotGate(()=>true);const frozen=manual.x;draw(stamp+100600);assert.equal(scene.pilotState().x,frozen,'A modal must gate motion at render time.');
+        scene.guideTo('archery');assert.equal(rendered.world.children.find(n=>n.userData.pilotGuide).position.x,32);
+        assert.equal(scene.canInteract('archery'),false);
+        scene.releasePilot();scene.setPilotGate(()=>false);scene.setGame(null);
+        scene.setPilot(777,{x:0,y:-.12,z:21,yaw:0},{id:777,name:'Private self',state:'online',department:'umum',is_me:true,private:true});
+        scene.setPeople(people.slice(0,2));draw(stamp+100640);assert.ok(positionFor(777),'Own private avatar survives directory refresh without entering the public roster.');
+        scene.releasePilot();draw(stamp+100680);assert.equal(positionFor(777),undefined);
         scene.setVisible(false); assert.equal(frames.size, 0);
         scene.dispose(); assert.equal(disposed, true); assert.equal(host.children.length, 0); assert.equal(labels.children.length, 0); assert.equal(frames.size, 0);
     } finally { for (const [key, value] of Object.entries(previous)) { if (value === undefined) delete global[key]; else global[key] = value; } }

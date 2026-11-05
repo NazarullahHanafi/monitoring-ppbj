@@ -14,11 +14,12 @@ use Tests\TestCase;
 class VirtualOfficeRecreationTest extends TestCase
 {
     use RefreshDatabase;
+    use \Tests\Concerns\PlacesOfficeAvatar;
 
     private function person(array $attributes = []): User
     {
         $user = User::factory()->create($attributes + ['department' => 'umum', 'role' => 'user', 'is_active' => true]);
-        Cache::put('presence:user:'.$user->id, ['id' => $user->id], 300); return $user;
+        Cache::put('presence:user:'.$user->id, ['id' => $user->id], 300);$this->placeAvatar($user); return $user;
     }
     private function order(array $data = []): array
     {
@@ -50,6 +51,7 @@ class VirtualOfficeRecreationTest extends TestCase
         $a=$this->person();$b=$this->person();$this->actingAs($a)->getJson(route('virtual-office.recreation'));$data=$this->order();
         $this->postJson(route('virtual-office.order'),$data)->assertCreated();$serving=['id'=>$data['request_id'],'request_id'=>(string)Str::uuid(),'destination'=>'beach'];
         $this->actingAs($b)->postJson(route('virtual-office.consume'),$serving)->assertNotFound();
+        $this->placeAvatar($a,'beach');
         $this->actingAs($a)->postJson(route('virtual-office.consume'),$serving)->assertOk()->assertJsonPath('orders.0.remaining',1);
         $this->postJson(route('virtual-office.consume'),$serving)->assertOk()->assertJsonPath('orders.0.remaining',1);
         $this->postJson(route('virtual-office.consume'),array_replace($serving,['request_id'=>(string)Str::uuid()]))->assertOk()->assertJsonCount(0,'orders');
@@ -89,6 +91,7 @@ class VirtualOfficeRecreationTest extends TestCase
     public function test_online_game_invitation_requires_recipient_consent_and_turn_revision_checks(): void
     {
         $a=$this->person();$b=$this->person();$c=$this->person();
+        $this->placeAvatar($a,'badminton');$this->placeAvatar($b,'badminton');
         $game=$this->actingAs($a)->postJson(route('virtual-office.game.invite'),['target_id'=>$b->id,'kind'=>'badminton'])->assertCreated()->assertJsonPath('game.status','pending')->assertJsonPath('game.bot',false)->json('game');
         $this->postJson(route('virtual-office.game.respond'),['id'=>$game['id'],'action'=>'accept'])->assertForbidden();
         $this->actingAs($c)->postJson(route('virtual-office.game.respond'),['id'=>$game['id'],'action'=>'accept'])->assertNotFound();
@@ -104,6 +107,7 @@ class VirtualOfficeRecreationTest extends TestCase
     public function test_offline_avatar_accepts_only_as_computer_without_changing_the_humans_presence_or_invites(): void
     {
         $a=$this->person();$b=$this->person();Cache::forget('presence:user:'.$b->id);
+        $this->placeAvatar($a,'badminton');
         $game=$this->actingAs($a)->postJson(route('virtual-office.game.invite'),['target_id'=>$b->id,'kind'=>'badminton'])->assertCreated()->assertJsonPath('game.bot',true)->assertJsonPath('game.status','playing')->json('game');
         $this->assertNull(Cache::get('presence:user:'.$b->id));$this->assertNull(Cache::get('office:game:user:'.$b->id));
         $this->postJson(route('virtual-office.game.hit'),['id'=>$game['id'],'revision'=>0,'request_id'=>(string)Str::uuid(),'racket'=>0,'aim'=>.5,'power'=>.6])->assertOk()->assertJsonPath('game.score.1',1)->assertJsonPath('game.turn',$a->id);

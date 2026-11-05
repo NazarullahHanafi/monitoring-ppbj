@@ -14,7 +14,7 @@ test('walking routes go around thin nets, walls and tables, never through their 
     for (const point of route) { assert.ok(nav.free(point.x, point.z)); assert.ok(nav.segment(previous, point)); previous = point; }
     assert.deepEqual(route.at(-1), to);
     assert.deepEqual(nav.move(from, to, 10), from, 'A long frame must not tunnel through a thin net.');
-    assert.equal(nav.free(4, 5), false); assert.equal(nav.free(44, 0), false);
+    assert.equal(nav.free(4, 5), false);assert.equal(nav.free(44,0),true,'Scenic ground outside campus is walkable.'); assert.equal(nav.free(101, 0), false);
 });
 
 test('close camera stops before walls but can orbit above their roof height', async () => {

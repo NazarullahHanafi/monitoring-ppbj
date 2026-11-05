@@ -7,10 +7,13 @@ import { createResidences } from './virtual-office-residences.js';
 import { createOfficeNavigation } from './virtual-office-navigation.js';
 import { createOfficeEnvironment } from './virtual-office-environment.js';
 import { createRivageBar } from './virtual-office-bar.js';
+import { createPilotPhysics, nearVenue, officeLayout } from './virtual-office-pilot-physics.js';
+import { costumeFor } from './virtual-office-costumes.js';
+import { costumeGeometry } from './virtual-office-costume-geometry.js';
 
 // Original procedural scene: no models, textures, or code from the reference site.
 // Static furniture is batched by material; animation is capped at 30fps / 24 avatars.
-export function createOfficeScene({ host, labels, onSelect, onFailure, onVenue = () => {},
+export function createOfficeScene({ host, labels, onSelect, onFailure, onVenue = () => {}, onGame = () => {}, onPilotState = () => {},
     rendererFactory = options => new THREE.WebGLRenderer(options), controlsFactory = (camera, element) => new OrbitControls(camera, element), getDate = () => new Date() }) {
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(36, 1, .1, 1200);
@@ -68,6 +71,18 @@ export function createOfficeScene({ host, labels, onSelect, onFailure, onVenue =
     // furniture are original geometry, batched by material with the building.
     box(86, .6, 96, 0, -.94, 28, 'base', .3);
     box(85.5, .14, 95.5, 0, -.57, 28, '#c6d4bc', .18);
+    box(201,.1,115,0,-.25,35,'#a5b99a',.05);
+    // Scenic paths extend beyond the campus; low fences mark the walkable world.
+    for(const side of [-1,1]){
+        box(54,.04,4,side*70,-.17,20,'#e6dfcc',0);box(4,.04,55,side*87,-.17,45,'#e6dfcc',0);
+        for(let z=-20;z<92;z+=8){cylinder(.08,1.1,side*99,.35,z,'wood');box(.08,.08,8,side*99,.7,z+4,'wood',0);}
+        for(const z of [34,58,80]){box(3,.4,.9,side*92,.05,z,'wood',.06);navigation.addBox(3,.9,side*92,z,'trail-bench',.7);plant(side*80,z,1);}
+        sign('SCENIC WALK','BOUNDED EXPLORATION / CAMPUS GATE',7,side*58,1.7,18);
+    }
+    navigation.addBox(160,40,0,97,'water-boundary',.1);
+    navigation.addBox(202,.3,0,-21.8,'residential-boundary',1.2);
+    for(const x of[-99,99])navigation.addBox(.2,114,x,35,'scenic-fence',1.2);
+    navigation.addBox(202,.2,0,91,'scenic-boundary',1.2);
     // Waterfront furnishings share the existing static geometry batches.
     box(85,.07,18,0,-.43,67,'#e4cfa5',.1);box(160,.08,48,0,-.64,100,'#6ea6ad',.1);
     for(let n=0;n<8;n++)box(120-n*8,.02,.13,0,-.57,79+n*2.8,'#c4ddd4',0);
@@ -250,7 +265,7 @@ export function createOfficeScene({ host, labels, onSelect, onFailure, onVenue =
     for (const [key, parts] of batches) { const combined = mergeGeometries(parts, false); parts.forEach(g => g.dispose()); if (combined) { ownedGeometries.add(combined); scene.add(new THREE.Mesh(combined, material(key))); } }
     batches.clear();
     const residences = createResidences({ scene, material, ownedGeometries });
-    const environment = createOfficeEnvironment({ scene, materials, ownedGeometries, sun, hemi, fill });
+    const environment = createOfficeEnvironment({ scene, materials, ownedGeometries, sun, hemi, fill, navigation });
     // A soft ambient contact shadow is one small procedural texture, no shadow-map pass.
     const shadowCanvas = document.createElement('canvas'); shadowCanvas.width = shadowCanvas.height = 128;
     const shadowCtx = shadowCanvas.getContext('2d'), gradient = shadowCtx.createRadialGradient(64, 64, 7, 64, 64, 64); gradient.addColorStop(0, '#16382f35'); gradient.addColorStop(1, '#16382f00'); shadowCtx.fillStyle = gradient; shadowCtx.fillRect(0, 0, 128, 128);
@@ -272,26 +287,32 @@ export function createOfficeScene({ host, labels, onSelect, onFailure, onVenue =
         const mesh = new THREE.Mesh(avatarGeometry.get(key), material(color)); mesh.position.set(...position); parent.add(mesh); return mesh;
     }
     const shirts = ['#547a71', '#557591', '#ad8a62', '#856c8c', '#6f8362', '#9e7270'];
+    const costumeCache=new Map(),costumeMaterial=new THREE.MeshStandardMaterial({vertexColors:true,roughness:.8});materials.set('costume-vertex',costumeMaterial);
     function figure(person) {
         const group = new THREE.Group(); scene.add(group);
-        const appearance = safeAvatar(person.avatar), feminine = appearance.style === 'feminine';
-        const shirt = { emerald: '#547a71', navy: '#405978', rose: '#b97988', cream: '#d3bc96', lavender: '#9682ae', terracotta: '#bb8265' }[appearance.color] || shirts[person.id % shirts.length];
+        const appearance = safeAvatar(person.avatar),costume=costumeFor(appearance.costume), feminine = (costume?.style||appearance.style) === 'feminine';
+        const shirt = costume?.shirt||{ emerald: '#547a71', navy: '#405978', rose: '#b97988', cream: '#d3bc96', lavender: '#9682ae', terracotta: '#bb8265' }[appearance.color] || shirts[person.id % shirts.length];
         const body = new THREE.Group(); group.add(body); const skin = { light: '#efd0ae', warm: '#dba77d', tan: '#bc8762', deep: '#895e46' }[appearance.skin];
         const hairColor = appearance.hair === 'hijab' ? shirt : '#352c32';
         avatarPart(body, 'box', [feminine ? .43 : .5, .65, .33], shirt, [0, 1.17, 0]);
-        if (appearance.outfit === 'blazer') {
+        if (!costume&&appearance.outfit === 'blazer') {
             avatarPart(body, 'box', [.15, .42, .035], 'white', [0, 1.29, .18]);
             for (const side of [-1, 1]) { const lapel = avatarPart(body, 'box', [.07, .32, .035], 'gold', [side * .12, 1.33, .19]); lapel.rotation.z = side * .25; }
         }
-        if (appearance.outfit === 'sport') avatarPart(body, 'box', [.32, .055, .02], 'white', [0, 1.3, .18]);
-        const skirt = appearance.outfit === 'dress' ? avatarPart(body, 'box', [.6, .4, .44], shirt, [0, .79, 0]) : null;
+        if (!costume&&appearance.outfit === 'sport') avatarPart(body, 'box', [.32, .055, .02], 'white', [0, 1.3, .18]);
+        const skirt = !costume&&appearance.outfit === 'dress' ? avatarPart(body, 'box', [.6, .4, .44], shirt, [0, .79, 0]) : null;
         const head = new THREE.Group(); head.position.y = 1.69; body.add(head);
         avatarPart(head, 'box', [.43, .46, .4], skin, [0, 0, 0]);
-        avatarPart(head, 'box', [.47, .18, .44], hairColor, [0, .21, -.02]);
-        avatarPart(head, 'box', [.45, appearance.hair === 'long' || appearance.hair === 'hijab' ? .67 : .3, .12], hairColor, [0, appearance.hair === 'long' || appearance.hair === 'hijab' ? -.12 : .07, -.2]);
-        if (appearance.hair !== 'short') for (const side of [-1, 1]) avatarPart(head, 'box', [.09, appearance.hair === 'bob' ? .4 : .53, .32], hairColor, [side * .235, -.01, -.03]);
-        if (appearance.hair === 'ponytail') avatarPart(head, 'box', [.24, .53, .22], hairColor, [0, -.02, -.35]);
-        if (appearance.hair === 'hijab') avatarPart(body, 'box', [.58, .18, .43], hairColor, [0, 1.44, -.04]);
+        if(costume){head.add(new THREE.Mesh(costumeGeometry(costume,'head',costumeCache,ownedGeometries),costumeMaterial));body.add(new THREE.Mesh(costumeGeometry(costume,'body',costumeCache,ownedGeometries),costumeMaterial));}
+        else {
+            const key='hair:'+appearance.hair;if(!avatarGeometry.has(key)){
+                const specs=[[.47,.18,.44,0,.21,-.02],[.45,appearance.hair==='long'||appearance.hair==='hijab'?.67:.3,.12,0,appearance.hair==='long'||appearance.hair==='hijab'?-.12:.07,-.2]];
+                if(appearance.hair!=='short')for(const side of[-1,1])specs.push([.09,appearance.hair==='bob'?.4:.53,.32,side*.235,-.01,-.03]);
+                const parts=specs.map(([w,h,d,x,y,z])=>{const g=new THREE.BoxGeometry(w,h,d);g.translate(x,y,z);const flat=g.toNonIndexed();g.dispose();return flat;});const geom=mergeGeometries(parts,false);parts.forEach(g=>g.dispose());avatarGeometry.set(key,geom);ownedGeometries.add(geom);
+            }head.add(new THREE.Mesh(avatarGeometry.get(key),material(hairColor)));
+        }
+        if (!costume&&appearance.hair === 'ponytail') avatarPart(head, 'box', [.24, .53, .22], hairColor, [0, -.02, -.35]);
+        if (!costume&&appearance.hair === 'hijab') avatarPart(body, 'box', [.58, .18, .43], hairColor, [0, 1.44, -.04]);
         if(!avatarGeometry.has('eyes')){
             const parts=[-.095,.095].map(x=>{const g=new THREE.BoxGeometry(.035,.045,.025);g.translate(x,.035,.205);const part=g.toNonIndexed();g.dispose();return part;});
             const geometry=mergeGeometries(parts,false);parts.forEach(g=>g.dispose());avatarGeometry.set('eyes',geometry);ownedGeometries.add(geometry);
@@ -311,7 +332,7 @@ export function createOfficeScene({ host, labels, onSelect, onFailure, onVenue =
             avatarPart(arm, 'box', [.15, .27, .16], skin, [0, -.45, .05]); arms.push(arm);
         }
         const legs = [], shoes = [];
-        for (const x of [-.14, .14]) { const leg = new THREE.Group(); leg.position.set(x, .83, 0); body.add(leg); avatarPart(leg, 'box', [.18, .64, .2], '#35463f', [0, -.32, 0]); shoes.push(avatarPart(leg, 'box', [.23, .14, .34], appearance.outfit === 'sport' ? 'white' : '#24352f', [0, -.7, .07])); legs.push(leg); }
+        for (const x of [-.14, .14]) { const leg = new THREE.Group(); leg.position.set(x, .83, 0); body.add(leg); avatarPart(leg, 'box', [.18, .64, .2], costume?.pants||'#35463f', [0, -.32, 0]); shoes.push(avatarPart(leg, 'box', [.23, .14, .34], costume?.accent||(appearance.outfit === 'sport' ? 'white' : '#24352f'), [0, -.7, .07])); legs.push(leg); }
         const cup = avatarPart(arms[1], 'sphere', [.12], 'white', [0, -.49, .14]);
         const plate = avatarPart(arms[0], 'box', [.35, .045, .24], 'white', [0, -.43, .23]);
         const racket = new THREE.Group(); arms[1].add(racket); racket.position.set(0, -.48, .16);
@@ -333,9 +354,15 @@ export function createOfficeScene({ host, labels, onSelect, onFailure, onVenue =
     let selected = null, paused = false, visible = true, disposed = false, frame = null, lastFrame = 0, lastLabels = 0;
     let roster = [], visitingHome = null, localMeeting = null, cameraMode = 'orbit', followId = null, energySaver = false, worldConfig = {};
     const recreation=new Map(),speechTimers=new Map();let localGame=null;
+    let controlledId=null,privatePilotSelf=null,pilotPhysics=null,pilotInput={},pilotReporter=onPilotState,guide=null,pilotGate=()=>false,pilotActivity=null;
+    const guideGeometry=new THREE.RingGeometry(1.2,1.4,32);ownedGeometries.add(guideGeometry);
+    const guideMaterial=new THREE.MeshBasicMaterial({color:'#e9be69',side:THREE.DoubleSide,transparent:true,opacity:.85});materials.set('pilot-guide',guideMaterial);
+    const guideMarker=new THREE.Mesh(guideGeometry,guideMaterial);guideMarker.rotation.x=-Math.PI/2;guideMarker.visible=false;guideMarker.userData.pilotGuide=true;scene.add(guideMarker);
+    const peerPilots=new Map(),gameTargets=[];
     const destinations={bar:[-32,-.12,49],disco:[-33,-.12,56],beach:[-35,-.12,69],garden:[-8,-.12,61],terrace:[17,-.12,67],lounge:[-14,.12,10]};
     const targetFocus = new THREE.Vector3(), cameraGoal = new THREE.Vector3(); let easingCamera = false;
     function setPeople(people) {
+        if(controlledId&&privatePilotSelf&&!people.some(p=>p.id===controlledId))people=[...people,privatePilotSelf];
         roster = people; residences.sync(people); environment.extent(residences.bounds().back);
         const presented = people.map(person => {
             if (!localMeeting?.connected || !localMeeting.room || ![localMeeting.room.from, localMeeting.room.to].includes(person.id)) {
@@ -359,10 +386,13 @@ export function createOfficeScene({ host, labels, onSelect, onFailure, onVenue =
             let f = figures.get(person.id), fresh = !f;
             if (!f) { f = figure(person); figures.set(person.id, f); }
             const previousGame = f.game?.id, previousPose = f.pose, oldHome = f.home?.clone();
+            const atDesk=person.in_office===false&&person.state!=='offline';
+            const remote=atDesk?null:peerPilots.get(person.id)||person.pilot;
+            const manual=person.id===controlledId&&pilotPhysics?pilotPhysics.state():remote;
             f.person = person; f.pose = poseFor(person, getDate()); let placement;
             f.game = gameFor(person, getDate());
-            const outing=recreation.get(person.id)||person.recreation;
-            const invitedGame=localGame&&localGame.status!=='pending'&&[localGame.from,localGame.to].includes(person.id);
+            const outing=atDesk?null:recreation.get(person.id)||person.recreation;
+            const invitedGame=!atDesk&&localGame&&localGame.status!=='pending'&&[localGame.from,localGame.to].includes(person.id);
             if(invitedGame){f.game=games.find(g=>g.id===localGame.kind)||f.game;f.pose='playing';}
             else if(outing?.kind==='game'&&outing.until>Date.now()/1000&&person.state!=='offline'){f.game=games.find(g=>g.id===outing.destination)||f.game;f.pose='playing';}
             const destination=outing&&(!outing.until||outing.until>Date.now()/1000)&&destinations[outing.destination];
@@ -371,7 +401,7 @@ export function createOfficeScene({ host, labels, onSelect, onFailure, onVenue =
                 f.pose=outing.kind==='drink'?'coffee':outing.kind==='food'?'eating':outing.kind==='dance'?'dancing':'resting';placement=[destination[0]+(person.id%5)*1.6,destination[1],destination[2]+Math.floor(person.id%10/5)*1.3];
                 const safe=navigation.nearest({x:placement[0],z:placement[2]});if(safe)placement=[safe.x,placement[1],safe.z];f.group.rotation.y=Math.PI;
             }
-            else if (person.meeting_with && Number.isInteger(person.meeting_spot)&&!invitedGame) {
+            else if (!atDesk&&person.meeting_with && Number.isInteger(person.meeting_spot)&&!invitedGame) {
                 f.pose = 'meeting'; const side = person.id < person.meeting_with ? -1 : 1;
                 placement = [-36 + person.meeting_spot * 6.5 + side * .9, -.12, 20]; f.facing = side < 0 ? Math.PI / 2 : -Math.PI / 2;
             }
@@ -390,10 +420,13 @@ export function createOfficeScene({ host, labels, onSelect, onFailure, onVenue =
             if ((f.pose === 'playing'||destination) && occupied.some(p => Math.hypot(p[0] - placement[0], p[2] - placement[2]) < .7)) {
                 outer: for (const radius of [.8, 1.5, 2.2]) for (let i = 0; i < 12; i++) { const x = placement[0] + Math.cos(i * Math.PI / 6) * radius, z = placement[2] + Math.sin(i * Math.PI / 6) * radius; if (navigation.free(x, z) && !occupied.some(p => Math.hypot(p[0] - x, p[2] - z) < .7)) { placement = [x, placement[1], z]; break outer; } }
             }
+            if(manual&&person.state!=='offline'){
+                placement=[manual.x,manual.y,manual.z];f.pose='manual';f.manual=true;f.group.rotation.y=manual.yaw;f.waypoints=[];
+            }else f.manual=false;
             occupied.push(placement);
             f.target.set(...placement); f.home = f.target.clone();
             if (fresh || (previousPose !== f.pose && f.pose !== 'meeting'&&!destination&&!invitedGame)) f.group.position.copy(f.target);
-            if (!fresh && ((f.pose === 'playing'&&(previousGame!==f.game.id||previousPose!=='playing')) || ((destination||f.pose === 'meeting') && (!oldHome || oldHome.distanceTo(f.home) > .1)))) {
+            if (!f.manual&&!fresh && ((f.pose === 'playing'&&(previousGame!==f.game.id||previousPose!=='playing')) || ((destination||f.pose === 'meeting') && (!oldHome || oldHome.distanceTo(f.home) > .1)))) {
                 if (!navigation.free(f.group.position.x, f.group.position.z)) { const safe = navigation.nearest(f.group.position)||navigation.nearest({x:0,z:21.5}); if (safe) f.group.position.set(safe.x, placement[1], safe.z); }
                 f.waypoints = navigation.path(f.group.position, f.home).map(p => new THREE.Vector3(p.x, placement[1], p.z));
             } else if (!['playing', 'meeting'].includes(f.pose)&&!destination) f.waypoints = [];
@@ -404,6 +437,7 @@ export function createOfficeScene({ host, labels, onSelect, onFailure, onVenue =
             if(f.pose==='dancing')f.icon.textContent=(person.state==='idle'?'JEDA':'ONLINE')+' · ÉCLIPSE ♫';
             f.label.setAttribute('aria-label', `${person.name}, ${person.state === 'online' ? 'online' : person.state === 'idle' ? 'jeda di aplikasi' : 'tidak online'}. Lihat detail anggota.`);
             f.cup.visible = f.pose === 'coffee'; f.plate.visible = f.pose === 'eating';
+            if(f.manual){f.cup.visible=manual.action==='drink';f.plate.visible=manual.action==='eat';f.icon.textContent=(person.private?'PRIVAT · ':'ONLINE · ')+(manual.action==='run'?'BOOST':manual.action==='jump'?'LOMPAT':'KENDALI SENDIRI');}
             f.racket.visible = f.pose === 'playing' && ['tennis', 'badminton', 'pingpong', 'golf'].includes(f.game.id);
             f.tool.visible=f.pose==='playing'&&['billiards','archery','darts'].includes(f.game.id);if(f.tool.visible)f.tool.geometry=toolGeometry(f.game.id);
             f.shoes.forEach(shoe => { shoe.visible = f.pose !== 'sleeping'; });
@@ -434,6 +468,26 @@ export function createOfficeScene({ host, labels, onSelect, onFailure, onVenue =
         if (easingCamera) { camera.position.lerp(cameraGoal, .12); controls.target.lerp(targetFocus, .12); if (camera.position.distanceTo(cameraGoal) < .04) { camera.position.copy(cameraGoal); controls.target.copy(targetFocus); easingCamera = false; } }
         for (const f of figures.values()) {
             const t = paused ? 0 : now / 1000 + f.phase;
+            if(f.person.id===controlledId&&pilotPhysics){
+                const yaw=Math.atan2(camera.position.x-controls.target.x,camera.position.z-controls.target.z);
+                const others=[...figures.values()].filter(other=>other!==f&&other.pose!=='sleeping').map(other=>other.group.position);
+                const state=pilotPhysics.step(frameStep,pilotGate()?{}:pilotInput,yaw,others);if(['walk','run','jump'].includes(state.action))pilotActivity=null;if(pilotActivity){state.action=pilotActivity.action;state.venue=pilotActivity.venue;}
+                f.group.position.set(state.x,state.y,state.z);f.group.rotation.y=state.yaw;f.manual=true;f.pose='manual';f.home.copy(f.group.position);f.target.copy(f.group.position);
+                if(guide){const place=officeLayout.venues[guide];state.target=guide;state.distance=Math.round(Math.hypot(state.x-place.x,state.z-place.z));}pilotReporter(state);
+                f.icon.textContent=(f.person.private?'PRIVAT · ':'ONLINE · ')+(state.action==='run'?'BOOST':state.action==='jump'?'LOMPAT':'KENDALI SENDIRI');
+            }
+            if(f.manual){
+                const state=f.person.id===controlledId&&pilotPhysics?{...pilotPhysics.state(),...(pilotActivity||{})}:peerPilots.get(f.person.id)||f.person.pilot;
+                if(state&&f.person.id!==controlledId){const target=new THREE.Vector3(state.x,state.y,state.z);const next=f.group.position.clone().lerp(target,.35);if(navigation.segment(f.group.position,next))f.group.position.copy(next);else f.group.position.copy(target);f.group.rotation.y=state.yaw;}
+                const moving=state&&['walk','run'].includes(state.action),wave=moving?Math.sin(now/1000*(state.action==='run'?13:8))*.55:0;
+                f.body.rotation.set(0,0,0);f.body.position.y=0;f.legs.forEach((leg,i)=>leg.rotation.x=wave*(i?-1:1));f.arms.forEach((arm,i)=>arm.rotation.x=-wave*(i?-1:1));f.head.rotation.set(0,0,0);
+                const played=state?.action==='play'?games.find(g=>g.id===state.venue):null;
+                f.racket.visible=Boolean(played&&['tennis','badminton','pingpong','golf'].includes(played.id));f.tool.visible=Boolean(played&&['billiards','archery','darts'].includes(played.id));if(f.tool.visible)f.tool.geometry=toolGeometry(played.id);
+                f.cup.visible=state?.action==='drink';f.plate.visible=state?.action==='eat';if(played)f.arms[1].rotation.x=-.8+(paused?0:Math.sin(t*2.3)*.45);
+                if(state?.action==='drink')f.arms[1].rotation.x=-1.2;if(state?.action==='eat')f.arms[0].rotation.x=-1;
+                if(state?.action==='dance'){f.body.rotation.z=paused?0:Math.sin(t*2.4)*.12;f.arms[1].rotation.x=-.8;f.arms[0].rotation.x=-.6;}
+                continue;
+            }
             const playing = f.pose === 'playing', walking = !paused && (playing || f.waypoints?.length > 0);
             f.target.copy(f.home);
             if (playing && !f.waypoints?.length) { f.target.x += Math.sin(t * .65) * (f.game.kind === 'court' ? 1.4 : .18); f.target.z += Math.cos(t * .5) * (f.game.kind === 'court' ? .3 : .08); }
@@ -473,7 +527,7 @@ export function createOfficeScene({ host, labels, onSelect, onFailure, onVenue =
         if (cameraMode !== 'orbit' && followed) { const fraction = navigation.cameraLimit(controls.target, camera.position, residences.cameraBoxes(followId)); if (fraction < 1) camera.position.lerpVectors(controls.target, camera.position, fraction); }
         renderer.render(scene, camera);
         if (paused || now - lastLabels > 120 || easingCamera) { drawLabels(); lastLabels = now; }
-        if (!paused || easingCamera) requestDraw();
+        if (!paused || easingCamera || pilotPhysics?.moving() || pilotPhysics&&pilotPhysics.state().stamina<100 || !pilotGate()&&(Math.abs(pilotInput.x||0)+Math.abs(pilotInput.z||0)>0 || pilotInput.jump)) requestDraw();
     }
     function requestDraw() { if (!disposed && visible && frame === null) frame = requestAnimationFrame(render); }
     function moveFigure(f, target, step) {
@@ -527,17 +581,20 @@ export function createOfficeScene({ host, labels, onSelect, onFailure, onVenue =
         if (paused) { camera.position.copy(cameraGoal); controls.target.copy(targetFocus); easingCamera = false; } else easingCamera = true; requestDraw();
     }
     let dragStart = null;
+    const hotspotMaterial=new THREE.MeshBasicMaterial({transparent:true,opacity:0,depthWrite:false});materials.set('game-hotspots',hotspotMaterial);
+    for(const game of games){const geometry=new THREE.BoxGeometry(6,1.4,.4);ownedGeometries.add(geometry);const mesh=new THREE.Mesh(geometry,hotspotMaterial);mesh.position.set(game.x,.7,game.z-(game.kind==='court'?6:4.2));mesh.userData.officeGame=game.id;scene.add(mesh);gameTargets.push(mesh);}
     const raycaster = new THREE.Raycaster(), pointer = new THREE.Vector2();
     const down = e => { dragStart = [e.clientX, e.clientY]; };
     const up = e => {
         if (!dragStart || Math.hypot(e.clientX - dragStart[0], e.clientY - dragStart[1]) > 6) return; dragStart = null;
         const rect = renderer.domElement.getBoundingClientRect(); pointer.set((e.clientX - rect.left) / rect.width * 2 - 1, -(e.clientY - rect.top) / rect.height * 2 + 1);
         raycaster.setFromCamera(pointer, camera);
-        const hit = raycaster.intersectObjects([...figures.values()].map(f => f.group).concat(residences.meshes,rivageBar.targets), true)[0];
+        const hit = raycaster.intersectObjects([...figures.values()].map(f => f.group).concat(residences.meshes,rivageBar.targets,gameTargets), true)[0];
         const resident = residences.personForHit(hit);
         if (resident) { onSelect(resident); visitHome(resident); }
         else if (hit?.object.userData.personId) onSelect(hit.object.userData.personId);
         else if(hit?.object.userData.officeVenue)onVenue(hit.object.userData.officeVenue);
+        else if(hit?.object.userData.officeGame)onGame(hit.object.userData.officeGame);
     };
     function theme() {
         const dark = document.documentElement.classList.contains('dark');
@@ -550,19 +607,32 @@ export function createOfficeScene({ host, labels, onSelect, onFailure, onVenue =
     const changed = () => requestDraw(); controls.addEventListener('change', changed); controls.addEventListener('start', () => { easingCamera = false; });
     theme(); focusRoom('all'); camera.position.copy(cameraGoal); controls.target.copy(targetFocus); easingCamera = false; resize();
     return { setPeople, resize, focusRoom, visitHome, setCameraMode,
-        setRecreation(id,value){recreation.set(Number(id),value?{...value,until:value.until||Date.now()/1000+900}:null);setPeople(roster);},
+        collisionBoxes:()=>navigation.boxes(),
+        setPilotReporter(fn){pilotReporter=fn;},
+        setPrivatePilotProfile(avatar){if(privatePilotSelf){privatePilotSelf={...privatePilotSelf,avatar};setPeople(roster.map(p=>p.id===privatePilotSelf.id?privatePilotSelf:p));}},
+        setPilotGate(fn){pilotGate=fn;},
+        setPilot(id,state,privateSelf=null){controlledId=id;privatePilotSelf=privateSelf;pilotPhysics=createPilotPhysics(navigation,state);setPeople(roster);setCameraMode('follow',id);requestDraw();},
+        releasePilot(){const privateId=privatePilotSelf?.id;controlledId=null;privatePilotSelf=null;pilotPhysics=null;pilotInput={};pilotActivity=null;guide=null;guideMarker.visible=false;setPeople(roster.filter(p=>p.id!==privateId));},
+        setPilotInput(value){pilotInput=value||{};requestDraw();},pilotState(){return pilotPhysics?{...pilotPhysics.state(),...(pilotActivity||{})}:null;},
+        focusPilot(){host.focus?.({preventScroll:true});},followPilot(){if(controlledId){setCameraMode('follow',controlledId);host.focus?.({preventScroll:true});}},
+        setPeerPilots(values){peerPilots.clear();for(const state of values)if(state.id!==controlledId)peerPilots.set(state.id,state);setPeople(roster.map(p=>({...p,pilot:peerPilots.get(p.id)||null,in_office:peerPilots.has(p.id)||p.id===controlledId})));},
+        canInteract(id){return nearVenue(pilotPhysics?.state(),id);},
+        guideTo(id){const point=officeLayout.venues[id];guide=point?id:null;guideMarker.visible=Boolean(point);if(point){guideMarker.position.set(point.x,.025,point.z);const me=pilotPhysics?.state();pilotReporter({...me,target:id,distance:me?Math.round(Math.hypot(point.x-me.x,point.z-me.z)):null});requestDraw();}return point;},
+        interactNearest(){const point=pilotPhysics?.state();if(!point)return;const id=Object.keys(officeLayout.venues).filter(id=>nearVenue(point,id)).sort((a,b)=>Math.hypot(point.x-officeLayout.venues[a].x,point.z-officeLayout.venues[a].z)-Math.hypot(point.x-officeLayout.venues[b].x,point.z-officeLayout.venues[b].z))[0];if(games.some(g=>g.id===id))onGame(id);else if(['bar','disco','beach','garden','terrace','lounge'].includes(id))onVenue(id);},
+        setRecreation(id,value){if(Number(id)===controlledId&&value)pilotActivity={action:({drink:'drink',food:'eat',dance:'dance'})[value.kind]||'idle',venue:value.destination};recreation.set(Number(id),value?{...value,until:value.until||Date.now()/1000+900}:null);setPeople(roster);},
         setVenueEffects(value){rivageBar.setEnabled(value);requestDraw();},
-        setGame(value){if(JSON.stringify(localGame)===JSON.stringify(value))return;localGame=value;setPeople(roster);},
+        setGame(value){if(JSON.stringify(localGame)===JSON.stringify(value))return;localGame=value;if(controlledId&&value?.status==='playing'&&[value.from,value.to].includes(controlledId))pilotActivity={action:'play',venue:value.kind};else if(pilotActivity?.action==='play')pilotActivity=null;setPeople(roster);},
         say(id,message){const f=figures.get(Number(id));if(!f)return;f.bubble.textContent=String(message||'').slice(0,350);f.bubble.hidden=false;if(speechTimers.has(id))clearTimeout(speechTimers.get(id));speechTimers.set(id,setTimeout(()=>{f.bubble.hidden=true;speechTimers.delete(id);requestDraw();},10000));requestDraw();},
         configureWorld(value) { worldConfig = value || {}; environment.configure(worldConfig, energySaver); material('#47695f').color.set(({ alps: '#47695f', village: '#936e53', nordic: '#566c80' })[worldConfig.settings?.landscape] || '#47695f'); requestDraw(); },
         setEnergySaver(value) { energySaver = Boolean(value); renderer.setPixelRatio(energySaver ? 1 : Math.min(window.devicePixelRatio || 1, 1.5)); environment.configure(worldConfig, energySaver); resize(); },
         setMeeting(value) { localMeeting = value; setPeople(roster); },
-        meetingReady() { const room = localMeeting?.room; if (!room || !localMeeting.connected) return false; return [room.from, room.to].every(id => { const f = figures.get(id); return f && f.pose === 'meeting' && !f.waypoints?.length && f.group.position.distanceTo(f.home) < .2 && Math.abs(f.group.rotation.y - f.facing) < .15; }); },
+        meetingReady() { if(controlledId&&localMeeting?.connected&&localMeeting.room){const a=figures.get(localMeeting.room.from),b=figures.get(localMeeting.room.to);if(!a||!b||a.group.position.distanceTo(b.group.position)>3)return false;const dx=b.group.position.x-a.group.position.x,dz=b.group.position.z-a.group.position.z,d=Math.hypot(dx,dz);return d>.2&&(Math.sin(a.group.rotation.y)*dx+Math.cos(a.group.rotation.y)*dz)/d>.45&&(-Math.sin(b.group.rotation.y)*dx-Math.cos(b.group.rotation.y)*dz)/d>.45;}const room = localMeeting?.room; if (!room || !localMeeting.connected) return false; return [room.from, room.to].every(id => { const f = figures.get(id); return f && f.pose === 'meeting' && !f.waypoints?.length && f.group.position.distanceTo(f.home) < .2 && Math.abs(f.group.rotation.y - f.facing) < .15; }); },
         select(id, focus = false) {
             if (selected !== id) visitingHome = null;
             selected = id; if (id && !figures.has(id) && roster.some(p => p.id === id)) setPeople(roster);
             for (const [key, f] of figures) { f.ring.visible = key === id; f.label.setAttribute('aria-pressed', String(key === id)); }
             const f = figures.get(id); residences.select(visitingHome ?? (f?.pose === 'sleeping' ? id : null));
+            if(f&&focus&&controlledId&&id!==controlledId&&pilotPhysics){pilotPhysics.face(f.group.position);requestDraw();return;}
             if (f && focus && cameraMode !== 'orbit') { setCameraMode(cameraMode, id); return; }
             if (f && focus && f.pose === 'sleeping') { visitHome(id); return; }
             if (f && focus) { targetFocus.copy(f.target).add(new THREE.Vector3(0, 1, 0)); cameraGoal.copy(targetFocus).add(new THREE.Vector3(11, 11, 14)); if (paused) { camera.position.copy(cameraGoal); controls.target.copy(targetFocus); } else easingCamera = true; } requestDraw();

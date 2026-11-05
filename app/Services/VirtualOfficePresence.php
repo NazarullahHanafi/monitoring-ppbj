@@ -7,7 +7,7 @@ use Illuminate\Support\Facades\Cache;
 
 class VirtualOfficePresence
 {
-    public const DIRECTORY_KEY = 'virtual-office:directory:v2';
+    public const DIRECTORY_KEY = 'virtual-office:directory:v3';
 
     public function snapshot(User $viewer): array
     {
@@ -30,6 +30,7 @@ class VirtualOfficePresence
             $keys[] = VirtualOfficeMeetings::key($person['id']);
             $keys[] = VirtualOfficeMeetings::lease($person['id']);
             $keys[] = 'office:recreation:'.$person['id'];
+            $keys[] = VirtualOfficePilot::key($person['id']);$keys[] = VirtualOfficePilot::lease($person['id']);
         }
         $presence = $keys === [] ? [] : Cache::many($keys);
         $counts = ['online' => 0, 'idle' => 0, 'offline' => 0];
@@ -39,6 +40,8 @@ class VirtualOfficePresence
             $online = is_array($entry) && (int) ($entry['id'] ?? 0) === (int) $person['id'];
             $state = $online ? (! empty($entry['idle']) ? 'idle' : 'online') : 'offline';
             $counts[$state]++;
+            $pilot=$presence[VirtualOfficePilot::key($person['id'])]??null;
+            $inOffice=$online&&is_array($pilot)&&($presence[VirtualOfficePilot::lease($person['id'])]??null)===($pilot['session_id']??'');
             $room = $presence[VirtualOfficeMeetings::key($person['id'])] ?? null;
             $partner = is_array($room) ? (($room['from'] ?? null) === (int) $person['id'] ? ($room['to'] ?? 0) : ($room['from'] ?? 0)) : 0;
             $paired = $online && is_array($room) && ($room['status'] ?? '') === 'accepted' && ($room['expires'] ?? 0) > now()->timestamp
@@ -48,6 +51,7 @@ class VirtualOfficePresence
                 'state' => $state,
                 'mood' => mb_substr((string) ($presence['presence:mood:'.$person['id']] ?? $entry['mood'] ?? ''), 0, 20),
                 'is_me' => (int) $person['id'] === (int) $viewer->id,
+                'in_office'=>$inOffice,'pilot'=>$inOffice?VirtualOfficePilot::publicState($pilot):null,
                 'recreation' => $online && is_array($presence['office:recreation:'.$person['id']] ?? null)
                     ? array_intersect_key($presence['office:recreation:'.$person['id']], array_flip(['destination', 'kind', 'until'])) : null,
                 'meeting_with' => $paired ? $partner : null, 'meeting_spot' => $paired ? (int) $room['spot'] : null,

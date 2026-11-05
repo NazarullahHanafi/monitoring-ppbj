@@ -14,15 +14,17 @@ class VirtualOfficeWorldController extends Controller
     {
         abort_unless(VirtualOfficeWorld::canConfigure($request->user()), 403);
         $data = $request->validate(['version' => ['required', 'integer', 'min:0'],
-            'settings' => ['required', 'array:landscape,weather,cycle_hours,particles,mountains,clouds'],
+            'settings' => ['required', 'array:landscape,weather,cycle_hours,particles,precipitation,mountains,clouds'],
             'settings.landscape' => ['required', Rule::in(['alps', 'village', 'nordic'])],
             'settings.weather' => ['required', Rule::in(['auto', 'clear', 'rain', 'snow', 'aurora', 'mist'])],
             'settings.cycle_hours' => ['required', 'integer', Rule::in([2, 3, 4, 6])],
             'settings.particles' => ['required', Rule::in(['low', 'medium'])],
+            'settings.precipitation'=>['sometimes',Rule::in(['light','heavy','storm'])],
             'settings.mountains' => ['required', 'boolean'], 'settings.clouds' => ['required', 'boolean']]);
         $data['settings']['mountains'] = $request->boolean('settings.mountains');
         $data['settings']['clouds'] = $request->boolean('settings.clouds');
         $data['settings']['cycle_hours'] = (int) $data['settings']['cycle_hours'];
+        $data['settings']['precipitation']??='heavy';
         DB::transaction(function () use ($data) {
             DB::table('virtual_office_world')->insertOrIgnore(['id' => 1, 'settings' => json_encode(VirtualOfficeWorld::defaults()), 'version' => 0, 'created_at' => now(), 'updated_at' => now()]);
             $row = DB::table('virtual_office_world')->where('id', 1)->lockForUpdate()->first();

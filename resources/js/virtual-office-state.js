@@ -1,3 +1,4 @@
+import { costumePresets } from './virtual-office-costumes.js';
 export const stateLabel = { online: 'Sedang online', idle: 'Jeda di aplikasi', offline: 'Tidak online' };
 export const games = [
     { id: 'tennis', name: 'Tenis', icon: '🎾', x: -32, z: -5, kind: 'court' },
@@ -27,6 +28,7 @@ export function gameFor(person, date = new Date()) {
 }
 export function poseFor(person, date = new Date()) {
     if (person.state === 'offline') return isOfficeNight(date) ? 'sleeping' : 'playing';
+    if(person.in_office===false)return 'working';
     const outing=person.recreation;
     if(outing?.until>date.valueOf()/1000&&outing.destination!=='office')return({drink:'coffee',food:'eating',dance:'dancing',game:'playing',relax:'resting'})[outing.kind]||'working';
     if (person.state === 'idle') return ['coffee', 'eating', 'resting'][Number(person.id) % 3];
@@ -42,6 +44,7 @@ export function safePeople(payload) {
         state: p.state, mood: String(p.mood || '').slice(0, 40), is_me: p.is_me === true,
         avatar: safeAvatar(p.avatar), share_activity: p.share_activity !== false,
         can_talk: p.can_talk !== false,
+        in_office:typeof p.in_office==='boolean'?p.in_office:undefined,pilot:p.pilot&&['x','y','z','yaw'].every(k=>Number.isFinite(p.pilot[k]))?{...p.pilot}:null,
         recreation: p.recreation && ['bar','disco','beach','garden','terrace','lounge','office',...games.map(g=>g.id)].includes(p.recreation.destination) ? { destination: p.recreation.destination, kind: ['drink','food','relax','game','dance'].includes(p.recreation.kind) ? p.recreation.kind : 'relax', until: Number(p.recreation.until) || 0 } : null,
         meeting_with: Number.isSafeInteger(p.meeting_with) && p.meeting_with > 0 ? p.meeting_with : null,
         meeting_spot: Number.isInteger(p.meeting_spot) && p.meeting_spot >= 0 && p.meeting_spot < 12 ? p.meeting_spot : null,
@@ -51,7 +54,7 @@ export function safePeople(payload) {
 export function safeAvatar(value = {}) {
     const options = { style: ['feminine', 'masculine'], hair: ['short', 'bob', 'long', 'ponytail', 'hijab'],
         outfit: ['blazer', 'casual', 'sport', 'dress'], color: ['emerald', 'navy', 'rose', 'cream', 'lavender', 'terracotta'],
-        skin: ['light', 'warm', 'tan', 'deep'], accessory: ['none', 'glasses', 'headphones'], game: games.map(g => g.id) };
+        skin: ['light', 'warm', 'tan', 'deep'], accessory: ['none', 'glasses', 'headphones'], costume:['none',...costumePresets.map(c=>c.id)],game: games.map(g => g.id) };
     return Object.fromEntries(Object.entries(options).map(([key, allowed]) => [key, allowed.includes(value?.[key]) ? value[key] : allowed[0]]));
 }
 

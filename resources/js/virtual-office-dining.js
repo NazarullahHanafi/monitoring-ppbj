@@ -10,7 +10,7 @@ export function createDiningCart() {
     };
 }
 
-export function mountOfficeDining({ document: doc, config, request, post, move, focusArea, set }) {
+export function mountOfficeDining({ document: doc, config, request, post, move, focusArea, set, requireVenue=()=>true }) {
     const $ = id => doc.getElementById(id), cart = createDiningCart(), favorites = new Set();
     const storageKey = 'simonpr:office:bar:'+config.myId;
     let catalog = [], account = null, group = '', favoritesOnly = false, loading = null, loadedAt = 0, locked = false, selectedVenue = 'bar', pendingCheckout = null;
@@ -75,7 +75,7 @@ export function mountOfficeDining({ document: doc, config, request, post, move, 
         $('voWalletHistory').replaceChildren(...(account.ledger||[]).map(row=>node('p','',`${new Date(row.created_at).toLocaleString('id-ID',{timeZone:'Asia/Jakarta'})} · ${row.amount>0?'+':''}${money(row.amount)} · ${row.reference.startsWith('daily:')?'Bonus harian':'Pesanan'} · saldo ${money(row.balance)}`)));
         $('voMyOrders').replaceChildren(...(account.orders||[]).map(row=>{
             const item=catalog.find(i=>i.id===row.item),host=node('div',''),b=button('Nikmati di '+$('voRelaxPlace').selectedOptions[0].textContent,async()=>{
-                if(locked)return;const destination=$('voRelaxPlace').value,result=await post('/virtual-office/recreation/consume',{id:row.id,destination},true);
+                if(locked)return;const destination=$('voRelaxPlace').value;if(!requireVenue(destination))return;const result=await post('/virtual-office/recreation/consume',{id:row.id,destination},true);
                 if(result){balance(result);move(destination,item?.kind||'drink',row.item,false);set('voClubStatus','Selamat menikmati '+(item?.name||row.item)+'. Satu porsi digunakan.');}
             });host.append(node('span','',`${item?.name||row.item} · ${row.remaining} porsi`),b);return host;
         }));if(!account.orders?.length)$('voMyOrders').append(node('p','','Belum ada pesanan tersimpan.'));renderCart();receiptList();
@@ -101,11 +101,12 @@ export function mountOfficeDining({ document: doc, config, request, post, move, 
     $('voClearCart').addEventListener('click',()=>{if(!locked&&!pendingCheckout){cart.clear();save();renderCart();}});
     $('voRefreshWallet').addEventListener('click',()=>load(true));
     $('voBarCheckout').addEventListener('click',async()=>{
+        if(!requireVenue('bar'))return;
         if(locked||!cart.items().length)return;locked=true;renderCart();menu();
         pendingCheckout ||= {request_id:globalThis.crypto.randomUUID(),items:cart.items(),destination:$('voRelaxPlace').value};save();
         try{const result=await post('/virtual-office/recreation/checkout',pendingCheckout,true);if(result){pendingCheckout=null;cart.clear();save();balance(result);set('voClubStatus',`Pesanan dibayar. Struk ${result.receipt_id.slice(0,8).toUpperCase()} tersedia; pilih Nikmati di Pesanan saya.`);}
             else if([400,403,404,409,422].includes(post.lastError?.status)){pendingCheckout=null;save();}}
         finally{locked=false;renderCart();menu();}
     });
-    return { load, balance, venue, open(){focusArea(selectedVenue);return load();} };
+    return { load, balance, venue, open({portable=false}={}){$('voClubDine')?.setAttribute('data-portable',String(portable));if($('voPortableHeading'))$('voPortableHeading').hidden=!portable;if(!portable)focusArea(selectedVenue);return load();} };
 }

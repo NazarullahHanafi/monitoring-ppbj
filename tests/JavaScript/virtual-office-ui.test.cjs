@@ -39,7 +39,7 @@ async function fixture({ canChat = true, meetingReady = false } = {}) {
     const window = { location: { origin: 'https://simon.example.test' }, matchMedia: () => ({ matches: false, addEventListener() {} }),
         addEventListener: (name, fn) => (events[name] ??= []).push(fn), SimonOfficeMention: person => { calls.push(person); return true; },
         __loadOfficeScene: () => scenePromise };
-    const sandbox = { ...state, mountOfficeClub: () => ({start(){},stop(){},select(){},syncScene(){},openGame(){},chat(id){if(canChat)calls.push(id);}}), mountOfficeLive: () => ({ start() {}, stop() {}, state: () => ({ ready: meetingReady, room: meetingReady ? { from: 2, to: 1 } : null }), invite() {} }), window, document, localStorage: { getItem: () => 'list', setItem() {} }, URL, Date, AbortController,
+    const sandbox = { ...state, mountOfficePilot:()=>({start(){},stop(){},interact:()=>true}), mountOfficeClub: () => ({start(){},stop(){},select(){},syncScene(){},openGame(){},chat(id){if(canChat)calls.push(id);}}), mountOfficeLive: () => ({ start() {}, stop() {}, state: () => ({ ready: meetingReady, room: meetingReady ? { from: 2, to: 1 } : null }), invite() {} }), window, document, localStorage: { getItem: () => 'list', setItem() {} }, URL, Date, AbortController,
         setTimeout: (fn, delay) => { const id = ++timerId; timers.set(id, { fn, delay }); return id; }, clearTimeout: id => timers.delete(id),
         fetch: (url, options) => new Promise(resolve => requests.push({ url, options, resolve })), console };
     let code = fs.readFileSync(path.resolve(__dirname, '../../resources/js/virtual-office.js'), 'utf8');
@@ -102,7 +102,7 @@ test('changing selected person cancels the journal request and ignores its late 
 
 test('own avatar editor sends only own preference data with csrf and handles stale-version conflicts', async () => {
     const f = await fixture(); f.get('voOpenAvatar').click();
-    assert.equal(f.get('voAvatarFields').children.length, 7); assert.equal(f.get('voAvatarPreview').children.length, 16);
+    assert.equal(f.get('voAvatarFields').children.length, 8); assert.equal(f.get('voAvatarPreview').children.length, 16);
     const submit = f.get('voAvatarForm').events.submit[0]({ preventDefault() {} });
     assert.equal(f.requests.length, 1); const request = f.requests[0], body = JSON.parse(request.options.body);
     assert.equal(new URL(request.url).pathname, '/virtual-office/avatar'); assert.equal(body.user_id, undefined);

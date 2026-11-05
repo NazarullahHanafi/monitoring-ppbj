@@ -1,7 +1,8 @@
 // Small 2D navigation grid for walking avatars. Segment tests prevent tunnelling
 // through thin nets/walls; seats/beds remain intentional stationary poses.
+import layout from '../data/virtual-office-layout.json' with { type: 'json' };
 export function createOfficeNavigation() {
-    const obstacles = [], minX = -43, maxX = 43, minZ = -14, maxZ = 76, cell = .5, radius = .3;
+    const obstacles = [], {minX,maxX,minZ,maxZ}=layout.bounds, cell = .5, radius = .3;
     const width = Math.round((maxX - minX) / cell) + 1, height = Math.round((maxZ - minZ) / cell) + 1;
     let grid = null;
     function free(x, z) {
@@ -23,11 +24,10 @@ export function createOfficeNavigation() {
     }
     function build() {
         if (grid) return;
-        grid = new Uint8Array(width * height);
-        for (let z = 0; z < height; z++) for (let x = 0; x < width; x++) {
-            const px = minX + x * cell, pz = minZ + z * cell;
-            grid[z * width + x] = free(px, pz) && !obstacles.some(b => px > b.left - .4 && px < b.right + .4 && pz > b.back - .4 && pz < b.front + .4) ? 1 : 0;
-        }
+        grid = new Uint8Array(width * height).fill(1);
+        for(let z=0;z<height;z++)for(let x=0;x<width;x++)if(x===0||z===0||x===width-1||z===height-1)grid[z*width+x]=0;
+        for(const b of obstacles){const left=Math.max(0,Math.ceil((b.left-.4-minX)/cell)),right=Math.min(width-1,Math.floor((b.right+.4-minX)/cell)),back=Math.max(0,Math.ceil((b.back-.4-minZ)/cell)),front=Math.min(height-1,Math.floor((b.front+.4-minZ)/cell));
+            for(let z=back;z<=front;z++)for(let x=left;x<=right;x++)grid[z*width+x]=0;}
     }
     function avoids(a, b, people) {
         const dx = b.x - a.x, dz = b.z - a.z, length = dx * dx + dz * dz;
@@ -78,6 +78,8 @@ export function createOfficeNavigation() {
         return [];
     }
     return {
+        boxes:()=>obstacles.map(b=>({...b})),
+        slide(from,to){if(segment(from,to))return{x:to.x,z:to.z};let next={x:from.x,z:from.z};if(segment(next,{x:to.x,z:next.z}))next.x=to.x;if(segment(next,{x:next.x,z:to.z}))next.z=to.z;return next;},
         addBox(w, d, x, z, tag = '', top = 2) { obstacles.push({ left: x - w / 2, right: x + w / 2, back: z - d / 2, front: z + d / 2, top, tag }); grid = null; },
         cameraLimit(from, to, extra = []) {
             let limit = 1;

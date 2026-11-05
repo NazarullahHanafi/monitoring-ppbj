@@ -20,7 +20,7 @@ export function mountOfficeLive({ document: doc, config, visible, getScene, getP
         $('voOfficeChatSend').disabled = !data.ready || !config.canMeet || busy;
         const peerName = room ? (room.from === Number(config.myId) ? room.to_name : room.from_name) : '';
         text('voMeetingTitle', incoming ? `${peerName} mengundang bertemu` : room?.status === 'pending' ? `Menunggu ${peerName}` : `Bertemu ${peerName}`);
-        text('voMeetingStatus', !room ? '' : room.status === 'pending' ? 'Undangan berlaku 3 menit. Pertemuan dimulai setelah rekan menerima.' : !data.connected ? 'Menunggu kedua peserta terhubung ke Kantor Virtual…' : !data.ready ? 'Avatar menuju tempat bertemu. Buka ruang 3D; tunggu keduanya saling berhadapan.' : 'Tatap muka siap · pesan diperbarui setiap 3 detik.');
+        text('voMeetingStatus', !room ? '' : room.status === 'pending' ? 'Undangan berlaku 3 menit. Pertemuan dimulai setelah rekan menerima.' : !data.connected ? 'Menunggu kedua peserta terhubung ke Kantor Virtual…' : !data.ready ? 'Jalan mendekati rekan, lalu klik avatarnya untuk saling menghadap.' : 'Tatap muka siap · pesan diperbarui setiap 3 detik.');
         const host = $('voOfficeMessages'), previousScroll = host.scrollTop, atBottom = host.scrollHeight - host.scrollTop - host.clientHeight < 60;
         host.replaceChildren();
         for (const message of (Array.isArray(data.messages) ? data.messages : []).slice(-30)) {
@@ -48,7 +48,7 @@ export function mountOfficeLive({ document: doc, config, visible, getScene, getP
         } catch (error) { text('voLiveStatus', controller.signal.aborted ? 'Waktu permintaan habis. Periksa hasil sebelum mencoba kembali.' : error.message); return null; }
         finally { clearTimeout(deadline); busy = false; $('voOfficeChatSend').disabled = !state.ready; }
     }
-    async function respond(action) { if (state.room) { const result = await post('/virtual-office/meetings/respond', { id: state.room.id, action }); if (result) text('voLiveStatus', action === 'accept' ? 'Undangan diterima. Kedua avatar menuju area pertemuan.' : 'Pertemuan ditutup.'); } }
+    async function respond(action) { if (state.room) { const result = await post('/virtual-office/meetings/respond', { id: state.room.id, action }); if (result) text('voLiveStatus', action === 'accept' ? 'Undangan diterima. Jalan mendekati rekan lalu klik avatarnya untuk saling menghadap.' : 'Pertemuan ditutup.'); } }
     $('voMeetingAccept').addEventListener('click', () => respond('accept'));
     $('voMeetingDecline').addEventListener('click', () => respond('decline'));
     $('voMeetingEnd').addEventListener('click', () => respond('end'));
@@ -70,14 +70,14 @@ export function mountOfficeLive({ document: doc, config, visible, getScene, getP
         });
         $('voOpenWorld').addEventListener('click', () => {
             draftVersion = world.version || 0;
-            for (const key of ['landscape', 'weather', 'cycle_hours', 'particles']) $('voWorld_'+key).value = world.settings?.[key] ?? '';
+            for (const key of ['landscape', 'weather', 'cycle_hours', 'particles', 'precipitation']) $('voWorld_'+key).value = world.settings?.[key] ?? '';
             for (const key of ['mountains', 'clouds']) $('voWorld_'+key).checked = world.settings?.[key] !== false;
             $('voWorldPanel').hidden = false; $('voWorld_landscape').focus();
         });
         $('voCloseWorld').addEventListener('click', () => { $('voWorldPanel').hidden = true; $('voOpenWorld').focus(); });
         $('voWorldForm').addEventListener('submit', async event => {
             event.preventDefault(); const settings = {};
-            for (const key of ['landscape', 'weather', 'particles']) settings[key] = $('voWorld_'+key).value;
+            for (const key of ['landscape', 'weather', 'particles', 'precipitation']) settings[key] = $('voWorld_'+key).value;
             settings.cycle_hours = Number($('voWorld_cycle_hours').value);
             for (const key of ['mountains', 'clouds']) settings[key] = $('voWorld_'+key).checked;
             const result = await post('/virtual-office/world', { version: draftVersion, settings });

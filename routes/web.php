@@ -89,6 +89,8 @@ Route::post('/procurement-workspace/{page}', [\App\Http\Controllers\ProcurementW
 // Own avatar is a personal preference, including for read-only viewers.
 Route::post('/virtual-office/avatar', [\App\Http\Controllers\VirtualOfficeController::class, 'saveAvatar'])
     ->middleware(['auth', 'throttle:virtual-office'])->name('virtual-office.avatar');
+Route::post('/virtual-office/pilot', [\App\Http\Controllers\VirtualOfficePilotController::class, 'pulse'])->middleware(['auth','throttle:virtual-office'])->name('virtual-office.pilot');
+Route::post('/virtual-office/pilot/leave', [\App\Http\Controllers\VirtualOfficePilotController::class, 'leave'])->middleware(['auth','throttle:virtual-office'])->name('virtual-office.pilot.leave');
 
 Route::middleware(['auth', 'readonly.block'])->group(function () {
     Route::get('/virtual-office/recreation', [\App\Http\Controllers\VirtualOfficeRecreationController::class, 'account'])->middleware('throttle:virtual-office')->name('virtual-office.recreation');

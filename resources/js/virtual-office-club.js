@@ -1,7 +1,7 @@
 import { createOfficeReadLoop, games } from './virtual-office-state.js';
 import { mountOfficeDining } from './virtual-office-dining.js';
 
-export function mountOfficeClub({ document: doc, config, visible, getPeople, getScene, focusArea = () => {} }) {
+export function mountOfficeClub({ document: doc, config, visible, getPeople, getScene, focusArea = () => {}, requireVenue = () => true }) {
     const $ = id => doc.getElementById(id), set = (id, value) => { if ($(id) && $(id).textContent !== String(value)) $(id).textContent = value; };
     if (!$('voClubPanel')) return { start(){}, stop(){}, select(){}, chat(){}, syncScene(){}, openGame(){} };
     const networkKinds = ['badminton','tennis','pingpong','foosball'];
@@ -21,17 +21,20 @@ export function mountOfficeClub({ document: doc, config, visible, getPeople, get
     }
     function controls(){return{aim:Number($('voGameAim').value)/100,power:Number($('voGamePower').value)/100,racket:Number($('voGameRacket').value)/100};}
     async function ensurePlay(){
+        if(!requireVenue($('voPlayableGame').value))return null;
         if(play)return play;if(opening)return opening;
         opening=import('./virtual-office-play.js').then(({createOfficePlay,playInstructions})=>{instructions=playInstructions;if(game)$('voPlayableGame').value=game.kind;play=createOfficePlay({canvas:$('voGameCanvas'),controls,onScore:value=>set('voGameScore',value),onStatus:value=>set('voGameStatus',value),onPointer:value=>{$('voGameRacket').value=Math.round(value*100);$('voGameAim').value=Math.round(value*100);},onCards:cards=>{$('voGameCards').replaceChildren(...cards.map(card=>{const b=doc.createElement('button');b.type='button';b.className='vo-button';b.textContent=card.label;b.disabled=card.disabled;b.addEventListener('click',card.action);return b;}));}});play.reset($('voPlayableGame').value);set('voGameInstructions',playInstructions[$('voPlayableGame').value]);play.visible(visible()&&!$('voClubPanel').hidden&&section==='play');if(game?.status!=='pending')play.network(game);return play;}).catch(()=>set('voGameStatus','Permainan belum termuat. Muat ulang halaman.')).finally(()=>{opening=null;});return opening;
     }
     function partners(){const selected=$('voPlayPartner').value;const nodes=[['','Komputer · latihan sendiri'],...getPeople().filter(p=>!p.is_me&&p.can_talk).map(p=>[p.id,`${p.name} · ${p.state==='offline'?'OFFLINE / komputer':'online / minta persetujuan'}`])];$('voPlayPartner').replaceChildren(...nodes.map(([value,label])=>{const option=doc.createElement('option');option.value=value;option.textContent=label;return option;}));if(nodes.some(n=>String(n[0])===selected))$('voPlayPartner').value=selected;}
     async function open(next='play'){
-        section=['play','dine','music'].includes(next)?next:'play';$('voClubPanel').hidden=false;
+        const portable=next==='orders';
+        if(next==='dine'&&!requireVenue('bar'))return;
+        section=portable?'dine':['play','dine','music'].includes(next)?next:'play';$('voClubPanel').hidden=false;
         for(const id of ['play','dine','music'])$('voClub'+id[0].toUpperCase()+id.slice(1)).hidden=id!==section;
         doc.querySelectorAll('[data-vo-club]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.voClub===section)));$('voClubPanel').focus();
         if(section==='play'){partners();await ensurePlay();}else play?.visible(false);
         $('voClubPanel').setAttribute('data-section',section);
-        if(section==='dine'){await dining.open();if(config.canChat&&!['bar','disco'].includes(ownActivity?.destination))move('bar');}
+        if(section==='dine')await dining.open({portable});
     }
     function renderGame(value){
         const changed=game?.revision!==value?.revision||game?.id!==value?.id;game=value;delay=peer||game?2500:8000;
@@ -60,21 +63,22 @@ export function mountOfficeClub({ document: doc, config, visible, getPeople, get
     $('voCloseClub').addEventListener('click',()=>{$('voClubPanel').hidden=true;play?.visible(false);doc.querySelector('[data-vo-club]')?.focus();});
     $('voClubPanel').addEventListener('keydown',e=>{if(e.key==='Escape'){$('voCloseClub').click();}if(e.key==='Tab'){const fields=[...$('voClubPanel').querySelectorAll('button:not(:disabled),input,select,canvas[tabindex]')].filter(el=>el.getClientRects().length);const first=fields[0],last=fields.at(-1);if(e.shiftKey&&(doc.activeElement===first||doc.activeElement===$('voClubPanel'))){e.preventDefault();last?.focus();}else if(!e.shiftKey&&doc.activeElement===last){e.preventDefault();first?.focus();}}});
     async function move(destination,kind='relax',item=null,send=true){
+        if(!requireVenue(destination))return;
         if(send&&ownActivity?.destination===destination&&ownActivity?.kind===kind)return;
         const result=send?await post('/virtual-office/recreation/move',{destination}):true;
         if(result){ownActivity={destination,kind,item,until:Date.now()/1000+900};getScene()?.setRecreation?.(config.myId,ownActivity);focusArea(destination);}
     }
-    const dining=mountOfficeDining({document:doc,config,request,post,move,focusArea,set});
+    const dining=mountOfficeDining({document:doc,config,request,post,move,focusArea,set,requireVenue});
     $('voGoRelax').addEventListener('click',()=>move($('voRelaxPlace').value,$('voRelaxPlace').value==='disco'?'dance':'relax'));
     $('voBackOffice').addEventListener('click',()=>move('office'));
     let venueEffects=true;try{venueEffects=localStorage.getItem('simonpr:office:venue-effects')!=='off';}catch{}
     $('voVenueEffects').checked=venueEffects;
     $('voVenueEffects').addEventListener('change',()=>{venueEffects=$('voVenueEffects').checked;getScene()?.setVenueEffects?.(venueEffects);try{localStorage.setItem('simonpr:office:venue-effects',venueEffects?'on':'off');}catch{}});
     for(const item of games){const option=doc.createElement('option');option.value=item.id;option.textContent=`${item.icon} ${item.name}`;$('voPlayableGame').append(option);}$('voPlayableGame').value='archery';
-    $('voPlayableGame').addEventListener('change',async()=>{if(game){set('voGameStatus','Akhiri pertandingan aktif sebelum mengganti permainan.');return;}const p=await ensurePlay();p?.reset($('voPlayableGame').value);});
-    $('voStartGame').addEventListener('click',async()=>{const kind=$('voPlayableGame').value,target=Number($('voPlayPartner').value);if(game){set('voGameStatus','Akhiri undangan/pertandingan aktif terlebih dahulu.');return;}if(target){if(!networkKinds.includes(kind)){set('voGameStatus','Permainan ini tersedia sebagai latihan lokal. Duel rekan tersedia untuk badminton, tenis, tenis meja, dan foosball.');return;}const result=await post('/virtual-office/game/invite',{kind,target_id:target});if(result){renderGame(result.game);await ensurePlay();play.network(result.game.status==='pending'?null:result.game);focusArea(kind);}}else{const p=await ensurePlay();p?.reset(kind);p?.visible(visible());focusArea(kind);getScene()?.setGame?.({kind,from:Number(config.myId),to:0,bot:true,status:'playing'});}});
-    for(const action of ['accept','decline','end'])$('vo'+action[0].toUpperCase()+action.slice(1)+'Game').addEventListener('click',async()=>{if(!game)return;const result=await post('/virtual-office/game/respond',{id:game.id,action});if(result){renderGame(result.game);if(action==='accept'){await ensurePlay();play.network(result.game);}else{play?.reset($('voPlayableGame').value);getScene()?.setGame?.(null);}}});
-    $('voGameAction').addEventListener('click',async()=>{if(game){if(game.status!=='playing'||game.turn!==Number(config.myId))return;const result=await post('/virtual-office/game/hit',{id:game.id,revision:game.revision,...controls()},true);if(result)renderGame(result.game);}else play?.action();});
+    $('voPlayableGame').addEventListener('change',async()=>{if(game){set('voGameStatus','Akhiri pertandingan aktif sebelum mengganti permainan.');return;}if(!requireVenue($('voPlayableGame').value))return;const p=await ensurePlay();p?.reset($('voPlayableGame').value);});
+    $('voStartGame').addEventListener('click',async()=>{const kind=$('voPlayableGame').value,target=Number($('voPlayPartner').value);if(!requireVenue(kind))return;if(game){set('voGameStatus','Akhiri undangan/pertandingan aktif terlebih dahulu.');return;}if(target){if(!networkKinds.includes(kind)){set('voGameStatus','Permainan ini tersedia sebagai latihan lokal. Duel rekan tersedia untuk badminton, tenis, tenis meja, dan foosball.');return;}const result=await post('/virtual-office/game/invite',{kind,target_id:target});if(result){renderGame(result.game);await ensurePlay();play.network(result.game.status==='pending'?null:result.game);focusArea(kind);}}else{const p=await ensurePlay();p?.reset(kind);p?.visible(visible());focusArea(kind);getScene()?.setGame?.({kind,from:Number(config.myId),to:0,bot:true,status:'playing'});}});
+    for(const action of ['accept','decline','end'])$('vo'+action[0].toUpperCase()+action.slice(1)+'Game').addEventListener('click',async()=>{if(!game)return;if(action==='accept'&&!requireVenue(game.kind))return;const result=await post('/virtual-office/game/respond',{id:game.id,action});if(result){renderGame(result.game);if(action==='accept'){await ensurePlay();play.network(result.game);}else{play?.reset($('voPlayableGame').value);getScene()?.setGame?.(null);}}});
+    $('voGameAction').addEventListener('click',async()=>{if(!requireVenue(game?.kind||$('voPlayableGame').value))return;if(game){if(game.status!=='playing'||game.turn!==Number(config.myId))return;const result=await post('/virtual-office/game/hit',{id:game.id,revision:game.revision,...controls()},true);if(result)renderGame(result.game);}else play?.action();});
     $('voGameReset').addEventListener('click',()=>{if(game)set('voGameStatus','Akhiri pertandingan terlebih dahulu.');else play?.reset($('voPlayableGame').value);});
     for(const id of ['voGameAim','voGamePower','voGameRacket'])$(id).addEventListener('input',()=>play?.draw());
     $('voGameCanvas').addEventListener('keydown',e=>{if(['ArrowLeft','ArrowRight'].includes(e.key)){e.preventDefault();const delta=e.key==='ArrowLeft'?-5:5;for(const id of ['voGameAim','voGameRacket'])$(id).value=Math.max(0,Math.min(100,Number($(id).value)+delta));play?.draw();}if(e.code==='Space'){e.preventDefault();$('voGameAction').click();}});
@@ -86,7 +90,7 @@ export function mountOfficeClub({ document: doc, config, visible, getPeople, get
     $('voMusicFile').addEventListener('change',async()=>{try{(await ensureMusic()).local($('voMusicFile').files[0]);set('voMusicStatus','Berkas lokal siap. Tekan Putar. Berkas tidak diunggah.');}catch(e){set('voMusicStatus',e.message);}});
     return {start(immediate=false){if(visible()&&config.canMeet)loop.start(immediate);play?.visible(visible()&&!$('voClubPanel').hidden&&section==='play');},stop(){loop.stop();play?.visible(false);music?.stop();},select(id){partners();},chat,
         syncScene(){getScene()?.setVenueEffects?.(venueEffects);if(ownActivity)getScene()?.setRecreation?.(config.myId,ownActivity);getScene()?.setGame?.(game);},
-        openVenue(venue='bar'){open('dine');dining.venue(venue);},
-        openGame(kind){$('voPlayableGame').value=kind;open('play');if(!game)ensurePlay().then(p=>p?.reset(kind));}
+        openVenue(venue='bar'){if(!requireVenue(venue))return;if(['bar','disco'].includes(venue)){open('dine');dining.venue(venue);}else{$('voRelaxPlace').value=venue;open('orders');}},
+        openGame(kind){if(!requireVenue(kind))return;$('voPlayableGame').value=kind;open('play');if(!game)ensurePlay().then(p=>p?.reset(kind));}
     };
 }

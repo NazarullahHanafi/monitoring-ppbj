@@ -1,6 +1,7 @@
 import { safePeople, poseFor, initials, stateLabel, poseLabel, createOfficeReadLoop, games, gameFor, safeAvatar, isOfficeNight } from './virtual-office-state.js';
 import { mountOfficeLive } from './virtual-office-live.js';
 import { mountOfficeClub } from './virtual-office-club.js';
+import { mountOfficePilot } from './virtual-office-pilot.js';
 
 const root = document.getElementById('virtualOffice');
 if (root && !root.dataset.initialized) {
@@ -10,7 +11,7 @@ if (root && !root.dataset.initialized) {
     const palette = ['#dce9df', '#eadfcc', '#dde5f1', '#e8dce5', '#d3e8e4', '#f0dfce'];
     let people = [], filter = 'all', selected = null, scene = null, sceneTicket = 0, sceneLoading = false, inView = true, leftPage = false;
     let requestedRoom = isOfficeNight() ? 'residences' : 'all', requestedHome = null;
-    let worldConfig = config.initial?.world || {}, live = null, club = null, sceneUnavailable = false;
+    let worldConfig = config.initial?.world || {}, live = null, club = null, pilot = null, sceneUnavailable = false;
     let energySaver = window.matchMedia('(max-width: 650px)').matches || Number(window.navigator?.hardwareConcurrency || 8) <= 4 || Number(window.navigator?.deviceMemory || 8) <= 4;
     try { const preference = localStorage.getItem('simonpr:office:quality'); if (['low', 'standard'].includes(preference)) energySaver = preference === 'low'; } catch {}
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -24,9 +25,11 @@ if (root && !root.dataset.initialized) {
     $('voActivityDate').min = new Date(Date.now() + 7 * 3600000 - 29 * 86400000).toISOString().slice(0, 10);
     function stopActivity() { activityTicket++; activityRequest?.abort(); activityRequest = null; $('voLoadActivity').disabled = false; }
     function portrait(host, value) {
-        const a = safeAvatar(value); host.replaceChildren(); host.className = `vo-avatar-preview vo-look-${a.style} vo-hair-${a.hair} vo-outfit-${a.outfit} vo-accessory-${a.accessory}`;
+        const a = safeAvatar(value),costume=(config.costumes||[]).find(c=>c.id===a.costume);host.replaceChildren();host.className = `vo-avatar-preview vo-look-${costume?.style||a.style} vo-hair-${costume?(costume.hairStyle==='long'?'long':costume.hairStyle==='bob'?'bob':'short'):a.hair} vo-outfit-${costume?'casual':a.outfit} vo-accessory-${a.accessory}`;
+        if(costume){host.className+=' vo-costume';host.style.setProperty('--vo-hair',costume.hair);host.style.setProperty('--vo-pants',costume.pants);}
         host.style.setProperty('--vo-shirt', { emerald: '#547a71', navy: '#405978', rose: '#b97988', cream: '#d3bc96', lavender: '#9682ae', terracotta: '#bb8265' }[a.color]);
         host.style.setProperty('--vo-skin', { light: '#efd0ae', warm: '#dba77d', tan: '#bc8762', deep: '#895e46' }[a.skin]);
+        if(costume)host.style.setProperty('--vo-shirt',costume.shirt);
         for (const part of ['halo', 'hair', 'ear-left', 'ear-right', 'neck', 'body', 'arm-left', 'arm-right', 'leg-left', 'leg-right', 'face', 'fringe', 'eyes', 'smile', 'glasses', 'phones']) { const node = document.createElement('span'); node.className = `vo-doll-${part}`; host.append(node); }
     }
     function chatActions(person) {
@@ -112,7 +115,7 @@ if (root && !root.dataset.initialized) {
         try {
             const { createOfficeScene } = await import('./virtual-office-scene.js');
             if (ticket !== sceneTicket || mode !== '3d' || !visible()) return;
-            scene = createOfficeScene({ host: $('voScene'), labels: $('voLabels'), onSelect: id => select(id, true), onVenue: venue => club?.openVenue?.(venue), onFailure: () => { sceneUnavailable = true; switchView('list', false); text('voSync', 'Ruang 3D tidak tersedia. Tim tetap dapat dilihat di mode ringan.'); } });
+            scene = createOfficeScene({ host: $('voScene'), labels: $('voLabels'), onSelect: id => select(id, true), onVenue: venue => club?.openVenue?.(venue), onGame: id=>club?.openGame?.(id), onFailure: () => { sceneUnavailable = true; switchView('list', false); text('voSync', 'Ruang 3D tidak tersedia. Tim tetap dapat dilihat di mode ringan.'); } });
             scene.setPeople(people); scene.setPaused(paused); scene.setVisible(visible());
             scene.configureWorld?.(worldConfig); scene.setEnergySaver?.(energySaver);
             scene.focusRoom(requestedRoom);
@@ -120,6 +123,7 @@ if (root && !root.dataset.initialized) {
             if (requestedHome !== null) scene.visitHome?.(requestedHome);
             if (live) scene.setMeeting?.(live.state());
             club?.syncScene();
+            pilot?.start();
             if (['follow', 'portrait'].includes($('voCameraMode').value)) scene.setCameraMode?.($('voCameraMode').value, selected || people.find(p => p.is_me)?.id);
         } catch {
             if (ticket === sceneTicket) { sceneUnavailable = true; switchView('list', false); text('voSync', 'Ruang 3D belum dapat dibuka. Mode ringan tetap tersedia.'); }
@@ -130,12 +134,12 @@ if (root && !root.dataset.initialized) {
         $('voView3d').setAttribute('aria-pressed', String(mode === '3d')); $('voViewList').setAttribute('aria-pressed', String(mode === 'list'));
         $('voScene').hidden = mode !== '3d'; $('voLabels').hidden = mode !== '3d'; $('voLightView').hidden = mode !== 'list'; $('voLoading').hidden = true;
         if (persist) try { localStorage.setItem('simonpr:office:view', mode); } catch {}
-        if (mode === 'list') { scene?.dispose(); scene = null; } else ensureScene();
+        if (mode === 'list') { pilot?.stop();scene?.dispose(); scene = null; } else ensureScene();
         $('voSceneHint').textContent = mode === '3d' ? 'Putar ruang dengan geser · Gulir untuk mendekat' : 'Pilih anggota untuk melihat detail dan membuka chat';
     }
     function lifecycle() {
-        if (!visible()) { loop.stop(); live?.stop(); club?.stop(); stopActivity(); scene?.setVisible(false); }
-        else { if (feedUrl) loop.start(true); live?.start(true); club?.start(true); scene?.setVisible(mode === '3d'); ensureScene(); }
+        if (!visible()) { loop.stop(); live?.stop(); club?.stop();pilot?.stop(); stopActivity(); scene?.setVisible(false); }
+        else { if (feedUrl) loop.start(true); live?.start(true); club?.start(true);if(mode==='3d')pilot?.start(); scene?.setVisible(mode === '3d'); ensureScene(); }
     }
     $('voSearch').addEventListener('input', renderPeople);
     root.querySelectorAll('[data-vo-filter]').forEach(button => button.addEventListener('click', () => { filter = button.dataset.voFilter; root.querySelectorAll('[data-vo-filter]').forEach(b => b.setAttribute('aria-pressed', String(b === button))); renderPeople(); }));
@@ -192,14 +196,14 @@ if (root && !root.dataset.initialized) {
         } catch (error) { if (ticket === activityTicket && visible()) text('voActivityStatus', controller.signal.aborted ? 'Permintaan berhenti. Coba lagi.' : error.message); }
         finally { clearTimeout(deadline); if (ticket === activityTicket) { activityRequest = null; $('voLoadActivity').disabled = false; } }
     });
-    const captions = { style: 'Gaya avatar', hair: 'Rambut / penutup kepala', outfit: 'Pakaian', color: 'Warna pakaian', skin: 'Warna kulit', accessory: 'Aksesori', game: 'Permainan favorit' };
+    const captions = { costume: 'Kostum anime / karakter', style: 'Gaya avatar', hair: 'Rambut / penutup kepala', outfit: 'Pakaian', color: 'Warna pakaian', skin: 'Warna kulit', accessory: 'Aksesori', game: 'Permainan favorit' };
     const choices = { feminine: 'Feminin', masculine: 'Maskulin', short: 'Pendek', bob: 'Bob', long: 'Panjang', ponytail: 'Kuncir', hijab: 'Hijab', blazer: 'Blazer', casual: 'Kasual', sport: 'Olahraga', dress: 'Gaun', emerald: 'Emerald', navy: 'Navy', rose: 'Rose', cream: 'Champagne', lavender: 'Lavender', terracotta: 'Terracotta', light: 'Cerah', warm: 'Hangat', tan: 'Sawo matang', deep: 'Gelap', none: 'Tanpa aksesori', glasses: 'Kacamata', headphones: 'Headphone' };
     const avatarFields = new Map(); let profile = config.myProfile || { avatar: safeAvatar(), share_activity: true, version: 0 };
     const avatarDraft = () => Object.fromEntries([...avatarFields].map(([key, select]) => [key, select.value]));
     for (const [key, options] of Object.entries(config.avatarOptions || {})) {
         if (!Object.hasOwn(captions, key) || !Array.isArray(options)) continue;
         const label = document.createElement('label'), caption = document.createElement('span'), select = document.createElement('select'); caption.textContent = captions[key];
-        select.name = key; options.forEach(value => { const option = document.createElement('option'); option.value = value; option.textContent = choices[value] || games.find(g => g.id === value)?.name || value; select.append(option); });
+        select.name = key; options.forEach(value => { const option = document.createElement('option'); option.value = value; option.textContent = key==='costume'?(value==='none'?'Pakaian pribadi':((config.costumes||[]).find(c=>c.id===value)?.anime+' · '+(config.costumes||[]).find(c=>c.id===value)?.name)):choices[value] || games.find(g => g.id === value)?.name || value; select.append(option); });
         select.addEventListener('change', () => portrait($('voAvatarPreview'), avatarDraft())); label.append(caption, select); $('voAvatarFields').append(label); avatarFields.set(key, select);
     }
     function openEditor() {
@@ -228,18 +232,20 @@ if (root && !root.dataset.initialized) {
             const saved = await response.json(); if (controller.signal.aborted) return;
             profile = { avatar: safeAvatar(saved.avatar), share_activity: saved.share_activity === true, version: saved.version };
             people = people.map(p => p.is_me ? { ...p, avatar: profile.avatar, share_activity: profile.share_activity } : p);
+            if(config.privateSelf){config.privateSelf.avatar=profile.avatar;scene?.setPrivatePilotProfile?.(profile.avatar);}
             scene?.setPeople(people); renderPeople(); if (selected !== null) select(selected); loop.refresh(true); text('voAvatarStatus', 'Avatar tersimpan. Rekan tim akan melihat perubahan pada pembaruan berikutnya.');
         } catch (error) { text('voAvatarStatus', controller.signal.aborted ? 'Waktu simpan habis. Muat ulang untuk memeriksa hasilnya.' : error.message); }
         finally { clearTimeout(deadline); avatarRequest = null; $('voSaveAvatar').disabled = false; }
     });
     document.addEventListener('visibilitychange', lifecycle);
-    window.addEventListener('pagehide', () => { leftPage = true; loop.stop(); live?.stop(); club?.stop(); stopActivity(); avatarRequest?.abort(); scene?.setVisible(false); });
+    window.addEventListener('pagehide', () => { leftPage = true; loop.stop(); live?.stop(); club?.stop();pilot?.stop(); stopActivity(); avatarRequest?.abort(); scene?.setVisible(false); });
     window.addEventListener('pageshow', event => { if (event.persisted) { leftPage = false; lifecycle(); } });
     if ('IntersectionObserver' in window) { const observer = new IntersectionObserver(entries => { const next = entries[0].isIntersecting; if (next !== inView) { inView = next; lifecycle(); } }, { rootMargin: '120px' }); observer.observe($('voWorkspace')); }
     root.querySelectorAll('[data-vo-room]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.voRoom === requestedRoom)));
     live = mountOfficeLive({ document, config, visible, getScene: () => scene, getPeople: () => people,
         onWorld: value => { worldConfig = value; scene?.configureWorld?.(value); },
         onRoom: value => { scene?.setMeeting?.(value); const person = people.find(p => p.id === selected); if (person) chatActions(person); if (value.room?.status === 'accepted' && mode !== '3d' && !sceneUnavailable) { switchView('3d'); text('voLiveStatus', 'Ruang 3D dibuka agar kedua avatar dapat bertatap muka.'); } } });
-    club = mountOfficeClub({ document, config, visible, getPeople: () => people, getScene: () => scene, focusArea });
+    pilot=mountOfficePilot({document,window,config,visible,getScene:()=>scene,onStatus:message=>text('voPilotStatus',message),onPose:value=>{if(value.target)text('voPilotTarget',`${games.find(g=>g.id===value.target)?.name||value.target} · ${value.distance} m · ikuti penanda emas`);}});
+    club = mountOfficeClub({ document, config, visible, getPeople: () => people, getScene: () => scene, focusArea, requireVenue:id=>pilot.interact(id) });
     apply(config.initial); motionButton(); switchView(mode, false); if (feedUrl) loop.start(); live.start(); club.start();
 }
