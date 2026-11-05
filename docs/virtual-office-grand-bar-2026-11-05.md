@@ -36,4 +36,22 @@ Pesanan tersimpan tetap dinikmati melalui tombol Nikmati, termasuk dibawa ke pan
 - Build produksi sukses. Bundle utama aplikasi tetap sama; kantor sekitar 51,6 KB minified / 18,5 KB gzip, scene lazy termasuk Three.js sekitar 615,2 KB / 161,5 KB. Peringatan chunk Vite berasal dari scene dinamis tersebut.
 - Pemeriksaan visual/GPU browser masih terhambat konektor `Cannot read properties of undefined (reading 'timeoutMs')`, termasuk saat menghubungkan tab website yang sudah terbuka. Tidak mengklaim screenshot atau pengukuran FPS perangkat.
 
-Pemasangan menggunakan migrasi aditif `virtual_office_tabs`, backup privat sebelum perubahan, dan aset ber-hash sebelum manifest. Hasil produksi dicatat setelah pemasangan.
+## Pemasangan dan verifikasi produksi
+
+Commit aplikasi `7d5f3a744c55d580300f35af027efa176c984645` berhasil dipasang di `https://sucofindoumumpku.com/virtual-office`. Migrasi aditif `virtual_office_tabs` berhasil pada PHP 8.3.36; autoload dan cache config/event/route/view dibangun ulang. Kelima aset kantor terverifikasi SHA-256; `/up` HTTP 200 dan endpoint privat tetap 401 tanpa login. Aset versi lama dipertahankan di webroot untuk tab yang masih terbuka.
+
+Pemeriksaan server memastikan seluruh route kantor yang dibatasi menggunakan limiter bernama, tanpa throttle numerik lama. Key dari 18 endpoint tanpa parameter terverifikasi unik; route aktivitas dengan parameter juga diperiksa middleware-nya. Budget pukulan 900/menit dan checkout 180/menit sudah terpasang pada konfigurasi produksi.
+
+| Sampel proses PHP | Waktu | SQL |
+|---|---:|---:|
+| Presence dingin, 22 anggota | 12,69 ms | 2 |
+| Presence hangat | 2,74 ms | 0 |
+| Render halaman Umum | 46,53 ms | 3 |
+| Render halaman Operasional | 8,35 ms | 1 |
+| Poll pesan | 39,98 ms | 1 |
+| Poll game kosong | 1,67 ms | 0 |
+| Baca dompet/struk melalui layanan tanpa pemberian bonus | 6,63 ms | 4 |
+
+Render memastikan ID panel bar/checkout/lampu/keranjang ponsel unik dan modul 3D/game/musik tetap lazy. Sampel ini bukan latency jaringan atau FPS GPU. Tidak ada pesan, undangan, pesanan, pemotongan saldo, bonus buatan, atau heartbeat pengguna yang dibuat untuk pemeriksaan produksi.
+
+Backup privat sebelum perubahan: `/home4/suc45578/deployment-artifacts/office-grand-bar-20261105-100021`, meliputi kode/aset/cache dan database 4.594.852 byte. Mode direktori 700, database 600; kredensial dump sementara telah dihapus.
