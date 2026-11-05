@@ -21,13 +21,13 @@
     "isDynamicEntry": true
   },
   "resources/js/virtual-office-play.js": {
-    "file": "assets/virtual-office-play-DDoG4Zr2.js",
+    "file": "assets/virtual-office-play-DXCkaxFr.js",
     "name": "virtual-office-play",
     "src": "resources/js/virtual-office-play.js",
     "isDynamicEntry": true
   },
   "resources/js/virtual-office-scene.js": {
-    "file": "assets/virtual-office-scene-CuBfyWly.js",
+    "file": "assets/virtual-office-scene-CZoFd1HC.js",
     "name": "virtual-office-scene",
     "src": "resources/js/virtual-office-scene.js",
     "isDynamicEntry": true,
@@ -36,7 +36,7 @@
     ]
   },
   "resources/js/virtual-office.js": {
-    "file": "assets/virtual-office-BxrHd2C_.js",
+    "file": "assets/virtual-office-C_mMFn7N.js",
     "name": "virtual-office",
     "src": "resources/js/virtual-office.js",
     "isEntry": true,

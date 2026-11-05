@@ -132,7 +132,7 @@ if (root && !root.dataset.initialized) {
     function switchView(next, persist = true) {
         mode = next; sceneTicket++; sceneLoading = false;
         $('voView3d').setAttribute('aria-pressed', String(mode === '3d')); $('voViewList').setAttribute('aria-pressed', String(mode === 'list'));
-        $('voScene').hidden = mode !== '3d'; $('voLabels').hidden = mode !== '3d'; $('voLightView').hidden = mode !== 'list'; $('voLoading').hidden = true;
+        $('voScene').hidden = mode !== '3d';if($('voPilotControls'))$('voPilotControls').hidden=mode!=='3d';if($('voTouchControls'))$('voTouchControls').hidden=mode!=='3d'; $('voLabels').hidden = mode !== '3d'; $('voLightView').hidden = mode !== 'list'; $('voLoading').hidden = true;
         if (persist) try { localStorage.setItem('simonpr:office:view', mode); } catch {}
         if (mode === 'list') { pilot?.stop();scene?.dispose(); scene = null; } else ensureScene();
         $('voSceneHint').textContent = mode === '3d' ? 'Putar ruang dengan geser · Gulir untuk mendekat' : 'Pilih anggota untuk melihat detail dan membuka chat';
@@ -178,7 +178,7 @@ if (root && !root.dataset.initialized) {
     document.addEventListener('keydown', event => { if (event.key === 'Escape') { closeEditor(); $('voWorkspace').classList.remove('vo-expanded'); fullscreenState(); } });
     for (const game of games) {
         const button = document.createElement('button'); button.type = 'button'; button.textContent = `${game.icon} ${game.name}`; button.setAttribute('aria-pressed', 'false');
-        button.addEventListener('click', () => { focusArea(game.id); club?.openGame(game.id); $('voGames').querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b === button))); text('voSceneHint', `${game.name} · pilih Mulai untuk bermain`); }); $('voGames').append(button);
+        button.addEventListener('click', () => { if(mode!=='3d')switchView('3d');club?.openGame(game.id); $('voGames').querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b === button))); text('voSceneHint', `${game.name} · pilih Mulai untuk bermain`); }); $('voGames').append(button);
     }
     $('voActivityDate').addEventListener('change', () => { stopActivity(); $('voActivityList').replaceChildren(); text('voActivityStatus', 'Tekan Lihat aktivitas menu untuk tanggal ini.'); });
     $('voLoadActivity').addEventListener('click', async () => {

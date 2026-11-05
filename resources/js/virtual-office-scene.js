@@ -13,6 +13,7 @@ import { costumeGeometry } from './virtual-office-costume-geometry.js';
 import { officeCameraPosition } from './virtual-office-camera.js';
 import { homeLocation,insideHome } from './virtual-office-home-layout.js';
 import { createOfficeHospitality } from './virtual-office-hospitality.js';
+import { animateOfficeAvatar,restingHeading } from './virtual-office-avatar-animation.js';
 
 // Original procedural scene: no models, textures, or code from the reference site.
 // Static furniture is batched by material; animation is capped at 30fps / 24 avatars.
@@ -115,7 +116,7 @@ export function createOfficeScene({ host, labels, onSelect, onFailure, onVenue =
     }
     function gameBall(game, color, radius = .16) {
         const geometry = new THREE.SphereGeometry(radius, 10, 8); ownedGeometries.add(geometry);
-        const mesh = new THREE.Mesh(geometry, material(color)); scene.add(mesh); gameBalls.push({ mesh, game });
+        const mesh = new THREE.Mesh(geometry, material(color)); mesh.userData.officeBall=game.id;scene.add(mesh); gameBalls.push({ mesh, game });
     }
     for (const game of games) {
         const { x, z, id } = game;
@@ -370,7 +371,7 @@ export function createOfficeScene({ host, labels, onSelect, onFailure, onVenue =
     const targetFocus = new THREE.Vector3(), cameraGoal = new THREE.Vector3(); let easingCamera = false;
     function setPeople(people) {
         if(controlledId&&privatePilotSelf&&!people.some(p=>p.id===controlledId))people=[...people,{...privatePilotSelf,home_slot:myHome?.slot??privatePilotSelf.home_slot}];
-        navigation.configureHomes(true,homeDoorOpen?myHome?.slot:null,homePlots??Math.max(people.length,...people.map(p=>(p.home_slot??-1)+1)));
+        navigation.configureHomes(true,homeDoorOpen?myHome?.slot:null,Math.max(homePlots??0,people.length,...people.map(p=>(p.home_slot??-1)+1)));
         roster = people; residences.sync(people); environment.extent(residences.bounds().back);
         const presented = people.map(person => {
             if (!localMeeting?.connected || !localMeeting.room || ![localMeeting.room.from, localMeeting.room.to].includes(person.id)) {
@@ -480,7 +481,7 @@ export function createOfficeScene({ host, labels, onSelect, onFailure, onVenue =
             if(f.person.id===controlledId&&pilotPhysics){
                 const yaw=Math.atan2(camera.position.x-controls.target.x,camera.position.z-controls.target.z);
                 const others=[...figures.values()].filter(other=>other!==f&&other.pose!=='sleeping').map(other=>other.group.position);
-                const state=pilotPhysics.step(frameStep,pilotGate()?{}:pilotInput,yaw,others);if(['walk','run','jump'].includes(state.action))pilotActivity=null;if(pilotActivity){state.action=pilotActivity.action;state.venue=pilotActivity.venue;}
+                const state=pilotPhysics.step(frameStep,pilotGate()?{}:pilotInput,yaw,others);if(['walk','run','jump'].includes(state.action))pilotActivity=null;if(pilotActivity)Object.assign(state,pilotActivity);
                 f.group.position.set(state.x,state.y,state.z);f.group.rotation.y=state.yaw;f.manual=true;f.pose='manual';f.home.copy(f.group.position);f.target.copy(f.group.position);
                 if(guide){const place=guide==='home'&&myHome?{x:myHome.x,z:myHome.z+5}:officeLayout.venues[guide];if(place){state.target=guide;state.distance=Math.round(Math.hypot(state.x-place.x,state.z-place.z));}}state.atHome=insideHome(state,myHome);state.nearDoor=Boolean(myHome&&Math.hypot(state.x-myHome.x,state.z-myHome.z-3.9)<=2.8);state.doorOpen=homeDoorOpen;pilotReporter(state);
                 if(myHome){const show=insideHome(state,myHome);if(show!==Boolean(f.insideOwnHome)){f.insideOwnHome=show;residences.select(show?homeOwner:null);}}
@@ -489,19 +490,14 @@ export function createOfficeScene({ host, labels, onSelect, onFailure, onVenue =
             if(f.manual){
                 const state=f.person.id===controlledId&&pilotPhysics?{...pilotPhysics.state(),...(pilotActivity||{})}:peerPilots.get(f.person.id)||f.person.pilot;
                 if(state&&f.person.id!==controlledId){const target=new THREE.Vector3(state.x,state.y,state.z);const next=f.group.position.clone().lerp(target,.35);if(navigation.segment(f.group.position,next))f.group.position.copy(next);else f.group.position.copy(target);f.group.rotation.y=state.yaw;}
-                const moving=state&&['walk','run'].includes(state.action),wave=moving?Math.sin(now/1000*(state.action==='run'?13:8))*.55:0;
-                f.body.rotation.set(0,0,0);f.body.position.y=0;f.legs.forEach((leg,i)=>leg.rotation.x=wave*(i?-1:1));f.arms.forEach((arm,i)=>arm.rotation.x=-wave*(i?-1:1));f.head.rotation.set(0,0,0);
+                const animation=animateOfficeAvatar(f,state,{time:now/1000+f.phase,dt:frameStep,reduced:paused});
                 const played=state?.action==='play'?games.find(g=>g.id===state.venue):null;
                 f.racket.visible=Boolean(played&&['tennis','badminton','pingpong','golf'].includes(played.id));f.tool.visible=Boolean(played&&['billiards','archery','darts'].includes(played.id));if(f.tool.visible)f.tool.geometry=toolGeometry(played.id);
-                f.cup.visible=state?.action==='drink';f.plate.visible=state?.action==='eat';if(played)f.arms[1].rotation.x=-.8+(paused?0:Math.sin(t*2.3)*.45);
-                if(state?.action==='drink')f.arms[1].rotation.x=-1.2;if(state?.action==='eat')f.arms[0].rotation.x=-1;
-                if(state?.action==='dance'){f.body.rotation.z=paused?0:Math.sin(t*2.4)*.12;f.arms[1].rotation.x=-.8;f.arms[0].rotation.x=-.6;}
+                f.cup.visible=state?.action==='drink';f.plate.visible=state?.action==='eat';
                 if(state?.action==='rest'){
-                    const lying=['recline','nap'].includes(state.pose);f.body.rotation.x=lying?-Math.PI/2:0;f.body.position.y=lying?.4:-.55;
-                    f.legs.forEach(leg=>leg.rotation.x=lying?0:-1.2);f.arms.forEach(arm=>arm.rotation.x=state.pose==='meditate'?-.4:lying?-.1:-.65);
-                    f.eyes.forEach(eye=>eye.scale.y=state.pose==='nap'?.15:1);f.icon.textContent=state.pose==='nap'?'ONLINE · TIDUR SANTAI':state.pose==='recline'?'ONLINE · REBAHAN':state.pose==='meditate'?'ONLINE · MEDITASI':'ONLINE · BERSANTAI';
-                }else f.eyes.forEach(eye=>eye.scale.y=1);
-                if(state?.action==='rest'&&['recline','nap'].includes(state.pose)){restMatrix.compose(new THREE.Vector3(f.group.position.x-Math.sin(f.group.rotation.y)*.7,f.group.position.y+.035,f.group.position.z-Math.cos(f.group.rotation.y)*.7),f.group.quaternion,new THREE.Vector3(1,1,1));restMats.setMatrixAt(restCount++,restMatrix);}
+                    f.icon.textContent=state.pose==='nap'?'ONLINE · TIDUR SANTAI':state.pose==='recline'?'ONLINE · REBAHAN':state.pose==='meditate'?'ONLINE · MEDITASI':'ONLINE · BERSANTAI';
+                }
+                if(animation.lying){restMatrix.compose(new THREE.Vector3(f.group.position.x-Math.sin(f.group.rotation.y)*.7,f.group.position.y+.035,f.group.position.z-Math.cos(f.group.rotation.y)*.7),f.group.quaternion,new THREE.Vector3(1,1,1));restMats.setMatrixAt(restCount++,restMatrix);}
                 continue;
             }
             const playing = f.pose === 'playing', walking = !paused && (playing || f.waypoints?.length > 0);
@@ -537,7 +533,7 @@ export function createOfficeScene({ host, labels, onSelect, onFailure, onVenue =
         hospitality.update(now,paused);
         for (const { mesh, game } of gameBalls) {
             const t = paused ? 0 : now / 1000;
-            const active = !isOfficeNight(getDate()) && [...figures.values()].some(f => f.pose === 'playing' && f.game.id === game.id);
+            const active = [...figures.values()].some(f => f.manual?(f.person.id===controlledId?pilotActivity:peerPilots.get(f.person.id)||f.person.pilot)?.action==='play'&&(f.person.id===controlledId?pilotActivity:peerPilots.get(f.person.id)||f.person.pilot)?.venue===game.id:!isOfficeNight(getDate())&&f.pose==='playing'&&f.game.id===game.id);
             const wave = active ? Math.sin(t * 1.8) : 0;
             mesh.position.set(game.x + (game.id === 'golf' ? wave * 4 : wave * 1.5), game.id === 'pingpong' ? 1.45 + Math.abs(wave) * .65 : game.id === 'basketball' ? .15 + Math.abs(wave) * 2.2 : game.id === 'bowling' || game.id === 'golf' ? .06 : .4 + Math.abs(wave) * 2, game.z + wave * (game.kind === 'court' ? 4 : 1.3));
         }
@@ -604,7 +600,7 @@ export function createOfficeScene({ host, labels, onSelect, onFailure, onVenue =
     }
     let dragStart = null;
     const hotspotMaterial=new THREE.MeshBasicMaterial({transparent:true,opacity:0,depthWrite:false});materials.set('game-hotspots',hotspotMaterial);
-    for(const game of games){const geometry=new THREE.BoxGeometry(6,1.4,.4);ownedGeometries.add(geometry);const mesh=new THREE.Mesh(geometry,hotspotMaterial);mesh.position.set(game.x,.7,game.z-(game.kind==='court'?6:4.2));mesh.userData.officeGame=game.id;scene.add(mesh);gameTargets.push(mesh);}
+    for(const game of games){const sign=new THREE.BoxGeometry(6,1.4,.4),floor=new THREE.BoxGeometry(game.kind==='court'?16:9,.18,game.kind==='court'?12:7);sign.translate(0,.7,-(game.kind==='court'?6:4.2));floor.translate(0,-.14,0);const a=sign.toNonIndexed(),b=floor.toNonIndexed(),geometry=mergeGeometries([a,b],false);sign.dispose();floor.dispose();a.dispose();b.dispose();ownedGeometries.add(geometry);const mesh=new THREE.Mesh(geometry,hotspotMaterial);mesh.position.set(game.x,0,game.z);mesh.userData.officeGame=game.id;scene.add(mesh);gameTargets.push(mesh);}
     const raycaster = new THREE.Raycaster(), pointer = new THREE.Vector2();
     const down = e => { dragStart = [e.clientX, e.clientY]; };
     const up = e => {
@@ -639,8 +635,9 @@ export function createOfficeScene({ host, labels, onSelect, onFailure, onVenue =
         canUseDoor(){const p=pilotPhysics?.state();return Boolean(myHome&&p&&(insideHome(p,myHome)||Math.hypot(p.x-myHome.x,p.z-myHome.z-3.9)<=2.8));},
         homeDoorOpen:()=>homeDoorOpen,
         setHomeDoor(open){if(homeDoorOpen===Boolean(open))return;homeDoorOpen=Boolean(open);navigation.configureHomes(true,homeDoorOpen?myHome?.slot:null);if(homeOwner)residences.setDoor(homeOwner,homeDoorOpen);requestDraw();},
-        setRestPose(pose){if(!pilotPhysics)return false;if(!pose){pilotActivity=null;requestDraw();return true;}const p=pilotPhysics.state();const venue=insideHome(p,myHome)?'home':['beach','garden','terrace','lounge','bar'].find(id=>nearVenue(p,id));if(!venue)return false;
-            if(['recline','nap'].includes(pose)&&![.7,1.3,1.8].every(d=>[-.25,0,.25].every(side=>navigation.free(p.x-Math.sin(p.yaw)*d+Math.cos(p.yaw)*side,p.z-Math.cos(p.yaw)*d-Math.sin(p.yaw)*side))))return false;
+        setRestPose(pose){if(!pilotPhysics)return false;if(!pose){pilotActivity=null;requestDraw();return true;}const p=pilotPhysics.state();if(!p.grounded||!navigation.free(p.x,p.z))return false;const venue=insideHome(p,myHome)?'home':['beach','garden','terrace','lounge','bar'].find(id=>nearVenue(p,id))||'campus';
+            if(['recline','nap'].includes(pose)){const heading=restingHeading(navigation,p,[...figures.values()].filter(f=>f.person.id!==controlledId&&f.pose!=='sleeping').map(f=>f.group.position));if(heading===null)return false;pilotPhysics.face({x:p.x+Math.sin(heading),z:p.z+Math.cos(heading)});}
+            pilotInput={};
             pilotActivity={action:'rest',pose,venue};requestDraw();return true;},
         setPilot(id,state,privateSelf=null){controlledId=id;privatePilotSelf=privateSelf;pilotPhysics=createPilotPhysics(navigation,state);setPeople(roster);setCameraMode('follow',id);requestDraw();},
         releasePilot(){const privateId=privatePilotSelf?.id;controlledId=null;privatePilotSelf=null;pilotPhysics=null;pilotInput={};pilotActivity=null;guide=null;guideMarker.visible=false;setPeople(roster.filter(p=>p.id!==privateId));},
@@ -649,7 +646,7 @@ export function createOfficeScene({ host, labels, onSelect, onFailure, onVenue =
         setPeerPilots(values){peerPilots.clear();for(const state of values)if(state.id!==controlledId)peerPilots.set(state.id,state);setPeople(roster.map(p=>({...p,pilot:peerPilots.get(p.id)||null,in_office:peerPilots.has(p.id)||p.id===controlledId})));},
         canInteract(id){return nearVenue(pilotPhysics?.state(),id);},
         guideTo(id){const point=id==='home'&&myHome?{x:myHome.x,z:myHome.z+5}:officeLayout.venues[id];guide=point?id:null;guideMarker.visible=Boolean(point);if(point){guideMarker.position.set(point.x,.025,point.z);const me=pilotPhysics?.state();pilotReporter({...me,target:id,distance:me?Math.round(Math.hypot(point.x-me.x,point.z-me.z)):null});requestDraw();}return point;},
-        interactNearest(){const point=pilotPhysics?.state();if(!point)return;if(myHome&&(insideHome(point,myHome)||Math.hypot(point.x-myHome.x,point.z-myHome.z-3.9)<=2.8)){onDoor();return;}const id=Object.keys(officeLayout.venues).filter(id=>nearVenue(point,id)).sort((a,b)=>Math.hypot(point.x-officeLayout.venues[a].x,point.z-officeLayout.venues[a].z)-Math.hypot(point.x-officeLayout.venues[b].x,point.z-officeLayout.venues[b].z))[0];if(games.some(g=>g.id===id))onGame(id);else if(['bar','disco','beach','garden','terrace','lounge'].includes(id))onVenue(id);},
+        interactNearest(){const point=pilotPhysics?.state();if(!point)return false;if(myHome&&(insideHome(point,myHome)||Math.hypot(point.x-myHome.x,point.z-myHome.z-3.9)<=2.8)){onDoor();return true;}const id=Object.keys(officeLayout.venues).filter(id=>nearVenue(point,id)).sort((a,b)=>Math.hypot(point.x-officeLayout.venues[a].x,point.z-officeLayout.venues[a].z)-Math.hypot(point.x-officeLayout.venues[b].x,point.z-officeLayout.venues[b].z))[0];if(games.some(g=>g.id===id)){onGame(id);return true;}if(['bar','disco','beach','garden','terrace','lounge'].includes(id)){onVenue(id);return true;}return false;},
         setRecreation(id,value){if(Number(id)===controlledId&&value)pilotActivity={action:({drink:'drink',food:'eat',dance:'dance',relax:'rest'})[value.kind]||'idle',venue:value.destination,pose:value.kind==='relax'?'sit':null};recreation.set(Number(id),value?{...value,until:value.until||Date.now()/1000+900}:null);setPeople(roster);},
         setVenueEffects(value){rivageBar.setEnabled(value);requestDraw();},
         setGame(value){if(JSON.stringify(localGame)===JSON.stringify(value))return;localGame=value;if(controlledId&&value?.status==='playing'&&[value.from,value.to].includes(controlledId))pilotActivity={action:'play',venue:value.kind};else if(pilotActivity?.action==='play')pilotActivity=null;setPeople(roster);},

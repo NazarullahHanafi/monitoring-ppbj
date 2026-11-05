@@ -6,8 +6,8 @@ function fixture(){
     const doc={hidden:false,activeElement:null,getElementById:node,querySelector:s=>s.startsWith('meta')?{content:'csrf'}:modal?{}:null,querySelectorAll:()=>[],addEventListener(k,f){events[k]=f;}};
     const win={addEventListener(k,f){windowEvents[k]=f;},navigator:{sendBeacon:(...v)=>beacons.push(v)}};
     const scene={reconcilePilot:v=>corrections.push(v),setPilotInput:v=>inputs.push(v),setPilotReporter(){},setPilotGate:v=>{gate=v;},setPilot(){sets++;},releasePilot(){releases++;},pilotState:()=>({x:0,y:-.12,z:21,yaw:0,action:'idle'}),setPeerPilots(){},canInteract:()=>false,guideTo(){}};
-    const context={crypto:require('node:crypto').webcrypto,Blob,AbortController,Date,fetch:(url,options)=>new Promise(resolve=>requests.push({url,options,resolve})),setTimeout:(fn,delay)=>{const id=++timerId;timers.set(id,{fn,delay});return id;},clearTimeout:id=>timers.delete(id)};
-    const code=fs.readFileSync(path.resolve(__dirname,'../../resources/js/virtual-office-pilot.js'),'utf8').replace('export function mountOfficePilot','function mountOfficePilot');vm.createContext(context);vm.runInContext(code,context);
+    const context={motion:require('../../resources/data/virtual-office-motion.json'),crypto:require('node:crypto').webcrypto,Blob,AbortController,Date,fetch:(url,options)=>new Promise(resolve=>requests.push({url,options,resolve})),setTimeout:(fn,delay)=>{const id=++timerId;timers.set(id,{fn,delay});return id;},clearTimeout:id=>timers.delete(id)};
+    const code=fs.readFileSync(path.resolve(__dirname,'../../resources/js/virtual-office-pilot.js'),'utf8').replace(/^import .*?;\s*/gm,'').replace('export function mountOfficePilot','function mountOfficePilot');vm.createContext(context);vm.runInContext(code,context);
     const pilot=context.mountOfficePilot({document:doc,window:win,config:{canPilot:true,myId:1},visible:()=>show,getScene:()=>scene});
     return {pilot,doc,requests,inputs,beacons,timers,corrections,get:node,get sets(){return sets;},get releases(){return releases;},get gate(){return gate;},modal(v){modal=v;},key(code,type='keydown'){let prevented=false;events[type]({code,preventDefault(){prevented=true;}});return prevented;},blur:()=>windowEvents.blur(),accept(i=0){requests[i].resolve({ok:true,json:async()=>({self:{x:0,y:-.12,z:21,yaw:0},peers:[]})});},pulse(){const [id,t]=[...timers].find(([,v])=>v.delay===1200);timers.delete(id);t.fn();}};
 }
@@ -26,7 +26,7 @@ test('sync is single-flight and a late response cannot resurrect stopped or rest
 test('the first walking frame accelerates idle sync before a legitimate sprint exhausts its distance credit',async()=>{
     const f=fixture();f.pilot.start();f.accept();await tick();assert.equal([...f.timers.values()].filter(t=>t.delay===1200).length,1);
     f.pilot.state({x:0,y:-.12,z:20.7,yaw:0,action:'run',stamina:99});
-    assert.equal([...f.timers.values()].filter(t=>t.delay===1200).length,0);assert.equal([...f.timers.values()].filter(t=>t.delay===300).length,1);f.pilot.stop();
+    assert.equal([...f.timers.values()].filter(t=>t.delay===1200).length,0);assert.equal([...f.timers.values()].filter(t=>t.delay===150).length,1);f.pilot.stop();
 });
 test('a rejected movement reconciles the same avatar without releasing it to a computer or resetting the camera',async()=>{
     const f=fixture();f.pilot.start();f.accept();await tick();f.pulse();const self={x:2,y:-.12,z:21,yaw:0,action:'idle'};
@@ -35,6 +35,6 @@ test('a rejected movement reconciles the same avatar without releasing it to a c
     f.get('voPilotTakeControl').events.click();f.pulse();assert.equal(JSON.parse(f.requests[2].options.body).mode,'move');f.pilot.stop();
 });
 test('slow requests freeze prediction before the server distance allowance is exhausted',async()=>{
-    const f=fixture();f.pilot.start();f.accept();await tick();f.pulse();for(let i=1;i<=9;i++)f.pilot.state({x:i*.5,y:-.12,z:21,yaw:0,action:'run'});
+    const f=fixture();f.pilot.start();f.accept();await tick();f.pulse();for(let i=1;i<=23;i++)f.pilot.state({x:i*.5,y:-.12,z:21,yaw:0,action:'run'});
     assert.equal(Object.keys(f.inputs.at(-1)).length,0);assert.equal(f.releases,0);assert.equal(f.requests.length,2);f.pilot.stop();
 });

@@ -16,7 +16,7 @@ export const playInstructions = {
     chess: 'Catur latihan · Anda putih. Klik bidak lalu kotak tujuan yang ditandai, atau pilih langkah dengan tombol. Rokade, en passant, skak dan skakmat berlaku. Promosi otomatis menjadi menteri.',
 };
 const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
-export function createOfficePlay({ canvas, onScore = () => {}, onStatus = () => {}, onCards = () => {}, controls = () => ({ aim: .5, power: .6, racket: .5 }), onPointer = () => {}, random = Math.random, raf = requestAnimationFrame, caf = cancelAnimationFrame }) {
+export function createOfficePlay({ canvas, onScore = () => {}, onStatus = () => {}, onCards = () => {}, controls = () => ({ aim: .5, power: .6, racket: .5 }), onPointer = () => {}, onAction = null, random = Math.random, raf = requestAnimationFrame, caf = cancelAnimationFrame }) {
     const ctx = canvas.getContext('2d'); let kind = 'archery', frame = null, active = false, last = 0, state = {}, pointer = null, network = null, chosen = -1, shot = null, flight = null;
     function circle(x, y, r, fill, stroke) { ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); if (fill) { ctx.fillStyle = fill; ctx.fill(); } if (stroke) { ctx.strokeStyle = stroke; ctx.stroke(); } }
     function line(x,y,xx,yy,color,width=2) { ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(xx,yy); ctx.strokeStyle=color; ctx.lineWidth=width; ctx.stroke(); }
@@ -140,7 +140,7 @@ export function createOfficePlay({ canvas, onScore = () => {}, onStatus = () => 
     }
     function loop(now){frame=null;if(!active)return;if(last&&now-last<1000/30){frame=raf(loop);return;}const dt=last?Math.min(.04,(now-last)/1000):0;last=now;step(dt);draw();frame=raf(loop);}
     const move=e=>{const rect=canvas.getBoundingClientRect();pointer={x:clamp((e.clientX-rect.left)/rect.width*800,0,800),y:clamp((e.clientY-rect.top)/rect.height*480,0,480)};onPointer(pointer.x/800);draw();};
-    const click=e=>{move(e);if(kind==='chess'){const c=Math.floor((pointer.x-160)/60),r=Math.floor(pointer.y/60);if(c<0||c>7||r<0||r>7)return;const i=r*8+c;if(chosen>=0&&state.chess.moves(chosen).includes(i))chessMove(chosen,i);else chosen=state.chess.board[i]===state.chess.board[i]?.toUpperCase()?i:-1;draw();}};
+    const click=e=>{if(!active)return;move(e);if(kind==='chess'){const c=Math.floor((pointer.x-160)/60),r=Math.floor(pointer.y/60);if(c<0||c>7||r<0||r>7)return;const i=r*8+c;if(chosen>=0&&state.chess.moves(chosen).includes(i))chessMove(chosen,i);else chosen=state.chess.board[i]===state.chess.board[i]?.toUpperCase()?i:-1;draw();}else if(active&&kind!=='uno'){if(onAction)onAction();else action();}};
     canvas.addEventListener('pointermove',move);canvas.addEventListener('click',click);
     reset();
     return {reset,action,draw,kind:()=>kind,state:()=>state,

@@ -33,13 +33,13 @@ async function fixture({ canChat = true, meetingReady = false } = {}) {
     const document = { hidden: false, activeElement: null, fullscreenElement: null, getElementById: get,
         createElement: () => new Element(), createTextNode: text => Object.assign(new Element(), { textContent: text }),
         querySelector: () => ({ content: 'test-csrf-token' }), addEventListener: (name, fn) => (documentEvents[name] ??= []).push(fn) };
-    const sceneState = { disposed: 0, visible: [], people: [], rooms: [], homes: [] };
+    const sceneState = { disposed: 0, visible: [], people: [], rooms: [], homes: [], games: [] };
     let resolveScene;
     const scenePromise = new Promise(resolve => { resolveScene = resolve; });
     const window = { location: { origin: 'https://simon.example.test' }, matchMedia: () => ({ matches: false, addEventListener() {} }),
         addEventListener: (name, fn) => (events[name] ??= []).push(fn), SimonOfficeMention: person => { calls.push(person); return true; },
         __loadOfficeScene: () => scenePromise };
-    const sandbox = { ...state, mountOfficePilot:()=>({start(){},stop(){},interact:()=>true}), mountOfficeClub: () => ({start(){},stop(){},select(){},syncScene(){},openGame(){},chat(id){if(canChat)calls.push(id);}}), mountOfficeLive: () => ({ start() {}, stop() {}, state: () => ({ ready: meetingReady, room: meetingReady ? { from: 2, to: 1 } : null }), invite() {} }), window, document, localStorage: { getItem: () => 'list', setItem() {} }, URL, Date, AbortController,
+    const sandbox = { ...state, mountOfficePilot:()=>({start(){},stop(){},interact:()=>true}), mountOfficeClub: () => ({start(){},stop(){},select(){},syncScene(){},openGame(id){sceneState.games.push(id);},chat(id){if(canChat)calls.push(id);}}), mountOfficeLive: () => ({ start() {}, stop() {}, state: () => ({ ready: meetingReady, room: meetingReady ? { from: 2, to: 1 } : null }), invite() {} }), window, document, localStorage: { getItem: () => 'list', setItem() {} }, URL, Date, AbortController,
         setTimeout: (fn, delay) => { const id = ++timerId; timers.set(id, { fn, delay }); return id; }, clearTimeout: id => timers.delete(id),
         fetch: (url, options) => new Promise(resolve => requests.push({ url, options, resolve })), console };
     let code = fs.readFileSync(path.resolve(__dirname, '../../resources/js/virtual-office.js'), 'utf8');
@@ -80,7 +80,7 @@ test('loaded scene is paused on hiding and disposed when selecting lightweight v
 test('selecting a game from lightweight mode retains the requested focus after lazy scene loading', async () => {
     const f = await fixture(); assert.equal(f.get('voGames').children.length, 13);
     f.get('voGames').children[1].click(); f.resolveScene(); await tick();
-    assert.equal(f.sceneState.rooms.at(-1), 'badminton'); f.hide(true);
+    assert.deepEqual(f.sceneState.games,['badminton']);assert.notEqual(f.sceneState.rooms.at(-1),'badminton','Selecting a distant game must not pull the camera away from manual control.'); f.hide(true);
 });
 
 test('visiting a private home from lightweight mode retains its owner after lazy loading', async () => {

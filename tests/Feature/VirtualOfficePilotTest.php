@@ -105,4 +105,15 @@ class VirtualOfficePilotTest extends TestCase
         $this->actingAs($user);foreach(['sit','recline','nap','meditate']as$i=>$pose)$this->postJson(route('virtual-office.pilot'),array_replace($body,['seq'=>$i+1,'pose'=>$pose]))->assertOk()->assertJsonPath('self.pose',$pose)->assertJsonPath('self.action','rest');
         $this->postJson(route('virtual-office.pilot'),array_replace($body,['seq'=>5,'pose'=>'javascript:alert(1)']))->assertUnprocessable();
     }
+    public function test_running_packets_can_cover_normal_network_latency_without_allowing_large_teleports(): void
+    {
+        $user=$this->person();$body=$this->packet();$self=$this->actingAs($user)->postJson(route('virtual-office.pilot'),$body)->assertOk()->json('self');
+        for($i=1;$i<=5;$i++){$this->travel(800)->milliseconds();$x=$self['x']+$i*7.2;$this->postJson(route('virtual-office.pilot'),array_replace($body,['mode'=>'move','seq'=>$i,'x'=>$x,'z'=>$self['z'],'action'=>'run']))->assertOk();}
+        $this->postJson(route('virtual-office.pilot'),array_replace($body,['mode'=>'move','seq'=>6,'x'=>99,'z'=>$self['z'],'action'=>'run']))->assertUnprocessable()->assertJsonPath('self.seq',5);
+    }
+    public function test_rest_at_the_regular_spawn_is_supported_and_keeps_the_selected_pose(): void
+    {
+        $user=$this->person();$body=$this->packet();$self=$this->actingAs($user)->postJson(route('virtual-office.pilot'),$body)->assertOk()->json('self');
+        foreach(['sit','recline','nap','meditate']as$i=>$pose)$this->postJson(route('virtual-office.pilot'),array_replace($body,['mode'=>'move','seq'=>$i+1,'x'=>$self['x'],'z'=>$self['z'],'action'=>'rest','venue'=>'campus','pose'=>$pose]))->assertOk()->assertJsonPath('self.pose',$pose);
+    }
 }

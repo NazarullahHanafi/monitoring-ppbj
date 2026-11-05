@@ -16,7 +16,7 @@ export function createPilotPhysics(navigation, initial = layout.spawn) {
         const ground=navigation.groundHeight?.(state)??-.12;
         if(!state.grounded){state.vy-=20*dt;state.y+=state.vy*dt;if(state.y<=ground){state.y=ground;state.vy=0;state.grounded=true;}}else state.y=ground;
         let next=navigation.slide(state,{x:state.x+dx*dt,z:state.z+dz*dt});
-        if(people.some(p=>Math.hypot(next.x-p.x,next.z-p.z)<.62))next={x:state.x,z:state.z};
+        if(people.some(p=>Math.hypot(next.x-p.x,next.z-p.z)<.62&&Math.hypot(next.x-p.x,next.z-p.z)<=Math.hypot(state.x-p.x,state.z-p.z)+.0001))next={x:state.x,z:state.z};
         const moved=Math.hypot(next.x-state.x,next.z-state.z)>.0001;state.x=next.x;state.z=next.z;
         if(moved)state.yaw=Math.atan2(dx,dz);
         state.action=!state.grounded?'jump':moved?(boosting?'run':'walk'):'idle';return {...state};

@@ -6,7 +6,7 @@ const { pathToFileURL } = require('node:url');
 test('procedural 3D office builds valid batched geometry, bounds avatars and releases frames/resources', async () => {
     const THREE = await import('three');
     const { createOfficeScene } = await import(pathToFileURL(path.resolve(__dirname, '../../resources/js/virtual-office-scene.js')));
-    const previous = {};
+    const previous = {},clickedGames=[];let reportedState;
     for (const key of ['window', 'document', 'ResizeObserver', 'MutationObserver', 'requestAnimationFrame', 'cancelAnimationFrame']) previous[key] = global[key];
     const frames = new Map(); let frameId = 0, rendered = null, disposed = false;
     class Node {
@@ -26,7 +26,7 @@ test('procedural 3D office builds valid batched geometry, bounds avatars and rel
         global.requestAnimationFrame = fn => { const id = ++frameId; frames.set(id, fn); return id; };
         global.cancelAnimationFrame = id => frames.delete(id);
         const host = new Node(), labels = new Node(), element = new Node(); let ratio;
-        const scene = createOfficeScene({ host, labels, onSelect() {}, onFailure() {},
+        const scene = createOfficeScene({ host, labels, onSelect() {}, onFailure() {},onGame:id=>clickedGames.push(id),onPilotState:p=>reportedState=p,
             getDate: () => new Date('2026-11-04T12:00:00Z'),
             rendererFactory: () => ({ domElement: element, setPixelRatio: value => { ratio = value; }, setSize() {},
                 render(world, camera) { world.updateMatrixWorld(true); camera.updateMatrixWorld(true); rendered = { world, camera }; }, dispose() { disposed = true; }, forceContextLoss() {} }),
@@ -118,9 +118,14 @@ test('procedural 3D office builds valid batched geometry, bounds avatars and rel
         scene.guideTo('archery');assert.equal(rendered.world.children.find(n=>n.userData.pilotGuide).position.x,32);
         assert.equal(scene.canInteract('archery'),false);
         scene.setPilotGate(()=>false);scene.setPilotInput({});scene.setGame(null);scene.reconcilePilot({x:-10,y:-.12,z:73,yaw:0});
-        for(const pose of['sit','recline','nap','meditate']){assert.equal(scene.setRestPose(pose),true);draw(stamp+100610);assert.equal(scene.pilotState().pose,pose);assert.equal(scene.pilotState().action,'rest');const group=rendered.world.children.find(g=>{if(!g.isGroup)return false;let match=false;g.traverse(n=>{if(n.userData.personId===1)match=true;});return match;});assert.equal(group.children[0].rotation.x,['recline','nap'].includes(pose)?-Math.PI/2:0);}
+        for(const pose of['sit','recline','nap','meditate']){assert.equal(scene.setRestPose(pose),true);draw(stamp+100610);assert.equal(scene.pilotState().pose,pose);assert.equal(scene.pilotState().action,'rest');const group=rendered.world.children.find(g=>{if(!g.isGroup)return false;let match=false;g.traverse(n=>{if(n.userData.personId===1)match=true;});return match;});assert.ok(Math.abs(group.children[0].rotation.x-(pose==='nap'?-Math.PI/2:pose==='recline'?-1.38:.04))<.00001);}
         scene.setPilotInput({x:1});draw(stamp+100650);assert.equal(scene.pilotState().action,'walk','Walking stands up without moving to a computer.');
         assert.equal(rendered.world.children.filter(n=>n.userData.hospitality==='hostess').length,2);assert.equal(rendered.world.children.filter(n=>n.userData.hospitality).length,6);
+        scene.setPilotInput({});scene.reconcilePilot({x:0,y:-.12,z:21,yaw:0});assert.equal(scene.setRestPose('nap'),true,'A user must be able to rest at the ordinary spawn, outside named recreation zones.');draw(stamp+101000);assert.equal(reportedState.pose,'nap');assert.equal(reportedState.venue,'campus');scene.setPeerPilots([]);draw(stamp+101040);assert.equal(scene.pilotState().pose,'nap','Peer polling must not stand the user up.');
+        scene.reconcilePilot({x:-32,y:-.12,z:15,yaw:0});scene.setGame({kind:'badminton',from:1,to:0,status:'playing'});scene.setPaused(false);scene.focusRoom('badminton');draw(stamp+102000);
+        const ball=rendered.world.children.find(n=>n.userData.officeBall==='badminton'),ballBefore=ball.position.clone();draw(stamp+102500);assert.ok(ball.position.distanceTo(ballBefore)>.1,'Manual games animate their world ball even at night.');
+        scene.setPaused(true);scene.focusRoom('badminton');draw(stamp+102600);
+        const hitPoint=new THREE.Vector3(-27,-.05,15).project(rendered.camera),tap={clientX:(hitPoint.x+1)/2*1000,clientY:(1-hitPoint.y)/2*600};element.events.pointerdown(tap);element.events.pointerup(tap);assert.equal(clickedGames.at(-1),'badminton','Clicking the court surface must reach the game callback.');
         scene.configureHome(1,{slot:0},2);scene.setHomeDoor(true);scene.setPilotInput({});scene.reconcilePilot({x:-36.75,y:.22,z:-25.2,yaw:0});draw(stamp+100690);assert.equal(scene.canUseDoor(),true);assert.equal(scene.homeDoorOpen(),true);assert.equal(scene.pilotState().y,.22);scene.setHomeDoor(false);
         scene.releasePilot();scene.setPilotGate(()=>false);scene.setGame(null);
         scene.setPilot(777,{x:0,y:-.12,z:21,yaw:0},{id:777,name:'Private self',state:'online',department:'umum',is_me:true,private:true});

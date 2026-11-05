@@ -16,6 +16,7 @@ class VirtualOfficePilot
     public static function key(int $id): string { return 'office:pilot:v1:'.$id; }
     public static function lease(int $id): string { return 'office:pilot:lease:'.$id; }
     public static function layout(): array { static $data; return $data ??= json_decode(file_get_contents(resource_path('data/virtual-office-layout.json')), true, 512, JSON_THROW_ON_ERROR); }
+    public static function motion(): array { static $data;return $data??=json_decode(file_get_contents(resource_path('data/virtual-office-motion.json')),true,512,JSON_THROW_ON_ERROR); }
     public static function allowed(User $user): bool { return $user->is_active && in_array($user->department, ['umum','operasional'], true); }
     public static function current(int $id): ?array
     {
@@ -58,7 +59,7 @@ class VirtualOfficePilot
                 $state=['x'=>$point['x'],'y'=>-.12,'z'=>$point['z'],'yaw'=>$point['yaw']??0,'session_id'=>$data['session_id'],'seq'=>0,'action'=>'idle','updated_ms'=>$now,'credit'=>.7,'door_open'=>false];
             }else{
                 if($data['seq']<=$state['seq'])return $state;
-                $elapsed=max(0,($now-$state['updated_ms'])/1000);$credit=min(5,($state['credit']??.7)+$elapsed*9.2);
+                $elapsed=max(0,($now-$state['updated_ms'])/1000);$motion=self::motion();$credit=min($motion['distance_credit'],($state['credit']??.7)+$elapsed*$motion['maximum_speed']);
                 $distance=0;$previous=$state;$trail=$data['trail']??[];
                 if(!$trail||hypot($trail[count($trail)-1]['x']-$data['x'],$trail[count($trail)-1]['z']-$data['z'])>.001)$trail[]=$data;
                 $home=VirtualOfficeHomes::own($user);$openSlot=!empty($state['door_open'])?($home['slot']??null):null;
@@ -67,7 +68,8 @@ class VirtualOfficePilot
                 abort_if($distance>$credit+.08,422,'Gerakan terlalu jauh. Posisi disinkronkan kembali.');
                 if(in_array($data['action'],['play','drink','eat','dance','rest'],true)){
                     $venue=self::layout()['venues'][$data['venue']??'']??null;$atHome=($data['venue']??null)==='home'&&VirtualOfficeHomes::inside($data,$home);
-                    abort_unless($atHome||$venue&&hypot($data['x']-$venue['x'],$data['z']-$venue['z'])<=$venue['radius'],422,'Datangi lokasi sebelum beraktivitas.');
+                    $outdoors=$data['action']==='rest'&&($data['venue']??null)==='campus'&&$this->free($data['x'],$data['z'],$openSlot);
+                    abort_unless($outdoors||$atHome||$venue&&hypot($data['x']-$venue['x'],$data['z']-$venue['z'])<=$venue['radius'],422,'Datangi lokasi sebelum beraktivitas.');
                 }
                 $state=array_merge($state,array_intersect_key($data,array_flip(['x','y','z','yaw','seq','action','venue','pose'])),['credit'=>max(0,$credit-$distance),'updated_ms'=>$now]);
             }
