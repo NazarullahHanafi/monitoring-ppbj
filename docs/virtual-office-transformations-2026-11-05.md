@@ -35,3 +35,11 @@ Mode selesai membersihkan mesh/geometri/material miliknya, memulihkan tubuh dan 
 - Konektor browser masih gagal membuka tab baru dengan `Cannot read properties of undefined (reading 'timeoutMs')`. Verifikasi visual dilakukan melalui proyeksi geometri dan rasterisasi CPU lokal; tidak mengklaim pengujian browser interaktif, WebGL nyata, atau FPS perangkat.
 
 Pemasangan memakai backup privat kode/aset/data/database dan tidak membutuhkan migrasi skema. Pemeriksaan produksi tidak membuat sesi/avatar/cast/pesanan/bonus fiktif. Tab lama memerlukan muat ulang agar mendapatkan model dan kontrol baru.
+
+## Hasil produksi
+
+Commit aplikasi `143d1bfe98c45fd6236c6bc20b095909740ed039` terpasang melalui fast-forward. Lint PHP 8.3, autoload Composer, dan optimize Laravel berhasil. Hash SHA-256 CSS, entry kantor, scene, play, dan music melalui HTTPS identik dengan aset rilis. `/up` merespons 200; lima endpoint baca privat merespons 401 untuk tamu.
+
+Render server owner, member Umum, dan Operasional menghasilkan HTTP 200, masing-masing 36,58 / 10,93 / 11,12 ms dengan 3 / 1 / 1 query. Presence cold 9,90 ms dengan dua query; warm 1,70 ms tanpa query. Ini sampel pemrosesan server, bukan waktu muat atau FPS browser. Seluruh ID panel mode tersedia tepat sekali; konfigurasi produksi mempunyai 13 mode, durasi 60/cooldown 80 detik, 53 jurus, batas terbang 18 meter, serta izin terbang Susanoo dan larangan terbang Kurama yang benar. Privasi owner dan lazy loading tetap lolos.
+
+Backup sebelum rilis: `/home4/suc45578/deployment-artifacts/office-transformations-20261105-170622`, mencakup kode/aset/data dan dump database 4.628.846 byte. Direktori berizin 700, dump 600; berkas kredensial sementara sudah dihapus. Tidak ada migrasi skema.
