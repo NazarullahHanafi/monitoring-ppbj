@@ -1,11 +1,13 @@
 import catalog from '../data/virtual-office-abilities.json' with {type:'json'};
 export const skillsFor=costume=>(catalog.characters[costume]||catalog.characters.none).map(id=>({id,...catalog.skills[id],cooldown:catalog.skills[id].cooldown||6}));
+export const transformationFor=id=>catalog.skills[id]?.type==='transform'?{id,...catalog.skills[id]}:null;
 
-export function createOfficeAbilities({THREE,scene,navigation,reduced=()=>false}){
-    const active=new Map(),seen=new Map(),cooldowns=new Map();
+export function createOfficeAbilities({THREE,scene,navigation,reduced=()=>false,createModel=()=>null}){
+    const active=new Map(),seen=new Map(),cooldowns=new Map(),forms=new Map(),ready=new Map();let clockOffset=0;
     const geometries={orb:new THREE.SphereGeometry(.24,12,8),ring:new THREE.TorusGeometry(.7,.045,5,24),beam:new THREE.CylinderGeometry(.09,.2,1,8),shard:new THREE.ConeGeometry(.18,1.3,5)};
     function cast(id,skill,figure,event=Date.now(),remote=false){
         const spec=catalog.skills[skill],now=Date.now();if(!spec||!figure||now-event>4500||event>now+1500)return false;
+        if(spec.type==='transform')return !forms.has(id)&&((ready.get(id)||0)<=now+clockOffset);
         if(!remote&&(cooldowns.get(id)||0)>now)return false;
         if(active.has(id))remove(id);
         if(spec.type==='clones')for(const[other,effect]of active)if(effect.spec.type==='clones')remove(other);
@@ -25,10 +27,29 @@ export function createOfficeAbilities({THREE,scene,navigation,reduced=()=>false}
         scene.add(root);active.set(id,{root,mat,parts,spec,started:now,figure});seen.set(id,event);return true;
     }
     function remove(id){const effect=active.get(id);if(!effect)return;scene.remove(effect.root);effect.mat.dispose();active.delete(id);}
-    return{cast,cancel:remove,pose:id=>active.get(id)?.spec.type,observe(id,state,figure){if(state?.skill&&state.skill_at&&seen.get(id)!==state.skill_at)cast(id,state.skill,figure,state.skill_at,true);},
-        update(now=Date.now()){for(const[id,e]of active){const age=(now-e.started)/1000;if(age>3.8){remove(id);continue;}if(!['clones','beam'].includes(e.spec.type)){e.root.position.copy(e.figure.group.position);e.root.rotation.y=e.figure.group.rotation.y;}e.mat.opacity=Math.min(.75,(3.8-age)*.65);if(reduced())continue;
+    function appearance(figure,spec){const changes=[],scale=figure.body.scale?.clone();
+        figure.body.traverse?.(node=>{if(!node.isMesh)return;if(spec.model==='saiyan'&&node.userData.costumePart==='head'){changes.push(()=>{node.visible=true;});node.visible=false;}
+            if(spec.model==='gear5'&&(node.userData.avatarCloth||node.userData.costumePart==='body')){const original=node.material,copy=original.clone();copy.color.set('#fff8ef');copy.vertexColors=false;node.material=copy;changes.push(()=>{node.material=original;copy.dispose();});}});
+        if(figure.body.scale)figure.body.scale.setScalar(({gear5:1.12,monster:1.65,demon:1.12,awakened:1.2})[spec.model]||1);
+        return()=>{changes.forEach(fn=>fn());if(scale)figure.body.scale.copy(scale);};}
+    function clearForm(id){const f=forms.get(id);if(!f)return;f.figure.body.visible=f.bodyVisible;f.restore();scene.remove(f.model.root);f.model.dispose();forms.delete(id);}
+    function observeForm(id,state,figure){
+        if(!figure)return;ready.set(id,state?.form_ready_at||0);const spec=transformationFor(state?.form),current=forms.get(id);
+        if(!spec||state.form_until<=Date.now()+clockOffset){clearForm(id);return;}
+        if(current?.stamp===state.form_at){if(current.figure!==figure){current.figure.body.visible=current.bodyVisible;current.restore();current.figure=figure;current.bodyVisible=figure.body.visible;current.restore=appearance(figure,spec);}return;}
+        clearForm(id);const model=createModel(spec,{costume:figure.person?.avatar?.costume,reduced:reduced()});if(!model)return;
+        model.root.userData.officeAbility=id;model.root.userData.officeTransformation=id;model.root.traverse(node=>{if(node.isMesh)node.userData.personId=id;});scene.add(model.root);forms.set(id,{model,spec,figure,stamp:state.form_at,until:state.form_until,bodyVisible:figure.body.visible,restore:appearance(figure,spec)});
+    }
+    return{cast,cancel:remove,clearForm,targets:()=>[...forms.values()].map(f=>f.model.root).filter(root=>root.visible),clock:value=>{clockOffset=value;},form:id=>forms.get(id)?.spec||null,
+        modeState(id){const f=forms.get(id);return f?{id:f.spec.id,name:f.spec.name,remaining:Math.max(0,Math.ceil((f.until-Date.now()-clockOffset)/1000)),expires:f.until-clockOffset,fly:Boolean(f.spec.fly),height:f.spec.height}:null;},
+        forget(id){remove(id);clearForm(id);ready.delete(id);seen.delete(id);cooldowns.delete(id);},
+        modeCooldown:id=>Math.max(0,Math.ceil(((ready.get(id)||0)-Date.now()-clockOffset)/1000)),
+        pose:id=>active.get(id)?.spec.type,observe(id,state,figure){observeForm(id,state,figure);if(state?.skill&&catalog.skills[state.skill]?.type!=='transform'&&state.skill_at&&seen.get(id)!==state.skill_at)cast(id,state.skill,figure,state.skill_at-clockOffset,true);},
+        update(now=Date.now(),focus=null){for(const[id,f]of forms){if(now+clockOffset>=f.until){clearForm(id);continue;}const detailed=!focus||Math.hypot(f.figure.group.position.x-focus.x,f.figure.group.position.z-focus.z)<55;f.model.root.visible=detailed;f.figure.body.visible=detailed&&f.model.replaceBody?false:f.bodyVisible;
+            f.model.root.position.copy(f.figure.group.position);f.model.root.rotation.y=f.figure.group.rotation.y;f.model.update((now-f.stamp+clockOffset)/1000,{flying:f.figure.flight,moving:f.figure.moving});}
+            for(const[id,e]of active){const age=(now-e.started)/1000;if(age>3.8){remove(id);continue;}if(!['clones','beam'].includes(e.spec.type)){e.root.position.copy(e.figure.group.position);e.root.rotation.y=e.figure.group.rotation.y;}e.mat.opacity=Math.min(.75,(3.8-age)*.65);if(reduced())continue;
             e.parts.forEach((part,i)=>{if(e.spec.type==='clones'){part.position.y=.02+Math.sin(age*3+i)*.015;part.rotation.y=Math.sin(age+i)*.04;}else{if(e.spec.type!=='beam'){part.rotation.z+=.035;part.rotation.y+=.05;}if(e.spec.type==='orb')part.scale.setScalar(part.geometry===geometries.ring ? .48*(1+Math.sin(age*7)*.1) : 1+Math.sin(age*9)*.08);else if(e.spec.type!=='beam')part.position.y+=Math.sin(age*3+i)*.006;}});}},
         cooldown:id=>Math.max(0,Math.ceil(((cooldowns.get(id)||0)-Date.now())/1000)),
-        dispose(){for(const id of active.keys())remove(id);Object.values(geometries).forEach(g=>g.dispose());seen.clear();cooldowns.clear();}
+        dispose(){for(const id of active.keys())remove(id);for(const id of forms.keys())clearForm(id);Object.values(geometries).forEach(g=>g.dispose());seen.clear();cooldowns.clear();ready.clear();}
     };
 }

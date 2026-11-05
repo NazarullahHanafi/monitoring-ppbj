@@ -12,12 +12,13 @@ class VirtualOfficePilotController extends Controller
     {
         $data=$request->validate(['user_id'=>['prohibited'],'session_id'=>['required','uuid'],'mode'=>['required',Rule::in(['claim','move'])],
             'seq'=>['required','integer','min:0','max:2147483647'],'x'=>['required','numeric','between:-100,100'],'z'=>['required','numeric','between:-216,92'],
-            'y'=>['required','numeric','between:-0.12,3.2'],'yaw'=>['required','numeric','between:-3.142,3.142'],
-            'trail'=>['sometimes','array','max:64'],'trail.*'=>['array:x,y,z'],'trail.*.x'=>['required','numeric','between:-100,100'],'trail.*.y'=>['sometimes','numeric','between:-0.12,3.2'],'trail.*.z'=>['required','numeric','between:-216,92'],
+            'y'=>['required','numeric','between:-0.12,18'],'yaw'=>['required','numeric','between:-3.142,3.142'],
+            'trail'=>['sometimes','array','max:64'],'trail.*'=>['array:x,y,z'],'trail.*.x'=>['required','numeric','between:-100,100'],'trail.*.y'=>['sometimes','numeric','between:-0.12,18'],'trail.*.z'=>['required','numeric','between:-216,92'],
+            'flight'=>['sometimes','boolean'],'end_form'=>['sometimes','boolean'],
             'venue'=>['nullable',Rule::in(array_merge(['home','campus'],array_keys(VirtualOfficePilot::layout()['venues'])))],
             'pose'=>['nullable',Rule::in(['sit','recline','nap','meditate'])],
             'skill'=>['nullable',Rule::in(array_keys(VirtualOfficePilot::abilities()['skills']))],'skill_id'=>['nullable','required_with:skill','uuid'],
-            'action'=>['required',Rule::in(['idle','walk','run','jump','play','dance','drink','eat','rest'])]]);
+            'action'=>['required',Rule::in(['idle','walk','run','jump','fly','land','play','dance','drink','eat','rest'])]]);
         try{$state=$pilot->pulse($request->user(),$data);}
         catch(\Symfony\Component\HttpKernel\Exception\HttpException $error){
             if($error->getStatusCode()!==422)throw $error;

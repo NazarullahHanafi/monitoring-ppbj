@@ -1,18 +1,491 @@
 {
- "characters":{
-  "none":["wave"],"naruto":["rasengan","clones","chakra"],"sasuke":["chidori","fire","susanoo"],"sakura":["strength","healing"],"kakashi":["chidori","clones"],"hinata":["palms","chakra"],"itachi":["fire","crows","susanoo"],
-  "luffy":["gatling","haki"],"zoro":["swords","haki"],"nami":["thunder","wind"],"sanji":["flamekick","haki"],"robin":["bloom","petals"],"chopper":["rumble","healing"],
-  "tanjiro":["water","sun"],"nezuko":["bloodflame","strength"],"zenitsu":["thunder","slash"],"inosuke":["beast","swords"],"giyu":["water","calm"],"shinobu":["butterfly","petals"],
-  "goku":["kamehameha","saiyan"],"vegeta":["galick","finalflash"],"gohan":["masenko","saiyan"],"piccolo":["beam","healing"],"bulma":["capsule","scan"],"trunks":["burning","swords"],
-  "deku":["fullcowling","smash"],"bakugo":["explosion","blast"],"todoroki":["ice","fire"],"uraraka":["gravity","petals"],"tsuyu":["frog","wave"],"allmight":["smash","strength"]
- },
- "skills":{
-  "wave":{"name":"Salam energi","type":"ring","color":"#d4b77b"},
-  "rasengan":{"name":"Rasengan","type":"orb","color":"#50ceff"},"clones":{"name":"Seribu Bayangan","type":"clones","color":"#ffa94a","cooldown":12},"chakra":{"name":"Aura chakra","type":"aura","color":"#ffb347"},
-  "chidori":{"name":"Chidori","type":"orb","color":"#98baff"},"fire":{"name":"Bola api","type":"flame","color":"#ff7044"},"susanoo":{"name":"Susanoo","type":"aura","color":"#b68eff"},"strength":{"name":"Pukulan kekuatan","type":"burst","color":"#ffb3d1"},"healing":{"name":"Aura penyembuhan","type":"aura","color":"#7df3b3"},"palms":{"name":"Delapan Trigram","type":"ring","color":"#8edbff"},"crows":{"name":"Ilusi gagak","type":"swarm","color":"#9585bf"},
-  "gatling":{"name":"Gomu Gomu Gatling","type":"burst","color":"#ffa69a"},"haki":{"name":"Haki","type":"aura","color":"#bd87de"},"swords":{"name":"Tebasan pedang","type":"slash","color":"#8ff2d2"},"thunder":{"name":"Kilatan petir","type":"beam","color":"#ffe878"},"wind":{"name":"Pusaran angin","type":"ring","color":"#b4eaff"},"flamekick":{"name":"Diable Jambe","type":"flame","color":"#ff9d47"},"bloom":{"name":"Hana Hana","type":"swarm","color":"#dfadff"},"petals":{"name":"Kelopak menari","type":"swarm","color":"#ffa6d7"},"rumble":{"name":"Rumble aura","type":"aura","color":"#f5b0cf"},
-  "water":{"name":"Pernapasan air","type":"slash","color":"#59c9ff"},"sun":{"name":"Hinokami Kagura","type":"flame","color":"#ff8758"},"bloodflame":{"name":"Darah membara","type":"flame","color":"#ff69a0"},"slash":{"name":"Tebasan kilat","type":"slash","color":"#ffdf68"},"beast":{"name":"Pernapasan binatang","type":"slash","color":"#9dcfff"},"calm":{"name":"Ketenangan air","type":"ring","color":"#89e1ef"},"butterfly":{"name":"Tarian kupu-kupu","type":"swarm","color":"#caa2ff"},
-  "kamehameha":{"name":"Kamehameha","type":"beam","color":"#5cd7ff","cooldown":8},"saiyan":{"name":"Aura Super Saiyan","type":"aura","color":"#ffe878"},"galick":{"name":"Galick Gun","type":"beam","color":"#c18bff"},"finalflash":{"name":"Final Flash","type":"beam","color":"#ffdf5f"},"masenko":{"name":"Masenko","type":"beam","color":"#fff19b"},"beam":{"name":"Makankosappo","type":"beam","color":"#c4ff85"},"capsule":{"name":"Kapsul teknologi","type":"orb","color":"#ffb7d4"},"scan":{"name":"Pemindai kapsul","type":"ring","color":"#91fff3"},"burning":{"name":"Burning Attack","type":"burst","color":"#ffe2aa"},
-  "fullcowling":{"name":"One For All · Full Cowling","type":"aura","color":"#5dffc4"},"smash":{"name":"Smash","type":"burst","color":"#80d9ff"},"explosion":{"name":"Ledakan","type":"burst","color":"#ffac56"},"blast":{"name":"AP Shot","type":"beam","color":"#ffce75"},"ice":{"name":"Dinding es","type":"ice","color":"#9ceaff"},"gravity":{"name":"Zero Gravity","type":"swarm","color":"#ffc2e3"},"frog":{"name":"Froppy leap aura","type":"ring","color":"#c1ef81"}
- }
+    "characters":  {
+                       "none":  [
+                                    "wave"
+                                ],
+                       "naruto":  [
+                                      "rasengan",
+                                      "clones",
+                                      "kurama"
+                                  ],
+                       "sasuke":  [
+                                      "chidori",
+                                      "fire",
+                                      "susanoo"
+                                  ],
+                       "sakura":  [
+                                      "strength",
+                                      "healing"
+                                  ],
+                       "kakashi":  [
+                                       "chidori",
+                                       "clones",
+                                       "susanoo_kakashi"
+                                   ],
+                       "hinata":  [
+                                      "palms",
+                                      "chakra"
+                                  ],
+                       "itachi":  [
+                                      "fire",
+                                      "crows",
+                                      "susanoo_itachi"
+                                  ],
+                       "luffy":  [
+                                     "gatling",
+                                     "haki",
+                                     "gear5"
+                                 ],
+                       "zoro":  [
+                                    "swords",
+                                    "haki"
+                                ],
+                       "nami":  [
+                                    "thunder",
+                                    "wind"
+                                ],
+                       "sanji":  [
+                                     "flamekick",
+                                     "haki"
+                                 ],
+                       "robin":  [
+                                     "bloom",
+                                     "petals"
+                                 ],
+                       "chopper":  [
+                                       "rumble",
+                                       "healing",
+                                       "monster"
+                                   ],
+                       "tanjiro":  [
+                                       "water",
+                                       "sun",
+                                       "slayer"
+                                   ],
+                       "nezuko":  [
+                                      "bloodflame",
+                                      "strength",
+                                      "demon"
+                                  ],
+                       "zenitsu":  [
+                                       "thunder",
+                                       "slash"
+                                   ],
+                       "inosuke":  [
+                                       "beast",
+                                       "swords"
+                                   ],
+                       "giyu":  [
+                                    "water",
+                                    "calm"
+                                ],
+                       "shinobu":  [
+                                       "butterfly",
+                                       "petals"
+                                   ],
+                       "goku":  [
+                                    "kamehameha",
+                                    "saiyan"
+                                ],
+                       "vegeta":  [
+                                      "galick",
+                                      "finalflash",
+                                      "saiyan"
+                                  ],
+                       "gohan":  [
+                                     "masenko",
+                                     "saiyan"
+                                 ],
+                       "piccolo":  [
+                                       "beam",
+                                       "healing",
+                                       "awakened"
+                                   ],
+                       "bulma":  [
+                                     "capsule",
+                                     "scan"
+                                 ],
+                       "trunks":  [
+                                      "burning",
+                                      "swords",
+                                      "saiyan"
+                                  ],
+                       "deku":  [
+                                    "fullcowling",
+                                    "smash"
+                                ],
+                       "bakugo":  [
+                                      "explosion",
+                                      "blast",
+                                      "cluster"
+                                  ],
+                       "todoroki":  [
+                                        "ice",
+                                        "fire",
+                                        "icefire"
+                                    ],
+                       "uraraka":  [
+                                       "gravity",
+                                       "petals"
+                                   ],
+                       "tsuyu":  [
+                                     "frog",
+                                     "wave"
+                                 ],
+                       "allmight":  [
+                                        "smash",
+                                        "strength"
+                                    ]
+                   },
+    "skills":  {
+                   "wave":  {
+                                "name":  "Salam energi",
+                                "type":  "ring",
+                                "color":  "#d4b77b"
+                            },
+                   "rasengan":  {
+                                    "name":  "Rasengan",
+                                    "type":  "orb",
+                                    "color":  "#50ceff"
+                                },
+                   "clones":  {
+                                  "name":  "Seribu Bayangan",
+                                  "type":  "clones",
+                                  "color":  "#ffa94a",
+                                  "cooldown":  12
+                              },
+                   "chakra":  {
+                                  "name":  "Aura chakra",
+                                  "type":  "aura",
+                                  "color":  "#ffb347"
+                              },
+                   "chidori":  {
+                                   "name":  "Chidori",
+                                   "type":  "orb",
+                                   "color":  "#98baff"
+                               },
+                   "fire":  {
+                                "name":  "Bola api",
+                                "type":  "flame",
+                                "color":  "#ff7044"
+                            },
+                   "strength":  {
+                                    "name":  "Pukulan kekuatan",
+                                    "type":  "burst",
+                                    "color":  "#ffb3d1"
+                                },
+                   "healing":  {
+                                   "name":  "Aura penyembuhan",
+                                   "type":  "aura",
+                                   "color":  "#7df3b3"
+                               },
+                   "palms":  {
+                                 "name":  "Delapan Trigram",
+                                 "type":  "ring",
+                                 "color":  "#8edbff"
+                             },
+                   "crows":  {
+                                 "name":  "Ilusi gagak",
+                                 "type":  "swarm",
+                                 "color":  "#9585bf"
+                             },
+                   "gatling":  {
+                                   "name":  "Gomu Gomu Gatling",
+                                   "type":  "burst",
+                                   "color":  "#ffa69a"
+                               },
+                   "haki":  {
+                                "name":  "Haki",
+                                "type":  "aura",
+                                "color":  "#bd87de"
+                            },
+                   "swords":  {
+                                  "name":  "Tebasan pedang",
+                                  "type":  "slash",
+                                  "color":  "#8ff2d2"
+                              },
+                   "thunder":  {
+                                   "name":  "Kilatan petir",
+                                   "type":  "beam",
+                                   "color":  "#ffe878"
+                               },
+                   "wind":  {
+                                "name":  "Pusaran angin",
+                                "type":  "ring",
+                                "color":  "#b4eaff"
+                            },
+                   "flamekick":  {
+                                     "name":  "Diable Jambe",
+                                     "type":  "flame",
+                                     "color":  "#ff9d47"
+                                 },
+                   "bloom":  {
+                                 "name":  "Hana Hana",
+                                 "type":  "swarm",
+                                 "color":  "#dfadff"
+                             },
+                   "petals":  {
+                                  "name":  "Kelopak menari",
+                                  "type":  "swarm",
+                                  "color":  "#ffa6d7"
+                              },
+                   "rumble":  {
+                                  "name":  "Rumble aura",
+                                  "type":  "aura",
+                                  "color":  "#f5b0cf"
+                              },
+                   "water":  {
+                                 "name":  "Pernapasan air",
+                                 "type":  "slash",
+                                 "color":  "#59c9ff"
+                             },
+                   "sun":  {
+                               "name":  "Hinokami Kagura",
+                               "type":  "flame",
+                               "color":  "#ff8758"
+                           },
+                   "bloodflame":  {
+                                      "name":  "Darah membara",
+                                      "type":  "flame",
+                                      "color":  "#ff69a0"
+                                  },
+                   "slash":  {
+                                 "name":  "Tebasan kilat",
+                                 "type":  "slash",
+                                 "color":  "#ffdf68"
+                             },
+                   "beast":  {
+                                 "name":  "Pernapasan binatang",
+                                 "type":  "slash",
+                                 "color":  "#9dcfff"
+                             },
+                   "calm":  {
+                                "name":  "Ketenangan air",
+                                "type":  "ring",
+                                "color":  "#89e1ef"
+                            },
+                   "butterfly":  {
+                                     "name":  "Tarian kupu-kupu",
+                                     "type":  "swarm",
+                                     "color":  "#caa2ff"
+                                 },
+                   "kamehameha":  {
+                                      "name":  "Kamehameha",
+                                      "type":  "beam",
+                                      "color":  "#5cd7ff",
+                                      "cooldown":  8
+                                  },
+                   "galick":  {
+                                  "name":  "Galick Gun",
+                                  "type":  "beam",
+                                  "color":  "#c18bff"
+                              },
+                   "finalflash":  {
+                                      "name":  "Final Flash",
+                                      "type":  "beam",
+                                      "color":  "#ffdf5f"
+                                  },
+                   "masenko":  {
+                                   "name":  "Masenko",
+                                   "type":  "beam",
+                                   "color":  "#fff19b"
+                               },
+                   "beam":  {
+                                "name":  "Makankosappo",
+                                "type":  "beam",
+                                "color":  "#c4ff85"
+                            },
+                   "capsule":  {
+                                   "name":  "Kapsul teknologi",
+                                   "type":  "orb",
+                                   "color":  "#ffb7d4"
+                               },
+                   "scan":  {
+                                "name":  "Pemindai kapsul",
+                                "type":  "ring",
+                                "color":  "#91fff3"
+                            },
+                   "burning":  {
+                                   "name":  "Burning Attack",
+                                   "type":  "burst",
+                                   "color":  "#ffe2aa"
+                               },
+                   "smash":  {
+                                 "name":  "Smash",
+                                 "type":  "burst",
+                                 "color":  "#80d9ff"
+                             },
+                   "explosion":  {
+                                     "name":  "Ledakan",
+                                     "type":  "burst",
+                                     "color":  "#ffac56"
+                                 },
+                   "blast":  {
+                                 "name":  "AP Shot",
+                                 "type":  "beam",
+                                 "color":  "#ffce75"
+                             },
+                   "ice":  {
+                               "name":  "Dinding es",
+                               "type":  "ice",
+                               "color":  "#9ceaff"
+                           },
+                   "gravity":  {
+                                   "name":  "Zero Gravity",
+                                   "type":  "swarm",
+                                   "color":  "#ffc2e3"
+                               },
+                   "frog":  {
+                                "name":  "Froppy leap aura",
+                                "type":  "ring",
+                                "color":  "#c1ef81"
+                            },
+                   "gear5":  {
+                                 "model":  "gear5",
+                                 "fly":  false,
+                                 "name":  "Gear 5",
+                                 "type":  "transform",
+                                 "height":  2.5,
+                                 "duration":  60,
+                                 "cooldown":  80,
+                                 "radius":  0.4,
+                                 "color":  "#fff8ed"
+                             },
+                   "awakened":  {
+                                    "model":  "awakened",
+                                    "fly":  true,
+                                    "name":  "Awakened Piccolo",
+                                    "type":  "transform",
+                                    "height":  2.6,
+                                    "duration":  60,
+                                    "cooldown":  80,
+                                    "radius":  0.4,
+                                    "color":  "#f1a34e"
+                                },
+                   "cluster":  {
+                                   "model":  "hero",
+                                   "fly":  false,
+                                   "name":  "Cluster",
+                                   "type":  "transform",
+                                   "height":  2.5,
+                                   "duration":  60,
+                                   "cooldown":  80,
+                                   "radius":  0.4,
+                                   "color":  "#ffbe69"
+                               },
+                   "icefire":  {
+                                   "model":  "icefire",
+                                   "fly":  false,
+                                   "name":  "Half-Cold Half-Hot",
+                                   "type":  "transform",
+                                   "height":  2.5,
+                                   "duration":  60,
+                                   "cooldown":  80,
+                                   "radius":  0.4,
+                                   "color":  "#b6f0ff"
+                               },
+                   "kurama":  {
+                                  "model":  "kurama",
+                                  "fly":  false,
+                                  "name":  "Mode Kurama",
+                                  "type":  "transform",
+                                  "height":  4.9,
+                                  "duration":  60,
+                                  "accent":  "#ffde86",
+                                  "radius":  0.85,
+                                  "cooldown":  80,
+                                  "color":  "#f5a63a"
+                              },
+                   "saiyan":  {
+                                  "model":  "saiyan",
+                                  "fly":  true,
+                                  "name":  "Super Saiyan",
+                                  "type":  "transform",
+                                  "height":  2.7,
+                                  "duration":  60,
+                                  "cooldown":  80,
+                                  "radius":  0.35,
+                                  "color":  "#ffe45c"
+                              },
+                   "monster":  {
+                                   "model":  "monster",
+                                   "fly":  false,
+                                   "name":  "Monster Point",
+                                   "type":  "transform",
+                                   "height":  3.7,
+                                   "duration":  60,
+                                   "cooldown":  80,
+                                   "radius":  0.65,
+                                   "color":  "#a47a50"
+                               },
+                   "fullcowling":  {
+                                       "model":  "hero",
+                                       "fly":  false,
+                                       "name":  "One For All · Full Cowling",
+                                       "type":  "transform",
+                                       "height":  2.5,
+                                       "duration":  60,
+                                       "cooldown":  80,
+                                       "radius":  0.4,
+                                       "color":  "#64ffd0"
+                                   },
+                   "susanoo_itachi":  {
+                                          "model":  "susanoo",
+                                          "fly":  false,
+                                          "name":  "Susanoo Itachi",
+                                          "type":  "transform",
+                                          "height":  5.6,
+                                          "duration":  60,
+                                          "accent":  "#ffd9a0",
+                                          "radius":  0.85,
+                                          "cooldown":  80,
+                                          "color":  "#ef8650"
+                                      },
+                   "susanoo_kakashi":  {
+                                           "model":  "susanoo",
+                                           "fly":  true,
+                                           "name":  "Susanoo Kakashi",
+                                           "type":  "transform",
+                                           "height":  6,
+                                           "duration":  60,
+                                           "accent":  "#cceeff",
+                                           "radius":  0.85,
+                                           "cooldown":  80,
+                                           "color":  "#6ea9e8"
+                                       },
+                   "demon":  {
+                                 "model":  "demon",
+                                 "fly":  false,
+                                 "name":  "Awakened Demon",
+                                 "type":  "transform",
+                                 "height":  2.5,
+                                 "duration":  60,
+                                 "cooldown":  80,
+                                 "radius":  0.4,
+                                 "color":  "#ed91b8"
+                             },
+                   "slayer":  {
+                                  "model":  "slayer",
+                                  "fly":  false,
+                                  "name":  "Hinokami Awakened",
+                                  "type":  "transform",
+                                  "height":  2.5,
+                                  "duration":  60,
+                                  "cooldown":  80,
+                                  "radius":  0.4,
+                                  "color":  "#ff9b57"
+                              },
+                   "susanoo":  {
+                                   "model":  "susanoo",
+                                   "fly":  true,
+                                   "name":  "Susanoo Sempurna",
+                                   "type":  "transform",
+                                   "height":  6,
+                                   "duration":  60,
+                                   "accent":  "#e9c8ff",
+                                   "radius":  0.85,
+                                   "cooldown":  80,
+                                   "color":  "#9864e8"
+                               }
+               }
 }

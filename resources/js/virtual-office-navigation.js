@@ -7,17 +7,17 @@ export function createOfficeNavigation() {
     const obstacles = [], {minX,maxX,minZ,maxZ}=layout.bounds, cell = .5, radius = .3;
     const width = Math.round((maxX - minX) / cell) + 1, height = Math.round((maxZ - minZ) / cell) + 1;
     let grid = null,homesEnabled=false,openHome=null,homePlots=128;
-    const extra=(a,b=a)=>homesEnabled?homeBoxes(a,b,openHome,homePlots):[];
+    const extra=(a,b=a,bodyRadius=.3)=>homesEnabled?homeBoxes(a,b,openHome,homePlots,Math.max(.4,bodyRadius)):[];
     const vaultable=box=>box.top<=motion.vault_height&&motion.vault_tags.includes(box.tag);
-    function free(x, z, y=-.12) {
-        return x >= minX + radius && x <= maxX - radius && z >= minZ + radius && z <= maxZ - radius
-            && !obstacles.concat(extra({x,z})).some(b => !(vaultable(b)&&y>=b.top+.075)&&x > b.left - radius && x < b.right + radius && z > b.back - radius && z < b.front + radius);
+    function free(x, z, y=-.12,bodyRadius=radius) {
+        return x >= minX + bodyRadius && x <= maxX - bodyRadius && z >= minZ + bodyRadius && z <= maxZ - bodyRadius
+            && !obstacles.concat(extra({x,z},{x,z},bodyRadius)).some(b => !(vaultable(b)&&y>=b.top+.075)&&x > b.left - bodyRadius && x < b.right + bodyRadius && z > b.back - bodyRadius && z < b.front + bodyRadius);
     }
-    function segment(a, b) {
-        if (!free(b.x, b.z,b.y??-.12)) return false;
-        for (const box of obstacles.concat(extra(a,b))) {
+    function segment(a, b,bodyRadius=radius) {
+        if (!free(b.x, b.z,b.y??-.12,bodyRadius)) return false;
+        for (const box of obstacles.concat(extra(a,b,bodyRadius))) {
             let low = 0, high = 1;
-            for (const [axis, start, end] of [['x', box.left - radius, box.right + radius], ['z', box.back - radius, box.front + radius]]) {
+            for (const [axis, start, end] of [['x', box.left - bodyRadius, box.right + bodyRadius], ['z', box.back - bodyRadius, box.front + bodyRadius]]) {
                 const delta = b[axis] - a[axis];
                 if (Math.abs(delta) < 1e-8) { if (a[axis] <= start || a[axis] >= end) { low = 2; break; } }
                 else { const t1 = (start - a[axis]) / delta, t2 = (end - a[axis]) / delta; low = Math.max(low, Math.min(t1, t2)); high = Math.min(high, Math.max(t1, t2)); }
@@ -91,7 +91,7 @@ export function createOfficeNavigation() {
         groundHeight(point){const col=Math.round((point.x+36.75)/10.5),row=Math.round((-28-point.z)/12);let ground=homesEnabled&&col>=0&&col<8&&row>=0&&insideHome(point,homeLocation(row*8+col))?.22:-.12;
             for(const b of obstacles.concat(extra(point)))if(vaultable(b)&&(point.y??-.12)>=b.top+.07&&point.x>b.left-radius&&point.x<b.right+radius&&point.z>b.back-radius&&point.z<b.front+radius)ground=Math.max(ground,b.top+.08);return ground;},
         boxes:()=>obstacles.map(b=>({...b})),
-        slide(from,to){const end={...to,y:to.y??from.y};if(segment(from,end))return{x:to.x,z:to.z};if(segment(from,{...end,z:from.z}))return{x:to.x,z:from.z};if(segment(from,{...end,x:from.x}))return{x:from.x,z:to.z};return{x:from.x,z:from.z};},
+        slide(from,to,bodyRadius=radius){const end={...to,y:to.y??from.y};if(segment(from,end,bodyRadius))return{x:to.x,z:to.z};if(segment(from,{...end,z:from.z},bodyRadius))return{x:to.x,z:from.z};if(segment(from,{...end,x:from.x},bodyRadius))return{x:from.x,z:to.z};return{x:from.x,z:from.z};},
         addBox(w, d, x, z, tag = '', top = 2) { obstacles.push({ left: x - w / 2, right: x + w / 2, back: z - d / 2, front: z + d / 2, top, tag }); grid = null; },
         cameraLimit(from, to, extra = []) {
             let limit = 1;

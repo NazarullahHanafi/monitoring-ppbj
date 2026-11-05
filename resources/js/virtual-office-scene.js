@@ -15,6 +15,7 @@ import { homeLocation,insideHome } from './virtual-office-home-layout.js';
 import { createOfficeHospitality } from './virtual-office-hospitality.js';
 import { animateOfficeAvatar,planOfficeRest } from './virtual-office-avatar-animation.js';
 import { createOfficeAbilities,skillsFor } from './virtual-office-abilities.js';
+import { createTransformationModel } from './virtual-office-transform-geometry.js';
 import { createOfficeInterior } from './virtual-office-interior.js';
 
 // Original procedural scene: no models, textures, or code from the reference site.
@@ -36,7 +37,7 @@ export function createOfficeScene({ host, labels, onSelect, onFailure, onVenue =
     const fill = new THREE.DirectionalLight('#cce5ef', 1.1); fill.position.set(15, 10, -10); scene.add(fill);
     const materials = new Map(), batches = new Map(), ownedGeometries = new Set(), textures = new Set(), figures = new Map();
     const navigation = createOfficeNavigation();
-    const abilities=createOfficeAbilities({THREE,scene,navigation,reduced:()=>paused||energySaver});
+    const abilities=createOfficeAbilities({THREE,scene,navigation,reduced:()=>paused||energySaver,createModel:(spec,options)=>createTransformationModel(THREE,spec,{...options,reduced:paused||energySaver})});
     const colors = { base: '#acb9ad', floor: '#f1ece0', edge: '#cebd9c', wood: '#b38b61', woodLight: '#d6b68a', oak: '#705b42',
         wall: '#e5e3d5', stone: '#c4cec5', deep: '#214b40', green: '#537d60', leaf: '#4a7750', lightLeaf: '#86a465',
         pot: '#e2d5bb', white: '#f5f0e5', metal: '#3c4d46', gold: '#b89c68', screen: '#173841', screenLine: '#62baaa',
@@ -307,7 +308,7 @@ export function createOfficeScene({ host, labels, onSelect, onFailure, onVenue =
         const shirt = costume?.shirt||{ emerald: '#547a71', navy: '#405978', rose: '#b97988', cream: '#d3bc96', lavender: '#9682ae', terracotta: '#bb8265' }[appearance.color] || shirts[person.id % shirts.length];
         const body = new THREE.Group(); group.add(body); const skin = { light: '#efd0ae', warm: '#dba77d', tan: '#bc8762', deep: '#895e46' }[appearance.skin];
         const hairColor = appearance.hair === 'hijab' ? shirt : '#352c32';
-        avatarPart(body, 'box', [feminine ? .43 : .5, .65, .33], shirt, [0, 1.17, 0]);
+        avatarPart(body, 'box', [feminine ? .43 : .5, .65, .33], shirt, [0, 1.17, 0]).userData.avatarCloth=true;
         if (!costume&&appearance.outfit === 'blazer') {
             avatarPart(body, 'box', [.15, .42, .035], 'white', [0, 1.29, .18]);
             for (const side of [-1, 1]) { const lapel = avatarPart(body, 'box', [.07, .32, .035], 'gold', [side * .12, 1.33, .19]); lapel.rotation.z = side * .25; }
@@ -316,7 +317,7 @@ export function createOfficeScene({ host, labels, onSelect, onFailure, onVenue =
         const skirt = !costume&&appearance.outfit === 'dress' ? avatarPart(body, 'box', [.6, .4, .44], shirt, [0, .79, 0]) : null;
         const head = new THREE.Group(); head.position.y = 1.69; body.add(head);
         avatarPart(head, 'box', [.43, .46, .4], skin, [0, 0, 0]);
-        if(costume){head.add(new THREE.Mesh(costumeGeometry(costume,'head',costumeCache,ownedGeometries),costumeMaterial));body.add(new THREE.Mesh(costumeGeometry(costume,'body',costumeCache,ownedGeometries),costumeMaterial));}
+        if(costume){const hair=new THREE.Mesh(costumeGeometry(costume,'head',costumeCache,ownedGeometries),costumeMaterial),clothes=new THREE.Mesh(costumeGeometry(costume,'body',costumeCache,ownedGeometries),costumeMaterial);hair.userData.costumePart='head';clothes.userData.costumePart='body';head.add(hair);body.add(clothes);}
         else {
             const key='hair:'+appearance.hair;if(!avatarGeometry.has(key)){
                 const specs=[[.47,.18,.44,0,.21,-.02],[.45,appearance.hair==='long'||appearance.hair==='hijab'?.67:.3,.12,0,appearance.hair==='long'||appearance.hair==='hijab'?-.12:.07,-.2]];
@@ -341,11 +342,11 @@ export function createOfficeScene({ host, labels, onSelect, onFailure, onVenue =
         const arms = [];
         for (const x of [-.34, .34]) {
             const arm = new THREE.Group(); arm.position.set(x, 1.42, 0); body.add(arm);
-            avatarPart(arm, 'box', [.17, .4, .2], shirt, [0, -.19, 0]);
+            avatarPart(arm, 'box', [.17, .4, .2], shirt, [0, -.19, 0]).userData.avatarCloth=true;
             avatarPart(arm, 'box', [.15, .27, .16], skin, [0, -.45, .05]); arms.push(arm);
         }
         const legs = [], shoes = [];
-        for (const x of [-.14, .14]) { const leg = new THREE.Group(); leg.position.set(x, .83, 0); body.add(leg); avatarPart(leg, 'box', [.18, .64, .2], costume?.pants||'#35463f', [0, -.32, 0]); shoes.push(avatarPart(leg, 'box', [.23, .14, .34], costume?.accent||(appearance.outfit === 'sport' ? 'white' : '#24352f'), [0, -.7, .07])); legs.push(leg); }
+        for (const x of [-.14, .14]) { const leg = new THREE.Group(); leg.position.set(x, .83, 0); body.add(leg); avatarPart(leg, 'box', [.18, .64, .2], costume?.pants||'#35463f', [0, -.32, 0]).userData.avatarCloth=true; shoes.push(avatarPart(leg, 'box', [.23, .14, .34], costume?.accent||(appearance.outfit === 'sport' ? 'white' : '#24352f'), [0, -.7, .07])); legs.push(leg); }
         const cup = avatarPart(arms[1], 'sphere', [.12], 'white', [0, -.49, .14]);
         const plate = avatarPart(arms[0], 'box', [.35, .045, .24], 'white', [0, -.43, .23]);
         const racket = new THREE.Group(); arms[1].add(racket); racket.position.set(0, -.48, .16);
@@ -367,7 +368,7 @@ export function createOfficeScene({ host, labels, onSelect, onFailure, onVenue =
     let selected = null, paused = false, visible = true, disposed = false, frame = null, lastFrame = 0, lastLabels = 0,lastDrawCamera=null;
     let roster = [], visitingHome = null, localMeeting = null, cameraMode = 'orbit', followId = null, energySaver = false, worldConfig = {};
     const recreation=new Map(),speechTimers=new Map();let localGame=null;
-    let controlledId=null,privatePilotSelf=null,pilotPhysics=null,pilotInput={},pilotReporter=onPilotState,guide=null,pilotGate=()=>false,pilotActivity=null,restPlan=null,myHome=null,homeOwner=null,homeDoorOpen=false,homePlots=null;
+    let controlledId=null,privatePilotSelf=null,pilotPhysics=null,pilotInput={},pilotReporter=onPilotState,guide=null,pilotGate=()=>false,pilotActivity=null,restPlan=null,myHome=null,homeOwner=null,homeDoorOpen=false,homePlots=null,endingMode=false,cameraForm=null;
     const guideGeometry=new THREE.RingGeometry(1.2,1.4,32);ownedGeometries.add(guideGeometry);
     const guideMaterial=new THREE.MeshBasicMaterial({color:'#e9be69',side:THREE.DoubleSide,transparent:true,opacity:.85});materials.set('pilot-guide',guideMaterial);
     const guideMarker=new THREE.Mesh(guideGeometry,guideMaterial);guideMarker.rotation.x=-Math.PI/2;guideMarker.visible=false;guideMarker.userData.pilotGuide=true;scene.add(guideMarker);
@@ -393,6 +394,7 @@ export function createOfficeScene({ host, labels, onSelect, onFailure, onVenue =
         for (const person of sorted) { if (chosen.length >= 24) break; if (person.state === 'online' && seats[person.department] >= 16) continue; chosen.push(person); if (person.state === 'online') seats[person.department]++; }
         const ids = new Set(chosen.map(p => p.id));
         for (const [id, f] of figures) if (!ids.has(id) || f.appearance !== JSON.stringify(chosen.find(p => p.id === id)?.avatar)) {
+            abilities.forget(id);
             scene.remove(f.group); f.label.remove(); f.ring.geometry.dispose(); ownedGeometries.delete(f.ring.geometry); f.privateGeometry.dispose(); ownedGeometries.delete(f.privateGeometry); f.ring.material.dispose(); materials.delete(`ring-${id}`); figures.delete(id);
         }
         seats.umum = seats.operasional = 0;
@@ -466,7 +468,7 @@ export function createOfficeScene({ host, labels, onSelect, onFailure, onVenue =
         const rect = host.getBoundingClientRect(), occupied = [];
         for (const f of [...figures.values()].sort((a, b) => Number(b.person.id === selected) - Number(a.person.id === selected))) {
             if (f.pose === 'sleeping') { const house = residences.location(f.person.id); point.set(house.x, 5.2, house.z + 1); }
-            else { f.group.getWorldPosition(point); point.y += 2.35; }
+            else { f.group.getWorldPosition(point); point.y += (abilities.form(f.person.id)?.height||1.8)+.55; }
             point.project(camera);
             const x = (point.x + 1) / 2 * rect.width, y = (1 - point.y) / 2 * rect.height;
             if(interior.active()&&f.person.id!==controlledId){f.label.hidden=true;continue;}
@@ -495,7 +497,8 @@ export function createOfficeScene({ host, labels, onSelect, onFailure, onVenue =
                     if(!restPlan.point)restPlan=null;
                     else{const dx=restPlan.point.x-p.x,dz=restPlan.point.z-p.z,d=Math.hypot(dx,dz);if(d<.04){pilotPhysics.face({x:p.x+Math.sin(restPlan.point.yaw),z:p.z+Math.cos(restPlan.point.yaw)});pilotActivity={action:'rest',pose:restPlan.pose,venue:insideHome(p,myHome)?'home':['beach','garden','terrace','lounge','bar'].find(id=>nearVenue(p,id))||'campus'};restPlan=null;input={};}
                         else{const scale=Math.min(1,d/(4.5*frameStep))/d;input={x:(Math.cos(yaw)*dx-Math.sin(yaw)*dz)*scale,z:(-Math.sin(yaw)*dx-Math.cos(yaw)*dz)*scale};}}}}
-                const state=pilotPhysics.step(frameStep,input,yaw,others);if(['walk','run','jump'].includes(state.action))pilotActivity=null;if(pilotActivity)Object.assign(state,pilotActivity);
+                const mode=abilities.modeState(controlledId);if((mode?.id||null)!==cameraForm){cameraForm=mode?.id||null;setCameraMode('follow',controlledId);}pilotPhysics.setForm(abilities.form(controlledId),mode?.expires);
+                const state=pilotPhysics.step(frameStep,input,yaw,others);if(['walk','run','jump','fly','land'].includes(state.action))pilotActivity=null;if(pilotActivity)Object.assign(state,pilotActivity);state.transformation=mode;state.transformationCooldown=abilities.modeCooldown(controlledId);
                 state.restPending=Boolean(restPlan);
                 f.group.position.set(state.x,state.y,state.z);f.group.rotation.y=state.yaw;f.manual=true;f.pose='manual';f.home.copy(f.group.position);f.target.copy(f.group.position);
                 if(guide){const place=guide==='home'&&myHome?{x:myHome.x,z:myHome.z+5}:officeLayout.venues[guide];if(place){state.target=guide;state.distance=Math.round(Math.hypot(state.x-place.x,state.z-place.z));}}state.atHome=insideHome(state,myHome);state.nearDoor=Boolean(myHome&&Math.hypot(state.x-myHome.x,state.z-myHome.z-3.9)<=2.8);state.doorOpen=homeDoorOpen;
@@ -506,7 +509,7 @@ export function createOfficeScene({ host, labels, onSelect, onFailure, onVenue =
             if(f.manual){
                 const state=f.person.id===controlledId&&pilotPhysics?{...pilotPhysics.state(),...(pilotActivity||{})}:peerPilots.get(f.person.id)||f.person.pilot;
                 if(state&&f.person.id!==controlledId){const target=new THREE.Vector3(state.x,state.y,state.z);const next=f.group.position.clone().lerp(target,.35);if(navigation.segment(f.group.position,next))f.group.position.copy(next);else f.group.position.copy(target);f.group.rotation.y=state.yaw;}
-                if(f.person.id!==controlledId)abilities.observe(f.person.id,state,f);
+                if(f.person.id!==controlledId)abilities.observe(f.person.id,state,f);f.flight=Boolean(state?.flight);f.moving=['walk','run'].includes(state?.action);
                 const skillPose=abilities.pose(f.person.id),animation=animateOfficeAvatar(f,skillPose&&!['walk','run','jump','rest'].includes(state?.action)?{...state,action:'cast',skillPose}:state,{time:now/1000+f.phase,dt:frameStep,reduced:paused});
                 const played=state?.action==='play'?games.find(g=>g.id===state.venue):null;
                 f.racket.visible=Boolean(played&&['tennis','badminton','pingpong','golf'].includes(played.id));f.tool.visible=Boolean(played&&['billiards','archery','darts'].includes(played.id));if(f.tool.visible)f.tool.geometry=toolGeometry(played.id);
@@ -514,9 +517,11 @@ export function createOfficeScene({ host, labels, onSelect, onFailure, onVenue =
                 if(state?.action==='rest'){
                     f.icon.textContent=state.pose==='nap'?'ONLINE · TIDUR SANTAI':state.pose==='recline'?'ONLINE · REBAHAN':state.pose==='meditate'?'ONLINE · MEDITASI':'ONLINE · BERSANTAI';
                 }
+                const form=abilities.form(f.person.id);if(form)f.icon.textContent=(f.person.private?'PRIVAT · ':'ONLINE · ')+form.name+(state?.flight?' · TERBANG':'');
                 if(animation.lying&&(!interior.active()||f.person.id===controlledId)){restMatrix.compose(new THREE.Vector3(f.group.position.x+Math.sin(f.group.rotation.y)*.7,f.group.position.y+.035,f.group.position.z+Math.cos(f.group.rotation.y)*.7),f.group.quaternion,new THREE.Vector3(1,1,1));restMats.setMatrixAt(restCount++,restMatrix);}
                 continue;
             }
+            abilities.clearForm(f.person.id);
             const playing = f.pose === 'playing', walking = !paused && (playing || f.waypoints?.length > 0);
             f.target.copy(f.home);
             if (playing && !f.waypoints?.length) { f.target.x += Math.sin(t * .65) * (f.game.kind === 'court' ? 1.4 : .18); f.target.z += Math.cos(t * .5) * (f.game.kind === 'court' ? .3 : .08); }
@@ -540,10 +545,10 @@ export function createOfficeScene({ host, labels, onSelect, onFailure, onVenue =
             else f.head.rotation.y = 0;
         }
         restMats.count=restCount;restMats.instanceMatrix.needsUpdate=true;
-        abilities.update();
+        abilities.update(Date.now(),pilotPhysics?.state());
         const followed = figures.get(followId);
         if (cameraMode !== 'orbit' && followed && !easingCamera) {
-            const nextTarget = followed.group.position.clone().add(new THREE.Vector3(0, followed.pose === 'sleeping' ? .25 : 1.3, followed.pose === 'sleeping' ? -1.3 : 0));
+            const nextTarget = followed.group.position.clone().add(new THREE.Vector3(0, abilities.form(followId)?.height*.55||(followed.pose === 'sleeping' ? .25 : 1.3), followed.pose === 'sleeping' ? -1.3 : 0));
             const delta = nextTarget.clone().sub(controls.target).multiplyScalar(.25); controls.target.add(delta); camera.position.add(delta);
         }
         environment.update(now, { paused, dark: document.documentElement.classList.contains('dark'), center: controls.target });
@@ -557,7 +562,7 @@ export function createOfficeScene({ host, labels, onSelect, onFailure, onVenue =
         }
         controls.update();
         const desiredCamera=camera.position.clone(),desiredOrientation=camera.quaternion.clone();
-        if (cameraMode !== 'orbit' && followed)camera.position.copy(officeCameraPosition(navigation,controls.target,desiredCamera,residences.cameraBoxes(followId),interior.active()?1.7:cameraMode==='portrait'?2.8:3.8,interior.active()?8:35));
+        if (cameraMode !== 'orbit' && followed)camera.position.copy(officeCameraPosition(navigation,controls.target,desiredCamera,residences.cameraBoxes(followId),interior.active()?1.7:abilities.form(followId)?.height*.85||(cameraMode==='portrait'?2.8:3.8),interior.active()?8:abilities.form(followId)?55:35));
         camera.lookAt(controls.target);camera.updateMatrixWorld(true);if(!lastDrawCamera)lastDrawCamera=camera.clone();else lastDrawCamera.copy(camera);
         interior.apply();renderer.render(scene, camera);
         if (paused || now - lastLabels > 120 || easingCamera) { drawLabels(); lastLabels = now; }
@@ -614,9 +619,10 @@ export function createOfficeScene({ host, labels, onSelect, onFailure, onVenue =
         if (mode === 'orbit') { cameraMode = 'orbit'; followId = null; controls.enablePan = true; controls.minDistance = 5; controls.maxDistance = 650; return; }
         if (!figures.has(id) && roster.some(p => p.id === id)) { selected = id; setPeople(roster); }
         const f = figures.get(id); if (!f) return;
-        cameraMode = mode === 'portrait' ? 'portrait' : 'follow'; followId = id; controls.enablePan = false; controls.minDistance = interior.active()?1.7:cameraMode==='portrait'?2.8:3.8; controls.maxDistance = interior.active()?8:35;
+        const form=abilities.form(id);cameraMode = mode === 'portrait' ? 'portrait' : 'follow'; followId = id; controls.enablePan = false; controls.minDistance = interior.active()?1.7:form?form.height*.85:cameraMode==='portrait'?2.8:3.8; controls.maxDistance = interior.active()?8:form?55:35;
         camera.fov = interior.active()?58:44; camera.updateProjectionMatrix(); targetFocus.copy(f.group.position).add(new THREE.Vector3(0, f.pose === 'sleeping' ? .25 : 1.3, f.pose === 'sleeping' ? -1.3 : 0));
-        cameraGoal.copy(targetFocus).add(cameraMode === 'portrait' ? new THREE.Vector3(1.8, .9, 2.7) : new THREE.Vector3(4, 2.5, 5));
+        if(form)targetFocus.y=f.group.position.y+form.height*.55;
+        cameraGoal.copy(targetFocus).add(form?new THREE.Vector3(form.height*.85,form.height*.65,form.height*1.1):cameraMode === 'portrait' ? new THREE.Vector3(1.8, .9, 2.7) : new THREE.Vector3(4, 2.5, 5));
         if (paused) { camera.position.copy(cameraGoal); controls.target.copy(targetFocus); easingCamera = false; } else easingCamera = true; requestDraw();
     }
     let dragStart = null;
@@ -628,7 +634,7 @@ export function createOfficeScene({ host, labels, onSelect, onFailure, onVenue =
         if (!dragStart || Math.hypot(e.clientX - dragStart[0], e.clientY - dragStart[1]) > 6) return; dragStart = null;
         const rect = renderer.domElement.getBoundingClientRect(); pointer.set((e.clientX - rect.left) / rect.width * 2 - 1, -(e.clientY - rect.top) / rect.height * 2 + 1);
         raycaster.setFromCamera(pointer, lastDrawCamera||camera);
-        const hit = raycaster.intersectObjects([...figures.values()].map(f => f.group).concat(residences.meshes,rivageBar.targets,hospitality.targets,gameTargets), true)[0];
+        const hit = raycaster.intersectObjects([...figures.values()].map(f => f.group).concat(residences.meshes,rivageBar.targets,hospitality.targets,gameTargets,abilities.targets()), true)[0];
         const resident = residences.personForHit(hit);
         if(resident===homeOwner&&hit?.object.userData.residenceLayer==='door'){onDoor();return;}
         if (resident) { onSelect(resident); visitHome(resident); }
@@ -650,7 +656,13 @@ export function createOfficeScene({ host, labels, onSelect, onFailure, onVenue =
         collisionBoxes:()=>navigation.boxes(),
         setPilotReporter(fn){pilotReporter=fn;},
         castSkill(index=0){const f=figures.get(controlledId);if(!f||!pilotPhysics)return{error:'Aktifkan kendali avatar dahulu.'};const skill=skillsFor(safeAvatar(f.person.avatar).costume)[index];if(!skill)return{error:'Jurus belum tersedia untuk kostum ini.'};if(abilities.cooldown(controlledId))return{error:`Pulihkan energi ${abilities.cooldown(controlledId)} detik lagi.`};
+            if(skill.type==='transform'&&(interior.active()||!navigation.free(pilotPhysics.state().x,pilotPhysics.state().z,pilotPhysics.state().y,skill.radius)))return{error:'Cari area lapang di luar rumah sebelum berubah.'};
+            if(skill.type==='transform'&&abilities.modeCooldown(controlledId))return{error:`Transformasi pulih dalam ${abilities.modeCooldown(controlledId)} detik.`};
             pilotActivity=null;restPlan=null;if(!abilities.cast(controlledId,skill.id,f))return{error:'Efek belum siap.'};requestDraw();return{skill:skill.id,skill_id:globalThis.crypto.randomUUID(),name:skill.name};},
+        syncPilot(state){if(!state||!pilotPhysics)return;if(Number.isFinite(state.updated_ms))abilities.clock(state.updated_ms-Date.now());if(endingMode&&state.form)return;if(!state.form)endingMode=false;abilities.observe(controlledId,state,figures.get(controlledId));const mode=abilities.modeState(controlledId);pilotPhysics.setForm(abilities.form(controlledId),mode?.expires);requestDraw();},
+        toggleFlight(){const result=pilotPhysics?.toggleFlight();requestDraw();return result;},
+        endTransformation(){endingMode=true;cameraForm=null;abilities.clearForm(controlledId);pilotPhysics?.setForm(null);setCameraMode('follow',controlledId);requestDraw();},
+        activeTransformation:()=>abilities.modeState(controlledId),
         setPrivatePilotProfile(avatar){if(privatePilotSelf){privatePilotSelf={...privatePilotSelf,avatar};setPeople(roster.map(p=>p.id===privatePilotSelf.id?privatePilotSelf:p));}},
         setPilotGate(fn){pilotGate=fn;},
         reconcilePilot(state){if(pilotPhysics){pilotPhysics.reset(state);pilotActivity=null;restPlan=null;pilotInput={};requestDraw();}},
@@ -663,7 +675,7 @@ export function createOfficeScene({ host, labels, onSelect, onFailure, onVenue =
             if(p.grounded&&!point)return false;restPlan={pose,point};
             if(point&&Math.hypot(point.x-p.x,point.z-p.z)<.04){pilotPhysics.face({x:p.x+Math.sin(point.yaw),z:p.z+Math.cos(point.yaw)});pilotActivity={action:'rest',pose,venue:insideHome(p,myHome)?'home':['beach','garden','terrace','lounge','bar'].find(id=>nearVenue(p,id))||'campus'};restPlan=null;}requestDraw();return true;},
         setPilot(id,state,privateSelf=null){controlledId=id;privatePilotSelf=privateSelf;pilotPhysics=createPilotPhysics(navigation,state);setPeople(roster);setCameraMode('follow',id);requestDraw();},
-        releasePilot(){interior.leave();const privateId=privatePilotSelf?.id;controlledId=null;privatePilotSelf=null;pilotPhysics=null;pilotInput={};pilotActivity=null;restPlan=null;guide=null;guideMarker.visible=false;setPeople(roster.filter(p=>p.id!==privateId));},
+        releasePilot(){interior.leave();abilities.clearForm(controlledId);endingMode=false;cameraForm=null;const privateId=privatePilotSelf?.id;controlledId=null;privatePilotSelf=null;pilotPhysics=null;pilotInput={};pilotActivity=null;restPlan=null;guide=null;guideMarker.visible=false;setPeople(roster.filter(p=>p.id!==privateId));},
         setPilotInput(value){pilotInput=value||{};requestDraw();},pilotState(){return pilotPhysics?{...pilotPhysics.state(),...(pilotActivity||{})}:null;},
         focusPilot(){host.focus?.({preventScroll:true});},followPilot(){if(controlledId){setCameraMode('follow',controlledId);host.focus?.({preventScroll:true});}},
         setPeerPilots(values){peerPilots.clear();for(const state of values)if(state.id!==controlledId)peerPilots.set(state.id,state);setPeople(roster.map(p=>({...p,pilot:peerPilots.get(p.id)||null,in_office:peerPilots.has(p.id)||p.id===controlledId})));},

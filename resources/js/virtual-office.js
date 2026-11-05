@@ -10,7 +10,8 @@ if (root && !root.dataset.initialized) {
     root.dataset.initialized = '1';
     const $ = id => document.getElementById(id);
     const config = JSON.parse($('voConfig').textContent);
-    function skillButtons(avatar){const skills=skillsFor(avatar?.costume);for(let i=0;i<3;i++){const button=$('voSkill'+i);if(!button)continue;button.hidden=!skills[i];if(skills[i])button.textContent=['Q','R','T'][i]+' · '+skills[i].name;}}
+    function skillButtons(avatar){const skills=skillsFor(avatar?.costume);for(let i=0;i<3;i++){const button=$('voSkill'+i);if(!button)continue;button.hidden=!skills[i];if(skills[i]){button.textContent=['Q','R','T'][i]+' · '+skills[i].name;button.title=skills[i].type==='transform'?'Transformasi 60 detik · perlu area lapang':'Jurus '+skills[i].name;}}}
+    function modeHud(value){if(value.interior&&value.transformation)pilot?.endMode?.();const mode=value.transformation;if($('voModeCooldown'))text('voModeCooldown',!mode&&value.transformationCooldown>0?'Transformasi pulih · '+value.transformationCooldown+' dtk':'');if(!$('voModePanel'))return;$('voModePanel').hidden=!mode;if(!mode)return;text('voModeName',mode.name);text('voModeRemaining',mode.remaining+' dtk');$('voModeTime').value=mode.remaining;$('voFlightToggle').hidden=!mode.fly;text('voFlightToggle',value.flight?'F · Mendarat':'F · Terbang');text('voModeGuide',mode.fly?'F terbang / mendarat · Space naik · C turun':'Mode berakhir otomatis. Jurus Q/R/T tetap tersedia.');}
     skillButtons(config.myProfile?.avatar);
     $('voGameAvatar')?.addEventListener('click',()=>$('voOpenAvatar').click());
     const palette = ['#dce9df', '#eadfcc', '#dde5f1', '#e8dce5', '#d3e8e4', '#f0dfce'];
@@ -220,6 +221,7 @@ if (root && !root.dataset.initialized) {
             if (!response.ok) throw new Error(response.status === 409 ? 'Avatar berubah di tab lain. Muat ulang halaman sebelum menyimpan.' : response.status === 419 || response.status === 401 ? 'Sesi berakhir. Muat ulang dan login kembali.' : 'Avatar belum tersimpan. Periksa koneksi lalu coba lagi.');
             const saved = await response.json(); if (controller.signal.aborted) return;
             profile = { avatar: safeAvatar(saved.avatar), share_activity: saved.share_activity === true, version: saved.version };
+            if(scene?.activeTransformation?.())pilot?.endMode?.();
             skillButtons(profile.avatar);
             people = people.map(p => p.is_me ? { ...p, avatar: profile.avatar, share_activity: profile.share_activity } : p);
             if(config.privateSelf){config.privateSelf.avatar=profile.avatar;scene?.setPrivatePilotProfile?.(profile.avatar);}
@@ -235,7 +237,7 @@ if (root && !root.dataset.initialized) {
     live = mountOfficeLive({ document, config, visible, getScene: () => scene, getPeople: () => people,
         onWorld: value => { worldConfig = value; scene?.configureWorld?.(value); },
         onRoom: value => { scene?.setMeeting?.(value); const person = people.find(p => p.id === selected); if (person) chatActions(person); if (value.room?.status === 'accepted' && mode !== '3d' && !sceneUnavailable) { switchView('3d'); text('voLiveStatus', 'Ruang 3D dibuka agar kedua avatar dapat bertatap muka.'); } } });
-    pilot=mountOfficePilot({document,window,config,visible,getScene:()=>scene,onStatus:message=>{text('voPilotStatus',message);text('voQuickStatus',message);},onPose:value=>{if($('voInteriorStatus'))$('voInteriorStatus').hidden=!value.interior;if($('voHomeDoor')){$('voHomeDoor').disabled=!value.atHome&&!value.nearDoor;$('voHomeDoor').textContent=value.doorOpen?'Tutup pintu':'Buka pintu';}if(value.target)text('voPilotTarget',`${(value.target==='home'?'Rumah saya':games.find(g=>g.id===value.target)?.name)||value.target} · ${value.distance} m · ikuti penanda emas`);}});
+    pilot=mountOfficePilot({document,window,config,visible,getScene:()=>scene,onStatus:message=>{text('voPilotStatus',message);text('voQuickStatus',message);},onPose:value=>{modeHud(value);if($('voInteriorStatus'))$('voInteriorStatus').hidden=!value.interior;if($('voHomeDoor')){$('voHomeDoor').disabled=!value.atHome&&!value.nearDoor;$('voHomeDoor').textContent=value.doorOpen?'Tutup pintu':'Buka pintu';}if(value.target)text('voPilotTarget',`${(value.target==='home'?'Rumah saya':games.find(g=>g.id===value.target)?.name)||value.target} · ${value.distance} m · ikuti penanda emas`);}});
     club = mountOfficeClub({ document, config, visible, getPeople: () => people, getScene: () => scene, focusArea, requireVenue:id=>pilot.interact(id) });
     apply(config.initial); motionButton(); switchView(mode, false); if (feedUrl) loop.start(); live.start(); club.start();
 }

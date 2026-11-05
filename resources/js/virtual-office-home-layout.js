@@ -1,7 +1,7 @@
 import homes from '../data/virtual-office-homes.json' with {type:'json'};
 export function homeLocation(slot){return Number.isInteger(slot)&&slot>=0&&slot<homes.capacity?{slot,x:homes.startX+slot%homes.columns*homes.spacingX,z:homes.startZ-Math.floor(slot/homes.columns)*homes.spacingZ}:null;}
-export function homeBoxes(a,b=a,openSlot=null,plots=homes.capacity){
-    const result=[],minX=Math.min(a.x,b.x)-.4,maxX=Math.max(a.x,b.x)+.4,minZ=Math.min(a.z,b.z)-.4,maxZ=Math.max(a.z,b.z)+.4;
+export function homeBoxes(a,b=a,openSlot=null,plots=homes.capacity,margin=.4){
+    const result=[],minX=Math.min(a.x,b.x)-margin,maxX=Math.max(a.x,b.x)+margin,minZ=Math.min(a.z,b.z)-margin,maxZ=Math.max(a.z,b.z)+margin;
     const firstCol=Math.max(0,Math.ceil((minX-5.1-homes.startX)/homes.spacingX)),lastCol=Math.min(homes.columns-1,Math.floor((maxX+5.1-homes.startX)/homes.spacingX));
     const firstRow=Math.max(0,Math.ceil((homes.startZ-maxZ-5.3)/homes.spacingZ)),lastRow=Math.min(Math.ceil(homes.capacity/homes.columns)-1,Math.floor((homes.startZ-minZ+5.3)/homes.spacingZ));
     for(let row=firstRow;row<=lastRow;row++)for(let col=firstCol;col<=lastCol;col++){

@@ -21,6 +21,12 @@ class VirtualOfficePilotTest extends TestCase
     {
         return $data+['session_id'=>(string)Str::uuid(),'mode'=>'claim','seq'=>0,'x'=>0,'y'=>-.12,'z'=>20,'yaw'=>0,'action'=>'idle'];
     }
+    private function transformed(string $costume='sasuke',string $skill='susanoo'): array
+    {
+        $user=$this->person();$avatar=\App\Services\VirtualOfficeAvatar::defaults();$avatar['costume']=$costume;$this->actingAs($user)->postJson(route('virtual-office.avatar'),['avatar'=>$avatar,'share_activity'=>true,'version'=>0])->assertOk();
+        $body=$this->packet();$self=$this->postJson(route('virtual-office.pilot'),$body)->assertOk()->json('self');$body=array_replace($body,['mode'=>'move','seq'=>1,'x'=>$self['x'],'z'=>$self['z']]);
+        $self=$this->postJson(route('virtual-office.pilot'),array_replace($body,['skill'=>$skill,'skill_id'=>(string)Str::uuid()]))->assertOk()->json('self');return[$user,$body,$self];
+    }
     public function test_own_manual_control_is_ephemeral_and_other_tabs_cannot_overwrite_an_active_session(): void
     {
         $user=$this->person();$body=$this->packet();$self=$this->actingAs($user)->postJson(route('virtual-office.pilot'),$body)->assertOk()->assertJsonCount(1,'peers')->json('self');
@@ -141,5 +147,32 @@ class VirtualOfficePilotTest extends TestCase
         $this->travel(7)->seconds();$this->postJson(route('virtual-office.pilot'),array_replace($cast,['seq'=>3,'skill'=>'kamehameha','skill_id'=>(string)Str::uuid()]))->assertUnprocessable();
         $this->postJson(route('virtual-office.pilot'),array_replace($cast,['seq'=>3,'skill'=>'clones','skill_id'=>(string)Str::uuid()]))->assertOk()->assertJsonPath('self.skill','clones');
         $this->assertDatabaseCount('virtual_office_orders',0);
+    }
+    public function test_transformation_lasts_sixty_seconds_and_authorized_flight_lands_after_expiry(): void
+    {
+        [$user,$body,$form]=$this->transformed();$started=now();$this->assertEquals(60000,$form['form_until']-$form['form_at']);$seq=1;$y=-.12;
+        $this->postJson(route('virtual-office.pilot'),array_replace($body,['seq'=>++$seq,'skill'=>'susanoo','skill_id'=>VirtualOfficePilot::current($user->id)['skill_id']]))->assertOk()->assertJsonPath('self.form_until',$form['form_until']);
+        $this->postJson(route('virtual-office.pilot'),array_replace($body,['seq'=>++$seq,'skill'=>'chidori','skill_id'=>(string)Str::uuid()]))->assertOk()->assertJsonPath('self.form','susanoo')->assertJsonPath('self.form_until',$form['form_until']);
+        for($i=0;$i<8;$i++){$this->travel(150)->milliseconds();$y+=.6;$this->postJson(route('virtual-office.pilot'),array_replace($body,['seq'=>++$seq,'y'=>$y,'action'=>'fly','flight'=>true]))->assertOk()->assertJsonPath('self.form','susanoo');}
+        foreach([10,20,30,40,50,59]as$second){$this->travelTo($started->copy()->addSeconds($second));$this->postJson(route('virtual-office.pilot'),array_replace($body,['seq'=>++$seq,'y'=>$y,'action'=>'fly','flight'=>true]))->assertOk()->assertJsonPath('self.form_until',$form['form_until']);}
+        $this->travelTo($started->copy()->addMilliseconds(60200));$this->postJson(route('virtual-office.pilot'),array_replace($body,['seq'=>++$seq,'y'=>$y,'action'=>'fly','flight'=>true]))->assertOk()->assertJsonPath('self.form',null)->assertJsonPath('self.flight',false);
+        for($i=0;$i<9;$i++){$this->travel(150)->milliseconds();$y=max(-.12,$y-.6);$this->postJson(route('virtual-office.pilot'),array_replace($body,['seq'=>++$seq,'y'=>$y,'action'=>'land','flight'=>false]))->assertOk();}
+        $this->assertEquals(-.12,VirtualOfficePilot::current($user->id)['y']);$this->assertDatabaseCount('virtual_office_orders',0);
+    }
+    public function test_forms_require_saved_costume_and_non_flying_kurama_cannot_forge_flight(): void
+    {
+        [$user,$body,$form]=$this->transformed('naruto','kurama');$this->assertSame('kurama',$form['form']);$this->travel(200)->milliseconds();
+        $this->postJson(route('virtual-office.pilot'),array_replace($body,['seq'=>2,'flight'=>true,'action'=>'fly','y'=>.4]))->assertUnprocessable();
+        $this->postJson(route('virtual-office.pilot'),array_replace($body,['seq'=>2,'flight'=>false,'y'=>5]))->assertUnprocessable();
+        $this->travel(7)->seconds();$this->postJson(route('virtual-office.pilot'),array_replace($body,['seq'=>2,'skill'=>'susanoo','skill_id'=>(string)Str::uuid()]))->assertUnprocessable();
+    }
+    public function test_cancel_reclaim_and_repeated_cancel_cannot_refresh_mode_or_landing_deadlines(): void
+    {
+        [$user,$body,$form]=$this->transformed();$seq=1;for($i=0;$i<10;$i++){$this->travel(150)->milliseconds();$this->postJson(route('virtual-office.pilot'),array_replace($body,['seq'=>++$seq,'y'=>($i+1)*.4-.12,'flight'=>true,'action'=>'fly']))->assertOk();}
+        $this->postJson(route('virtual-office.pilot'),array_replace($body,['seq'=>++$seq,'y'=>3.88,'flight'=>false,'action'=>'land','end_form'=>true]))->assertOk()->assertJsonPath('self.form',null);$deadline=VirtualOfficePilot::current($user->id)['landing_until'];
+        $this->travel(5)->seconds();$this->postJson(route('virtual-office.pilot'),array_replace($body,['seq'=>++$seq,'y'=>3.88,'action'=>'land','end_form'=>true]))->assertOk();$this->assertEquals($deadline,VirtualOfficePilot::current($user->id)['landing_until']);
+        $this->travel(2)->seconds();$this->postJson(route('virtual-office.pilot'),array_replace($body,['seq'=>++$seq,'y'=>3.88,'action'=>'land','end_form'=>true]))->assertUnprocessable()->assertJsonPath('self.y',-.12);
+        $this->postJson(route('virtual-office.pilot'),array_replace($body,['mode'=>'claim','seq'=>0]))->assertOk()->assertJsonPath('self.form_ready_at',$form['form_ready_at']);
+        $this->postJson(route('virtual-office.pilot'),array_replace($body,['seq'=>1,'skill'=>'susanoo','skill_id'=>(string)Str::uuid()]))->assertUnprocessable();
     }
 }

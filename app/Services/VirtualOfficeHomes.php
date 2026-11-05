@@ -21,10 +21,10 @@ class VirtualOfficeHomes
     }
     public static function own(User $user): ?array { return self::location(self::slots()[$user->id]??null); }
     public static function inside(array $point,?array $home): bool { return $home&&abs($point['x']-$home['x'])<4.4&&abs($point['z']-$home['z'])<3.7; }
-    public static function boxes(array $a,?array $b=null,?int $openSlot=null,?int $plotCount=null): array
+    public static function boxes(array $a,?array $b=null,?int $openSlot=null,?int $plotCount=null,float $margin=.4): array
     {
         $b??=$a;$l=self::layout();$result=[];
-        $minX=min($a['x'],$b['x'])-.4;$maxX=max($a['x'],$b['x'])+.4;$minZ=min($a['z'],$b['z'])-.4;$maxZ=max($a['z'],$b['z'])+.4;
+        $minX=min($a['x'],$b['x'])-$margin;$maxX=max($a['x'],$b['x'])+$margin;$minZ=min($a['z'],$b['z'])-$margin;$maxZ=max($a['z'],$b['z'])+$margin;
         $firstCol=max(0,(int)ceil(($minX-5.1-$l['startX'])/$l['spacingX']));$lastCol=min($l['columns']-1,(int)floor(($maxX+5.1-$l['startX'])/$l['spacingX']));
         $firstRow=max(0,(int)ceil(($l['startZ']-$maxZ-5.3)/$l['spacingZ']));$lastRow=min((int)ceil($l['capacity']/$l['columns'])-1,(int)floor(($l['startZ']-$minZ+5.3)/$l['spacingZ']));
         if($firstRow>$lastRow||$firstCol>$lastCol)return [];

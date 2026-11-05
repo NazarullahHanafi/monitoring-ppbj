@@ -1,15 +1,15 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),path=require('node:path');
 const tick=()=>new Promise(setImmediate);
 function fixture(){
-    const timers=new Map(),requests=[],events={},windowEvents={},inputs=[],beacons=[],rests=[],nodes=new Map();let timerId=0,modal=false,show=true,sets=0,releases=0,corrections=[],gate;
+    const timers=new Map(),requests=[],events={},windowEvents={},inputs=[],beacons=[],rests=[],syncs=[],flights=[],ends=[],nodes=new Map();let timerId=0,modal=false,show=true,sets=0,releases=0,corrections=[],gate;
     const node=id=>{if(!nodes.has(id))nodes.set(id,{events:{},addEventListener(k,f){this.events[k]=f;},value:0});return nodes.get(id);};
     const doc={hidden:false,activeElement:null,getElementById:node,querySelector:s=>s.startsWith('meta')?{content:'csrf'}:modal?{}:null,querySelectorAll:()=>[],addEventListener(k,f){events[k]=f;}};
     const win={addEventListener(k,f){windowEvents[k]=f;},navigator:{sendBeacon:(...v)=>beacons.push(v)}};
-    const scene={setRestPose:p=>{rests.push(p);return true;},reconcilePilot:v=>corrections.push(v),setPilotInput:v=>inputs.push(v),setPilotReporter(){},setPilotGate:v=>{gate=v;},setPilot(){sets++;},releasePilot(){releases++;},pilotState:()=>({x:0,y:-.12,z:21,yaw:0,action:'idle'}),setPeerPilots(){},canInteract:()=>false,guideTo(){}};
+    const scene={syncPilot:v=>syncs.push(v),toggleFlight:()=>{flights.push(true);return 'fly';},endTransformation:()=>ends.push(true),setRestPose:p=>{rests.push(p);return true;},reconcilePilot:v=>corrections.push(v),setPilotInput:v=>inputs.push(v),setPilotReporter(){},setPilotGate:v=>{gate=v;},setPilot(){sets++;},releasePilot(){releases++;},pilotState:()=>({x:0,y:-.12,z:21,yaw:0,action:'idle'}),setPeerPilots(){},canInteract:()=>false,guideTo(){}};
     const context={motion:require('../../resources/data/virtual-office-motion.json'),crypto:require('node:crypto').webcrypto,Blob,AbortController,Date,fetch:(url,options)=>new Promise(resolve=>requests.push({url,options,resolve})),setTimeout:(fn,delay)=>{const id=++timerId;timers.set(id,{fn,delay});return id;},clearTimeout:id=>timers.delete(id)};
     const code=fs.readFileSync(path.resolve(__dirname,'../../resources/js/virtual-office-pilot.js'),'utf8').replace(/^import .*?;\s*/gm,'').replace('export function mountOfficePilot','function mountOfficePilot');vm.createContext(context);vm.runInContext(code,context);
     const pilot=context.mountOfficePilot({document:doc,window:win,config:{canPilot:true,myId:1},visible:()=>show,getScene:()=>scene});
-    return {pilot,doc,requests,inputs,beacons,rests,timers,corrections,get:node,get sets(){return sets;},get releases(){return releases;},get gate(){return gate;},modal(v){modal=v;},key(code,type='keydown'){let prevented=false;events[type]({code,preventDefault(){prevented=true;}});return prevented;},blur:()=>windowEvents.blur(),accept(i=0){requests[i].resolve({ok:true,json:async()=>({self:{x:0,y:-.12,z:21,yaw:0},peers:[]})});},pulse(){const [id,t]=[...timers].find(([,v])=>v.delay===1200);timers.delete(id);t.fn();}};
+    return {pilot,doc,requests,inputs,beacons,rests,syncs,flights,ends,timers,corrections,get:node,get sets(){return sets;},get releases(){return releases;},get gate(){return gate;},modal(v){modal=v;},key(code,type='keydown'){let prevented=false;events[type]({code,preventDefault(){prevented=true;}});return prevented;},blur:()=>windowEvents.blur(),accept(i=0){requests[i].resolve({ok:true,json:async()=>({self:{x:0,y:-.12,z:21,yaw:0},peers:[]})});},pulse(){const [id,t]=[...timers].find(([,v])=>v.delay===1200);timers.delete(id);t.fn();}};
 }
 test('keyboard ignores editors and modals, supports arrows/jump/boost, clears held keys on blur',async()=>{
     const f=fixture();f.pilot.start();f.accept();await tick();assert.equal(f.sets,1);
@@ -40,4 +40,9 @@ test('slow requests freeze prediction before the server distance allowance is ex
 });
 test('a rest request made before control is claimed is applied once after claim without a second click',async()=>{
     const f=fixture();f.get('voRestPose').value='nap';f.get('voRestStart').events.click();assert.equal(f.requests.length,1);f.accept();await tick();assert.equal(f.sets,1);assert.deepEqual(f.rests,['nap']);f.pulse();f.accept(1);await tick();assert.deepEqual(f.rests,['nap']);f.pilot.stop();
+});
+test('flight input respects modal focus, grants synchronize, and failed mode cancellation backs off',async()=>{
+    const f=fixture();f.pilot.start();f.accept();await tick();assert.equal(f.syncs.length,1);assert.equal(f.key('KeyF'),true);assert.equal(f.flights.length,1);f.key('KeyC');assert.equal(f.inputs.at(-1).descend,true);f.key('KeyC','keyup');assert.equal(f.inputs.at(-1).descend,false);f.modal(true);assert.equal(f.key('KeyF'),false);assert.equal(f.flights.length,1);f.modal(false);
+    f.get('voModeEnd').events.click();assert.equal(f.ends.length,1);const[id,timer]=[...f.timers].find(([,t])=>t.delay===0);f.timers.delete(id);timer.fn();assert.equal(JSON.parse(f.requests[1].options.body).end_form,true);
+    f.requests[1].resolve({ok:false,status:422,json:async()=>({self:{x:0,y:-.12,z:21,yaw:0},message:'Koreksi'})});await tick();assert.ok([...f.timers.values()].some(t=>t.delay===1200));assert.ok(![...f.timers.values()].some(t=>t.delay===0),'A rejected cancellation must not spin requests.');f.pilot.stop();
 });
