@@ -1,5 +1,6 @@
 {
   "capacity":128,"columns":8,"startX":-36.75,"startZ":-28,"spacingX":10.5,"spacingZ":12,
+  "roof":{"w":10,"d":8.7,"bottom":3.5,"top":4.55},
   "boxes":[
     {"x":0,"z":-3.9,"w":9.4,"d":0.18,"top":3.6,"tag":"home-back"},
     {"x":-4.6,"z":0,"w":0.18,"d":7.8,"top":3.6,"tag":"home-side"},

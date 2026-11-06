@@ -137,6 +137,14 @@ class VirtualOfficePilotTest extends TestCase
         $this->travel(1800)->milliseconds();$this->postJson(route('virtual-office.pilot'),array_replace($move,['seq'=>2]))->assertUnprocessable()->assertJsonPath('self.seq',1);
         $this->postJson(route('virtual-office.pilot'),array_replace($move,['seq'=>2,'y'=>3.3]))->assertUnprocessable();
     }
+
+    public function test_repeated_real_double_jumps_reset_airtime_when_landing_occurs_between_snapshots(): void
+    {
+        $trace=json_decode(file_get_contents(base_path('tests/Fixtures/virtual-office-repeated-jumps.json')),true,512,JSON_THROW_ON_ERROR);$user=$this->person();$body=$this->packet();$this->actingAs($user)->postJson(route('virtual-office.pilot'),$body)->assertOk();
+        Cache::put(VirtualOfficePilot::key($user->id),array_merge(VirtualOfficePilot::current($user->id),$trace['initial']),900);$start=now();
+        foreach($trace['packets']as$i=>$packet){$this->travelTo($start->copy()->addMilliseconds($packet['ms']));unset($packet['ms']);$this->postJson(route('virtual-office.pilot'),array_replace($body,$packet,['mode'=>'move','seq'=>$i+1]))->assertOk()->assertJsonPath('self.seq',$i+1);}
+        $this->assertSame(60,VirtualOfficePilot::current($user->id)['seq']);
+    }
     public function test_skill_casts_use_saved_costume_are_idempotent_and_have_server_cooldown(): void
     {
         $user=$this->person();$this->actingAs($user);$avatar=\App\Services\VirtualOfficeAvatar::defaults();$avatar['costume']='naruto';$this->postJson(route('virtual-office.avatar'),['avatar'=>$avatar,'share_activity'=>true,'version'=>0])->assertOk();
@@ -165,6 +173,14 @@ class VirtualOfficePilotTest extends TestCase
         $this->postJson(route('virtual-office.pilot'),array_replace($body,['seq'=>2,'flight'=>true,'action'=>'fly','y'=>.4]))->assertUnprocessable();
         $this->postJson(route('virtual-office.pilot'),array_replace($body,['seq'=>2,'flight'=>false,'y'=>5]))->assertUnprocessable();
         $this->travel(7)->seconds();$this->postJson(route('virtual-office.pilot'),array_replace($body,['seq'=>2,'skill'=>'susanoo','skill_id'=>(string)Str::uuid()]))->assertUnprocessable();
+    }
+
+    public function test_real_susanoo_flight_crosses_a_house_lands_on_its_roof_and_returns_to_ground(): void
+    {
+        [$user,$body]=$this->transformed();$trace=json_decode(file_get_contents(base_path('tests/Fixtures/virtual-office-flight-roof.json')),true,512,JSON_THROW_ON_ERROR);
+        Cache::put(VirtualOfficePilot::key($user->id),array_merge(VirtualOfficePilot::current($user->id),$trace['initial']),900);$start=now();
+        foreach($trace['packets']as$i=>$packet){$this->travelTo($start->copy()->addMilliseconds($packet['ms']));unset($packet['ms']);$this->postJson(route('virtual-office.pilot'),array_replace($body,$packet,['mode'=>'move','seq'=>$i+2]))->assertOk()->assertJsonPath('self.seq',$i+2);}
+        $state=VirtualOfficePilot::current($user->id);$this->assertEquals(-.12,$state['y']);$this->assertFalse($state['air_access']);$this->assertFalse(\App\Services\VirtualOfficeHomes::inside(['x'=>-36.75,'y'=>8,'z'=>-28],\App\Services\VirtualOfficeHomes::own($user)));
     }
     public function test_cancel_reclaim_and_repeated_cancel_cannot_refresh_mode_or_landing_deadlines(): void
     {

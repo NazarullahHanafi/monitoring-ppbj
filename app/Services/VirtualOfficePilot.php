@@ -8,10 +8,10 @@ use Illuminate\Support\Facades\Cache;
 class VirtualOfficePilot
 {
     private ?int $homePlotCount=null;
-    private function neighbourhood(array $a,?array $b,?int $openSlot,float $radius=.3): array
+    private function neighbourhood(array $a,?array $b,?int $openSlot,float $radius=.3,bool $airspace=false): array
     {
         if(min($a['z'],$b['z']??$a['z'])>-20)return [];
-        return VirtualOfficeHomes::boxes($a,$b,$openSlot,$this->homePlotCount??=count(VirtualOfficeHomes::slots()),max(.4,$radius));
+        return VirtualOfficeHomes::boxes($a,$b,$openSlot,$this->homePlotCount??=count(VirtualOfficeHomes::slots()),max(.4,$radius),$airspace);
     }
     public static function key(int $id): string { return 'office:pilot:v1:'.$id; }
     public static function lease(int $id): string { return 'office:pilot:lease:'.$id; }
@@ -23,36 +23,39 @@ class VirtualOfficePilot
     {
         $state=Cache::get(self::key($id));return is_array($state)&&Cache::get(self::lease($id))===($state['session_id']??null)?$state:null;
     }
-    public static function publicState(?array $state): ?array { return $state ? array_intersect_key($state,array_flip(['x','y','z','yaw','action','venue','pose','door_open','seq','updated_ms','skill','skill_at','form','form_at','form_until','form_ready_at','flight'])) : null; }
+    public static function publicState(?array $state): ?array { return $state ? array_intersect_key($state,array_flip(['x','y','z','yaw','action','venue','pose','door_open','seq','updated_ms','skill','skill_at','form','form_at','form_until','form_ready_at','flight','air_access'])) : null; }
     private static function vaultable(array $box): bool { return $box['top']<=self::motion()['vault_height']&&in_array($box['tag'],self::motion()['vault_tags'],true); }
-    public function free(float $x,float $z,?int $openSlot=null,float $y=-.12,float $radius=.3): bool
+    public function free(float $x,float $z,?int $openSlot=null,float $y=-.12,float $radius=.3,bool $airspace=false): bool
     {
         $bounds=self::layout()['bounds'];$r=$radius;
         if($x<$bounds['minX']+$r||$x>$bounds['maxX']-$r||$z<$bounds['minZ']+$r||$z>$bounds['maxZ']-$r)return false;
-        foreach(array_merge($this->obstacles(),$this->neighbourhood(['x'=>$x,'z'=>$z],null,$openSlot,$radius))as$b)if(!(self::vaultable($b)&&$y>=$b['top']+.075)&&$x>$b['left']-$r&&$x<$b['right']+$r&&$z>$b['back']-$r&&$z<$b['front']+$r)return false;
+        foreach(array_merge($this->obstacles(),$this->neighbourhood(['x'=>$x,'z'=>$z],null,$openSlot,$radius,$airspace))as$b)if(!((self::vaultable($b)||$airspace)&&$y>=$b['top']+.075||isset($b['bottom'])&&$y+1.8<=$b['bottom']-.075)&&$x>$b['left']-$r&&$x<$b['right']+$r&&$z>$b['back']-$r&&$z<$b['front']+$r)return false;
         return true;
     }
     public function obstacles(): array
     {
         static $data;return $data ??= json_decode(file_get_contents(resource_path('data/virtual-office-collisions.json')),true,512,JSON_THROW_ON_ERROR);
     }
-    private function ground(array $point,?array $home,?int $openSlot): float
+    private function ground(array $point,?array $home,?int $openSlot,bool $airspace=false,float $radius=.3): float
     {
-        $ground=VirtualOfficeHomes::inside($point,$home)?.22:-.12;
-        foreach(array_merge($this->obstacles(),$this->neighbourhood($point,null,$openSlot))as$box)if(self::vaultable($box)&&$point['x']>$box['left']-.3&&$point['x']<$box['right']+.3&&$point['z']>$box['back']-.3&&$point['z']<$box['front']+.3&&($point['y']??-.12)>=$box['top']+.07)$ground=max($ground,$box['top']+.08);
+        $floorPoint=array_replace($point,['y'=>-.12]);$ground=-.12;
+        $layout=VirtualOfficeHomes::layout();$column=(int)round(($point['x']-$layout['startX'])/$layout['spacingX']);$row=(int)round(($layout['startZ']-$point['z'])/$layout['spacingZ']);$slot=$row*$layout['columns']+$column;
+        if($column>=0&&$column<$layout['columns']&&$row>=0&&$slot<($this->homePlotCount??=count(VirtualOfficeHomes::slots()))&&VirtualOfficeHomes::inside($floorPoint,VirtualOfficeHomes::location($slot)))$ground=.22;
+        foreach(array_merge($this->obstacles(),$this->neighbourhood($point,null,$openSlot,$radius,$airspace))as$box)if((self::vaultable($box)||$airspace)&&$point['x']>$box['left']-$radius&&$point['x']<$box['right']+$radius&&$point['z']>$box['back']-$radius&&$point['z']<$box['front']+$radius&&($point['y']??-.12)>=$box['top']+.07)$ground=max($ground,$box['top']+.08);
         return $ground;
     }
-    public function segment(array $a,array $b,?int $openSlot=null,float $radius=.3): bool
+    public function segment(array $a,array $b,?int $openSlot=null,float $radius=.3,bool $airspace=false): bool
     {
-        if(!$this->free($b['x'],$b['z'],$openSlot,$b['y']??-.12,$radius))return false;
-        foreach(array_merge($this->obstacles(),$this->neighbourhood($a,$b,$openSlot,$radius))as$box){$low=0;$high=1;
+        if(!$this->free($b['x'],$b['z'],$openSlot,$b['y']??-.12,$radius,$airspace))return false;
+        foreach(array_merge($this->obstacles(),$this->neighbourhood($a,$b,$openSlot,$radius,$airspace))as$box){$low=0;$high=1;
             foreach([['x',$box['left']-$radius,$box['right']+$radius],['z',$box['back']-$radius,$box['front']+$radius]]as[$axis,$start,$end]){
                 $delta=$b[$axis]-$a[$axis];
                 if(abs($delta)<1e-8){if($a[$axis]<=$start||$a[$axis]>=$end){$low=2;break;}}
                 else{$t1=($start-$a[$axis])/$delta;$t2=($end-$a[$axis])/$delta;$low=max($low,min($t1,$t2));$high=min($high,max($t1,$t2));}
             }
             if($low<=$high&&$high>0&&$low<1){$ay=$a['y']??-.12;$by=$b['y']??-.12;
-                if(self::vaultable($box)&&min($ay+($by-$ay)*max(0,$low),$ay+($by-$ay)*min(1,$high))>=$box['top']+.075)continue;
+                $startY=$ay+($by-$ay)*max(0,$low);$endY=$ay+($by-$ay)*min(1,$high);
+                if((self::vaultable($box)||$airspace)&&min($startY,$endY)>=$box['top']+.075||isset($box['bottom'])&&max($startY,$endY)+1.8<=$box['bottom']-.075)continue;
                 return false;
             }
         }return true;
@@ -74,21 +77,31 @@ class VirtualOfficePilot
                 if($form&&$now>=($state['form_until']??0)){$state['form']=null;$state['flight']=false;$state['landing_until']=($state['form_until']??$now)+6000;$form=null;}
                 $graceFlight=$wasFlying&&!$form&&$now<=($state['form_until']??0)+1000;
                 $flying=!empty($data['flight'])&&!empty($form['fly']);if(!empty($state['flight'])&&!$flying)$state['landing_until']=$now+6000;
-                $landing=!empty($state['landing_until'])&&$state['y']>.15;
-                if($landing&&$now>$state['landing_until']){$own=VirtualOfficeHomes::own($user);$state['y']=$this->ground($state,$own,!empty($state['door_open'])?($own['slot']??null):null);$state['action']='idle';$state['air_started_ms']=null;$state['landing_until']=null;Cache::put(self::key($user->id),$state,900);$landing=false;}
+                $home=VirtualOfficeHomes::own($user);$openSlot=!empty($state['door_open'])?($home['slot']??null):null;
+                $airspace=$flying||$wasFlying||$graceFlight||!empty($state['air_access']);
+                $bodyRadius=$form['radius']??.3;$stateGround=$this->ground($state,$home,$openSlot,$airspace,$bodyRadius);
+                $landing=!empty($state['landing_until'])&&$state['y']>$stateGround+.12;
+                if($landing&&$now>$state['landing_until']){$state['y']=$stateGround;$state['action']='idle';$state['air_started_ms']=null;$state['landing_until']=null;Cache::put(self::key($user->id),$state,900);$landing=false;}
                 abort_if(!empty($data['flight'])&&empty($form['fly'])&&!$graceFlight,422,'Mode ini tidak dapat terbang.');
-                $maximumY=$flying||$landing?self::motion()['flight_maximum_y']:self::motion()['maximum_y'];
+                $airFloor=$state['air_floor']??$stateGround;
+                $maximumY=$flying||$landing||$graceFlight?self::motion()['flight_maximum_y']:($airspace?min(self::motion()['flight_maximum_y'],max(self::motion()['maximum_y'],max($stateGround,$airFloor)+self::motion()['maximum_y']+.12)):self::motion()['maximum_y']);
                 abort_if($data['y']>$maximumY||collect($data['trail']??[])->contains(fn($p)=>($p['y']??-.12)>$maximumY),422,'Ketinggian tidak sesuai mode aktif.');
                 abort_if($landing&&!$flying&&!$graceFlight&&$data['y']>$state['y']+.05,422,'Mode berakhir. Avatar harus mendarat.');
                 $elapsed=max(0,($now-$state['updated_ms'])/1000);$motion=self::motion();$credit=min($motion['distance_credit'],($state['credit']??.7)+$elapsed*$motion['maximum_speed']);
                 $distance=0;$previous=$state;$trail=$data['trail']??[];
                 if(!$trail||hypot($trail[count($trail)-1]['x']-$data['x'],$trail[count($trail)-1]['z']-$data['z'])>.001||abs(($trail[count($trail)-1]['y']??-.12)-$data['y'])>.001)$trail[]=$data;
-                $home=VirtualOfficeHomes::own($user);$openSlot=!empty($state['door_open'])?($home['slot']??null):null;
-                $vertical=0;foreach($trail as$point){$point['y']=$point['y']??($previous['y']??-.12);$vertical+=abs($point['y']-($previous['y']??-.12));$distance+=hypot($point['x']-$previous['x'],$point['z']-$previous['z']);abort_unless($this->segment($previous,$point,$openSlot,$form['radius']??.3),422,'Gerakan dikoreksi: batas kawasan atau penghalang.');$previous=$point;}
+                $air=$state['air_started_ms']??null;$previousGround=$stateGround;
+                $vertical=0;foreach($trail as$point){$point['y']=$point['y']??($previous['y']??-.12);$vertical+=abs($point['y']-($previous['y']??-.12));$distance+=hypot($point['x']-$previous['x'],$point['z']-$previous['z']);abort_unless($this->segment($previous,$point,$openSlot,$form['radius']??.3,$airspace),422,'Gerakan dikoreksi: batas kawasan atau penghalang.');
+                    $support=$this->ground($point,$home,$openSlot,$airspace,$bodyRadius);
+                    // A landing may occur between two snapshots. Inspect the
+                    // verified trail instead of extending one endless jump.
+                    if($point['y']<=$support+.12){$air=null;$airFloor=$support;}
+                    elseif($air===null){$air=$now;$airFloor=max($previousGround,$support);}
+                    $previousGround=$support;$previous=$point;}
                 abort_if($vertical>($elapsed*15+.5),422,'Lompatan terlalu cepat.');
-                $ground=$this->ground($data,$home,$openSlot);
-                $air=$data['y']>$ground+.12?($state['air_started_ms']??$now):null;
-                abort_if(!$flying&&!$landing&&$air!==null&&$now-$air>self::motion()['maximum_air_ms'],422,'Lompatan berakhir. Kembali ke tanah.');
+                $ground=$this->ground($data,$home,$openSlot,$airspace,$bodyRadius);
+                $airLimit=self::motion()['maximum_air_ms']+($airspace?sqrt(2*max(0,$airFloor-$ground)/self::motion()['gravity'])*1000:0);
+                abort_if(!$flying&&!$landing&&$air!==null&&$now-$air>$airLimit,422,'Lompatan berakhir. Kembali ke tanah.');
                 // Reject teleports and continuous sweeps through even thin nets.
                 abort_if($distance>$credit+.08,422,'Gerakan terlalu jauh. Posisi disinkronkan kembali.');
                 if(in_array($data['action'],['play','drink','eat','dance','rest'],true)){
@@ -96,7 +109,8 @@ class VirtualOfficePilot
                     $outdoors=$data['action']==='rest'&&($data['venue']??null)==='campus'&&$this->free($data['x'],$data['z'],$openSlot);
                     abort_unless($outdoors||$atHome||$venue&&hypot($data['x']-$venue['x'],$data['z']-$venue['z'])<=$venue['radius'],422,'Datangi lokasi sebelum beraktivitas.');
                 }
-                $state=array_merge($state,array_intersect_key($data,array_flip(['x','y','z','yaw','seq','action','venue','pose'])),['credit'=>max(0,$credit-$distance),'updated_ms'=>$now,'air_started_ms'=>$air,'flight'=>$flying]);
+                $state=array_merge($state,array_intersect_key($data,array_flip(['x','y','z','yaw','seq','action','venue','pose'])),['credit'=>max(0,$credit-$distance),'updated_ms'=>$now,'air_started_ms'=>$air,'air_floor'=>$airFloor,'flight'=>$flying,'air_access'=>$airspace&&$data['y']>$this->ground($data,$home,$openSlot,false)+.12]);
+                if(!$flying&&$data['y']<=$ground+.12)$state['landing_until']=null;
             }
             if(!empty($data['skill'])&&($state['skill_id']??null)!==($data['skill_id']??null)){
                 $profile=\Illuminate\Support\Facades\DB::table('virtual_office_profiles')->where('user_id',$user->id)->value('avatar');

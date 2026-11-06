@@ -20,8 +20,8 @@ class VirtualOfficeHomes
         return ['slot'=>$slot,'x'=>$layout['startX']+($slot%$layout['columns'])*$layout['spacingX'],'z'=>$layout['startZ']-(int)floor($slot/$layout['columns'])*$layout['spacingZ']];
     }
     public static function own(User $user): ?array { return self::location(self::slots()[$user->id]??null); }
-    public static function inside(array $point,?array $home): bool { return $home&&abs($point['x']-$home['x'])<4.4&&abs($point['z']-$home['z'])<3.7; }
-    public static function boxes(array $a,?array $b=null,?int $openSlot=null,?int $plotCount=null,float $margin=.4): array
+    public static function inside(array $point,?array $home): bool { return $home&&($point['y']??-.12)<self::layout()['roof']['bottom']&&abs($point['x']-$home['x'])<4.4&&abs($point['z']-$home['z'])<3.7; }
+    public static function boxes(array $a,?array $b=null,?int $openSlot=null,?int $plotCount=null,float $margin=.4,bool $airspace=false): array
     {
         $b??=$a;$l=self::layout();$result=[];
         $minX=min($a['x'],$b['x'])-$margin;$maxX=max($a['x'],$b['x'])+$margin;$minZ=min($a['z'],$b['z'])-$margin;$maxZ=max($a['z'],$b['z'])+$margin;
@@ -32,6 +32,7 @@ class VirtualOfficeHomes
         for($row=$firstRow;$row<=$lastRow;$row++)for($col=$firstCol;$col<=$lastCol;$col++){
             $slot=$row*$l['columns']+$col;if($slot>=$plots)continue;$p=self::location($slot);if(!$p)continue;
             foreach($l['boxes']as$box){if($box['tag']==='home-door'&&$slot===$openSlot)continue;$result[]=['left'=>$p['x']+$box['x']-$box['w']/2,'right'=>$p['x']+$box['x']+$box['w']/2,'back'=>$p['z']+$box['z']-$box['d']/2,'front'=>$p['z']+$box['z']+$box['d']/2,'top'=>$box['top'],'tag'=>$box['tag']];}
+            if($airspace){$roof=$l['roof'];$result[]=['left'=>$p['x']-$roof['w']/2,'right'=>$p['x']+$roof['w']/2,'back'=>$p['z']-$roof['d']/2,'front'=>$p['z']+$roof['d']/2,'bottom'=>$roof['bottom'],'top'=>$roof['top'],'tag'=>'home-roof'];}
         }return $result;
     }
 }

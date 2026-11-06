@@ -1,7 +1,14 @@
 (() => {
     const channel=new URL(location.href).searchParams.get('office_frame')||'';
     const send = (type, value) => { if(window.parent !== window) window.parent.postMessage({type, value,channel}, window.location.origin); };
+    const root=document.documentElement,themeButton=document.getElementById('hologramThemeToggle');
+    function theme(dark){if(!root)return;root.classList.toggle('dark',dark);root.dataset.theme=dark?'dark':'light';root.style.colorScheme=dark?'dark':'light';if(themeButton){themeButton.textContent=dark?'☀ Mode terang':'☾ Mode gelap';themeButton.setAttribute('aria-pressed',String(dark));}}
+    theme(root?.classList.contains('dark')||false);
+    themeButton?.addEventListener('click',()=>{const dark=!root.classList.contains('dark');try{if(parent!==window&&typeof parent.setThemeMode==='function')parent.setThemeMode(dark?'dark':'light');else localStorage.setItem('theme',dark?'dark':'light');}catch{}theme(dark);});
+    window.addEventListener?.('storage',event=>{if(event.key==='theme')theme(event.newValue==='dark');});
     const form = document.getElementById('torprForm');
+    const robot=document.querySelector('.hf-robot'),formHeader=document.getElementById('formTitle')?.parentElement;
+    if(robot&&formHeader){const copy=robot.cloneNode(true);copy.classList.add('hf-form-robot');formHeader.prepend(copy);}
     let dirty = false, activityAt = 0;
     const changed = () => { if (!dirty) { dirty = true; send('office-hologram-dirty', true); } };
     form?.addEventListener('input', changed); form?.addEventListener('change', changed);

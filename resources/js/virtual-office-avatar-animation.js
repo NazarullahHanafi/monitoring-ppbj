@@ -4,7 +4,12 @@ export function animateOfficeAvatar(f,state,{time=0,dt=1/30,reduced=false}={}){
     const weight=reduced?1:1-Math.exp(-Math.max(.001,dt)*16),stride=moving?Math.sin(time*(running?13:8))*(running?.78:.48):0;
     let tilt=moving?(running?.16:.06):0,bob=moving?Math.abs(Math.sin(time*(running?13:8)))*(running?.07:.035):reduced?0:Math.sin(time*1.8)*.012;
     const legs=[stride,-stride],arms=[-stride*.85,stride*.85],side=[0,0];
-    if(state?.action==='jump'){tilt=-.12;legs.fill(.5);arms.fill(-.7);bob=0;}
+    const motion=f.officeAnimation??={airborne:false,landing:0};
+    if(state?.action==='jump'){
+        const vertical=Math.max(-1,Math.min(1,(state.vy??0)/7)),rise=Math.max(0,vertical),fall=Math.max(0,-vertical);
+        tilt=-.1+fall*.12;legs[0]=.18+rise*.4;legs[1]=.24+rise*.28;arms[0]=-.65-rise*.2;arms[1]=-.6-fall*.18;bob=0;motion.airborne=true;motion.landing=0;
+    }else if(motion.airborne){motion.airborne=false;if(state?.grounded!==false&&!['fly','land','rest'].includes(state?.action))motion.landing=.18;}
+    if(motion.landing>0){motion.landing=Math.max(0,motion.landing-dt);if(!rest&&!reduced){const settle=Math.sin(motion.landing/.18*Math.PI);bob-=settle*.09;tilt+=settle*.06;}}
     if(state?.action==='fly'){tilt=.16;legs.fill(.3);arms.fill(.15);side[0]=-.12;side[1]=.12;bob=0;}
     if(state?.action==='land'){tilt=-.06;legs.fill(.35);arms.fill(-.3);bob=0;}
     if(rest){tilt=lying?(state.pose==='nap'?-Math.PI/2:-1.38):.04;bob=lying?.4:-.5;legs.fill(lying?0:-1.25);arms.fill(lying?-.08:state.pose==='meditate'?-.4:-.8);if(state.pose==='meditate'){side[0]=-.3;side[1]=.3;}if(!reduced)bob+=Math.sin(time*1.4)*.007;}
