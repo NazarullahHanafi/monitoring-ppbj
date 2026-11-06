@@ -24,6 +24,12 @@ Adaptasi game mengambil bentuk panah chakra Susanoo dari [Indra's Arrow](https:/
 
 Seluruh **180 tes JavaScript** dan **510 tes PHP (4.150 assertions)** lulus. Pengujian mencakup transisi kamera berulang, batas zoom dan inersia, render scene, cleanup geometri/material, transaksi/idempotensi, role dan read-only, pembatasan mode jurus, penghalang/jarak, cooldown, perisai, serta paket gerak lama setelah respawn. Build berhasil: entry kantor 92,60 kB / gzip 32,96 kB; scene lazy 682,92 kB / gzip 185,60 kB. Peringatan chunk >500 kB tetap ada. Scene dasar tetap di bawah 750 mesh pada pengujian 24 avatar rinci; hanya tiga collider toko/NPC ditambahkan (total metadata 206).
 
-Hasil verifikasi produksi dicatat setelah pemasangan.
+## Produksi
+
+Rilis `de3b7236b0b418334fb0699cb7e08d43f2c60a99` sudah dipasang. Migrasi inventaris berhasil pada PHP server 8.3.36. SHA-256 aset publik combat/hologram, entry kantor, scene, permainan dan musik cocok dengan kode build. Health 200; endpoint combat, hologram dan kantor menolak tamu dengan 401. Budget GET combat 600/menit, serangan 900/menit, pembelian 180/menit, terpisah dari gerak.
+
+Render owner, anggota Umum dan Operasional berhasil. UI toko/kesehatan/jurus mengikuti izin; identitas owner tetap privat. Scope tracking dan form TOR asli tetap lolos pemeriksaan tanpa sidebar/app-shell kedua. Metadata fisik 206 collider cocok dengan scene, posisi berdiri di depan toko bebas dan counter padat. Sampel proses server: kantor anggota 12,55 ms / 1 query, tracking Operasional 3,42 ms / 0 query, presence warm 1,87 ms / 0 query. Ini bukan waktu muat browser atau FPS.
+
+Backup kode/aset dan database: `/home4/suc45578/deployment-artifacts/office-armory-camera-20261106-150359`, dump 4.670.284 byte, direktori 700 dan dump 600. Kredensial sementara dihapus. Hanya migrasi tabel inventaris baru yang dijalankan; rollback kode tidak menghapus tabel inventaris. Pemeriksaan produksi tidak membuat pesanan/dokumen, menembak pemain, atau memberi grant/sesi kehadiran buatan.
 
 Konektor browser masih gagal memilih tab dengan `Cannot read properties of undefined (reading 'timeoutMs')`. Tampilan interaktif dan FPS GPU belum diverifikasi langsung. Pengujian otomatis tidak menjamin bebas bug pada seluruh perangkat atau koneksi.
