@@ -38,7 +38,7 @@ class AppServiceProvider extends ServiceProvider
         \Illuminate\Support\Facades\RateLimiter::for('virtual-office', function (\Illuminate\Http\Request $request) {
             $route = $request->route()?->getName() ?? $request->path();
             $maximum = $request->isMethodSafe() ? 600 : match ($route) {
-                'virtual-office.game.hit', 'virtual-office.pilot' => 900,
+                'virtual-office.game.hit', 'virtual-office.pilot', 'virtual-office.combat.attack' => 900,
                 'virtual-office.game.invite', 'virtual-office.meetings.invite', 'virtual-office.world' => 30,
                 default => 180,
             };

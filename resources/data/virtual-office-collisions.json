@@ -360,6 +360,30 @@
     "tag": "hospitality-npc"
   },
   {
+    "left": 51.66,
+    "right": 52.34,
+    "back": 32.559999999999995,
+    "front": 33.24,
+    "top": 2.1,
+    "tag": "hospitality-npc"
+  },
+  {
+    "left": 49,
+    "right": 55,
+    "back": 33.65,
+    "front": 34.35,
+    "top": 1.2,
+    "tag": "armory-counter"
+  },
+  {
+    "left": 49,
+    "right": 55,
+    "back": 31.5,
+    "front": 31.700000000000003,
+    "top": 2.8,
+    "tag": "armory-wall"
+  },
+  {
     "left": -36.75,
     "right": -35.25,
     "back": 65.6,

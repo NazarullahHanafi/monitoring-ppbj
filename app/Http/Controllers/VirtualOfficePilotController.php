@@ -14,7 +14,7 @@ class VirtualOfficePilotController extends Controller
             'seq'=>['required','integer','min:0','max:2147483647'],'x'=>['required','numeric','between:-100,100'],'z'=>['required','numeric','between:-216,92'],
             'y'=>['required','numeric','between:-0.12,18'],'yaw'=>['required','numeric','between:-3.142,3.142'],
             'trail'=>['sometimes','array','max:64'],'trail.*'=>['array:x,y,z'],'trail.*.x'=>['required','numeric','between:-100,100'],'trail.*.y'=>['sometimes','numeric','between:-0.12,18'],'trail.*.z'=>['required','numeric','between:-216,92'],
-            'flight'=>['sometimes','boolean'],'end_form'=>['sometimes','boolean'],
+            'flight'=>['sometimes','boolean'],'end_form'=>['sometimes','boolean'],'respawn_id'=>['nullable','uuid'],'workspace'=>['sometimes','boolean'],'combat_version'=>['sometimes','integer','in:1'],
             'venue'=>['nullable',Rule::in(array_merge(['home','campus'],array_keys(VirtualOfficePilot::layout()['venues'])))],
             'pose'=>['nullable',Rule::in(['sit','recline','nap','meditate'])],
             'skill'=>['nullable',Rule::in(array_keys(VirtualOfficePilot::abilities()['skills']))],'skill_id'=>['nullable','required_with:skill','uuid'],

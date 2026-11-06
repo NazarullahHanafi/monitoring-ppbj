@@ -1,4 +1,10 @@
 const test=require('node:test'),assert=require('node:assert/strict'),path=require('node:path');const {pathToFileURL}=require('node:url');
+test('narrow-space obstruction changes are damped without changing the requested orbit zoom',async()=>{
+    const T=await import('three'),{createOfficeCameraRig}=await import(pathToFileURL(path.resolve('resources/js/virtual-office-camera.js'))),rig=createOfficeCameraRig(),target=new T.Vector3(0,1.3,0),desired=new T.Vector3(4,4,5),original=desired.clone();let blocked=false,previous=null;
+    const nav={cameraLimit:(a,b)=>blocked&&b.y<6?.2:1};
+    for(let i=0;i<240;i++){blocked=i>20&&i<160&&i%4!==0;const point=rig.resolve(nav,target,desired,[],3.8,35,1/30);if(previous)assert.ok(point.distanceTo(previous)<.31,'No instantaneous close-up when an obstacle appears/disappears.');assert.ok(point.distanceTo(target)>=3.7999);previous=point;assert.deepEqual(desired.toArray(),original.toArray());}
+    assert.ok(previous.distanceTo(desired)<.01);rig.reset();assert.deepEqual(rig.resolve({cameraLimit:()=>1},target,desired).toArray(),desired.toArray());
+});
 test('camera obstruction never eats the chosen zoom and recovers its comfortable distance after passing a wall',async()=>{
     const T=await import('three'),{officeCameraPosition}=await import(pathToFileURL(path.resolve('resources/js/virtual-office-camera.js'))),{createOfficeNavigation}=await import(pathToFileURL(path.resolve('resources/js/virtual-office-navigation.js')));
     const nav=createOfficeNavigation();nav.addBox(.2,12,0,0,'wall',3.5);const target=new T.Vector3(-.6,1.3,0),desired=new T.Vector3(5,4,7),copy=desired.clone();

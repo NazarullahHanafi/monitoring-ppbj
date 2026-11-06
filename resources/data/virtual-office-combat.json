@@ -1,0 +1,13 @@
+{
+  "shop":{"x":52,"z":35,"radius":5,"name":"ATLAS / Armory","seller":"KAIA"},
+  "weapons":{
+    "pistol":{"name":"Pulse Pistol","price":250,"damage":25,"range":24,"cooldown":650,"color":"#74efff"},
+    "rifle":{"name":"Nova Rifle","price":650,"damage":20,"range":38,"cooldown":350,"color":"#a6ffd5"},
+    "shotgun":{"name":"Prism Shotgun","price":550,"damage":50,"range":12,"cooldown":1200,"color":"#ffd28b"},
+    "sniper":{"name":"Aurora Sniper","price":900,"damage":100,"range":65,"cooldown":2400,"color":"#d4b1ff"}
+  },
+  "specials":{
+    "indra_arrow":{"name":"Panah Indra","form":"susanoo","damage":75,"range":55,"cooldown":6500,"color":"#b696ff"},
+    "bijudama":{"name":"Bijūdama","form":"kurama","damage":90,"range":45,"cooldown":8000,"color":"#ff9f56"}
+  }
+}

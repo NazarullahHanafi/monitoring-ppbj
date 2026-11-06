@@ -3,6 +3,7 @@
 @push('styles')
 <link rel="stylesheet" href="{{ asset('assets/virtual-office/office.css') }}?v={{ filemtime(public_path('assets/virtual-office/office.css')) }}">
 <link rel="stylesheet" href="{{ asset('assets/virtual-office/hologram.css') }}?v={{ filemtime(public_path('assets/virtual-office/hologram.css')) }}">
+<link rel="stylesheet" href="{{ asset('assets/virtual-office/combat.css') }}?v={{ filemtime(public_path('assets/virtual-office/combat.css')) }}">
 @endpush
 @section('content')
 <div class="vo" id="virtualOffice">
@@ -18,6 +19,7 @@
             <div class="vo-stage-header"><div class="vo-location"><span class="vo-location-mark">S</span><div><b>PEKANBARU HQ</b><small>Ruang kolaborasi SUCOFINDO</small></div></div>
                 <div class="vo-view-switch" role="group" aria-label="Tampilan kantor"><button type="button" id="voView3d" aria-pressed="true">◈ Ruang 3D</button><button type="button" id="voViewList" aria-pressed="false">☷ Mode ringan</button><button type="button" id="voToggleTeam" aria-pressed="true" aria-controls="voTeam">☰ Tim</button><button type="button" id="voExitFullscreen" aria-label="Keluar dari layar penuh" hidden>⛶ Keluar</button></div></div>
             <div class="vo-scene-wrap">
+                @include('virtual-office.combat')
                 <nav class="vo-game-tools" aria-label="Menu dalam game"><button type="button" id="voEnterFullscreen">⛶ Game penuh</button><button type="button" id="voToggleHud" aria-controls="voPilotControls" aria-expanded="true">Kendali & pose</button><button type="button" id="voToggleInfo" aria-expanded="false">Informasi & fasilitas</button><button type="button" id="voHologramOpen" aria-controls="voHologram" aria-expanded="false">◇ Hologram kerja</button><button type="button" id="voGameAvatar">Avatar & kostum</button></nav>
                 <div class="vo-quick-status"><span id="voQuickStatus" role="status">WASD · Space dua kali · Shift lari · E interaksi</span><small id="voInteriorStatus" hidden>Rumah saya · berjalan ke pintu untuk keluar</small></div>
                 <div class="vo-skill-bar" aria-label="Jurus kostum"><small>Jurus kostum · efek visual <span id="voModeCooldown"></span></small><button type="button" data-vo-skill="0" id="voSkill0">Q · Salam energi</button><button type="button" data-vo-skill="1" id="voSkill1" hidden></button><button type="button" data-vo-skill="2" id="voSkill2" hidden></button></div>

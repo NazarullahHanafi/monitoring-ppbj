@@ -4,8 +4,8 @@ import motion from '../data/virtual-office-motion.json' with {type:'json'};
 export function mountOfficePilot({document:doc,window:win,config,visible,getScene,onStatus=()=>{},onPose=()=>{}}) {
     if(!config.canPilot)return{start(){},stop(){},interact:()=>true};
     const keys=new Set();let session=globalThis.crypto.randomUUID(),generation=0,timer=null,nextDelay=null,controller=null,enabled=false,claimed=false,seq=0,last=null,trail=[],inputFrozen=false,requestStarted=0,unconfirmed=0,pendingDistance=0,reported=null,doorIntent=null,pendingGuide=null,pendingRest=null,restNotice=false,pendingSkill=null,pendingEnd=false;
-    const $=id=>doc.getElementById(id);
-    const blocked=()=>!visible()||doc.hidden||Boolean(doc.querySelector('.vo-club-panel:not([hidden]),.vo-avatar-editor:not([hidden]),.vo-world-panel:not([hidden]),.vo-hologram-work:not([hidden])'));
+    let respawnId=null; const $=id=>doc.getElementById(id);
+    const blocked=()=>!visible()||doc.hidden||Boolean(doc.querySelector('.vo-armory-panel:not([hidden]),.vo-club-panel:not([hidden]),.vo-avatar-editor:not([hidden]),.vo-world-panel:not([hidden]),.vo-hologram-work:not([hidden])'));
     const walkingKeys=()=>['KeyW','KeyA','KeyS','KeyD','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].some(key=>keys.has(key));
     function input(){const el=doc.activeElement;const typing=el&&['INPUT','TEXTAREA','SELECT'].includes(el.tagName)||el?.isContentEditable;
         const data=blocked()||typing||inputFrozen?{}:{x:Number(keys.has('KeyD')||keys.has('ArrowRight'))-Number(keys.has('KeyA')||keys.has('ArrowLeft')),z:Number(keys.has('KeyW')||keys.has('ArrowUp'))-Number(keys.has('KeyS')||keys.has('ArrowDown')),boost:keys.has('ShiftLeft')||keys.has('ShiftRight'),jump:keys.has('Space'),descend:keys.has('KeyC')};getScene()?.setPilotInput?.(data);}
@@ -48,14 +48,14 @@ export function mountOfficePilot({document:doc,window:win,config,visible,getScen
         const snapshot=last||{x:0,y:-.12,z:20,yaw:0,action:'idle'},mode=claimed?'move':'claim';
         try{
             const headers={Accept:'application/json','Content-Type':'application/json','X-CSRF-TOKEN':doc.querySelector('meta[name="csrf-token"]')?.content||''};
-            const response=await fetch('/virtual-office/pilot',{method:'POST',signal:own.signal,credentials:'same-origin',headers,body:JSON.stringify({session_id:session,mode,seq:++seq,x:snapshot.x,y:snapshot.y,z:snapshot.z,yaw:snapshot.yaw,action:snapshot.action||'idle',flight:Boolean(snapshot.flight),end_form:ending,venue:snapshot.venue||null,pose:snapshot.pose||null,trail:mode==='move'?sentTrail:[],...(skill?{skill:skill.skill,skill_id:skill.skill_id}:{})})});
+            const response=await fetch('/virtual-office/pilot',{method:'POST',signal:own.signal,credentials:'same-origin',headers,body:JSON.stringify({session_id:session,mode,combat_version:1,respawn_id:respawnId,workspace:Boolean(doc.querySelector('.vo-hologram-work:not([hidden])')),seq:++seq,x:snapshot.x,y:snapshot.y,z:snapshot.z,yaw:snapshot.yaw,action:snapshot.action||'idle',flight:Boolean(snapshot.flight),end_form:ending,venue:snapshot.venue||null,pose:snapshot.pose||null,trail:mode==='move'?sentTrail:[],...(skill?{skill:skill.skill,skill_id:skill.skill_id}:{})})});
             const data=await response.json();if(!response.ok){const error=new Error(data.message||'Kendali belum tersinkron.');error.status=response.status;error.self=data.self;throw error;}
             if(!enabled||ticket!==generation||own.signal.aborted)return;
             acknowledged=true;
             getScene()?.setPeerPilots?.(data.peers||[]);
             if(pendingSkill===skill)pendingSkill=null;
             if(!claimed){claimed=true;getScene()?.setPilot?.(Number(config.myId),data.self,config.privateSelf);trail=[];reported=data.self;unconfirmed=0;onStatus('WASD / panah · Space lompat · Shift boost · E interaksi');}else unconfirmed=Math.max(0,unconfirmed-sentDistance);
-            getScene()?.syncPilot?.(data.self,{sentAt:requestStarted,receivedAt:Date.now()});if(ending)pendingEnd=false;
+            if(data.self?.respawn_id&&data.self.respawn_id!==respawnId){if(respawnId!==null||mode==='move'){keys.clear();trail=[];unconfirmed=0;pendingDistance=0;pendingSkill=null;pendingEnd=false;doorIntent=null;reported=data.self;last=data.self;getScene()?.respawnPilot?.(data.self);onStatus('Avatar respawn di rumah. Perisai aktif selama 8 detik.');}respawnId=data.self.respawn_id;}getScene()?.syncPilot?.(data.self,{sentAt:requestStarted,receivedAt:Date.now()});if(ending)pendingEnd=false;
             if(pendingGuide){getScene()?.guideTo?.(pendingGuide);pendingGuide=null;}
             if(pendingRest){const pose=pendingRest;pendingRest=null;rest(pose);}
             pendingDistance=0;getScene()?.setHomeDoor?.(Boolean(data.self?.door_open));
@@ -64,7 +64,7 @@ export function mountOfficePilot({document:doc,window:win,config,visible,getScen
         }catch(error){if(enabled&&ticket===generation){if(pendingSkill===skill)pendingSkill=null;onStatus(error.message);if(error.status!==422)keys.clear();inputFrozen=true;input();if([401,403,409].includes(error.status)){enabled=false;claimed=false;getScene()?.releasePilot?.();}else if(error.status===422){trail=[];unconfirmed=0;if(error.self){getScene()?.reconcilePilot?.(error.self);reported=error.self;last=error.self;inputFrozen=false;input();}else claimed=false;}}}
         finally{clearTimeout(deadline);if(controller===own){controller=null;pendingDistance=0;}if(enabled&&ticket===generation&&visible()){nextDelay=!acknowledged?motion.idle_interval_ms:pendingEnd||pendingSkill?0:claimed&&(walkingKeys()||['walk','run','jump','fly','land'].includes(last?.action))?motion.moving_interval_ms:motion.idle_interval_ms;timer=setTimeout(pulse,nextDelay);}}
     }
-    function start(){if(enabled||!visible()||!getScene())return;session=globalThis.crypto.randomUUID();generation++;seq=0;last=null;trail=[];reported=null;unconfirmed=0;pendingDistance=0;doorIntent=null;enabled=true;inputFrozen=false;claimed=false;pulse();}
+    function start(){if(enabled||!visible()||!getScene())return;session=globalThis.crypto.randomUUID();generation++;respawnId=null;seq=0;last=null;trail=[];reported=null;unconfirmed=0;pendingDistance=0;doorIntent=null;enabled=true;inputFrozen=false;claimed=false;pulse();}
     function stop(){generation++;enabled=false;claimed=false;doorIntent=null;pendingSkill=null;pendingRest=null;pendingEnd=false;keys.clear();inputFrozen=true;input();if(timer)clearTimeout(timer);timer=null;nextDelay=null;controller?.abort();controller=null;getScene()?.releasePilot?.();
         const token=doc.querySelector('meta[name="csrf-token"]')?.content||'';try{win.navigator?.sendBeacon?.('/virtual-office/pilot/leave',new Blob([JSON.stringify({session_id:session,_token:token})],{type:'application/json'}));}catch{} }
     return {start,stop,state,toggleDoor,endMode,suspendInput(){keys.clear();input();},interact(id){const scene=getScene();if(!claimed||!scene?.canInteract?.(id)){pendingGuide=id;scene?.guideTo?.(id);onStatus('Jalan ke '+id+' terlebih dahulu, lalu klik tempatnya atau tekan E.');return false;}return true;}};

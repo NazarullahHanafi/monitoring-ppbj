@@ -101,6 +101,10 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
     Route::post('/virtual-office/recreation/move', [\App\Http\Controllers\VirtualOfficeRecreationController::class, 'move'])->middleware('throttle:virtual-office')->name('virtual-office.move');
     Route::get('/virtual-office/messages', [\App\Http\Controllers\VirtualOfficeRecreationController::class, 'messages'])->middleware('throttle:virtual-office')->name('virtual-office.messages');
     Route::post('/virtual-office/messages', [\App\Http\Controllers\VirtualOfficeRecreationController::class, 'send'])->middleware('throttle:virtual-office')->name('virtual-office.messages.send');
+    Route::get('/virtual-office/combat', [\App\Http\Controllers\VirtualOfficeCombatController::class, 'show'])->middleware('throttle:virtual-office')->name('virtual-office.combat');
+    Route::post('/virtual-office/combat/buy', [\App\Http\Controllers\VirtualOfficeCombatController::class, 'buy'])->middleware('throttle:virtual-office')->name('virtual-office.combat.buy');
+    Route::post('/virtual-office/combat/equip', [\App\Http\Controllers\VirtualOfficeCombatController::class, 'equip'])->middleware('throttle:virtual-office')->name('virtual-office.combat.equip');
+    Route::post('/virtual-office/combat/attack', [\App\Http\Controllers\VirtualOfficeCombatController::class, 'attack'])->middleware('throttle:virtual-office')->name('virtual-office.combat.attack');
     Route::get('/virtual-office/game', [\App\Http\Controllers\VirtualOfficeGameController::class, 'show'])->middleware('throttle:virtual-office')->name('virtual-office.game');
     Route::post('/virtual-office/game/invite', [\App\Http\Controllers\VirtualOfficeGameController::class, 'invite'])->middleware('throttle:virtual-office')->name('virtual-office.game.invite');
     Route::post('/virtual-office/game/respond', [\App\Http\Controllers\VirtualOfficeGameController::class, 'respond'])->middleware('throttle:virtual-office')->name('virtual-office.game.respond');

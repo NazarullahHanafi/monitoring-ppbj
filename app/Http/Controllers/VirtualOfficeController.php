@@ -25,6 +25,7 @@ class VirtualOfficeController extends Controller
             'costumes'=>VirtualOfficeAvatar::costumes(),
             'hologramTools'=>$this->hologramTools($request->user()),
             'canPilot'=>\App\Services\VirtualOfficePilot::allowed($request->user()),
+            'canCombat'=>\App\Services\VirtualOfficeRecreation::allowed($request->user())&&!\Illuminate\Support\Facades\Cache::get('simonpr:read_only_mode',false),
             'myHome'=>\App\Services\VirtualOfficeHomes::own($request->user()),
             'homePlots'=>count(\App\Services\VirtualOfficeHomes::slots()),
             'privateSelf'=>!$request->user()->shouldDisplayInPresence()?['id'=>$request->user()->id,'name'=>'Anda · privat','department'=>$request->user()->department,'state'=>'online','is_me'=>true,'avatar'=>$profile['avatar'],'private'=>true]:null,

@@ -11,6 +11,7 @@
     "archery": {"x": 32, "z": 45, "radius": 8}, "bar": {"x": -30, "z": 49, "radius": 15},
     "disco": {"x": -30, "z": 56, "radius": 6}, "beach": {"x": -25, "z": 69, "radius": 20},
     "garden": {"x": -8, "z": 61, "radius": 7}, "terrace": {"x": 22, "z": 67, "radius": 10},
-    "lounge": {"x": -12, "z": 9, "radius": 7}, "office": {"x": 0, "z": 0, "radius": 20}
+    "lounge": {"x": -12, "z": 9, "radius": 7}, "office": {"x": 0, "z": 0, "radius": 20},
+    "armory": {"x": 52, "z": 35, "radius": 5}
   }
 }

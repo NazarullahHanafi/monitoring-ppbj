@@ -23,7 +23,7 @@ class VirtualOfficePilot
     {
         $state=Cache::get(self::key($id));return is_array($state)&&Cache::get(self::lease($id))===($state['session_id']??null)?$state:null;
     }
-    public static function publicState(?array $state): ?array { return $state ? array_intersect_key($state,array_flip(['x','y','z','yaw','action','venue','pose','door_open','seq','updated_ms','skill','skill_at','form','form_at','form_until','form_ready_at','flight','air_access'])) : null; }
+    public static function publicState(?array $state): ?array { return $state ? array_intersect_key($state,array_flip(['x','y','z','yaw','action','venue','pose','door_open','seq','updated_ms','skill','skill_at','form','form_at','form_until','form_ready_at','flight','air_access','hp','weapon','respawn_id','shield_until','shot_at','shot_kind','shot_end','attack_ready_at'])) : null; }
     private static function vaultable(array $box): bool { return $box['top']<=self::motion()['vault_height']&&in_array($box['tag'],self::motion()['vault_tags'],true); }
     public function free(float $x,float $z,?int $openSlot=null,float $y=-.12,float $radius=.3,bool $airspace=false): bool
     {
@@ -70,8 +70,9 @@ class VirtualOfficePilot
             abort_if($active&&$active['session_id']!==$data['session_id'],409,'Avatar sedang dikendalikan dari tab lain. Tutup kendali tab tersebut terlebih dahulu.');
             if(!$active||$data['mode']==='claim'){
                 $point=$state&&$this->free($state['x'],$state['z'])?$state:['x'=>-6+($user->id%16)*.8,'y'=>-.12,'z'=>20.5+((int)floor($user->id/16)%3)*.8];
-                $state=['x'=>$point['x'],'y'=>-.12,'z'=>$point['z'],'yaw'=>$point['yaw']??0,'session_id'=>$data['session_id'],'seq'=>0,'action'=>'idle','updated_ms'=>$now,'credit'=>.7,'door_open'=>false,'form'=>null,'flight'=>false,'form_ready_at'=>$state['form_ready_at']??0,'skill_at'=>$state['skill_at']??null,'skill'=>$state['skill']??null];
+                $state=['x'=>$point['x'],'y'=>$this->ground(array_replace($point,['y'=>-.12]),VirtualOfficeHomes::own($user),null),'z'=>$point['z'],'yaw'=>$point['yaw']??0,'session_id'=>$data['session_id'],'seq'=>0,'action'=>'idle','updated_ms'=>$now,'credit'=>.7,'door_open'=>false,'form'=>null,'flight'=>false,'form_ready_at'=>$state['form_ready_at']??0,'skill_at'=>$state['skill_at']??null,'skill'=>$state['skill']??null,'hp'=>$state['hp']??100,'weapon'=>$state['weapon']??null,'respawn_id'=>$state['respawn_id']??null,'shield_until'=>$state['shield_until']??0,'attack_ready_at'=>$state['attack_ready_at']??0];
             }else{
+                if(!empty($state['respawn_id'])&&($data['respawn_id']??null)!==$state['respawn_id']){Cache::put(self::lease($user->id),$data['session_id'],20);return $state;}
                 if($data['seq']<=$state['seq'])return $state;
                 $catalog=self::abilities();$form=$catalog['skills'][$state['form']??'']??null;$wasFlying=!empty($state['flight']);
                 if($form&&$now>=($state['form_until']??0)){$state['form']=null;$state['flight']=false;$state['landing_until']=($state['form_until']??$now)+6000;$form=null;}
@@ -127,6 +128,8 @@ class VirtualOfficePilot
                 $state['skill']=$data['skill'];$state['skill_id']=$data['skill_id'];$state['skill_at']=$now;
             }
             if(!empty($data['end_form'])&&!empty($state['form'])){$state['form']=null;$state['flight']=false;if($state['y']>.15)$state['landing_until']=$now+6000;}
+            $state['workspace']=!empty($data['workspace']);
+            $state['combat_version']=(int)($data['combat_version']??0);
             abort_if(Cache::has($left),409,'Kendali sudah dihentikan.');
             Cache::put(self::key($user->id),$state,900);Cache::put(self::lease($user->id),$data['session_id'],20);
             return $state;
