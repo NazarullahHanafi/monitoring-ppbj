@@ -47,7 +47,7 @@ export function createOfficeAbilities({THREE,scene,navigation,reduced=()=>false,
             // not move a transformation's deadline backwards and forwards.
             const now=Date.now();if(Number.isFinite(roundTrip)&&roundTrip>=0){if(clockSample&&now-clockSample.at<60000&&roundTrip>clockSample.roundTrip)return;clockSample={at:now,roundTrip};}
             clockOffset=value;
-        },form:id=>forms.get(id)?.spec||null,
+        },form:id=>forms.get(id)?.spec||null,weaponAnchor:id=>forms.get(id)?.model.replaceBody?forms.get(id).model.root:null,
         modeState(id){const f=forms.get(id);return f?{id:f.spec.id,name:f.spec.name,remaining:Math.max(0,Math.ceil((f.until-Date.now()-clockOffset)/1000)),expires:f.until-clockOffset,fly:Boolean(f.spec.fly),height:f.spec.height}:null;},
         forget(id){remove(id);clearForm(id);ready.delete(id);seen.delete(id);cooldowns.delete(id);expired.delete(id);},
         modeCooldown:id=>Math.max(0,Math.ceil(((ready.get(id)||0)-Date.now()-clockOffset)/1000)),

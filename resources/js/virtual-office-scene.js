@@ -522,7 +522,7 @@ export function createOfficeScene({ host, labels, onSelect, onFailure, onVenue =
             }
             if(f.manual){
                 const state=f.person.id===controlledId&&pilotPhysics?{...pilotPhysics.state(),...pilotMetadata,...(pilotActivity||{})}:peerPilots.get(f.person.id)||f.person.pilot;
-                if(state&&aiming&&f.person.id===controlledId)state.aim_pitch=Math.atan2(camera.position.y-controls.target.y,Math.hypot(camera.position.x-controls.target.x,camera.position.z-controls.target.z));combatEffects.observe(f.person.id,state,f);
+                if(state&&aiming&&f.person.id===controlledId)state.aim_pitch=Math.atan2(camera.position.y-controls.target.y,Math.hypot(camera.position.x-controls.target.x,camera.position.z-controls.target.z));combatEffects.observe(f.person.id,state,f,Date.now(),abilities.weaponAnchor(f.person.id));
                 if(state&&f.person.id!==controlledId){const target=new THREE.Vector3(state.x,state.y,state.z);const next=f.group.position.clone().lerp(target,.35);if(state.respawn_id!==f.respawnId){f.respawnId=state.respawn_id;f.group.position.copy(target);}else if(navigation.segment(f.group.position,next,.3,Boolean(state.air_access||state.flight)))f.group.position.copy(next);else f.group.position.copy(target);f.group.rotation.y=state.yaw;}
                 if(f.person.id!==controlledId)abilities.observe(f.person.id,state,f);f.flight=Boolean(state?.flight);f.moving=['walk','run'].includes(state?.action);
                 const skillPose=abilities.pose(f.person.id),animation=animateOfficeAvatar(f,skillPose&&!['walk','run','jump','fly','land','rest'].includes(state?.action)?{...state,action:'cast',skillPose}:state,{time:now/1000+f.phase,dt:frameStep,reduced:paused});
