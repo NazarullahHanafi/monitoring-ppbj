@@ -23,6 +23,7 @@ class VirtualOfficeController extends Controller
             'profileUrl' => '/virtual-office/avatar', 'myId' => $request->user()->id,
             'myProfile' => $profile, 'avatarOptions' => VirtualOfficeAvatar::options(),
             'costumes'=>VirtualOfficeAvatar::costumes(),
+            'hologramTools'=>$this->hologramTools($request->user()),
             'canPilot'=>\App\Services\VirtualOfficePilot::allowed($request->user()),
             'myHome'=>\App\Services\VirtualOfficeHomes::own($request->user()),
             'homePlots'=>count(\App\Services\VirtualOfficeHomes::slots()),
@@ -39,6 +40,41 @@ class VirtualOfficeController extends Controller
         $this->authorizeDepartment($request);
 
         return response()->json($presence->snapshot($request->user()))->header('Cache-Control', 'private, no-store');
+    }
+
+    private function hologramTools(User $user): array
+    {
+        $tool = fn (string $id, string $title, string $description) => ['id'=>$id,'title'=>$title,'description'=>$description,
+            'url'=>route('virtual-office.hologram', ['tool'=>$id], false)];
+        $tools = [];
+        if ($user->department === 'operasional') {
+            if (! $user->isReadOnly() && ! Cache::get('simonpr:read_only_mode', false)) {
+                $tools[]=$tool('create', 'Tambah TOR PR', 'Susun pengadaan baru dari ruang kerja Anda.');
+            }
+            $tools[]=$tool('torpr', 'Daftar TOR PR', 'Buka dokumen, draft, dan progres pengajuan.');
+        }
+        $tools[]=$tool('tracking', 'Tracking PR', 'Telusuri perjalanan PR dan PPBJ.');
+        return $tools;
+    }
+
+    public function hologram(Request $request, string $tool)
+    {
+        $this->authorizeDepartment($request);
+        abort_unless(in_array($tool, ['create','torpr','tracking'], true), 404);
+        if ($tool !== 'tracking') {
+            abort_unless($request->user()->department === 'operasional', 403);
+        }
+        if ($tool === 'create') {
+            abort_if($request->user()->isReadOnly() || Cache::get('simonpr:read_only_mode', false), 403);
+        }
+        // A presentation context only: writes still use the original routes,
+        // CSRF, department, ownership and read-only checks.
+        $request->attributes->set('office_hologram', true);
+        $request->attributes->set('office_hologram_create', $tool === 'create');
+        $view = $tool === 'tracking'
+            ? app(TrackingPrController::class)->hologram($request)
+            : app(TorprController::class)->index($request);
+        return response()->view($view->name(), $view->getData())->header('Cache-Control', 'private, no-store');
     }
 
     private function profile(User $user): array

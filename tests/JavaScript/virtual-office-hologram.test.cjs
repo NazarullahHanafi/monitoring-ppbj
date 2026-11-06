@@ -1,0 +1,34 @@
+const test=require('node:test'),assert=require('node:assert/strict'),path=require('node:path');const{pathToFileURL}=require('node:url');
+async function fixture(tools=[{id:'create',title:'Tambah TOR PR',description:'Dokumen asli',url:'/virtual-office/hologram/create'},{id:'tracking',title:'Tracking PR',description:'Lacak',url:'/virtual-office/hologram/tracking'}]){
+    const{mountOfficeHologram}=await import(pathToFileURL(path.resolve('resources/js/virtual-office-hologram.js'))),nodes=new Map(),events={},documentEvents={},timers=new Map(),shown=[];let id=0,allow=false,questions=0,suspended=0,activities=0;
+    class Element{constructor(){this.hidden=true;this.events={};this.children=[];this.style={};this.attrs={};this.offsetWidth=330;this.offsetHeight=300;this.contentWindow={location:{pathname:'/virtual-office/hologram/create'}};}addEventListener(k,f){this.events[k]=f;}append(...items){this.children.push(...items);}setAttribute(k,v){this.attrs[k]=v;}removeAttribute(k){delete this[k];}focus(){doc.activeElement=this;}contains(target){return target===this||this.children.includes(target);}click(){return this.events.click?.();}}
+    const get=id=>{if(!nodes.has(id))nodes.set(id,new Element());return nodes.get(id);};const doc={activeElement:null,getElementById:get,createElement:()=>new Element(),addEventListener:(k,f)=>documentEvents[k]=f};
+    get('voHologram').parentElement={getBoundingClientRect:()=>({width:1000,height:600})};
+    const win={location:{origin:'https://office.test'},addEventListener:(k,f)=>events[k]=f,setTimeout:(fn,ms)=>{timers.set(++id,{fn,ms});return id;},clearTimeout:id=>timers.delete(id),confirm:()=>{questions++;return allow;}};
+    const api=mountOfficeHologram({document:doc,window:win,config:{myId:7,hologramTools:tools},getScene:()=>({showHologram:id=>shown.push(id),focusPilot(){}}),onWork:()=>suspended++,onActivity:()=>activities++});
+    return{api,get,events,timers,shown,allow:v=>allow=v,get questions(){return questions;},get suspended(){return suspended;},get activities(){return activities;},message(type,value,overrides={}){events.message({origin:win.location.origin,source:get('voHologramFrame').contentWindow,data:{type,value,channel:'1'},...overrides});}};
+}
+test('hologram opens above only its owner, loads a real tool only on explicit selection and releases its frame on close',async()=>{
+    const f=await fixture();assert.equal(f.get('voHologramFrame').src,undefined);assert.equal(f.timers.size,0);f.get('voHologramOpen').click();assert.equal(f.get('voHologram').hidden,false);assert.deepEqual(f.shown,[7]);
+    f.get('voHologramTools').children[0].click();assert.equal(f.get('voHologramWork').hidden,false);assert.equal(f.get('voHologramFrame').src,'/virtual-office/hologram/create?office_frame=1');assert.equal(f.suspended,1);
+    f.message('office-hologram-ready');assert.equal(f.get('voHologramLoading').hidden,true);assert.equal(f.timers.size,0);f.api.close();assert.equal(f.get('voHologramFrame').src,undefined);assert.equal(f.get('voHologramWork').hidden,true);assert.equal(f.shown.at(-1),null);
+});
+test('unsaved form requires explicit discard, and forged or stale frame messages cannot alter that decision',async()=>{
+    const f=await fixture();f.api.open();f.get('voHologramTools').children[0].click();f.message('office-hologram-ready');f.message('office-hologram-dirty',true);
+    for(const override of[{origin:'https://other.test'},{source:{}},{data:{type:'office-hologram-ready',channel:'stale'}}])f.message('office-hologram-ready',null,override);
+    f.api.close();assert.equal(f.questions,1);assert.equal(f.get('voHologramWork').hidden,false);f.get('voHologramReload').click();assert.equal(f.questions,2);assert.equal(f.get('voHologramFrame').src,'/virtual-office/hologram/create?office_frame=1');
+    f.allow(true);f.get('voHologramReload').click();assert.match(f.get('voHologramFrame').src,/office_frame=2$/);f.message('office-hologram-dirty',true);f.allow(false);f.api.close();assert.equal(f.get('voHologramWork').hidden,true,'A dirty event from the old document cannot taint a new document.');assert.equal(f.timers.size,0);
+});
+test('tool URLs cannot load external pages or arbitrary app routes, and labels remain inert text',async()=>{
+    const f=await fixture([{id:'tracking',title:'<img onerror=alert(1)>',description:'Text',url:'/virtual-office/hologram/tracking'},{id:'create',title:'Bad',url:'https://other.test/virtual-office/hologram/create'},{id:'tracking',title:'Bad route',url:'/account'},{id:'profile',url:'/virtual-office/hologram/profile'}]);
+    const buttons=f.get('voHologramTools').children;assert.equal(buttons.length,1);assert.equal(buttons[0].children[1].children[0].textContent,'<img onerror=alert(1)>');f.api.open();f.api.anchor({x:-100,y:-200,visible:true});assert.equal(f.get('voHologram').style.left,'177px');assert.equal(f.get('voHologram').style.top,'312px');f.api.close();
+});
+test('frame activity is coarse and timeout keeps retry and close available without reloading in a loop',async()=>{
+    const f=await fixture();f.api.open();f.get('voHologramTools').children[1].click();f.message('office-hologram-activity');assert.equal(f.activities,1);const timer=[...f.timers.values()][0];timer.fn();assert.match(f.get('voHologramStatus').textContent,/belum merespons/);assert.equal(f.get('voHologramWork').hidden,false);f.message('office-hologram-escape');assert.equal(f.get('voHologramWork').hidden,true);
+});
+test('3D projection stays batched, follows height changes and releases every geometry/material',async()=>{
+    const T=await import('three'),{createOfficeHologramProjection}=await import(pathToFileURL(path.resolve('resources/js/virtual-office-hologram-geometry.js'))),scene=new T.Scene(),camera=new T.PerspectiveCamera(44,1,.1,100);camera.position.set(4,4,7);camera.lookAt(0,1,0);camera.updateMatrixWorld(true);
+    const hologram=createOfficeHologramProjection(T,scene),figure={person:{id:7},group:new T.Group()};figure.group.position.set(2,-.12,3);let meshes=0,geometries=new Set(),materials=new Set(),disposed=0;
+    hologram.root.traverse(node=>{if(node.isMesh){meshes++;geometries.add(node.geometry);materials.add(node.material);}});assert.equal(meshes,5);for(const resource of[...geometries,...materials])resource.addEventListener('dispose',()=>disposed++);
+    const point=hologram.update(figure,camera,{height:6,reduced:true});assert.ok(point.toArray().every(Number.isFinite));assert.equal(hologram.root.position.y,7.43);assert.equal(hologram.root.visible,true);hologram.hide();assert.equal(hologram.root.visible,false);assert.equal(hologram.root.userData.officeAbility,null);hologram.dispose();assert.equal(scene.children.length,0);assert.equal(disposed,geometries.size+materials.size);
+});

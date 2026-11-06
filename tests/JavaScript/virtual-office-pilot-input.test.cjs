@@ -18,6 +18,10 @@ test('keyboard ignores editors and modals, supports arrows/jump/boost, clears he
     f.modal(true);assert.equal(f.gate(),true);assert.equal(f.key('KeyW'),false);f.modal(false);f.key('ArrowLeft');assert.equal(f.inputs.at(-1).x,-1);
     assert.equal(f.pilot.interact('archery'),false);f.pilot.stop();assert.equal(f.beacons.length,1);assert.equal(JSON.parse(await f.beacons[0][1].text())._token,'csrf');
 });
+
+test('opening a hologram clears held movement without releasing the avatar lease',async()=>{
+    const f=fixture();f.pilot.start();f.accept();await tick();f.key('KeyW');assert.equal(f.inputs.at(-1).z,1);f.modal(true);f.pilot.suspendInput();assert.equal(Object.keys(f.inputs.at(-1)).length,0);f.modal(false);f.key('ShiftLeft');assert.equal(f.inputs.at(-1).z,0);assert.equal(f.releases,0);f.pilot.stop();
+});
 test('sync is single-flight and a late response cannot resurrect stopped or restarted control',async()=>{
     const f=fixture();f.pilot.start();f.pilot.start();assert.equal(f.requests.length,1);f.accept();await tick();f.pulse();assert.equal(f.requests.length,2);
     const old=JSON.parse(f.requests[1].options.body).session_id;f.pilot.stop();assert.equal(f.requests[1].options.signal.aborted,true);f.pilot.start();assert.equal(f.requests.length,3);

@@ -40,7 +40,7 @@ async function fixture({ canChat = true, meetingReady = false } = {}) {
         addEventListener: (name, fn) => (events[name] ??= []).push(fn), SimonOfficeMention: person => { calls.push(person); return true; },
         __loadOfficeScene: () => scenePromise };
     const {mountOfficeViewport}=await import(pathToFileURL(path.resolve('resources/js/virtual-office-viewport.js'))),{skillsFor}=await import(pathToFileURL(path.resolve('resources/js/virtual-office-abilities.js')));
-    const sandbox = { ...state,mountOfficeViewport,skillsFor, mountOfficePilot:()=>({start(){},stop(){},interact:()=>true}), mountOfficeClub: () => ({start(){},stop(){},select(){},syncScene(){},openGame(id){sceneState.games.push(id);},chat(id){if(canChat)calls.push(id);}}), mountOfficeLive: () => ({ start() {}, stop() {}, state: () => ({ ready: meetingReady, room: meetingReady ? { from: 2, to: 1 } : null }), invite() {} }), window, document, localStorage: { getItem: () => 'list', setItem() {} }, URL, Date, AbortController,
+    const sandbox = { ...state,mountOfficeViewport,skillsFor,mountOfficeHologram:()=>({open(){sceneState.holograms=(sceneState.holograms||0)+1;},close:()=>false,escape:()=>false,sync(){}}), mountOfficePilot:()=>({start(){},stop(){},interact:()=>true}), mountOfficeClub: () => ({start(){},stop(){},select(){},syncScene(){},openGame(id){sceneState.games.push(id);},chat(id){if(canChat)calls.push(id);}}), mountOfficeLive: () => ({ start() {}, stop() {}, state: () => ({ ready: meetingReady, room: meetingReady ? { from: 2, to: 1 } : null }), invite() {} }), window, document, localStorage: { getItem: () => 'list', setItem() {} }, URL, Date, AbortController,
         setTimeout: (fn, delay) => { const id = ++timerId; timers.set(id, { fn, delay }); return id; }, clearTimeout: id => timers.delete(id),
         fetch: (url, options) => new Promise(resolve => requests.push({ url, options, resolve })), console };
     let code = fs.readFileSync(path.resolve(__dirname, '../../resources/js/virtual-office.js'), 'utf8');
@@ -64,6 +64,10 @@ test('office displays hostile names as inert text, filters locally and never sen
 test('office shortcut opens the avatar composer directly without leaving fullscreen', async () => {
     const f = await fixture({ meetingReady: true }); f.get('voPeople').children.find(p => p.dataset.personId === 1).click();
     f.get('voChat').click(); assert.equal(f.calls.length, 2); assert.equal(f.calls[0], 1); assert.equal(f.requests.length, 0); f.hide(true);
+});
+
+test('selecting own avatar opens its work hologram instead of a conversation with itself',async()=>{
+    const f=await fixture();f.get('voPeople').children.find(p=>p.dataset.personId===2).click();assert.equal(f.sceneState.holograms,1);assert.equal(f.calls.length,0);f.hide(true);
 });
 test('read-only office cannot invoke chat even if its button handler is called', async () => {
     const f = await fixture({ canChat: false }); f.get('voPeople').children.find(p => p.dataset.personId === 1).click();

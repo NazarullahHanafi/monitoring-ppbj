@@ -17,11 +17,12 @@ import { animateOfficeAvatar,planOfficeRest } from './virtual-office-avatar-anim
 import { createOfficeAbilities,skillsFor } from './virtual-office-abilities.js';
 import { createTransformationModel } from './virtual-office-transform-geometry.js';
 import { createOfficeInterior } from './virtual-office-interior.js';
+import { createOfficeHologramProjection } from './virtual-office-hologram-geometry.js';
 
 // Original procedural scene: no models, textures, or code from the reference site.
 // Static furniture is batched by material; animation is capped at 30fps / 24 avatars.
 export function createOfficeScene({ host, labels, onSelect, onFailure, onVenue = () => {}, onGame = () => {}, onDoor=()=>{},onPilotState = () => {},
-    rendererFactory = options => new THREE.WebGLRenderer(options), controlsFactory = (camera, element) => new OrbitControls(camera, element), getDate = () => new Date() }) {
+    onHologramAnchor=()=>{},rendererFactory = options => new THREE.WebGLRenderer(options), controlsFactory = (camera, element) => new OrbitControls(camera, element), getDate = () => new Date() }) {
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(36, 1, .1, 1200);
     const renderer = rendererFactory({ antialias: true, alpha: false, powerPreference: 'low-power' });
@@ -38,6 +39,7 @@ export function createOfficeScene({ host, labels, onSelect, onFailure, onVenue =
     const materials = new Map(), batches = new Map(), ownedGeometries = new Set(), textures = new Set(), figures = new Map();
     const navigation = createOfficeNavigation();
     const abilities=createOfficeAbilities({THREE,scene,navigation,reduced:()=>paused||energySaver,createModel:(spec,options)=>createTransformationModel(THREE,spec,{...options,reduced:paused||energySaver})});
+    const hologram=createOfficeHologramProjection(THREE,scene);let hologramId=null,lastHologramAnchor=0;
     const colors = { base: '#acb9ad', floor: '#f1ece0', edge: '#cebd9c', wood: '#b38b61', woodLight: '#d6b68a', oak: '#705b42',
         wall: '#e5e3d5', stone: '#c4cec5', deep: '#214b40', green: '#537d60', leaf: '#4a7750', lightLeaf: '#86a465',
         pot: '#e2d5bb', white: '#f5f0e5', metal: '#3c4d46', gold: '#b89c68', screen: '#173841', screenLine: '#62baaa',
@@ -564,6 +566,8 @@ export function createOfficeScene({ host, labels, onSelect, onFailure, onVenue =
         const desiredCamera=camera.position.clone(),desiredOrientation=camera.quaternion.clone();
         if (cameraMode !== 'orbit' && followed)camera.position.copy(officeCameraPosition(navigation,controls.target,desiredCamera,residences.cameraBoxes(followId),interior.active()?1.7:abilities.form(followId)?.height*.85||(cameraMode==='portrait'?2.8:3.8),interior.active()?8:abilities.form(followId)?55:35));
         camera.lookAt(controls.target);camera.updateMatrixWorld(true);if(!lastDrawCamera)lastDrawCamera=camera.clone();else lastDrawCamera.copy(camera);
+        const hologramPoint=hologram.update(figures.get(hologramId),camera,{time:now/1000,height:abilities.form(hologramId)?.height||1.8,reduced:paused||energySaver});
+        if(paused||now-lastHologramAnchor>100){onHologramAnchor(hologramPoint?{x:(hologramPoint.x+1)/2*host.clientWidth,y:(1-hologramPoint.y)/2*host.clientHeight,visible:hologramPoint.z>-1&&hologramPoint.z<1&&Math.abs(hologramPoint.x)<1&&Math.abs(hologramPoint.y)<1}:null);lastHologramAnchor=now;}
         interior.apply();renderer.render(scene, camera);
         if (paused || now - lastLabels > 120 || easingCamera) { drawLabels(); lastLabels = now; }
         camera.position.copy(desiredCamera);camera.quaternion.copy(desiredOrientation);camera.updateMatrixWorld(true);
@@ -646,10 +650,11 @@ export function createOfficeScene({ host, labels, onSelect, onFailure, onVenue =
         if (!dragStart || Math.hypot(e.clientX - dragStart[0], e.clientY - dragStart[1]) > 6) return; dragStart = null;
         const rect = renderer.domElement.getBoundingClientRect(); pointer.set((e.clientX - rect.left) / rect.width * 2 - 1, -(e.clientY - rect.top) / rect.height * 2 + 1);
         raycaster.setFromCamera(pointer, lastDrawCamera||camera);
-        const hit = raycaster.intersectObjects([...figures.values()].map(f => f.group).concat(residences.meshes,rivageBar.targets,hospitality.targets,gameTargets,abilities.targets()), true)[0];
+        const hit = raycaster.intersectObjects([...figures.values()].map(f => f.group).concat(residences.meshes,rivageBar.targets,hospitality.targets,gameTargets,abilities.targets(),hologram.root.visible?[hologram.root]:[]), true)[0];
         const resident = residences.personForHit(hit);
         if(resident===homeOwner&&hit?.object.userData.residenceLayer==='door'){onDoor();return;}
         if (resident) { onSelect(resident); visitHome(resident); }
+        else if(hit?.object.userData.officeHologramOwner)onSelect(hit.object.userData.officeHologramOwner);
         else if (hit?.object.userData.personId) onSelect(hit.object.userData.personId);
         else if(hit?.object.userData.officeVenue)onVenue(hit.object.userData.officeVenue);
         else if(hit?.object.userData.officeGame)onGame(hit.object.userData.officeGame);
@@ -665,6 +670,7 @@ export function createOfficeScene({ host, labels, onSelect, onFailure, onVenue =
     const changed = () => requestDraw(); controls.addEventListener('change', changed); controls.addEventListener('start', () => { easingCamera = false; });
     theme(); focusRoom('all'); camera.position.copy(cameraGoal); controls.target.copy(targetFocus); easingCamera = false; resize();
     return { setPeople, resize, focusRoom, visitHome, setCameraMode,
+        showHologram(id){hologramId=id!==null&&(id===homeOwner||id===controlledId||figures.get(id)?.person.is_me)?id:null;if(hologramId===null)hologram.hide();requestDraw();},
         collisionBoxes:()=>navigation.boxes(),
         setPilotReporter(fn){pilotReporter=fn;},
         castSkill(index=0){const f=figures.get(controlledId);if(!f||!pilotPhysics)return{error:'Aktifkan kendali avatar dahulu.'};const skill=skillsFor(safeAvatar(f.person.avatar).costume)[index];if(!skill)return{error:'Jurus belum tersedia untuk kostum ini.'};if(abilities.cooldown(controlledId))return{error:`Pulihkan energi ${abilities.cooldown(controlledId)} detik lagi.`};
@@ -718,6 +724,7 @@ export function createOfficeScene({ host, labels, onSelect, onFailure, onVenue =
         dispose() { disposed = true; if (frame !== null) cancelAnimationFrame(frame); frame = null; observer.disconnect(); themeObserver.disconnect(); controls.dispose();
             interior.dispose();
             abilities.dispose();
+            hologram.dispose();
             for(const timer of speechTimers.values())clearTimeout(timer);speechTimers.clear();recreation.clear();
             renderer.domElement.removeEventListener('pointerdown', down); renderer.domElement.removeEventListener('pointerup', up); renderer.domElement.removeEventListener('webglcontextlost', lost);
             residences.dispose();restMats.dispose(); environment.dispose(); for (const geometry of ownedGeometries) geometry.dispose(); for (const mat of materials.values()) mat.dispose(); for (const texture of textures) texture.dispose();

@@ -114,6 +114,8 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
         ->middleware('throttle:virtual-office')->name('virtual-office.activity');
     Route::get('/virtual-office', [\App\Http\Controllers\VirtualOfficeController::class, 'index'])
         ->name('virtual-office.index');
+    Route::get('/virtual-office/hologram/{tool}', [\App\Http\Controllers\VirtualOfficeController::class, 'hologram'])
+        ->whereIn('tool', ['create','torpr','tracking'])->middleware('throttle:virtual-office')->name('virtual-office.hologram');
     Route::get('/virtual-office/presence', [\App\Http\Controllers\VirtualOfficeController::class, 'presence'])
         ->middleware([\App\Http\Middleware\DisableLoggingForPolling::class, 'throttle:virtual-office'])
         ->name('virtual-office.presence');

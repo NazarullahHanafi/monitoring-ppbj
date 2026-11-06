@@ -1,4 +1,4 @@
-@extends('layouts.landing')
+@extends(request()->attributes->get('office_hologram') ? 'virtual-office.hologram-layout' : 'layouts.landing')
 
 @section('title', 'Track PR - PPBJ Management System')
 
@@ -1842,8 +1842,8 @@
         <section class="search-section">
             <div class="wrap">
                 <div class="search-card sr">
-                    <form method="POST" action="{{ route('landing.track.secure') }}" autocomplete="off">
-                        @csrf
+                    <form method="{{ request()->attributes->get('office_hologram') ? 'GET' : 'POST' }}" action="{{ request()->attributes->get('office_hologram') ? route('virtual-office.hologram', ['tool'=>'tracking']) : route('landing.track.secure') }}" autocomplete="off">
+                        @unless(request()->attributes->get('office_hologram')) @csrf @endunless
                         <div class="search-row">
                             <div class="search-input-wrap">
                                 <span class="search-ic"><i class="fas fa-search"></i></span>
@@ -1894,7 +1894,7 @@
                             </div>
                             <div style="display:grid;gap:10px">
                                 @foreach($likeResults as $item)
-                                    <a href="{{ route('landing.track.token', ['token' => $item['tracking_token'] ?? '']) }}"
+                                    <a href="{{ request()->attributes->get('office_hologram') ? route('virtual-office.hologram', ['tool'=>'tracking', 'tracking_token'=>$item['tracking_token'] ?? '']) : route('landing.track.token', ['token' => $item['tracking_token'] ?? '']) }}"
                                         style="display:flex;align-items:center;justify-content:space-between;gap:14px;padding:14px 16px;border:1px solid var(--border);border-radius:14px;background:rgba(255,255,255,.035);text-decoration:none;color:var(--text)">
                                         <span style="min-width:0">
                                             <span
@@ -2103,7 +2103,7 @@
                     </div>
 
                     <div class="action-row sr d2">
-                        <a href="{{ route('landing.track') }}" class="btn-sec btn-back">
+                        <a href="{{ request()->attributes->get('office_hologram') ? route('virtual-office.hologram', ['tool'=>'tracking']) : route('landing.track') }}" class="btn-sec btn-back">
                             <i class="fas fa-arrow-left"></i> Cari Nomor Lain
                         </a>
                         <button onclick="window.print()" class="btn-sec btn-print">
@@ -2398,7 +2398,7 @@
 
                     {{-- Actions --}}
                     <div class="action-row sr d2">
-                        <a href="{{ route('landing.track') }}" class="btn-sec btn-back">
+                        <a href="{{ request()->attributes->get('office_hologram') ? route('virtual-office.hologram', ['tool'=>'tracking']) : route('landing.track') }}" class="btn-sec btn-back">
                             <i class="fas fa-arrow-left"></i> Cari PR Lain
                         </a>
                         <button onclick="window.print()" class="btn-sec btn-print">

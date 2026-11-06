@@ -5,7 +5,7 @@ export function mountOfficePilot({document:doc,window:win,config,visible,getScen
     if(!config.canPilot)return{start(){},stop(){},interact:()=>true};
     const keys=new Set();let session=globalThis.crypto.randomUUID(),generation=0,timer=null,nextDelay=null,controller=null,enabled=false,claimed=false,seq=0,last=null,trail=[],inputFrozen=false,requestStarted=0,unconfirmed=0,pendingDistance=0,reported=null,doorIntent=null,pendingGuide=null,pendingRest=null,restNotice=false,pendingSkill=null,pendingEnd=false;
     const $=id=>doc.getElementById(id);
-    const blocked=()=>!visible()||doc.hidden||Boolean(doc.querySelector('.vo-club-panel:not([hidden]),.vo-avatar-editor:not([hidden]),.vo-world-panel:not([hidden])'));
+    const blocked=()=>!visible()||doc.hidden||Boolean(doc.querySelector('.vo-club-panel:not([hidden]),.vo-avatar-editor:not([hidden]),.vo-world-panel:not([hidden]),.vo-hologram-work:not([hidden])'));
     const walkingKeys=()=>['KeyW','KeyA','KeyS','KeyD','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].some(key=>keys.has(key));
     function input(){const el=doc.activeElement;const typing=el&&['INPUT','TEXTAREA','SELECT'].includes(el.tagName)||el?.isContentEditable;
         const data=blocked()||typing||inputFrozen?{}:{x:Number(keys.has('KeyD')||keys.has('ArrowRight'))-Number(keys.has('KeyA')||keys.has('ArrowLeft')),z:Number(keys.has('KeyW')||keys.has('ArrowUp'))-Number(keys.has('KeyS')||keys.has('ArrowDown')),boost:keys.has('ShiftLeft')||keys.has('ShiftRight'),jump:keys.has('Space'),descend:keys.has('KeyC')};getScene()?.setPilotInput?.(data);}
@@ -67,5 +67,5 @@ export function mountOfficePilot({document:doc,window:win,config,visible,getScen
     function start(){if(enabled||!visible()||!getScene())return;session=globalThis.crypto.randomUUID();generation++;seq=0;last=null;trail=[];reported=null;unconfirmed=0;pendingDistance=0;doorIntent=null;enabled=true;inputFrozen=false;claimed=false;pulse();}
     function stop(){generation++;enabled=false;claimed=false;doorIntent=null;pendingSkill=null;pendingRest=null;pendingEnd=false;keys.clear();inputFrozen=true;input();if(timer)clearTimeout(timer);timer=null;nextDelay=null;controller?.abort();controller=null;getScene()?.releasePilot?.();
         const token=doc.querySelector('meta[name="csrf-token"]')?.content||'';try{win.navigator?.sendBeacon?.('/virtual-office/pilot/leave',new Blob([JSON.stringify({session_id:session,_token:token})],{type:'application/json'}));}catch{} }
-    return {start,stop,state,toggleDoor,endMode,interact(id){const scene=getScene();if(!claimed||!scene?.canInteract?.(id)){pendingGuide=id;scene?.guideTo?.(id);onStatus('Jalan ke '+id+' terlebih dahulu, lalu klik tempatnya atau tekan E.');return false;}return true;}};
+    return {start,stop,state,toggleDoor,endMode,suspendInput(){keys.clear();input();},interact(id){const scene=getScene();if(!claimed||!scene?.canInteract?.(id)){pendingGuide=id;scene?.guideTo?.(id);onStatus('Jalan ke '+id+' terlebih dahulu, lalu klik tempatnya atau tekan E.');return false;}return true;}};
 }

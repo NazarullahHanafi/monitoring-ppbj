@@ -20,6 +20,19 @@ class TrackingPrController extends Controller
         return view('tracking.index', $this->resolveTrackingData($request));
     }
 
+    public function hologram(Request $request)
+    {
+        // Umum sees exactly the public tracking view; the operational workspace
+        // remains restricted to its existing department.
+        if ($request->user()->department !== 'operasional' && $request->filled('tracking_token')) {
+            $data=$request->validate(['tracking_token'=>['required','string','max:2048']]);
+            $view=$this->landingToken($data['tracking_token']);
+            abort_unless($view instanceof \Illuminate\View\View, 422, 'Link tracking tidak valid. Cari nomor PR kembali.');
+            return $view;
+        }
+        return view($request->user()->department === 'operasional' ? 'tracking.index' : 'landing.track', $this->resolveTrackingData($request));
+    }
+
     public function landing(Request $request)
     {
         $keyword = $this->trackingKeyword($request);
