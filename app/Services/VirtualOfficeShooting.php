@@ -10,7 +10,8 @@ class VirtualOfficeShooting
 {
     private function ray(array $state,array $aim,array $spec): array
     {
-        $height=isset($spec['form'])?(VirtualOfficePilot::abilities()['skills'][$spec['form']]['height']??2.2)*.55:1.2;
+        $form=($state['form_until']??0)>now()->getTimestampMs()?(VirtualOfficePilot::abilities()['skills'][$state['form']??'']??null):null;
+        $height=$form?($form['height']??2.2)*.55:(isset($spec['form'])?(VirtualOfficePilot::abilities()['skills'][$spec['form']]['height']??2.2)*.55:1.2);
         $origin=['x'=>$state['x'],'y'=>$state['y']+$height,'z'=>$state['z']];$length=0;
         foreach(['x','y','z']as$axis)$length+=($aim[$axis]-$origin[$axis])**2;$length=sqrt($length);
         abort_if($length<.1,422,'Arahkan bidikan sedikit lebih jauh dari avatar.');$end=[];

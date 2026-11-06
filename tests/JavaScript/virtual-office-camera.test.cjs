@@ -1,4 +1,8 @@
 const test=require('node:test'),assert=require('node:assert/strict'),path=require('node:path');const {pathToFileURL}=require('node:url');
+test('a clear camera follows a full mouse orbit and zoom in the same frame without trailing motion',async()=>{
+    const T=await import('three'),{createOfficeCameraRig}=await import(pathToFileURL(path.resolve('resources/js/virtual-office-camera.js'))),rig=createOfficeCameraRig(),target=new T.Vector3(0,1.3,0),nav={cameraLimit:()=>1};
+    for(const desired of[new T.Vector3(4,4,5),new T.Vector3(-5,4,4),new T.Vector3(-9,7,-8),new T.Vector3(3,3,-4)]){assert.ok(rig.resolve(nav,target,desired,[],3.8,35,1/60).distanceTo(desired)<1e-10);assert.ok(rig.resolve(nav,target,desired,[],3.8,35,1/60).distanceTo(desired)<1e-10);}
+});
 test('narrow-space obstruction changes are damped without changing the requested orbit zoom',async()=>{
     const T=await import('three'),{createOfficeCameraRig}=await import(pathToFileURL(path.resolve('resources/js/virtual-office-camera.js'))),rig=createOfficeCameraRig(),target=new T.Vector3(0,1.3,0),desired=new T.Vector3(4,4,5),original=desired.clone();let blocked=false,previous=null;
     const nav={cameraLimit:(a,b)=>blocked&&b.y<6?.2:1};

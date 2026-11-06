@@ -19,7 +19,7 @@ if (root && !root.dataset.initialized) {
     const palette = ['#dce9df', '#eadfcc', '#dde5f1', '#e8dce5', '#d3e8e4', '#f0dfce'];
     let people = [], filter = 'all', selected = null, scene = null, sceneTicket = 0, sceneLoading = false, inView = true, leftPage = false;
     let requestedRoom = isOfficeNight() ? 'residences' : 'all', requestedHome = null;
-    let worldConfig = config.initial?.world || {}, live = null, club = null, pilot = null, hologram=null, combat=null, sceneUnavailable = false;
+    let worldConfig = config.initial?.world || {}, live = null, club = null, pilot = null, hologram=null, combat=null, viewport=null, sceneUnavailable = false;
     let energySaver = window.matchMedia('(max-width: 650px)').matches || Number(window.navigator?.hardwareConcurrency || 8) <= 4 || Number(window.navigator?.deviceMemory || 8) <= 4;
     try { const preference = localStorage.getItem('simonpr:office:quality'); if (['low', 'standard'].includes(preference)) energySaver = preference === 'low'; } catch {}
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -90,7 +90,7 @@ if (root && !root.dataset.initialized) {
         text('voDetailNote', 'Kehadiran mengikuti heartbeat aplikasi. Pose avatar hanya ilustrasi; tidak menunjukkan aktivitas fisik atau produktivitas anggota tim.');
         chatActions(person);
         if (focus) {
-            $('voWorkspace').classList.remove('vo-team-hidden'); $('voWorkspace').classList.add('vo-team-open'); $('voToggleTeam').setAttribute('aria-pressed', 'true');
+            viewport?.show('team');
             if (!document.fullscreenElement && !$('voWorkspace').classList.contains('vo-expanded') && window.matchMedia('(max-width: 950px)').matches) $('voDetail').scrollIntoView?.({ block: 'nearest', behavior: paused ? 'auto' : 'smooth' });
         }
         scene?.select(id, focus&&!combat?.armed?.()); renderPeople(); club?.select(id); if(focus&&person.is_me)hologram?.open();else if (focus&&!combat?.armed?.()) club?.chat(id, false);
@@ -125,7 +125,7 @@ if (root && !root.dataset.initialized) {
         try {
             const { createOfficeScene } = await import('./virtual-office-scene.js');
             if (ticket !== sceneTicket || mode !== '3d' || !visible()) return;
-            scene = createOfficeScene({ host: $('voScene'), labels: $('voLabels'), onSelect: id => select(id, true),onCombatFire:special=>combat?.fire?.(special),onAimChange:value=>combat?.aimState?.(value),onHologramAnchor:point=>hologram?.anchor?.(point), onVenue: venue => venue==='armory'?combat?.open?.():club?.openVenue?.(venue), onGame: id=>club?.openGame?.(id), onDoor:()=>pilot?.toggleDoor?.(), onFailure: () => { sceneUnavailable = true; switchView('list', false); text('voSync', 'Ruang 3D tidak tersedia. Tim tetap dapat dilihat di mode ringan.'); } });
+            scene = createOfficeScene({ host: $('voScene'), labels: $('voLabels'), onSelect: id => select(id, true),onCombatFire:special=>combat?.fire?.(special),onAimChange:value=>{combat?.aimState?.(value);if(value)viewport?.closePanels();},onHologramAnchor:point=>hologram?.anchor?.(point), onVenue: venue => venue==='armory'?combat?.open?.():club?.openVenue?.(venue), onGame: id=>club?.openGame?.(id), onDoor:()=>pilot?.toggleDoor?.(), onFailure: () => { sceneUnavailable = true; switchView('list', false); text('voSync', 'Ruang 3D tidak tersedia. Tim tetap dapat dilihat di mode ringan.'); } });
             scene.configureHome?.(Number(config.myId),config.myHome,config.homePlots);scene.setPeople(people); scene.setPaused(paused); scene.setVisible(visible());
             scene.configureWorld?.(worldConfig); scene.setEnergySaver?.(energySaver);
             scene.focusRoom(requestedRoom);
@@ -171,7 +171,7 @@ if (root && !root.dataset.initialized) {
     $('voQuality').addEventListener('change', () => { energySaver = $('voQuality').value === 'low'; scene?.setEnergySaver?.(energySaver); try { localStorage.setItem('simonpr:office:quality', energySaver ? 'low' : 'standard'); } catch {} });
     $('voInviteMeeting').addEventListener('click', () => { if (selected !== null) { if (mode !== '3d') switchView('3d'); live?.invite(selected); } });
     $('voChat').addEventListener('click', () => { if (selected !== null) club?.chat(selected); });
-    mountOfficeViewport({document,getScene:()=>scene,onEscape:()=>{if(combat?.escape?.())return true;if(!$('voAvatarEditor').hidden){closeEditor();return true;}if(hologram?.escape())return true;if(config.canConfigureWorld&&!$('voWorldPanel').hidden){$('voWorldPanel').hidden=true;$('voOpenWorld').focus();return true;}if(selected!==null){closeDetail();return true;}return false;},onEnter:()=>{if(mode!=='3d')switchView('3d');scene?.followPilot?.();}});
+    viewport=mountOfficeViewport({document,getScene:()=>scene,onEscape:()=>{if(combat?.escape?.())return true;if(!$('voAvatarEditor').hidden){closeEditor();return true;}if(hologram?.escape())return true;if(config.canConfigureWorld&&!$('voWorldPanel').hidden){$('voWorldPanel').hidden=true;$('voOpenWorld').focus();return true;}if(selected!==null){closeDetail();return true;}return false;},onEnter:()=>{if(mode!=='3d')switchView('3d');scene?.followPilot?.();}});
     for (const game of games) {
         const button = document.createElement('button'); button.type = 'button'; button.textContent = `${game.icon} ${game.name}`; button.setAttribute('aria-pressed', 'false');
         button.addEventListener('click', () => { if(mode!=='3d')switchView('3d');club?.openGame(game.id); $('voGames').querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b === button))); text('voSceneHint', `${game.name} · pilih Mulai untuk bermain`); }); $('voGames').append(button);
@@ -246,5 +246,5 @@ if (root && !root.dataset.initialized) {
     pilot=mountOfficePilot({document,window,config,visible,getScene:()=>scene,onStatus:showStatus,onPose:value=>{modeHud(value);combat?.pose?.(value);if($('voInteriorStatus'))$('voInteriorStatus').hidden=!value.interior;if($('voHomeDoor')){$('voHomeDoor').disabled=!value.atHome&&!value.nearDoor;$('voHomeDoor').textContent=value.doorOpen?'Tutup pintu':'Buka pintu';}if(value.target)text('voPilotTarget',`${(value.target==='home'?'Rumah saya':games.find(g=>g.id===value.target)?.name)||value.target} · ${value.distance} m · ikuti penanda emas`);}});
     club = mountOfficeClub({ document, config, visible, getPeople: () => people, getScene: () => scene, focusArea, requireVenue:id=>pilot.interact(id) });
     hologram=mountOfficeHologram({document,window,config,getScene:()=>scene,onWork:()=>pilot?.suspendInput?.(),onActivity:()=>document.dispatchEvent(new Event('pointermove'))});
-    combat=mountOfficeCombat({document,window,config,visible,getScene:()=>scene,getTarget:()=>selected,getPeople:()=>people,onStatus:showStatus});apply(config.initial); motionButton(); switchView(mode, false); if (feedUrl) loop.start(); live.start(); club.start();
+    combat=mountOfficeCombat({document,window,config,visible,getScene:()=>scene,getTarget:()=>selected,getPeople:()=>people,onOpen:()=>viewport?.closePanels(),onStatus:showStatus});apply(config.initial); motionButton(); switchView(mode, false); if (feedUrl) loop.start(); live.start(); club.start();
 }

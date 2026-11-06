@@ -1,0 +1,17 @@
+# Perbaikan kendali bidikan, inventaris, dan panel
+
+Screenshot lanjutan menunjukkan tiga masalah yang belum diselesaikan oleh rilis sebelumnya: tubuh Susanoo menutup crosshair, kamera mouse tertinggal karena damping OrbitControls ditambah smoothing rig, serta informasi membuka kartu cuaca/klub/kampus terpisah. Panel tim belum memiliki tombol tutup yang dapat dijangkau dalam fullscreen.
+
+Bidikan sekarang memakai pandangan orang pertama dengan yaw/pitch dari input mouse langsung. B/tombol Bidik meminta pointer lock jika browser mendukung; gerak mouse di canvas tetap tersedia sebagai fallback, dan tahan klik kanan tetap dapat dipakai. B, Esc, kehilangan pointer lock, blur, dan pembukaan inventaris memulihkan kamera. Pelepasan klik kanan di luar canvas juga ditangani. Arah ray mengikuti crosshair yang digambar, termasuk ketika belum ada frame baru setelah input. Tampilan orang pertama menyembunyikan hanya tubuh/model sendiri selama draw, menampilkan senjata di depan kamera, lalu memulihkan parent/transform/visibility setelah draw. Pemain lain tetap melihat model lengkap. Titik awal senjata pada transformasi aktif mengikuti tinggi form di server.
+
+Orbit mouse tidak lagi memiliki inertia. Rig menerapkan perubahan orbit/zoom langsung dan menghaluskan koreksi benturan; transisi programatis memakai delta waktu dengan respons lebih cepat. Batas jarak kamera, collision, perlindungan rumah/dokumen, cooldown, dan otorisasi tetap dipakai.
+
+Perlengkapan memiliki dropdown **Senjata milik saya**, dimuat dari inventaris server. Memilih senjata yang dimiliki mengirim equip, bukan buy, dan dapat dilakukan jauh dari toko. Pemilihan gagal mengembalikan dropdown ke senjata yang benar serta menampilkan pesan server di dock. Permintaan tetap single-flight, memakai CSRF dan batas waktu. Respons revisi lama tidak mengganti senjata terbaru.
+
+Informasi kini satu panel HTML yang dapat digulir: cuaca, kamera/grafis, avatar, dan fasilitas klub berada dalam satu pembungkus tersembunyi. Kendali, informasi, dan tim menggunakan satu status panel; membuka salah satunya menutup yang sebelumnya. Tim memiliki tombol × sendiri dan tombol Tim dalam toolbar game. Mulai membidik menutup panel samping. Tombol keluar fullscreen tetap dapat dijangkau di toolbar. HTML awal memakai hidden, termasuk untuk tim.
+
+Validasi lokal: 188 tes JavaScript lulus; tes scene tambahan setelahnya mencakup relative mouse saat pointer lock, pemulihan kamera, dan pelepasan klik kanan di luar canvas. Pengujian memeriksa visibility pada saat renderer dipanggil, arah kamera terhadap ray, penghentian drift, inventaris yang sudah dibeli, error equip, dan pergantian panel berulang. Pengujian PHP mencakup HTML hasil render dan transaksi equip tanpa pembelian tambahan. Seluruh 517 tes PHP lulus dengan 4.218 assertions. Build produksi berhasil: entry 95,58 kB / gzip 33,98 kB, scene lazy 688,94 kB / gzip 187,65 kB. Peringatan ukuran scene di atas 500 kB masih ada.
+
+Verifikasi browser interaktif belum berhasil: konektor tab mengembalikan `Cannot read properties of undefined (reading 'timeoutMs')`; fallback Computer Use melaporkan native pipe tidak tersedia. Karena itu belum ada klaim pengujian piksel, kenyamanan mouse langsung, atau FPS GPU. Pemeriksaan scene memakai renderer uji dan tidak menggantikan pengujian langsung pada perangkat pengguna.
+
+Tidak ada migrasi, penghapusan inventaris, atau perubahan saldo dalam rilis ini. Verifikasi produksi hanya membaca render dan endpoint yang tidak mengirim aksi pemain; tidak menembak pengguna atau membeli item.

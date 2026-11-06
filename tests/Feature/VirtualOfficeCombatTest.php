@@ -92,4 +92,17 @@ class VirtualOfficeCombatTest extends TestCase
         $a=$this->person();$this->place($a);$this->fire($a,'sniper',['x'=>0,'y'=>1,'z'=>30])->assertForbidden();$this->fire($a,'indra_arrow',['x'=>0,'y'=>1,'z'=>30])->assertUnprocessable();
         $this->fire($a,'pistol',['x'=>0,'y'=>100000,'z'=>30])->assertUnprocessable();$this->actingAs($a)->postJson(route('virtual-office.combat.fire'),['kind'=>'pistol','aim'=>['x'=>0,'y'=>1,'z'=>30],'damage'=>999,'request_id'=>(string)Str::uuid()])->assertUnprocessable();
     }
+    public function test_owned_weapons_can_be_switched_away_from_shop_without_charging_again(): void {
+        $u=$this->person();$this->own($u);$this->own($u,'sniper');$this->place($u,0,20,['weapon'=>'pistol']);
+        $this->actingAs($u)->getJson(route('virtual-office.combat'))->assertOk()->assertJsonCount(2,'owned');
+        foreach(['sniper','pistol',null,'sniper']as$weapon)$this->postJson(route('virtual-office.combat.equip'),['weapon'=>$weapon])->assertOk()->assertJsonPath('self.weapon',$weapon);
+        $this->assertDatabaseCount('virtual_office_weapons',2);$this->assertDatabaseCount('virtual_office_ledger',1);$this->assertDatabaseHas('virtual_office_wallets',['user_id'=>$u->id,'balance'=>1000]);
+    }
+    public function test_a_gun_aims_from_the_active_giant_height_and_expired_forms_restore_normal_origin(): void {
+        $u=$this->person();$this->own($u);$height=VirtualOfficePilot::abilities()['skills']['susanoo']['height']*.55;
+        $this->place($u,0,20,['weapon'=>'pistol','form'=>'susanoo','form_until'=>now()->getTimestampMs()+60000]);
+        $response=$this->fire($u,'pistol',['x'=>0,'y'=>$height-.12,'z'=>40])->assertOk()->json();$this->assertEqualsWithDelta($height-.12,$response['self']['shot_origin']['y'],.00001);
+        $this->place($u,0,20,['weapon'=>'pistol','form'=>'susanoo','form_until'=>now()->getTimestampMs()-1]);
+        $this->fire($u,'pistol',['x'=>0,'y'=>1.08,'z'=>40])->assertOk()->assertJsonPath('self.shot_origin.y',1.08);
+    }
 }

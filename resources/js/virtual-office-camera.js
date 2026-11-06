@@ -23,10 +23,12 @@ export function officeCameraPosition(navigation,target,desired,extra=[],minimum=
 // Smooth the obstruction offset, not OrbitControls' desired zoom. A short hold
 // prevents alternating between overhead and shoulder views at a narrow doorway.
 export function createOfficeCameraRig(){
-    let offset=null,obstructed=false,clearFor=0,held=null;
-    return{reset(){offset=null;held=null;obstructed=false;clearFor=0;},resolve(navigation,target,desired,extra=[],minimum=3.6,maximum=35,seconds=1/30){
+    let offset=null,lastDirect=null,obstructed=false,clearFor=0,held=null;
+    return{reset(){offset=null;lastDirect=null;held=null;obstructed=false;clearFor=0;},resolve(navigation,target,desired,extra=[],minimum=3.6,maximum=35,seconds=1/30){
         const dt=THREE.MathUtils.clamp(Number(seconds)||1/30,.001,.06),goal=officeCameraPosition(navigation,target,desired,extra,minimum,maximum),wanted=goal.sub(target),direct=desired.clone().sub(target).clampLength(minimum,maximum),blocked=wanted.distanceTo(direct)>.05;
         if(blocked){obstructed=true;clearFor=0;held=wanted.clone();}else if(obstructed){clearFor+=dt;if(clearFor<.35&&held)wanted.copy(held);else{obstructed=false;held=null;}}
+        // Apply orbit/zoom input immediately. Only the collision correction eases.
+        if(offset&&lastDirect)offset.add(direct.clone().sub(lastDirect));lastDirect=direct.clone();
         if(!offset)offset=wanted.clone();else{const delta=wanted.clone().sub(offset).multiplyScalar(1-Math.exp(-dt*7));delta.clampLength(0,Math.max(8,minimum*2)*dt);offset.add(delta);}
         offset.clampLength(minimum,maximum);return target.clone().add(offset);
     }};

@@ -46,6 +46,15 @@ class VirtualOfficeTest extends TestCase
         $this->assertArrayNotHasKey('role', $response->json('people.0'));
         $this->assertArrayNotHasKey('last_seen_ip', $response->json('people.0'));
     }
+    public function test_game_panels_have_individual_close_controls_and_information_shares_one_hidden_sheet(): void
+    {
+        $u=User::factory()->create(['department'=>'umum','role'=>'user','is_active'=>true]);$html=$this->actingAs($u)->get(route('virtual-office.index'))->assertOk()->getContent();
+        $dom=new \DOMDocument();$previous=libxml_use_internal_errors(true);try{$dom->loadHTML($html);}finally{libxml_clear_errors();libxml_use_internal_errors($previous);}$xpath=new \DOMXPath($dom);
+        foreach(['voTeam','voHudPanels','voInfoPanel']as$id)$this->assertSame(1,$xpath->query('//*[@id="'.$id.'" and @hidden]')->length);
+        foreach(['voWeatherStatus','voCameraMode','voQuality','voWallet','voOpenAvatar']as$id)$this->assertSame(1,$xpath->query('//*[@id="'.$id.'"]/ancestor::*[@id="voInfoPanel"]')->length,$id.' belongs to the same dismissible sheet.');
+        foreach(['voCloseTeam'=>'voTeam','voCloseInfo'=>'voInfoPanel','voCloseHud'=>'voHudPanels']as$button=>$panel){$this->assertSame(1,$xpath->query('//*[@id="'.$button.'"]')->length);$this->assertSame(1,$xpath->query('//*[@id="'.$button.'"]/ancestor::*[@id="'.$panel.'"]')->length);}
+        $this->assertSame(1,$xpath->query('//*[@id="voGameTeam"]/ancestor::nav[contains(@class,"vo-game-tools")]')->length);$this->assertSame(1,$xpath->query('//*[@id="voWeaponSelect"]')->length);
+    }
 
     public function test_presence_and_mood_are_fresh_even_when_directory_is_warm_and_me_is_not_shared(): void
     {

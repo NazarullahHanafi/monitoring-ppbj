@@ -1,6 +1,6 @@
 import catalog from '../data/virtual-office-combat.json' with {type:'json'};
 
-export function mountOfficeCombat({document:doc,window:win,config,visible,getScene,onStatus=()=>{}}){
+export function mountOfficeCombat({document:doc,window:win,config,visible,getScene,onOpen=()=>{},onStatus=()=>{}}){
     const $=id=>doc.getElementById(id),panel=$('voArmoryPanel'),hud=$('voCombatHud'),workspace=$('voWorkspace');
     if(!panel)return{open(){},pose(){},self(){},close(){},fire(){},aimState(){}};
     let account=null,self={},busy=false,readyAt=0,closed=false,controller=null;
@@ -9,12 +9,14 @@ export function mountOfficeCombat({document:doc,window:win,config,visible,getSce
     function showHud(show,expand=false){if(hud)hud.hidden=!show;$('voCombatToggle')?.setAttribute('aria-expanded',String(show));if(expand)fold(false);}
     function fold(collapsed){if($('voCombatDetails'))$('voCombatDetails').hidden=collapsed;$('voCombatFold')?.setAttribute('aria-expanded',String(!collapsed));}
     function aimState(value){workspace?.classList.toggle('vo-aiming',Boolean(value));workspace?.classList.toggle('vo-sniper',value&&self.weapon==='sniper');$('voCombatAim')?.setAttribute('aria-pressed',String(Boolean(value)));set('voCombatAim',value?'B · Selesai bidik':'B · Bidik');}
-    function aim(){const active=getScene()?.setAiming?.(!getScene()?.isAiming?.());aimState(active);if(!active&&!self.weapon&&!getScene()?.activeTransformation?.())status('Pegang senjata atau aktifkan mode Susanoo/Kurama dahulu.');}
+    function aim(){const active=getScene()?.setAiming?.(!getScene()?.isAiming?.());aimState(active);if(active){getScene()?.lockAim?.();getScene()?.focusPilot?.();status('Gerakkan mouse untuk mengarahkan bidikan. Klik kiri / V menembak. B / Esc selesai.');}else if(!self.weapon&&!getScene()?.activeTransformation?.())status('Pegang senjata atau aktifkan mode Susanoo/Kurama dahulu.');}
     function render(){
-        if(!account)return;set('voArmoryBalance','$'+account.balance+' virtual');const list=$('voArmoryItems');list.replaceChildren();
+        if(!account)return;
+        const picker=$('voWeaponSelect');if(picker){picker.replaceChildren();for(const kind of['',...account.owned]){const option=doc.createElement('option');option.value=kind;option.textContent=kind?catalog.weapons[kind]?.name||kind:'Simpan senjata';picker.append(option);}picker.value=self.weapon||'';picker.disabled=busy;}
+        set('voArmoryBalance','$'+account.balance+' virtual');const list=$('voArmoryItems');list.replaceChildren();
         for(const[kind,spec]of Object.entries(account.weapons)){
             const owned=account.owned.includes(kind),card=doc.createElement('article'),name=doc.createElement('h3'),note=doc.createElement('p'),button=doc.createElement('button');
-            name.textContent=spec.name;note.textContent=`$${spec.price} · damage ${spec.damage} · ${spec.range} m`;button.type='button';button.textContent=owned?(self.weapon===kind?'Sedang dipegang':'Pegang senjata'):'Beli & langsung pegang';button.disabled=busy||self.weapon===kind;
+            name.textContent=spec.name;note.textContent=owned?`Milik Anda · ${spec.range} m`:`$${spec.price} · damage ${spec.damage} · ${spec.range} m`;button.type='button';button.textContent=owned?(self.weapon===kind?'Sedang dipegang':'Pegang senjata'):'Beli & langsung pegang';button.disabled=busy||owned&&self.weapon===kind;
             button.addEventListener('click',()=>mutate(owned?'equip':'buy',owned?{weapon:kind}:{weapon:kind,request_id:pending.get(kind)||globalThis.crypto.randomUUID()}));card.append(name,note,button);list.append(card);
         }
         if($('voCombatHolster'))$('voCombatHolster').disabled=busy||!self.weapon;
@@ -31,18 +33,18 @@ export function mountOfficeCombat({document:doc,window:win,config,visible,getSce
     async function mutate(action,body){
         if(busy)return;if(action==='buy')pending.set(body.weapon,body.request_id);const data=await request('/'+action,body);if(!data)return;
         if(action==='buy'){pending.delete(body.weapon);account=data;}apply(data);render();close();showHud(true,true);
-        status(body.weapon?`${catalog.weapons[body.weapon].name} dipegang. B untuk bidik, klik kiri / V menembak.`:'Senjata disimpan.');
+        getScene()?.setAiming?.(false);aimState(false);status(body.weapon?`${catalog.weapons[body.weapon].name} dipegang. B untuk bidik, klik kiri / V menembak.`:'Senjata disimpan.');
     }
     async function open(){
-        if(closed||!visible())return;if(busy){status('Menunggu aksi sebelumnya selesai.');return;}getScene()?.setAiming?.(false);aimState(false);panel.hidden=false;
+        if(closed||!visible())return;if(busy){status('Menunggu aksi sebelumnya selesai.');return;}onOpen();getScene()?.setAiming?.(false);aimState(false);panel.hidden=false;render();
         const value=await request('',null);if(value&&!closed){account=value;apply(value);render();}if(!closed&&!panel.hidden)$('voArmoryClose').focus();
     }
     function close(){panel.hidden=true;getScene()?.focusPilot?.();}
     function pose(value){
-        if(value?.hp!==undefined&&(value.combat_revision??0)>=(self.combat_revision??0))self={...self,...value};
+        const previous=self.weapon;if(value?.hp!==undefined&&(value.combat_revision??0)>=(self.combat_revision??0))self={...self,...value};if(previous!==self.weapon)render();
         const mode=getScene()?.activeTransformation?.(),special=['susanoo','kurama'].includes(mode?.id),cooling=Date.now()<readyAt;
         if($('voCombatHealth'))$('voCombatHealth').value=self.hp??100;set('voCombatHealthText',(self.hp??100)+' HP');set('voCombatWeapon',catalog.weapons[self.weapon]?.name||mode?.name||'Tanpa senjata');
-        set('voCombatTarget','B / tahan klik kanan: bidik · klik kiri / V: tembak');set('voCombatMode',mode?`${mode.name} · ${mode.remaining??''} dtk`:'');if($('voCombatMode'))$('voCombatMode').hidden=!mode;
+        set('voCombatTarget','B: bidik · mouse: arah · klik kiri / V: tembak');set('voCombatMode',mode?`${mode.name} · ${mode.remaining??''} dtk`:'');if($('voCombatMode'))$('voCombatMode').hidden=!mode;
         $('voCombatSpecial').hidden=!special;set('voCombatSpecial',mode?.id==='susanoo'?'G · Panah Indra':'G · Bijūdama');
         $('voCombatFire').disabled=!self.weapon||busy||cooling;set('voCombatFire',cooling?'Pulih '+Math.ceil((readyAt-Date.now())/1000)+' dtk':'V · Tembak');$('voCombatSpecial').disabled=busy||cooling;
         if($('voCombatAim'))$('voCombatAim').disabled=!self.weapon&&!special;aimState(Boolean(getScene()?.isAiming?.()));
@@ -58,7 +60,10 @@ export function mountOfficeCombat({document:doc,window:win,config,visible,getSce
     }
     $('voArmoryOpen').addEventListener('click',open);$('voArmoryClose').addEventListener('click',close);$('voArmoryRoute').addEventListener('click',()=>{close();getScene()?.guideTo?.('armory');onStatus('Ikuti penanda ke ATLAS Armory di sisi timur kampus.');});
     $('voCombatFire').addEventListener('click',()=>fire());$('voCombatSpecial').addEventListener('click',()=>fire(true));$('voCombatHolster').addEventListener('click',()=>mutate('equip',{weapon:null}));
-    $('voCombatAim')?.addEventListener('click',aim);$('voCombatFold')?.addEventListener('click',()=>fold(!$('voCombatDetails').hidden));$('voCombatHide')?.addEventListener('click',()=>{showHud(false);getScene()?.setAiming?.(false);aimState(false);});$('voCombatToggle')?.addEventListener('click',()=>{const open=hud?.hidden===true||$('voCombatDetails')?.hidden===true;showHud(open,open);if(!open)fold(true);});
+    async function loadInventory(){const value=await request('',null);if(value&&!closed){account=value;apply(value);render();}}
+    function expand(){const open=hud?.hidden===true||$('voCombatDetails')?.hidden===true;showHud(open,open);if(open&&!account&&!busy)loadInventory();if(!open)fold(true);}
+    $('voWeaponSelect')?.addEventListener('change',()=>{const kind=$('voWeaponSelect').value;if(!account||busy||kind&&!account.owned.includes(kind)){render();return;}getScene()?.setAiming?.(false);mutate('equip',{weapon:kind||null});});
+    $('voCombatAim')?.addEventListener('click',aim);$('voCombatFold')?.addEventListener('click',expand);$('voCombatHide')?.addEventListener('click',()=>{showHud(false);getScene()?.setAiming?.(false);aimState(false);});$('voCombatToggle')?.addEventListener('click',expand);
     doc.addEventListener('keydown',event=>{
         if(event.repeat||event.defaultPrevented||event.ctrlKey||event.metaKey||event.altKey||event.isComposing)return;const el=doc.activeElement;if(['INPUT','TEXTAREA','SELECT'].includes(el?.tagName)||el?.isContentEditable)return;
         if(!panel.hidden&&event.key==='Escape'){event.preventDefault();close();return;}if(blocked())return;

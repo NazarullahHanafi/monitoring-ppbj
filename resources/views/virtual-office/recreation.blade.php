@@ -1,7 +1,3 @@
-<div class="vo-club-toolbar">
-    <div><span class="vo-eyebrow">MAISON DU RIVAGE</span><b>Make time for a little joy.</b><small id="voGameNotice" role="status"></small></div>
-    <div><button type="button" class="vo-button" data-vo-club="play">♜ Main & ajak teman</button><button type="button" class="vo-button" data-vo-club="dine">☕ Bar & restoran</button><button type="button" class="vo-button" data-vo-club="music">♫ Musik saya</button><button type="button" class="vo-button" data-vo-club="orders">Pesanan saya</button><span class="vo-wallet" id="voWallet">$ — <small>virtual</small></span></div>
-</div>
 <section class="vo-club-panel" id="voClubPanel" role="dialog" aria-modal="true" aria-labelledby="voClubTitle" tabindex="-1" hidden>
     <div class="vo-club-sheet"><header><div><span class="vo-eyebrow">THE RIVAGE CLUB</span><h2 id="voClubTitle">Play. Taste. Unwind.</h2></div><button type="button" class="vo-button" id="voCloseClub" aria-label="Tutup klub">✕</button></header>
         <nav class="vo-club-tabs" aria-label="Fasilitas klub"><button type="button" data-vo-club="play">Permainan</button><button type="button" data-vo-club="dine">Bar & restoran</button><button type="button" data-vo-club="music">Musik</button></nav>

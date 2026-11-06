@@ -3,3 +3,17 @@
 @media(max-width:650px){.vo-workspace .vo-game-tools{top:8px;left:8px;right:8px;gap:4px}.vo-game-tools button{font-size:8px;padding:7px}.vo-workspace .vo-hud-panels{top:80px;right:8px;bottom:118px;width:min(285px,calc(100% - 16px))}.vo-workspace .vo-campus-card{top:80px;left:8px}.vo-workspace .vo-quick-status{top:80px;font-size:9px}.vo-workspace .vo-controls{bottom:10px;right:8px}.vo-workspace.vo-immersive .vo-game-tools{top:8px}.vo-workspace.vo-immersive .vo-hud-panels{top:80px}}
 .vo-workspace:not(.vo-hud-hidden) .vo-quick-status,.vo-workspace.vo-info-open .vo-quick-status{display:none!important}
 @media(pointer:coarse){.vo-workspace.vo-immersive.vo-hud-hidden .vo-touch-controls{display:flex}}
+
+/* A single sheet is open at a time; hidden also wins over legacy fullscreen rules. */
+.vo-workspace{grid-template-columns:minmax(0,1fr)}
+#voWorkspace [hidden]{display:none!important}
+.vo-workspace .vo-info-panel{position:absolute;left:12px;top:58px;bottom:90px;z-index:45;width:min(330px,calc(100% - 24px));max-height:480px;overflow:auto;overscroll-behavior:contain;border:1px solid var(--vo-line);border-radius:14px;background:var(--vo-paper);color:var(--vo-ink);padding:20px;box-shadow:0 15px 45px #0003}
+.vo-info-panel h2{font:25px Georgia,serif;margin:10px 0}.vo-info-panel>small{display:block;font-size:10px;color:var(--vo-muted)}
+.vo-workspace .vo-info-panel .vo-live-hud,.vo-workspace .vo-info-panel .vo-club-toolbar{position:static!important;display:flex!important;width:100%;max-height:none;margin:12px 0 0;padding:14px 0;border:0;border-top:1px solid var(--vo-line);border-radius:0;background:transparent;flex-wrap:wrap;gap:10px;overflow:visible}
+.vo-workspace .vo-info-panel .vo-club-toolbar>div{display:flex;flex-wrap:wrap;gap:8px}.vo-info-panel .vo-club-toolbar>div:first-child{display:none!important}.vo-info-panel .vo-wallet{color:var(--vo-ink);background:var(--vo-soft)}
+.vo-workspace.vo-team-open .vo-team{display:flex;position:absolute;top:74px;right:12px;bottom:16px;width:min(320px,calc(100% - 24px));min-height:0;max-height:640px;z-index:47;border:1px solid var(--vo-line);border-radius:14px;background:var(--vo-paper);box-shadow:0 15px 45px #0003;overflow:auto}
+.vo-team .vo-panel-close{position:sticky;align-self:flex-end;margin:8px 8px -34px 0;top:8px;flex-shrink:0;z-index:4}.vo-team .vo-team-orbit{display:none}.vo-team .vo-people{min-height:80px;overflow:auto}.vo-team .vo-team-heading{padding-right:42px}
+.vo-workspace.vo-team-open .vo-quick-status{display:none!important}
+.vo-panel-close:focus-visible{outline:2px solid #e2be78;outline-offset:3px}
+@media(max-width:650px){.vo-workspace .vo-info-panel{top:80px;left:8px;bottom:118px;width:min(320px,calc(100% - 16px));padding:17px}.vo-workspace.vo-team-open .vo-team{top:90px;right:8px;bottom:100px}}
+.vo-workspace.vo-immersive .vo-game-tools #voEnterFullscreen{display:block}.vo-team .vo-panel-close{z-index:8}
