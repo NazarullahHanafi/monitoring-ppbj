@@ -58,7 +58,7 @@ export function mountOfficeCombat({document:doc,window:win,config,visible,getSce
     }
     $('voArmoryOpen').addEventListener('click',open);$('voArmoryClose').addEventListener('click',close);$('voArmoryRoute').addEventListener('click',()=>{close();getScene()?.guideTo?.('armory');onStatus('Ikuti penanda ke ATLAS Armory di sisi timur kampus.');});
     $('voCombatFire').addEventListener('click',()=>fire());$('voCombatSpecial').addEventListener('click',()=>fire(true));$('voCombatHolster').addEventListener('click',()=>mutate('equip',{weapon:null}));
-    $('voCombatAim')?.addEventListener('click',aim);$('voCombatFold')?.addEventListener('click',()=>fold(!$('voCombatDetails').hidden));$('voCombatHide')?.addEventListener('click',()=>{showHud(false);getScene()?.setAiming?.(false);aimState(false);});$('voCombatToggle')?.addEventListener('click',()=>showHud(hud?.hidden===true,true));
+    $('voCombatAim')?.addEventListener('click',aim);$('voCombatFold')?.addEventListener('click',()=>fold(!$('voCombatDetails').hidden));$('voCombatHide')?.addEventListener('click',()=>{showHud(false);getScene()?.setAiming?.(false);aimState(false);});$('voCombatToggle')?.addEventListener('click',()=>{const open=hud?.hidden===true||$('voCombatDetails')?.hidden===true;showHud(open,open);if(!open)fold(true);});
     doc.addEventListener('keydown',event=>{
         if(event.repeat||event.defaultPrevented||event.ctrlKey||event.metaKey||event.altKey||event.isComposing)return;const el=doc.activeElement;if(['INPUT','TEXTAREA','SELECT'].includes(el?.tagName)||el?.isContentEditable)return;
         if(!panel.hidden&&event.key==='Escape'){event.preventDefault();close();return;}if(blocked())return;
