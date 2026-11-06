@@ -23,7 +23,7 @@ import { createOfficeCombatEffects } from './virtual-office-combat-effects.js';
 // Original procedural scene: no models, textures, or code from the reference site.
 // Static furniture is batched by material; animation is capped at 30fps / 24 avatars.
 export function createOfficeScene({ host, labels, onSelect, onFailure, onVenue = () => {}, onGame = () => {}, onDoor=()=>{},onPilotState = () => {},
-    onHologramAnchor=()=>{},rendererFactory = options => new THREE.WebGLRenderer(options), controlsFactory = (camera, element) => new OrbitControls(camera, element), getDate = () => new Date() }) {
+    onHologramAnchor=()=>{},onCombatFire=()=>{},onAimChange=()=>{},rendererFactory = options => new THREE.WebGLRenderer(options), controlsFactory = (camera, element) => new OrbitControls(camera, element), getDate = () => new Date() }) {
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(36, 1, .1, 1200);
     const renderer = rendererFactory({ antialias: true, alpha: false, powerPreference: 'low-power' });
@@ -42,8 +42,11 @@ export function createOfficeScene({ host, labels, onSelect, onFailure, onVenue =
     const cameraRig=createOfficeCameraRig();
     const abilities=createOfficeAbilities({THREE,scene,navigation,reduced:()=>paused||energySaver,createModel:(spec,options)=>createTransformationModel(THREE,spec,{...options,reduced:paused||energySaver})});
     const hologram=createOfficeHologramProjection(THREE,scene);let hologramId=null,lastHologramAnchor=0;
-    const combatEffects=createOfficeCombatEffects(THREE,scene);let pilotMetadata={};
-    function combatState(state){if(!state)return;for(const key of['hp','weapon','shield_until','respawn_id','shot_at','shot_kind','shot_end','attack_ready_at'])if(Object.hasOwn(state,key))pilotMetadata[key]=state[key];requestDraw();}
+    const combatEffects=createOfficeCombatEffects(THREE,scene);let pilotMetadata={},aiming=false,rightAimHold=false,aimControls=null;
+    function combatState(state){if(!state||(state.combat_revision??0)<(pilotMetadata.combat_revision??0))return;if(state.weapon&&state.weapon!==pilotMetadata.weapon){pilotActivity=null;restPlan=null;}for(const key of['hp','weapon','shield_until','respawn_id','shot_at','shot_kind','shot_origin','shot_end','attack_ready_at','combat_revision'])if(Object.hasOwn(state,key))pilotMetadata[key]=state[key];requestDraw();}
+    function setAiming(value){value=Boolean(value&&pilotPhysics&&!pilotGate()&&!interior.active()&&(pilotMetadata.weapon||['susanoo','kurama'].includes(abilities.modeState(controlledId)?.id)));if(value===aiming)return aiming;
+        aiming=value;settleOfficeCamera(controls);cameraRig.reset();if(value){pilotActivity=null;restPlan=null;abilities.cancel(controlledId);setCameraMode('follow',controlledId);aimControls={buttons:controls.mouseButtons?{...controls.mouseButtons}:null,polar:controls.maxPolarAngle};if(controls.mouseButtons){controls.mouseButtons.LEFT=null;controls.mouseButtons.RIGHT=THREE.MOUSE.ROTATE;}controls.maxPolarAngle=Math.PI-.25;}else if(aimControls){if(aimControls.buttons)Object.assign(controls.mouseButtons,aimControls.buttons);controls.maxPolarAngle=aimControls.polar;aimControls=null;}onAimChange(aiming);requestDraw();return aiming;
+    }
     const colors = { base: '#acb9ad', floor: '#f1ece0', edge: '#cebd9c', wood: '#b38b61', woodLight: '#d6b68a', oak: '#705b42',
         wall: '#e5e3d5', stone: '#c4cec5', deep: '#214b40', green: '#537d60', leaf: '#4a7750', lightLeaf: '#86a465',
         pot: '#e2d5bb', white: '#f5f0e5', metal: '#3c4d46', gold: '#b89c68', screen: '#173841', screenLine: '#62baaa',
@@ -490,7 +493,7 @@ export function createOfficeScene({ host, labels, onSelect, onFailure, onVenue =
     }
     function render(now = 0) {
         frame = null; if (disposed || !visible) return;
-        if (now - lastFrame < 1000 / 30 && !paused) { frame = requestAnimationFrame(render); return; }
+        if (now - lastFrame < 1000 / 30 && (!paused||combatEffects.active())) { frame = requestAnimationFrame(render); return; }
         const frameStep = Math.min(.06, Math.max(.001, (now - lastFrame) / 1000)); lastFrame = now;
         if (easingCamera) { camera.position.lerp(cameraGoal, .12); controls.target.lerp(targetFocus, .12); if (camera.position.distanceTo(cameraGoal) < .04) { camera.position.copy(cameraGoal); controls.target.copy(targetFocus); easingCamera = false; } }
         let restCount=0;
@@ -508,7 +511,8 @@ export function createOfficeScene({ host, labels, onSelect, onFailure, onVenue =
                     else{const dx=restPlan.point.x-p.x,dz=restPlan.point.z-p.z,d=Math.hypot(dx,dz);if(d<.04){pilotPhysics.face({x:p.x+Math.sin(restPlan.point.yaw),z:p.z+Math.cos(restPlan.point.yaw)});pilotActivity={action:'rest',pose:restPlan.pose,venue:insideHome(p,myHome)?'home':['beach','garden','terrace','lounge','bar'].find(id=>nearVenue(p,id))||'campus'};restPlan=null;input={};}
                         else{const scale=Math.min(1,d/(4.5*frameStep))/d;input={x:(Math.cos(yaw)*dx-Math.sin(yaw)*dz)*scale,z:(-Math.sin(yaw)*dx-Math.cos(yaw)*dz)*scale};}}}}
                 const mode=abilities.modeState(controlledId);if((mode?.id||null)!==cameraForm){cameraForm=mode?.id||null;setCameraMode('follow',controlledId);}pilotPhysics.setForm(abilities.form(controlledId),mode?.expires);
-                const state=pilotPhysics.step(frameStep,input,yaw,others);if(['walk','run','jump','fly','land'].includes(state.action))pilotActivity=null;if(pilotActivity)Object.assign(state,pilotActivity);state.transformation=mode;state.transformationCooldown=abilities.modeCooldown(controlledId);
+                if(aiming&&!pilotMetadata.weapon&&!['susanoo','kurama'].includes(mode?.id))setAiming(false);
+                const state=pilotPhysics.step(frameStep,input,yaw,others);if(aiming){pilotPhysics.face({x:state.x-Math.sin(yaw)*10,z:state.z-Math.cos(yaw)*10});state.yaw=pilotPhysics.state().yaw;}if(['walk','run','jump','fly','land'].includes(state.action))pilotActivity=null;if(pilotActivity)Object.assign(state,pilotActivity);state.transformation=mode;state.transformationCooldown=abilities.modeCooldown(controlledId);
                 state.restPending=Boolean(restPlan);
                 f.group.position.set(state.x,state.y,state.z);f.group.rotation.y=state.yaw;f.manual=true;f.pose='manual';f.home.copy(f.group.position);f.target.copy(f.group.position);
                 if(guide){const place=guide==='home'&&myHome?{x:myHome.x,z:myHome.z+5}:officeLayout.venues[guide];if(place){state.target=guide;state.distance=Math.round(Math.hypot(state.x-place.x,state.z-place.z));}}state.atHome=insideHome(state,myHome);state.nearDoor=Boolean(myHome&&Math.hypot(state.x-myHome.x,state.z-myHome.z-3.9)<=2.8);state.doorOpen=homeDoorOpen;
@@ -518,11 +522,11 @@ export function createOfficeScene({ host, labels, onSelect, onFailure, onVenue =
             }
             if(f.manual){
                 const state=f.person.id===controlledId&&pilotPhysics?{...pilotPhysics.state(),...pilotMetadata,...(pilotActivity||{})}:peerPilots.get(f.person.id)||f.person.pilot;
-                combatEffects.observe(f.person.id,state,f);if(state?.weapon&&state.action==='idle'){f.arms[1].rotation.x=-.6;}
+                if(state&&aiming&&f.person.id===controlledId)state.aim_pitch=Math.atan2(camera.position.y-controls.target.y,Math.hypot(camera.position.x-controls.target.x,camera.position.z-controls.target.z));combatEffects.observe(f.person.id,state,f);
                 if(state&&f.person.id!==controlledId){const target=new THREE.Vector3(state.x,state.y,state.z);const next=f.group.position.clone().lerp(target,.35);if(state.respawn_id!==f.respawnId){f.respawnId=state.respawn_id;f.group.position.copy(target);}else if(navigation.segment(f.group.position,next,.3,Boolean(state.air_access||state.flight)))f.group.position.copy(next);else f.group.position.copy(target);f.group.rotation.y=state.yaw;}
                 if(f.person.id!==controlledId)abilities.observe(f.person.id,state,f);f.flight=Boolean(state?.flight);f.moving=['walk','run'].includes(state?.action);
                 const skillPose=abilities.pose(f.person.id),animation=animateOfficeAvatar(f,skillPose&&!['walk','run','jump','fly','land','rest'].includes(state?.action)?{...state,action:'cast',skillPose}:state,{time:now/1000+f.phase,dt:frameStep,reduced:paused});
-                const played=state?.action==='play'?games.find(g=>g.id===state.venue):null;
+                if(state?.weapon&&!state.form&&!['rest','play','drink','eat'].includes(state.action)){f.arms[1].rotation.x=-.7;f.arms[0].rotation.x=aiming&&f.person.id===controlledId?-.9:-.2;}const played=state?.action==='play'?games.find(g=>g.id===state.venue):null;
                 f.racket.visible=Boolean(played&&['tennis','badminton','pingpong','golf'].includes(played.id));f.tool.visible=Boolean(played&&['billiards','archery','darts'].includes(played.id));if(f.tool.visible)f.tool.geometry=toolGeometry(played.id);
                 f.cup.visible=state?.action==='drink';f.plate.visible=state?.action==='eat';
                 if(state?.action==='rest'){
@@ -561,6 +565,7 @@ export function createOfficeScene({ host, labels, onSelect, onFailure, onVenue =
         const followed = figures.get(followId);
         if (cameraMode !== 'orbit' && followed && !easingCamera) {
             const nextTarget = followed.group.position.clone().add(new THREE.Vector3(0, abilities.form(followId)?.height*.55||(followed.pose === 'sleeping' ? .25 : 1.3), followed.pose === 'sleeping' ? -1.3 : 0));
+            if(aiming){const yaw=Math.atan2(camera.position.x-controls.target.x,camera.position.z-controls.target.z);nextTarget.x+=Math.cos(yaw)*.9;nextTarget.z-=Math.sin(yaw)*.9;}
             const delta = nextTarget.clone().sub(controls.target).multiplyScalar(1-Math.exp(-frameStep*8.6)); controls.target.add(delta); camera.position.add(delta);
         }
         environment.update(now, { paused, dark: document.documentElement.classList.contains('dark'), center: controls.target });
@@ -581,7 +586,7 @@ export function createOfficeScene({ host, labels, onSelect, onFailure, onVenue =
         interior.apply();renderer.render(scene, camera);
         if (paused || now - lastLabels > 120 || easingCamera) { drawLabels(); lastLabels = now; }
         camera.position.copy(desiredCamera);camera.quaternion.copy(desiredOrientation);camera.updateMatrixWorld(true);
-        if (!paused || easingCamera || restPlan || pilotPhysics?.moving() || pilotPhysics&&pilotPhysics.state().stamina<100 || !pilotGate()&&(Math.abs(pilotInput.x||0)+Math.abs(pilotInput.z||0)>0 || pilotInput.jump)) requestDraw();
+        if (!paused || combatEffects.active() || easingCamera || restPlan || pilotPhysics?.moving() || pilotPhysics&&pilotPhysics.state().stamina<100 || !pilotGate()&&(Math.abs(pilotInput.x||0)+Math.abs(pilotInput.z||0)>0 || pilotInput.jump)) requestDraw();
     }
     function requestDraw() { if (!disposed && visible && frame === null) frame = requestAnimationFrame(render); }
     function moveFigure(f,target,step){const home=residences.location(f.person.id),near=home&&Math.abs(f.group.position.x-home.x)<4.8&&Math.abs(f.group.position.z-home.z)<5;if(Boolean(near)!==Boolean(f.npcDoorOpen)){f.npcDoorOpen=Boolean(near);residences.setDoor(f.person.id,Boolean(near));}return navigation.withHomeAccess(residences.slotFor(f.person.id),()=>moveFigureInner(f,target,step));}
@@ -656,9 +661,11 @@ export function createOfficeScene({ host, labels, onSelect, onFailure, onVenue =
     const hotspotMaterial=new THREE.MeshBasicMaterial({transparent:true,opacity:0,depthWrite:false});materials.set('game-hotspots',hotspotMaterial);
     for(const game of games){const sign=new THREE.BoxGeometry(6,1.4,.4),floor=new THREE.BoxGeometry(game.kind==='court'?16:9,.18,game.kind==='court'?12:7);sign.translate(0,.7,-(game.kind==='court'?6:4.2));floor.translate(0,-.14,0);const a=sign.toNonIndexed(),b=floor.toNonIndexed(),geometry=mergeGeometries([a,b],false);sign.dispose();floor.dispose();a.dispose();b.dispose();ownedGeometries.add(geometry);const mesh=new THREE.Mesh(geometry,hotspotMaterial);mesh.position.set(game.x,0,game.z);mesh.userData.officeGame=game.id;scene.add(mesh);gameTargets.push(mesh);}
     const raycaster = new THREE.Raycaster(), pointer = new THREE.Vector2();
-    const down = e => { dragStart = [e.clientX, e.clientY]; };
+    const down = e => { if(e.button===2){rightAimHold=!aiming;setAiming(true);}dragStart = [e.clientX, e.clientY]; };
     const up = e => {
+        if(e.button===2){if(rightAimHold)setAiming(false);rightAimHold=false;dragStart=null;return;}
         if (!dragStart || Math.hypot(e.clientX - dragStart[0], e.clientY - dragStart[1]) > 6) return; dragStart = null;
+        if(aiming&&!pilotGate()){onCombatFire(false);return;}
         const rect = renderer.domElement.getBoundingClientRect(); pointer.set((e.clientX - rect.left) / rect.width * 2 - 1, -(e.clientY - rect.top) / rect.height * 2 + 1);
         raycaster.setFromCamera(pointer, lastDrawCamera||camera);
         const hit = raycaster.intersectObjects([...figures.values()].map(f => f.group).concat(residences.meshes,rivageBar.targets,hospitality.targets,gameTargets,abilities.targets(),hologram.root.visible?[hologram.root]:[]), true)[0];
@@ -677,12 +684,16 @@ export function createOfficeScene({ host, labels, onSelect, onFailure, onVenue =
     const observer = new ResizeObserver(resize); observer.observe(host);
     const themeObserver = new MutationObserver(theme); themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
     const lost = e => { e.preventDefault(); if (!disposed) onFailure(); };
-    renderer.domElement.addEventListener('pointerdown', down); renderer.domElement.addEventListener('pointerup', up); renderer.domElement.addEventListener('webglcontextlost', lost);
+    const contextMenu=e=>{if(aiming||pilotMetadata.weapon)e.preventDefault();};
+    const cancelAim=()=>{rightAimHold=false;dragStart=null;setAiming(false);},lostPointer=()=>{if(rightAimHold)cancelAim();};
+    window.addEventListener?.('blur',cancelAim);renderer.domElement.addEventListener('pointercancel',cancelAim);renderer.domElement.addEventListener('lostpointercapture',lostPointer);
+    renderer.domElement.addEventListener('pointerdown', down,true); renderer.domElement.addEventListener('pointerup', up);renderer.domElement.addEventListener('contextmenu',contextMenu); renderer.domElement.addEventListener('webglcontextlost', lost);
     const changed = () => requestDraw(); controls.addEventListener('change', changed); controls.addEventListener('start', () => { easingCamera = false; });
     theme(); focusRoom('all'); camera.position.copy(cameraGoal); controls.target.copy(targetFocus); easingCamera = false; resize();
     return { setPeople, resize, focusRoom, visitHome, setCameraMode,
+        setAiming,isAiming:()=>aiming,aimPoint(range=65){if(!pilotPhysics)return null;const view=lastDrawCamera||camera;raycaster.setFromCamera(new THREE.Vector2(0,0),view);const from=raycaster.ray.origin.clone(),to=raycaster.ray.at(range+camera.position.distanceTo(controls.target),new THREE.Vector3()),limit=navigation.rayLimit(from,to);to.lerpVectors(from,to,limit);const hits=raycaster.intersectObjects([...figures.values()].filter(f=>f.person.id!==controlledId).map(f=>f.group).concat(abilities.targets().filter(r=>r.userData.officeAbility!==controlledId)),true);if(hits[0]&&hits[0].distance<from.distanceTo(to))to.copy(hits[0].point);pilotPhysics.face(to);requestDraw();return{x:to.x,y:to.y,z:to.z};},
         combatState,facePilot(id){const target=figures.get(id);if(target&&pilotPhysics)pilotPhysics.face(target.group.position);},
-        respawnPilot(state){if(!pilotPhysics)return;interior.leave();closeHomePreview(false);abilities.forget(controlledId);endingMode=false;cameraForm=null;pilotActivity=null;restPlan=null;pilotInput={};pilotMetadata={};combatState(state);pilotPhysics.reset({...state,flight:false,air_access:false});homeDoorOpen=false;navigation.configureHomes(true,null,homePlots??128);if(homeOwner)residences.setDoor(homeOwner,false);const f=figures.get(controlledId);if(f)f.group.position.set(state.x,state.y,state.z);setCameraMode('follow',controlledId);requestDraw();},
+        respawnPilot(state){if(!pilotPhysics)return;setAiming(false);interior.leave();closeHomePreview(false);abilities.forget(controlledId);endingMode=false;cameraForm=null;pilotActivity=null;restPlan=null;pilotInput={};pilotMetadata={};combatState(state);pilotPhysics.reset({...state,flight:false,air_access:false});homeDoorOpen=false;navigation.configureHomes(true,null,homePlots??128);if(homeOwner)residences.setDoor(homeOwner,false);const f=figures.get(controlledId);if(f)f.group.position.set(state.x,state.y,state.z);setCameraMode('follow',controlledId);requestDraw();},
         showHologram(id){hologramId=id!==null&&(id===homeOwner||id===controlledId||figures.get(id)?.person.is_me)?id:null;if(hologramId===null)hologram.hide();requestDraw();},
         collisionBoxes:()=>navigation.boxes(),
         setPilotReporter(fn){pilotReporter=fn;},
@@ -701,12 +712,12 @@ export function createOfficeScene({ host, labels, onSelect, onFailure, onVenue =
         canUseDoor(){const p=pilotPhysics?.state();return Boolean(myHome&&p&&(insideHome(p,myHome)||Math.hypot(p.x-myHome.x,p.z-myHome.z-3.9)<=2.8));},
         homeDoorOpen:()=>homeDoorOpen,
         setHomeDoor(open){if(homeDoorOpen===Boolean(open))return;homeDoorOpen=Boolean(open);navigation.configureHomes(true,homeDoorOpen?myHome?.slot:null);if(homeOwner)residences.setDoor(homeOwner,homeDoorOpen);requestDraw();},
-        setRestPose(pose){if(!pilotPhysics)return false;abilities.cancel(controlledId);restPlan=null;pilotActivity=null;pilotInput={};if(!pose){requestDraw();return true;}if(!['sit','recline','nap','meditate'].includes(pose))return false;
+        setRestPose(pose){if(!pilotPhysics)return false;if(pose)setAiming(false);abilities.cancel(controlledId);restPlan=null;pilotActivity=null;pilotInput={};if(!pose){requestDraw();return true;}if(!['sit','recline','nap','meditate'].includes(pose))return false;
             const p=pilotPhysics.state(),others=[...figures.values()].filter(f=>f.person.id!==controlledId&&f.pose!=='sleeping').map(f=>f.group.position),point=p.grounded?planOfficeRest(navigation,p,pose,others):null;
             if(p.grounded&&!point)return false;restPlan={pose,point};
             if(point&&Math.hypot(point.x-p.x,point.z-p.z)<.04){pilotPhysics.face({x:p.x+Math.sin(point.yaw),z:p.z+Math.cos(point.yaw)});pilotActivity={action:'rest',pose,venue:insideHome(p,myHome)?'home':['beach','garden','terrace','lounge','bar'].find(id=>nearVenue(p,id))||'campus'};restPlan=null;}requestDraw();return true;},
         setPilot(id,state,privateSelf=null){controlledId=id;privatePilotSelf=privateSelf;pilotMetadata={};combatState(state);pilotPhysics=createPilotPhysics(navigation,state);setPeople(roster);setCameraMode('follow',id);requestDraw();},
-        releasePilot(){interior.leave();abilities.clearForm(controlledId);endingMode=false;cameraForm=null;const privateId=privatePilotSelf?.id;controlledId=null;privatePilotSelf=null;pilotPhysics=null;pilotInput={};pilotActivity=null;restPlan=null;guide=null;guideMarker.visible=false;setPeople(roster.filter(p=>p.id!==privateId));},
+        releasePilot(){setAiming(false);interior.leave();abilities.clearForm(controlledId);endingMode=false;cameraForm=null;const privateId=privatePilotSelf?.id;controlledId=null;privatePilotSelf=null;pilotPhysics=null;pilotInput={};pilotActivity=null;restPlan=null;guide=null;guideMarker.visible=false;setPeople(roster.filter(p=>p.id!==privateId));},
         setPilotInput(value){pilotInput=value||{};requestDraw();},pilotState(){return pilotPhysics?{...pilotPhysics.state(),...pilotMetadata,...(pilotActivity||{})}:null;},
         focusPilot(){host.focus?.({preventScroll:true});},followPilot(){if(controlledId){setCameraMode('follow',controlledId);host.focus?.({preventScroll:true});}},
         setPeerPilots(values){peerPilots.clear();for(const state of values)if(state.id!==controlledId)peerPilots.set(state.id,state);setPeople(roster.map(p=>({...p,pilot:peerPilots.get(p.id)||null,in_office:peerPilots.has(p.id)||p.id===controlledId})));},
@@ -739,7 +750,8 @@ export function createOfficeScene({ host, labels, onSelect, onFailure, onVenue =
             abilities.dispose();
             hologram.dispose();combatEffects.dispose();
             for(const timer of speechTimers.values())clearTimeout(timer);speechTimers.clear();recreation.clear();
-            renderer.domElement.removeEventListener('pointerdown', down); renderer.domElement.removeEventListener('pointerup', up); renderer.domElement.removeEventListener('webglcontextlost', lost);
+            renderer.domElement.removeEventListener('pointerdown', down,true); renderer.domElement.removeEventListener('pointerup', up);renderer.domElement.removeEventListener('contextmenu',contextMenu); renderer.domElement.removeEventListener('webglcontextlost', lost);
+            window.removeEventListener?.('blur',cancelAim);renderer.domElement.removeEventListener('pointercancel',cancelAim);renderer.domElement.removeEventListener('lostpointercapture',lostPointer);
             residences.dispose();restMats.dispose(); environment.dispose(); for (const geometry of ownedGeometries) geometry.dispose(); for (const mat of materials.values()) mat.dispose(); for (const texture of textures) texture.dispose();
             figures.forEach(f => f.label.remove()); figures.clear(); scene.clear(); renderer.dispose(); renderer.forceContextLoss(); renderer.domElement.remove(); }
     };

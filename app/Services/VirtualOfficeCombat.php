@@ -17,10 +17,11 @@ class VirtualOfficeCombat
     public function account(User $user): array
     {
         return self::catalog() + ['owned'=>DB::table('virtual_office_weapons')->where('user_id',$user->id)->pluck('weapon')->all(),
-            'balance'=>(int)(DB::table('virtual_office_wallets')->where('user_id',$user->id)->value('balance')??0)];
+            'balance'=>(int)(DB::table('virtual_office_wallets')->where('user_id',$user->id)->value('balance')??0),'self'=>VirtualOfficePilot::publicState(VirtualOfficePilot::current($user->id))];
     }
     public function buy(User $user,string $weapon,string $requestId): array
     {
+        return Cache::lock('office:pilot:mutex:'.$user->id,3)->block(1,function()use($user,$weapon,$requestId){
         $shop=self::catalog()['shop'];$state=VirtualOfficePilot::current($user->id);
         abort_unless($state&&hypot($state['x']-$shop['x'],$state['z']-$shop['z'])<=$shop['radius']&&$state['y']<1.5,409,'Berjalan ke bot KAIA di ATLAS Armory dahulu.');
         DB::transaction(function()use($user,$weapon,$requestId){
@@ -34,14 +35,17 @@ class VirtualOfficeCombat
             DB::table('virtual_office_wallets')->where('user_id',$user->id)->update(['balance'=>$balance,'updated_at'=>now()]);
             DB::table('virtual_office_ledger')->insert(['user_id'=>$user->id,'reference'=>$reference,'amount'=>-$price,'balance'=>$balance,'created_at'=>now()]);
         },3);
+        $state['weapon']=$weapon;if($weapon){$state['action']='idle';$state['venue']=null;$state['pose']=null;}$state['combat_revision']=($state['combat_revision']??0)+1;
+        Cache::put(VirtualOfficePilot::key($user->id),$state,900);
         return $this->account($user);
+        });
     }
     public function equip(User $user,?string $weapon): array
     {
         abort_if($weapon&&!DB::table('virtual_office_weapons')->where('user_id',$user->id)->where('weapon',$weapon)->exists(),403,'Senjata belum dimiliki.');
         return Cache::lock('office:pilot:mutex:'.$user->id,3)->block(1,function()use($user,$weapon){
             $state=VirtualOfficePilot::current($user->id);abort_unless($state,409,'Aktifkan kendali avatar dahulu.');
-            $state['weapon']=$weapon;Cache::put(VirtualOfficePilot::key($user->id),$state,900);return ['self'=>VirtualOfficePilot::publicState($state)];
+            $state['weapon']=$weapon;if($weapon){$state['action']='idle';$state['venue']=null;$state['pose']=null;}$state['combat_revision']=($state['combat_revision']??0)+1;Cache::put(VirtualOfficePilot::key($user->id),$state,900);return ['self'=>VirtualOfficePilot::publicState($state)];
         });
     }
     public function attack(User $user,User $target,string $kind,string $requestId): array
@@ -69,7 +73,7 @@ class VirtualOfficeCombat
             abort_if($distance>$spec['range'],422,'Target terlalu jauh.');
             abort_unless(app(VirtualOfficePilot::class)->segment($origin,$end,null,.02,true),422,'Target terhalang tembok, net, atau perabot.');
             $hp=max(0,($b['hp']??100)-$spec['damage']);$knockout=$hp===0;
-            $a['attack_ready_at']=$now+$spec['cooldown'];$a['shot_at']=$now;$a['shot_kind']=$kind;$a['shot_end']=$end;$b['hp']=$hp;
+            $a['attack_ready_at']=$now+$spec['cooldown'];$a['shot_at']=$now;$a['shot_kind']=$kind;$a['shot_end']=$end;$a['shot_origin']=$origin;$a['combat_revision']=($a['combat_revision']??0)+1;$b['hp']=$hp;$b['combat_revision']=($b['combat_revision']??0)+1;
             if($knockout){$home=VirtualOfficeHomes::own($target);abort_unless($home,409,'Rumah target belum tersedia.');
                 $b=array_merge($b,['x'=>$home['x']-1,'y'=>.22,'z'=>$home['z']+2.5,'yaw'=>0,'hp'=>100,'respawn_id'=>(string)Str::uuid(),'shield_until'=>$now+8000,'form'=>null,'flight'=>false,'air_access'=>false,'landing_until'=>null,'air_started_ms'=>null,'air_floor'=>.22,'door_open'=>false,'action'=>'idle','venue'=>null,'pose'=>null,'skill'=>null,'weapon'=>null,'credit'=>.7,'updated_ms'=>$now]);
             }

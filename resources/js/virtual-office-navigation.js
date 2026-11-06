@@ -94,6 +94,7 @@ export function createOfficeNavigation() {
         boxes:()=>obstacles.map(b=>({...b})),
         slide(from,to,bodyRadius=radius,airspace=false){const end={...to,y:to.y??from.y};if(segment(from,end,bodyRadius,airspace))return{x:to.x,z:to.z};if(segment(from,{...end,z:from.z},bodyRadius,airspace))return{x:to.x,z:from.z};if(segment(from,{...end,x:from.x},bodyRadius,airspace))return{x:from.x,z:to.z};return{x:from.x,z:from.z};},
         addBox(w, d, x, z, tag = '', top = 2) { obstacles.push({ left: x - w / 2, right: x + w / 2, back: z - d / 2, front: z + d / 2, top, tag }); grid = null; },
+        rayLimit(from,to){let limit=1;for(const box of obstacles.concat(extra(from,to,.02,true))){let low=0,high=1;for(const[axis,start,end]of[['x',box.left-.02,box.right+.02],['z',box.back-.02,box.front+.02],['y',box.bottom??-.3,box.top+.02]]){const delta=to[axis]-from[axis];if(Math.abs(delta)<1e-8){if(from[axis]<start||from[axis]>end){low=2;break;}}else{const a=(start-from[axis])/delta,b=(end-from[axis])/delta;low=Math.max(low,Math.min(a,b));high=Math.min(high,Math.max(a,b));}}if(low<=high&&low>=0&&low<limit)limit=Math.max(0,low-.001);}if(to.y<-.12&&from.y>-.12)limit=Math.min(limit,(-.12-from.y)/(to.y-from.y));return limit;},
         cameraLimit(from, to, extra = []) {
             let limit = 1;
             for (const b of obstacles.concat(extra)) {

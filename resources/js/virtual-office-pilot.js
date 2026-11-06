@@ -53,7 +53,7 @@ export function mountOfficePilot({document:doc,window:win,config,visible,getScen
             if(!enabled||ticket!==generation||own.signal.aborted)return;
             acknowledged=true;
             getScene()?.setPeerPilots?.(data.peers||[]);
-            if(pendingSkill===skill)pendingSkill=null;
+            if(pendingSkill===skill){pendingSkill=null;if(skill)onStatus((skill.name||'Jurus')+' aktif.');}
             if(!claimed){claimed=true;getScene()?.setPilot?.(Number(config.myId),data.self,config.privateSelf);trail=[];reported=data.self;unconfirmed=0;onStatus('WASD / panah · Space lompat · Shift boost · E interaksi');}else unconfirmed=Math.max(0,unconfirmed-sentDistance);
             if(data.self?.respawn_id&&data.self.respawn_id!==respawnId){if(respawnId!==null||mode==='move'){keys.clear();trail=[];unconfirmed=0;pendingDistance=0;pendingSkill=null;pendingEnd=false;doorIntent=null;reported=data.self;last=data.self;getScene()?.respawnPilot?.(data.self);onStatus('Avatar respawn di rumah. Perisai aktif selama 8 detik.');}respawnId=data.self.respawn_id;}getScene()?.syncPilot?.(data.self,{sentAt:requestStarted,receivedAt:Date.now()});if(ending)pendingEnd=false;
             if(pendingGuide){getScene()?.guideTo?.(pendingGuide);pendingGuide=null;}

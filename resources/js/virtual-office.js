@@ -27,6 +27,8 @@ if (root && !root.dataset.initialized) {
     try { if (localStorage.getItem('simonpr:office:view') === 'list') mode = 'list'; } catch {}
     const visible = () => !document.hidden && inView && !leftPage;
     const text = (id, value) => { $(id).textContent = value; };
+    let statusTimer=null,lastStatus='';
+    function showStatus(message){text('voPilotStatus',message);text('voQuickStatus',message);if(message===lastStatus)return;lastStatus=message;const toast=$('voQuickStatus').parentElement;toast?.classList.add('vo-toast-visible');clearTimeout(statusTimer);statusTimer=setTimeout(()=>{toast?.classList.remove('vo-toast-visible');lastStatus='';},4500);}
     let activityRequest = null, activityTicket = 0, avatarRequest = null, editorReturnFocus = null;
     const officeDate = () => new Date(Date.now() + 7 * 3600000).toISOString().slice(0, 10);
     $('voActivityDate').value = officeDate(); $('voActivityDate').max = officeDate();
@@ -123,7 +125,7 @@ if (root && !root.dataset.initialized) {
         try {
             const { createOfficeScene } = await import('./virtual-office-scene.js');
             if (ticket !== sceneTicket || mode !== '3d' || !visible()) return;
-            scene = createOfficeScene({ host: $('voScene'), labels: $('voLabels'), onSelect: id => select(id, true),onHologramAnchor:point=>hologram?.anchor?.(point), onVenue: venue => venue==='armory'?combat?.open?.():club?.openVenue?.(venue), onGame: id=>club?.openGame?.(id), onDoor:()=>pilot?.toggleDoor?.(), onFailure: () => { sceneUnavailable = true; switchView('list', false); text('voSync', 'Ruang 3D tidak tersedia. Tim tetap dapat dilihat di mode ringan.'); } });
+            scene = createOfficeScene({ host: $('voScene'), labels: $('voLabels'), onSelect: id => select(id, true),onCombatFire:special=>combat?.fire?.(special),onAimChange:value=>combat?.aimState?.(value),onHologramAnchor:point=>hologram?.anchor?.(point), onVenue: venue => venue==='armory'?combat?.open?.():club?.openVenue?.(venue), onGame: id=>club?.openGame?.(id), onDoor:()=>pilot?.toggleDoor?.(), onFailure: () => { sceneUnavailable = true; switchView('list', false); text('voSync', 'Ruang 3D tidak tersedia. Tim tetap dapat dilihat di mode ringan.'); } });
             scene.configureHome?.(Number(config.myId),config.myHome,config.homePlots);scene.setPeople(people); scene.setPaused(paused); scene.setVisible(visible());
             scene.configureWorld?.(worldConfig); scene.setEnergySaver?.(energySaver);
             scene.focusRoom(requestedRoom);
@@ -241,8 +243,8 @@ if (root && !root.dataset.initialized) {
     live = mountOfficeLive({ document, config, visible, getScene: () => scene, getPeople: () => people,
         onWorld: value => { worldConfig = value; scene?.configureWorld?.(value); },
         onRoom: value => { scene?.setMeeting?.(value); const person = people.find(p => p.id === selected); if (person) chatActions(person); if (value.room?.status === 'accepted' && mode !== '3d' && !sceneUnavailable) { switchView('3d'); text('voLiveStatus', 'Ruang 3D dibuka agar kedua avatar dapat bertatap muka.'); } } });
-    pilot=mountOfficePilot({document,window,config,visible,getScene:()=>scene,onStatus:message=>{text('voPilotStatus',message);text('voQuickStatus',message);},onPose:value=>{modeHud(value);combat?.pose?.(value);if($('voInteriorStatus'))$('voInteriorStatus').hidden=!value.interior;if($('voHomeDoor')){$('voHomeDoor').disabled=!value.atHome&&!value.nearDoor;$('voHomeDoor').textContent=value.doorOpen?'Tutup pintu':'Buka pintu';}if(value.target)text('voPilotTarget',`${(value.target==='home'?'Rumah saya':games.find(g=>g.id===value.target)?.name)||value.target} · ${value.distance} m · ikuti penanda emas`);}});
+    pilot=mountOfficePilot({document,window,config,visible,getScene:()=>scene,onStatus:showStatus,onPose:value=>{modeHud(value);combat?.pose?.(value);if($('voInteriorStatus'))$('voInteriorStatus').hidden=!value.interior;if($('voHomeDoor')){$('voHomeDoor').disabled=!value.atHome&&!value.nearDoor;$('voHomeDoor').textContent=value.doorOpen?'Tutup pintu':'Buka pintu';}if(value.target)text('voPilotTarget',`${(value.target==='home'?'Rumah saya':games.find(g=>g.id===value.target)?.name)||value.target} · ${value.distance} m · ikuti penanda emas`);}});
     club = mountOfficeClub({ document, config, visible, getPeople: () => people, getScene: () => scene, focusArea, requireVenue:id=>pilot.interact(id) });
     hologram=mountOfficeHologram({document,window,config,getScene:()=>scene,onWork:()=>pilot?.suspendInput?.(),onActivity:()=>document.dispatchEvent(new Event('pointermove'))});
-    combat=mountOfficeCombat({document,window,config,visible,getScene:()=>scene,getTarget:()=>selected,getPeople:()=>people,onStatus:message=>text('voQuickStatus',message)});apply(config.initial); motionButton(); switchView(mode, false); if (feedUrl) loop.start(); live.start(); club.start();
+    combat=mountOfficeCombat({document,window,config,visible,getScene:()=>scene,getTarget:()=>selected,getPeople:()=>people,onStatus:showStatus});apply(config.initial); motionButton(); switchView(mode, false); if (feedUrl) loop.start(); live.start(); club.start();
 }

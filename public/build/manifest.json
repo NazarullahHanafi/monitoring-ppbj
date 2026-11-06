@@ -27,7 +27,7 @@
     "isDynamicEntry": true
   },
   "resources/js/virtual-office-scene.js": {
-    "file": "assets/virtual-office-scene-BG5oMh8X.js",
+    "file": "assets/virtual-office-scene-Bp8WdT4y.js",
     "name": "virtual-office-scene",
     "src": "resources/js/virtual-office-scene.js",
     "isDynamicEntry": true,
@@ -36,7 +36,7 @@
     ]
   },
   "resources/js/virtual-office.js": {
-    "file": "assets/virtual-office-D9h6MFBN.js",
+    "file": "assets/virtual-office-iuNuc56J.js",
     "name": "virtual-office",
     "src": "resources/js/virtual-office.js",
     "isEntry": true,
