@@ -17,4 +17,10 @@ Isi dokumen hologram mendapat palet kaca biru kehijauan dengan aksen emas, grid 
 
 Seluruh **175 tes JavaScript** dan **503 tes PHP (4.091 assertions)** lulus. Build berhasil: entry kantor 86,45 kB / gzip 31,03 kB, scene lazy 678,01 kB / gzip 183,63 kB. Peringatan chunk scene >500 kB masih ada. Animasi robot tidak menambah dependensi atau aset gambar.
 
-Verifikasi produksi dicatat setelah pemasangan.
+## Produksi
+
+Rilis `cc6a6d6b1bda45673876b56538d83b24b8abb046` sudah dipasang. SHA-256 CSS/frame JS, entry kantor, scene, permainan, musik, dan CSS kantor cocok dengan respons HTTPS publik. Health 200; endpoint pribadi hologram dan kantor memberi 401 bagi tamu. Pemeriksaan server juga memastikan lintasan tinggi bebas, volume atap rendah padat, dan terbang di atas rumah tidak dianggap interior.
+
+Render owner, anggota Umum, serta Operasional berhasil (200). Semua dokumen mempunyai robot dan tombol tema, tanpa sidebar/app-shell kedua. Umum tetap mendapat scope tracking publik, Operasional memakai form TOR asli. Sampel proses server: create 46,39 ms / 6 query, daftar 23,72 ms / 6 query, tracking Operasional 5,77 ms / 0 query, presence warm 2,10 ms / 0 query. Angka ini bukan waktu muat browser atau FPS.
+
+Backup kode/aset dan database berada di `/home4/suc45578/deployment-artifacts/office-flight-stability-20261106-115114`; dump 4.669.331 byte, izin direktori 700, dump 600, kredensial sementara dihapus. Tidak ada migrasi. Pemeriksaan produksi tidak membuat TOR, pesanan, kehadiran, atau grant jurus.
