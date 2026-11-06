@@ -49,6 +49,7 @@ async function fixture({ canChat = true, meetingReady = false } = {}) {
     return { get, people, calls, filters, rooms, requests, sceneState, timers,
         search(value) { get('voSearch').value = value; get('voSearch').events.input[0](); },
         hide(hidden) { document.hidden = hidden; (documentEvents.visibilitychange || []).forEach(fn => fn()); },
+        key(key){(documentEvents.keydown||[]).forEach(fn=>fn({key}));},
         resolveScene() { resolveScene({ createOfficeScene: () => ({ setPeople: values => sceneState.people.push(values), setPaused() {}, setVisible: value => sceneState.visible.push(value), dispose: () => sceneState.disposed++, focusRoom: value => sceneState.rooms.push(value), visitHome: id => sceneState.homes.push(id), select() {}, resize() {} }) }); } };
 }
 test('office displays hostile names as inert text, filters locally and never sends a chat automatically', async () => {
@@ -87,9 +88,18 @@ test('selecting a game from lightweight mode retains the requested focus after l
 test('visiting a private home from lightweight mode retains its owner after lazy loading', async () => {
     const f = await fixture(); f.get('voPeople').children.find(p => p.dataset.personId === 1).click();
     f.get('voVisitHome').click(); f.resolveScene(); await tick();
-    assert.equal(f.sceneState.rooms.at(-1), 'residences'); assert.equal(f.sceneState.homes.at(-1), 1);
+    assert.equal(f.sceneState.rooms.at(-1), 'all'); assert.equal(f.sceneState.homes.at(-1), 1);
     assert.equal(f.requests.length, 0, 'Visiting a virtual home does not send a request or change real presence.');
     f.get('voCloseDetail').click(); assert.equal(f.get('voDetail').hidden, true); f.hide(true);
+});
+
+test('Escape dismisses house detail and a late lazy scene cannot reopen that home',async()=>{
+    const f=await fixture();f.get('voAvatarEditor').hidden=true;f.get('voPeople').children.find(p=>p.dataset.personId===1).click();f.get('voVisitHome').click();f.key('Escape');assert.equal(f.get('voDetail').hidden,true);f.resolveScene();await tick();assert.equal(f.sceneState.homes.length,0);f.hide(true);
+});
+
+test('refreshing presence cannot reopen a house detail that was explicitly closed',async()=>{
+    const f=await fixture();try{f.get('voPeople').children.find(p=>p.dataset.personId===1).click();f.get('voVisitHome').click();f.resolveScene();await tick();f.get('voCloseDetail').click();f.get('voRefresh').click();await tick();assert.equal(f.requests.length,1);
+    f.requests[0].resolve({ok:true,json:async()=>({people:f.people,updated_at:new Date().toISOString()})});await tick();assert.equal(f.get('voDetail').hidden,true);assert.deepEqual(f.sceneState.homes,[1]);}finally{f.hide(true);}
 });
 
 test('changing selected person cancels the journal request and ignores its late result', async () => {

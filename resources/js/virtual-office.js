@@ -99,7 +99,7 @@ if (root && !root.dataset.initialized) {
         text('voOnline', count('online')); text('voIdle', count('idle')); text('voOffline', count('offline')); text('voTotal', people.length);
         const stamp = new Date(snapshot?.updated_at);
         text('voSync', `Diperbarui ${Number.isNaN(stamp.valueOf()) ? 'baru saja' : stamp.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}${snapshot?.limited ? ' · Maksimal 120 anggota' : ''}`);
-        if (selected !== null && !people.some(p => p.id === selected)) { selected = null; $('voDetail').hidden = true; }
+        if (selected !== null && !people.some(p => p.id === selected)) closeDetail();
         renderPeople(); scene?.setPeople(people);
         if (snapshot?.world) { worldConfig = snapshot.world; scene?.configureWorld?.(worldConfig); }
         if (selected !== null) select(selected);
@@ -151,8 +151,9 @@ if (root && !root.dataset.initialized) {
     root.querySelectorAll('[data-vo-filter]').forEach(button => button.addEventListener('click', () => { filter = button.dataset.voFilter; root.querySelectorAll('[data-vo-filter]').forEach(b => b.setAttribute('aria-pressed', String(b === button))); renderPeople(); }));
     function focusArea(room) { requestedRoom = room; requestedHome = null; $('voCameraMode').value = 'orbit'; if (mode !== '3d') switchView('3d'); scene?.focusRoom(room); }
     root.querySelectorAll('[data-vo-room]').forEach(button => button.addEventListener('click', () => { root.querySelectorAll('[data-vo-room]').forEach(b => b.setAttribute('aria-pressed', String(b === button))); focusArea(button.dataset.voRoom); }));
-    $('voCloseDetail').addEventListener('click', () => { stopActivity(); selected = null; requestedHome = null; $('voDetail').hidden = true; scene?.select(null); renderPeople(); });
-    $('voVisitHome').addEventListener('click', () => { if (selected === null) return; const id = selected; focusArea('residences'); requestedHome = id; scene?.visitHome?.(id); text('voSceneHint', 'Interior rumah terpilih · tutup detail untuk menutup atap kembali'); });
+    function closeDetail(){stopActivity();selected=null;requestedHome=null;$('voDetail').hidden=true;scene?.select(null);renderPeople();}
+    $('voCloseDetail').addEventListener('click', closeDetail);
+    $('voVisitHome').addEventListener('click', () => { if (selected === null) return; requestedHome = selected;if(mode!=='3d')switchView('3d');scene?.visitHome?.(selected); text('voSceneHint', 'Interior rumah terpilih · tutup detail untuk menutup atap kembali'); });
     $('voView3d').addEventListener('click', () => { sceneUnavailable = false; switchView('3d'); }); $('voViewList').addEventListener('click', () => switchView('list'));
     $('voZoomIn').addEventListener('click', () => scene?.zoom(.82)); $('voZoomOut').addEventListener('click', () => scene?.zoom(1.22)); $('voReset').addEventListener('click', () => focusArea('all'));
     function motionButton() { $('voMotion').setAttribute('aria-pressed', String(paused)); $('voMotion').setAttribute('aria-label', paused ? 'Lanjutkan animasi' : 'Jeda animasi'); $('voMotion').textContent = paused ? '▷' : 'Ⅱ'; }
@@ -165,7 +166,7 @@ if (root && !root.dataset.initialized) {
     $('voQuality').addEventListener('change', () => { energySaver = $('voQuality').value === 'low'; scene?.setEnergySaver?.(energySaver); try { localStorage.setItem('simonpr:office:quality', energySaver ? 'low' : 'standard'); } catch {} });
     $('voInviteMeeting').addEventListener('click', () => { if (selected !== null) { if (mode !== '3d') switchView('3d'); live?.invite(selected); } });
     $('voChat').addEventListener('click', () => { if (selected !== null) club?.chat(selected); });
-    mountOfficeViewport({document,getScene:()=>scene,onEscape:closeEditor,onEnter:()=>{if(mode!=='3d')switchView('3d');scene?.followPilot?.();}});
+    mountOfficeViewport({document,getScene:()=>scene,onEscape:()=>{if(!$('voAvatarEditor').hidden){closeEditor();return true;}if(config.canConfigureWorld&&!$('voWorldPanel').hidden){$('voWorldPanel').hidden=true;$('voOpenWorld').focus();return true;}if(selected!==null){closeDetail();return true;}return false;},onEnter:()=>{if(mode!=='3d')switchView('3d');scene?.followPilot?.();}});
     for (const game of games) {
         const button = document.createElement('button'); button.type = 'button'; button.textContent = `${game.icon} ${game.name}`; button.setAttribute('aria-pressed', 'false');
         button.addEventListener('click', () => { if(mode!=='3d')switchView('3d');club?.openGame(game.id); $('voGames').querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b === button))); text('voSceneHint', `${game.name} · pilih Mulai untuk bermain`); }); $('voGames').append(button);

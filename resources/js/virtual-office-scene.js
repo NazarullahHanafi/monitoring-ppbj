@@ -10,7 +10,7 @@ import { createRivageBar } from './virtual-office-bar.js';
 import { createPilotPhysics, nearVenue, officeLayout } from './virtual-office-pilot-physics.js';
 import { costumeFor } from './virtual-office-costumes.js';
 import { costumeGeometry } from './virtual-office-costume-geometry.js';
-import { officeCameraPosition } from './virtual-office-camera.js';
+import { officeCameraPosition,settleOfficeCamera } from './virtual-office-camera.js';
 import { homeLocation,insideHome } from './virtual-office-home-layout.js';
 import { createOfficeHospitality } from './virtual-office-hospitality.js';
 import { animateOfficeAvatar,planOfficeRest } from './virtual-office-avatar-animation.js';
@@ -366,7 +366,7 @@ export function createOfficeScene({ host, labels, onSelect, onFailure, onVenue =
             privateGeometry: racketGeometry, target: new THREE.Vector3(), phase: person.id * 1.75 };
     }
     let selected = null, paused = false, visible = true, disposed = false, frame = null, lastFrame = 0, lastLabels = 0,lastDrawCamera=null;
-    let roster = [], visitingHome = null, localMeeting = null, cameraMode = 'orbit', followId = null, energySaver = false, worldConfig = {};
+    let roster = [], visitingHome = null, homeCamera = null, localMeeting = null, cameraMode = 'orbit', followId = null, energySaver = false, worldConfig = {};
     const recreation=new Map(),speechTimers=new Map();let localGame=null;
     let controlledId=null,privatePilotSelf=null,pilotPhysics=null,pilotInput={},pilotReporter=onPilotState,guide=null,pilotGate=()=>false,pilotActivity=null,restPlan=null,myHome=null,homeOwner=null,homeDoorOpen=false,homePlots=null,endingMode=false,cameraForm=null;
     const guideGeometry=new THREE.RingGeometry(1.2,1.4,32);ownedGeometries.add(guideGeometry);
@@ -441,7 +441,7 @@ export function createOfficeScene({ host, labels, onSelect, onFailure, onVenue =
             }else f.manual=false;
             occupied.push(placement);
             f.target.set(...placement); f.home = f.target.clone();
-            if (fresh || (previousPose !== f.pose && f.pose !== 'meeting'&&!destination&&!invitedGame)) f.group.position.copy(f.target);
+            if (fresh || f.manual&&person.id===controlledId || (previousPose !== f.pose && f.pose !== 'meeting'&&!destination&&!invitedGame)) f.group.position.copy(f.target);
             if (!f.manual&&!fresh && ((f.pose === 'playing'&&(previousGame!==f.game.id||previousPose!=='playing')) || ((destination||f.pose === 'meeting') && (!oldHome || oldHome.distanceTo(f.home) > .1)))) {
                 if (!navigation.free(f.group.position.x, f.group.position.z)) { const safe = navigation.nearest(f.group.position)||navigation.nearest({x:0,z:21.5}); if (safe) f.group.position.set(safe.x, placement[1], safe.z); }
                 f.waypoints = navigation.withHomeAccess(residences.slotFor(person.id),()=>navigation.path(f.group.position, f.home)).map(p => new THREE.Vector3(p.x, placement[1], p.z));
@@ -457,7 +457,7 @@ export function createOfficeScene({ host, labels, onSelect, onFailure, onVenue =
             f.racket.visible = f.pose === 'playing' && ['tennis', 'badminton', 'pingpong', 'golf'].includes(f.game.id);
             f.tool.visible=f.pose==='playing'&&['billiards','archery','darts'].includes(f.game.id);if(f.tool.visible)f.tool.geometry=toolGeometry(f.game.id);
             f.shoes.forEach(shoe => { shoe.visible = f.pose !== 'sleeping'; });
-            f.eyes.forEach(eye => { eye.scale.y = f.pose === 'sleeping' ? .18 : 1; });
+            if(!f.manual)f.eyes.forEach(eye => { eye.scale.y = f.pose === 'sleeping' ? .18 : 1; });
             f.ring.visible = selected === person.id; f.label.setAttribute('aria-pressed', String(selected === person.id));
         }
         residences.select(visitingHome ?? (figures.get(selected)?.pose === 'sleeping' ? selected : null));
@@ -502,7 +502,7 @@ export function createOfficeScene({ host, labels, onSelect, onFailure, onVenue =
                 state.restPending=Boolean(restPlan);
                 f.group.position.set(state.x,state.y,state.z);f.group.rotation.y=state.yaw;f.manual=true;f.pose='manual';f.home.copy(f.group.position);f.target.copy(f.group.position);
                 if(guide){const place=guide==='home'&&myHome?{x:myHome.x,z:myHome.z+5}:officeLayout.venues[guide];if(place){state.target=guide;state.distance=Math.round(Math.hypot(state.x-place.x,state.z-place.z));}}state.atHome=insideHome(state,myHome);state.nearDoor=Boolean(myHome&&Math.hypot(state.x-myHome.x,state.z-myHome.z-3.9)<=2.8);state.doorOpen=homeDoorOpen;
-                if(myHome){const show=insideHome(state,myHome);if(show!==interior.active()){easingCamera=false;residences.select(show?homeOwner:null);if(show){cameraMode='follow';followId=controlledId;controls.enablePan=false;}}interior.set(show?homeOwner:null,show?f.group:null);state.interior=show;}else state.interior=false;
+                if(myHome){const show=insideHome(state,myHome);if(show!==interior.active()){closeHomePreview();easingCamera=false;residences.select(show?homeOwner:null);if(show){cameraMode='follow';followId=controlledId;controls.enablePan=false;}}interior.set(show?homeOwner:null,show?f.group:null);state.interior=show;}else state.interior=false;
                 pilotReporter({...state,interior:interior.active()});
                 f.icon.textContent=(f.person.private?'PRIVAT · ':'ONLINE · ')+(state.action==='run'?'BOOST':state.action==='jump'?'LOMPAT':'KENDALI SENDIRI');
             }
@@ -510,7 +510,7 @@ export function createOfficeScene({ host, labels, onSelect, onFailure, onVenue =
                 const state=f.person.id===controlledId&&pilotPhysics?{...pilotPhysics.state(),...(pilotActivity||{})}:peerPilots.get(f.person.id)||f.person.pilot;
                 if(state&&f.person.id!==controlledId){const target=new THREE.Vector3(state.x,state.y,state.z);const next=f.group.position.clone().lerp(target,.35);if(navigation.segment(f.group.position,next))f.group.position.copy(next);else f.group.position.copy(target);f.group.rotation.y=state.yaw;}
                 if(f.person.id!==controlledId)abilities.observe(f.person.id,state,f);f.flight=Boolean(state?.flight);f.moving=['walk','run'].includes(state?.action);
-                const skillPose=abilities.pose(f.person.id),animation=animateOfficeAvatar(f,skillPose&&!['walk','run','jump','rest'].includes(state?.action)?{...state,action:'cast',skillPose}:state,{time:now/1000+f.phase,dt:frameStep,reduced:paused});
+                const skillPose=abilities.pose(f.person.id),animation=animateOfficeAvatar(f,skillPose&&!['walk','run','jump','fly','land','rest'].includes(state?.action)?{...state,action:'cast',skillPose}:state,{time:now/1000+f.phase,dt:frameStep,reduced:paused});
                 const played=state?.action==='play'?games.find(g=>g.id===state.venue):null;
                 f.racket.visible=Boolean(played&&['tennis','badminton','pingpong','golf'].includes(played.id));f.tool.visible=Boolean(played&&['billiards','archery','darts'].includes(played.id));if(f.tool.visible)f.tool.geometry=toolGeometry(played.id);
                 f.cup.visible=state?.action==='drink';f.plate.visible=state?.action==='eat';
@@ -584,8 +584,17 @@ export function createOfficeScene({ host, labels, onSelect, onFailure, onVenue =
         }
     }
     function resize() { if (disposed) return; const rect = host.getBoundingClientRect(); if (rect.width < 1 || rect.height < 1) return; renderer.setSize(rect.width, rect.height, false); camera.aspect = rect.width / rect.height; camera.updateProjectionMatrix(); requestDraw(); }
+    function closeHomePreview(restore=true){
+        visitingHome=null;const saved=homeCamera;homeCamera=null;if(!saved)return;
+        residences.select(null);if(!restore)return;
+        settleOfficeCamera(controls);const anchor=figures.get(saved.followId)?.group.position;
+        const delta=saved.anchor&&anchor?anchor.clone().sub(saved.anchor):new THREE.Vector3();
+        cameraMode=saved.mode;followId=saved.followId;controls.enablePan=saved.pan;controls.minDistance=saved.min;controls.maxDistance=saved.max;
+        camera.fov=saved.fov;camera.updateProjectionMatrix();camera.position.copy(saved.position).add(delta);controls.target.copy(saved.target).add(delta);targetFocus.copy(saved.focus).add(delta);cameraGoal.copy(saved.goal).add(delta);easingCamera=saved.easing;
+    }
     function focusRoom(room = 'all') {
         if(interior.active()){setCameraMode('follow',controlledId);return;}
+        closeHomePreview(false);settleOfficeCamera(controls);
         cameraMode = 'orbit'; followId = null; camera.fov = 36; camera.updateProjectionMatrix(); controls.enablePan = true; controls.minDistance = 8; controls.maxDistance = 650;
         const narrow = host.clientWidth < 600, views = { all: [[0, 0, 14], [86, 90, 125]], office: [[0, 0, 0], [34, 31, 42]], umum: [[-9, .5, -5], [11, 22, 22]], operasional: [[9, .5, -5], [28, 21, 24]], lounge: [[-3, .4, 7], [17, 23, 31]], park: [[0, 0, 28], [56, 65, 96]] };
         for (const game of games) views[game.id] = [[game.x, .3, game.z], [game.x + 14, 19, game.z + 22]];
@@ -606,8 +615,10 @@ export function createOfficeScene({ host, labels, onSelect, onFailure, onVenue =
     }
     function visitHome(id) {
         if(interior.active()){setCameraMode('follow',controlledId);return;}
-        cameraMode = 'orbit'; followId = null; controls.enablePan = true; controls.minDistance = 5; controls.maxDistance = 650; camera.fov = 36; camera.updateProjectionMatrix();
         const location = residences.location(id); if (!location) return;
+        settleOfficeCamera(controls);
+        if(!homeCamera)homeCamera={mode:cameraMode,followId,anchor:figures.get(followId)?.group.position.clone(),position:camera.position.clone(),target:controls.target.clone(),focus:targetFocus.clone(),goal:cameraGoal.clone(),easing:easingCamera,fov:camera.fov,min:controls.minDistance,max:controls.maxDistance,pan:controls.enablePan};
+        cameraMode = 'orbit'; followId = null; controls.enablePan = true; controls.minDistance = 5; controls.maxDistance = 650; camera.fov = 36; camera.updateProjectionMatrix();
         visitingHome = id; residences.select(id);
         targetFocus.set(location.x, 1.2, location.z); cameraGoal.copy(targetFocus).add(new THREE.Vector3(11, 12, 15));
         if (host.clientWidth < 600) cameraGoal.sub(targetFocus).multiplyScalar(1.23).add(targetFocus);
@@ -616,7 +627,8 @@ export function createOfficeScene({ host, labels, onSelect, onFailure, onVenue =
     }
     function setCameraMode(mode, id = selected) {
         if(interior.active()){mode='follow';id=controlledId;}
-        if (mode === 'orbit') { cameraMode = 'orbit'; followId = null; controls.enablePan = true; controls.minDistance = 5; controls.maxDistance = 650; return; }
+        closeHomePreview(false);settleOfficeCamera(controls);
+        if (mode === 'orbit') { cameraMode = 'orbit'; followId = null; camera.fov=36;camera.updateProjectionMatrix();controls.enablePan = true; controls.minDistance = 5; controls.maxDistance = 650;requestDraw();return; }
         if (!figures.has(id) && roster.some(p => p.id === id)) { selected = id; setPeople(roster); }
         const f = figures.get(id); if (!f) return;
         const form=abilities.form(id);cameraMode = mode === 'portrait' ? 'portrait' : 'follow'; followId = id; controls.enablePan = false; controls.minDistance = interior.active()?1.7:form?form.height*.85:cameraMode==='portrait'?2.8:3.8; controls.maxDistance = interior.active()?8:form?55:35;
@@ -659,7 +671,7 @@ export function createOfficeScene({ host, labels, onSelect, onFailure, onVenue =
             if(skill.type==='transform'&&(interior.active()||!navigation.free(pilotPhysics.state().x,pilotPhysics.state().z,pilotPhysics.state().y,skill.radius)))return{error:'Cari area lapang di luar rumah sebelum berubah.'};
             if(skill.type==='transform'&&abilities.modeCooldown(controlledId))return{error:`Transformasi pulih dalam ${abilities.modeCooldown(controlledId)} detik.`};
             pilotActivity=null;restPlan=null;if(!abilities.cast(controlledId,skill.id,f))return{error:'Efek belum siap.'};requestDraw();return{skill:skill.id,skill_id:globalThis.crypto.randomUUID(),name:skill.name};},
-        syncPilot(state){if(!state||!pilotPhysics)return;if(Number.isFinite(state.updated_ms))abilities.clock(state.updated_ms-Date.now());if(endingMode&&state.form)return;if(!state.form)endingMode=false;abilities.observe(controlledId,state,figures.get(controlledId));const mode=abilities.modeState(controlledId);pilotPhysics.setForm(abilities.form(controlledId),mode?.expires);requestDraw();},
+        syncPilot(state,timing){if(!state||!pilotPhysics)return;const received=timing?.receivedAt??Date.now(),sent=timing?.sentAt??received;if(Number.isFinite(state.updated_ms))abilities.clock(state.updated_ms-(sent+received)/2,Math.max(0,received-sent));if(endingMode&&state.form)return;if(!state.form)endingMode=false;abilities.observe(controlledId,state,figures.get(controlledId),true);const mode=abilities.modeState(controlledId);pilotPhysics.setForm(abilities.form(controlledId),mode?.expires);requestDraw();},
         toggleFlight(){const result=pilotPhysics?.toggleFlight();requestDraw();return result;},
         endTransformation(){endingMode=true;cameraForm=null;abilities.clearForm(controlledId);pilotPhysics?.setForm(null);setCameraMode('follow',controlledId);requestDraw();},
         activeTransformation:()=>abilities.modeState(controlledId),
@@ -691,7 +703,7 @@ export function createOfficeScene({ host, labels, onSelect, onFailure, onVenue =
         setMeeting(value) { localMeeting = value; setPeople(roster); },
         meetingReady() { if(controlledId&&localMeeting?.connected&&localMeeting.room){const a=figures.get(localMeeting.room.from),b=figures.get(localMeeting.room.to);if(!a||!b||a.group.position.distanceTo(b.group.position)>3)return false;const dx=b.group.position.x-a.group.position.x,dz=b.group.position.z-a.group.position.z,d=Math.hypot(dx,dz);return d>.2&&(Math.sin(a.group.rotation.y)*dx+Math.cos(a.group.rotation.y)*dz)/d>.45&&(-Math.sin(b.group.rotation.y)*dx-Math.cos(b.group.rotation.y)*dz)/d>.45;}const room = localMeeting?.room; if (!room || !localMeeting.connected) return false; return [room.from, room.to].every(id => { const f = figures.get(id); return f && f.pose === 'meeting' && !f.waypoints?.length && f.group.position.distanceTo(f.home) < .2 && Math.abs(f.group.rotation.y - f.facing) < .15; }); },
         select(id, focus = false) {
-            if (selected !== id) visitingHome = null;
+            if (selected !== id) closeHomePreview();
             selected = id; if (id && !figures.has(id) && roster.some(p => p.id === id)) setPeople(roster);
             for (const [key, f] of figures) { f.ring.visible = key === id; f.label.setAttribute('aria-pressed', String(key === id)); }
             const f = figures.get(id); residences.select(visitingHome ?? (f?.pose === 'sleeping' ? id : null));
@@ -701,7 +713,7 @@ export function createOfficeScene({ host, labels, onSelect, onFailure, onVenue =
             if (f && focus) { targetFocus.copy(f.target).add(new THREE.Vector3(0, 1, 0)); cameraGoal.copy(targetFocus).add(new THREE.Vector3(11, 11, 14)); if (paused) { camera.position.copy(cameraGoal); controls.target.copy(targetFocus); } else easingCamera = true; } requestDraw();
         },
         zoom(factor) { if(!Number.isFinite(factor)||factor<=0)return;easingCamera=false;const offset=camera.position.clone().sub(controls.target);offset.setLength(THREE.MathUtils.clamp(offset.length()*factor,controls.minDistance,controls.maxDistance));camera.position.copy(controls.target).add(offset);controls.update();requestDraw(); },
-        setPaused(value) { paused = value; if (paused) for (const f of figures.values()) if (f.pose === 'meeting') { f.group.position.copy(f.home); f.group.rotation.y = f.facing; f.waypoints = []; } if (frame !== null) cancelAnimationFrame(frame); frame = null; requestDraw(); },
+        setPaused(value) { paused = value; if(paused&&easingCamera){camera.position.copy(cameraGoal);controls.target.copy(targetFocus);easingCamera=false;}if (paused) for (const f of figures.values()) if (f.pose === 'meeting') { f.group.position.copy(f.home); f.group.rotation.y = f.facing; f.waypoints = []; } if (frame !== null) cancelAnimationFrame(frame); frame = null; requestDraw(); },
         setVisible(value) { visible = value; if (!value && frame !== null) { cancelAnimationFrame(frame); frame = null; } else if (value) { lastFrame = 0; resize(); requestDraw(); } },
         dispose() { disposed = true; if (frame !== null) cancelAnimationFrame(frame); frame = null; observer.disconnect(); themeObserver.disconnect(); controls.dispose();
             interior.dispose();

@@ -55,7 +55,7 @@ export function mountOfficePilot({document:doc,window:win,config,visible,getScen
             getScene()?.setPeerPilots?.(data.peers||[]);
             if(pendingSkill===skill)pendingSkill=null;
             if(!claimed){claimed=true;getScene()?.setPilot?.(Number(config.myId),data.self,config.privateSelf);trail=[];reported=data.self;unconfirmed=0;onStatus('WASD / panah · Space lompat · Shift boost · E interaksi');}else unconfirmed=Math.max(0,unconfirmed-sentDistance);
-            getScene()?.syncPilot?.(data.self);if(ending)pendingEnd=false;
+            getScene()?.syncPilot?.(data.self,{sentAt:requestStarted,receivedAt:Date.now()});if(ending)pendingEnd=false;
             if(pendingGuide){getScene()?.guideTo?.(pendingGuide);pendingGuide=null;}
             if(pendingRest){const pose=pendingRest;pendingRest=null;rest(pose);}
             pendingDistance=0;getScene()?.setHomeDoor?.(Boolean(data.self?.door_open));

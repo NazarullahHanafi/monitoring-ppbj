@@ -1,5 +1,8 @@
 import * as THREE from 'three';
 
+// Flush old drag/zoom inertia before a programmatic camera transition.
+export function settleOfficeCamera(controls){const damping=controls.enableDamping;controls.enableDamping=false;controls.update?.();controls.enableDamping=damping;}
+
 // Resolve obstruction for this draw only. OrbitControls retains the user's zoom,
 // so passing a wall cannot progressively collapse the camera into the avatar.
 export function officeCameraPosition(navigation,target,desired,extra=[],minimum=3.6,maximum=35){
@@ -11,7 +14,8 @@ export function officeCameraPosition(navigation,target,desired,extra=[],minimum=
     // Prefer looking over nearby furniture/walls instead of moving inside a face.
     for(const height of[4.5,6,9]){
         const candidate=target.clone().add(new THREE.Vector3(offset.x*.4,height,offset.z*.4));
+        candidate.sub(target).clampLength(minimum,maximum).add(target);
         if(navigation.cameraLimit(target,candidate,extra)>=.99)return candidate;
     }
-    return target.clone().add(new THREE.Vector3(0,Math.max(minimum,6),0));
+    return target.clone().add(new THREE.Vector3(0,THREE.MathUtils.clamp(6,minimum,maximum),0));
 }

@@ -59,6 +59,7 @@ test('procedural 3D office builds valid batched geometry, bounds avatars and rel
         }
         scene.setPeople(people.slice(0, 2)); assert.equal(labels.children.length, 2);
         scene.setPeople(people.slice(0, 2).map(person => ({ ...person, state: 'offline' })));
+        const beforeHome=rendered.camera.position.clone();
         scene.select(1, true); draw(400);
         let body = null;
         rendered.world.traverse(node => {
@@ -71,7 +72,7 @@ test('procedural 3D office builds valid batched geometry, bounds avatars and rel
         const roof = rendered.world.children.find(node => node.userData.residenceLayer === 'roof');
         const instance = new THREE.Matrix4(); roof.getMatrixAt(0, instance); assert.equal(instance.determinant(), 0);
         roof.getMatrixAt(1, instance); assert.ok(instance.determinant() > .9, 'Other homes remain closed.');
-        scene.select(null); draw(500); roof.getMatrixAt(0, instance); assert.ok(instance.determinant() > .9, 'Closing detail restores the roof.');
+        scene.select(null); draw(500); roof.getMatrixAt(0, instance); assert.ok(instance.determinant() > .9, 'Closing detail restores the roof.');assert.ok(rendered.camera.position.distanceTo(beforeHome)<.000001,'Closing a home preview must also restore the camera.');
         scene.setMeeting({ connected: true, room: { from: 1, to: 2, spot: 5, id: 'test-meeting' } });
         scene.setPaused(false);
         for (let i = 0; i < 120; i++) draw(600 + i * 40);
@@ -106,10 +107,11 @@ test('procedural 3D office builds valid batched geometry, bounds avatars and rel
         scene.say(1,'<script>inert speech</script>');assert.equal(labels.children.find(l=>l.children[1].textContent===people[0].name).children.at(-1).textContent,'<script>inert speech</script>');
         scene.setGame(null);scene.setMeeting(null);
         scene.setPeople([{...people[0],is_me:true,state:'online',in_office:true},{...people[1],state:'online',in_office:false}]);
-        scene.setPilot(1,{x:0,y:-.12,z:21,yaw:0});scene.setPaused(true);
+        scene.setPilot(1,{x:0,y:-.12,z:21,yaw:0});assert.deepEqual(positionFor(1).toArray(),[0,-.12,21],'Reclaiming control must position the avatar before framing its camera.');scene.setPaused(true);
         draw(stamp+100000);let manual=scene.pilotState();assert.equal(manual.z,21);
         scene.setGame({from:1,to:2,kind:'badminton',status:'playing'});draw(stamp+100040);
         assert.equal(scene.pilotState().z,21,'Starting a game cannot move the controlled avatar automatically.');
+        const beforePreview=rendered.camera.position.clone();scene.select(2);scene.visitHome(2);draw(stamp+100041);scene.visitHome(2);scene.select(null);draw(stamp+100042);assert.equal(rendered.camera.fov,44);assert.ok(rendered.camera.position.distanceTo(beforePreview)<.000001,'Repeated home previews must preserve the original follow camera: '+JSON.stringify({before:beforePreview.toArray(),after:rendered.camera.position.toArray(),pilot:scene.pilotState()}));
         assert.ok(positionFor(2).z<0,'A colleague on a business menu remains seated at a computer despite an old invitation.');
         scene.setPilotInput({x:1,boost:true,jump:true});
         for(let i=0;i<12;i++)draw(stamp+100080+i*40);

@@ -61,7 +61,7 @@ export function mountOfficeLive({ document: doc, config, visible, getScene, getP
     if (config.canConfigureWorld && $('voWorldForm')) {
         doc.addEventListener('keydown', event => {
             if ($('voWorldPanel').hidden) return;
-            if (event.key === 'Escape') { $('voWorldPanel').hidden = true; $('voOpenWorld').focus(); }
+            if (event.key === 'Escape') { event.preventDefault(); $('voWorldPanel').hidden = true; $('voOpenWorld').focus(); }
             if (event.key === 'Tab') {
                 const fields = [...$('voWorldPanel').querySelectorAll('button, select, input')], first = fields[0], last = fields.at(-1);
                 if (event.shiftKey && doc.activeElement === first) { event.preventDefault(); last?.focus(); }

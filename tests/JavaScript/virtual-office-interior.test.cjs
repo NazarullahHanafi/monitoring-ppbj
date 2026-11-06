@@ -4,3 +4,10 @@ test('interior isolates own avatar and house, survives avatar replacement and re
     const replacement=new THREE.Group();scene.add(replacement);scene.remove(self);interior.set(5,replacement);scene.background=new THREE.Color('red');interior.apply();assert.equal(replacement.visible,true);assert.equal(scene.background,background,'Weather updates cannot leak the outside backdrop into the house.');
     interior.leave();assert.equal(outside.visible,true);assert.equal(hidden.visible,false);assert.ok(camera.position.equals(before));assert.equal(camera.fov,44);assert.equal(controls.maxDistance,35);assert.deepEqual(states,[5,null]);interior.dispose();
 });
+
+test('walking through a house restores the exterior camera relative to the new avatar position',async()=>{
+    const THREE=await import('three'),{createOfficeInterior}=await import(pathToFileURL(path.resolve('resources/js/virtual-office-interior.js'))),scene=new THREE.Scene(),camera=new THREE.PerspectiveCamera(44),self=new THREE.Group();self.position.set(20,.34,-35);
+    const controls={target:self.position.clone().add(new THREE.Vector3(0,1.3,0)),minDistance:3.8,maxDistance:35,enableDamping:true,update(){}};camera.position.copy(controls.target).add(new THREE.Vector3(4,2.5,5));const position=camera.position.clone(),target=controls.target.clone();
+    const interior=createOfficeInterior({scene,residences:{interior(){}},camera,controls});interior.set(1,self);self.position.add(new THREE.Vector3(2,-.46,6));interior.leave();
+    assert.deepEqual(camera.position.toArray(),position.add(new THREE.Vector3(2,-.46,6)).toArray());assert.deepEqual(controls.target.toArray(),target.add(new THREE.Vector3(2,-.46,6)).toArray());assert.equal(controls.enableDamping,true);assert.equal(camera.fov,44);
+});

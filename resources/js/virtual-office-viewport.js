@@ -16,6 +16,6 @@ export function mountOfficeViewport({document:doc,getScene,onEscape=()=>{},onEnt
     $('voToggleInfo')?.addEventListener('click',()=>{workspace.classList.toggle('vo-info-open');update();});
     $('voToggleHud')?.addEventListener('click',()=>{workspace.classList.toggle('vo-hud-hidden');update();});
     doc.addEventListener('fullscreenchange',update);
-    doc.addEventListener('keydown',event=>{if(event.key==='Escape'){onEscape();workspace.classList.remove('vo-expanded','vo-info-open');update();}});
+    doc.addEventListener('keydown',event=>{if(event.key==='Escape'&&!event.defaultPrevented){if(onEscape()===true){event.preventDefault?.();return;}workspace.classList.remove('vo-expanded','vo-info-open');update();}});
     update();return{update};
 }
