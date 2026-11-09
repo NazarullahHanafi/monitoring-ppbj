@@ -9,9 +9,9 @@ class VirtualOfficePresence
 {
     public const DIRECTORY_KEY = 'virtual-office:directory:v4';
 
-    public function snapshot(User $viewer): array
+    private function directory(): array
     {
-        $directory = Cache::remember(self::DIRECTORY_KEY, 60, function (): array {
+        return Cache::remember(self::DIRECTORY_KEY, 60, function (): array {
             $homeSlots=VirtualOfficeHomes::slots();
             return User::query()->leftJoin('virtual_office_profiles as profile', 'users.id', '=', 'profile.user_id')
                 ->where('users.is_active', true)->whereIn('department', ['umum', 'operasional'])
@@ -21,6 +21,34 @@ class VirtualOfficePresence
                     'avatar' => VirtualOfficeAvatar::sanitize($user->avatar, $user->gender, $user->id),'home_slot'=>$homeSlots[$user->id]??null, 'can_talk' => ! $user->isReadOnly(), 'share_activity' => $user->share_activity === null || (bool) $user->share_activity])
                 ->values()->all();
         });
+    }
+
+    /** Movement needs only live, leased public positions, not menus or the world. */
+    public function pilotPeers(): array
+    {
+        $directory = array_slice($this->directory(), 0, 120);
+        $keys = [];
+        foreach ($directory as $person) {
+            $keys[] = 'presence:user:'.$person['id'];
+            $keys[] = VirtualOfficePilot::key($person['id']);
+            $keys[] = VirtualOfficePilot::lease($person['id']);
+        }
+        $values = $keys === [] ? [] : Cache::many($keys);
+        $peers = [];
+        foreach ($directory as $person) {
+            $entry = $values['presence:user:'.$person['id']] ?? null;
+            $pilot = $values[VirtualOfficePilot::key($person['id'])] ?? null;
+            if (is_array($entry) && (int) ($entry['id'] ?? 0) === (int) $person['id']
+                && is_array($pilot) && ($values[VirtualOfficePilot::lease($person['id'])] ?? null) === ($pilot['session_id'] ?? '')) {
+                $peers[] = ['id' => $person['id']] + VirtualOfficePilot::publicState($pilot);
+            }
+        }
+        return $peers;
+    }
+
+    public function snapshot(User $viewer): array
+    {
+        $directory = $this->directory();
         $limited = count($directory) > 120;
         $directory = array_slice($directory, 0, 120);
         $keys = [];

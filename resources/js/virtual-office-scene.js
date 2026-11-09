@@ -587,9 +587,14 @@ export function createOfficeScene({ host, labels, onSelect, onFailure, onVenue =
         environment.update(now, { paused, dark: document.documentElement.classList.contains('dark'), center: controls.target });
         rivageBar.update(now,{paused,energySaver});
         hospitality.update(now,paused);
+        const activeGames=new Set(),officeNight=isOfficeNight(getDate());
+        for(const figure of figures.values()){
+            if(figure.manual){const state=figure.person.id===controlledId?pilotActivity:peerPilots.get(figure.person.id)||figure.person.pilot;if(state?.action==='play')activeGames.add(state.venue);}
+            else if(!officeNight&&figure.pose==='playing')activeGames.add(figure.game.id);
+        }
         for (const { mesh, game } of gameBalls) {
             const t = paused ? 0 : now / 1000;
-            const active = [...figures.values()].some(f => f.manual?(f.person.id===controlledId?pilotActivity:peerPilots.get(f.person.id)||f.person.pilot)?.action==='play'&&(f.person.id===controlledId?pilotActivity:peerPilots.get(f.person.id)||f.person.pilot)?.venue===game.id:!isOfficeNight(getDate())&&f.pose==='playing'&&f.game.id===game.id);
+            const active = activeGames.has(game.id);
             const wave = active ? Math.sin(t * 1.8) : 0;
             mesh.position.set(game.x + (game.id === 'golf' ? wave * 4 : wave * 1.5), game.id === 'pingpong' ? 1.45 + Math.abs(wave) * .65 : game.id === 'basketball' ? .15 + Math.abs(wave) * 2.2 : game.id === 'bowling' || game.id === 'golf' ? .06 : .4 + Math.abs(wave) * 2, game.z + wave * (game.kind === 'court' ? 4 : 1.3));
         }

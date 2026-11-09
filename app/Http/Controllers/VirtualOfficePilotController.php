@@ -24,7 +24,7 @@ class VirtualOfficePilotController extends Controller
             if($error->getStatusCode()!==422)throw $error;
             return response()->json(['message'=>$error->getMessage(),'self'=>VirtualOfficePilot::publicState(VirtualOfficePilot::current($request->user()->id))],422)->header('Cache-Control','private, no-store');
         }
-        $peers=collect($presence->snapshot($request->user())['people'])->filter(fn($p)=>!empty($p['pilot']))->map(fn($p)=>['id'=>$p['id']]+$p['pilot'])->values();
+        $peers=$presence->pilotPeers();
         return response()->json(['self'=>VirtualOfficePilot::publicState($state),'peers'=>$peers])->header('Cache-Control','private, no-store');
     }
     public function leave(Request $request,VirtualOfficePilot $pilot)

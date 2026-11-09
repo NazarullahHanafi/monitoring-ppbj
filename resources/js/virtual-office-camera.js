@@ -1,35 +1,35 @@
 import * as THREE from 'three';
 
-// Flush old drag/zoom inertia before a programmatic camera transition.
 export function settleOfficeCamera(controls){const damping=controls.enableDamping;controls.enableDamping=false;controls.update?.();controls.enableDamping=damping;}
 
-// Resolve obstruction for this draw only. OrbitControls retains the user's zoom,
-// so passing a wall cannot progressively collapse the camera into the avatar.
-export function officeCameraPosition(navigation,target,desired,extra=[],minimum=3.6,maximum=35){
-    const offset=desired.clone().sub(target);if(!Number.isFinite(offset.lengthSq())||offset.lengthSq()<.001)offset.set(4,3,5);
-    if(offset.length()<minimum||offset.length()>maximum)offset.setLength(THREE.MathUtils.clamp(offset.length(),minimum,maximum));
-    const goal=target.clone().add(offset),fraction=navigation.cameraLimit(target,goal,extra);
-    if(fraction>=1)return goal;
-    if(fraction>=.72&&offset.length()*fraction>=minimum)return target.clone().addScaledVector(offset,fraction);
-    // Prefer looking over nearby furniture/walls instead of moving inside a face.
-    for(const height of[4.5,6,9]){
-        const candidate=target.clone().add(new THREE.Vector3(offset.x*.4,height,offset.z*.4));
-        candidate.sub(target).clampLength(minimum,maximum).add(target);
-        if(navigation.cameraLimit(target,candidate,extra)>=.99)return candidate;
-    }
-    return target.clone().add(new THREE.Vector3(0,THREE.MathUtils.clamp(6,minimum,maximum),0));
+function cameraOffset(target,desired,minimum,maximum){
+    const offset=desired.clone().sub(target);
+    if(!Number.isFinite(offset.lengthSq())||offset.lengthSq()<.001)offset.set(4,3,5);
+    if(offset.length()<minimum||offset.length()>maximum)offset.clampLength(minimum,maximum);
+    return offset;
 }
 
-// Smooth the obstruction offset, not OrbitControls' desired zoom. A short hold
-// prevents alternating between overhead and shoulder views at a narrow doorway.
+// Obstruction may shorten the radius, never rotate or lift the user's view.
+// Keep comfortable avatar clearance even when a very large object is nearby.
+export function officeCameraPosition(navigation,target,desired,extra=[],minimum=3.6,maximum=35){
+    const offset=cameraOffset(target,desired,minimum,maximum),distance=offset.length();
+    const fraction=THREE.MathUtils.clamp(navigation.cameraLimit(target,target.clone().add(offset),extra),0,1);
+    if(fraction>=1)return target.clone().add(offset);
+    return target.clone().add(offset.setLength(Math.max(minimum,distance*fraction)));
+}
+
 export function createOfficeCameraRig(){
-    let offset=null,lastDirect=null,obstructed=false,clearFor=0,held=null;
-    return{reset(){offset=null;lastDirect=null;held=null;obstructed=false;clearFor=0;},resolve(navigation,target,desired,extra=[],minimum=3.6,maximum=35,seconds=1/30){
-        const dt=THREE.MathUtils.clamp(Number(seconds)||1/30,.001,.06),goal=officeCameraPosition(navigation,target,desired,extra,minimum,maximum),wanted=goal.sub(target),direct=desired.clone().sub(target).clampLength(minimum,maximum),blocked=wanted.distanceTo(direct)>.05;
-        if(blocked){obstructed=true;clearFor=0;held=wanted.clone();}else if(obstructed){clearFor+=dt;if(clearFor<.35&&held)wanted.copy(held);else{obstructed=false;held=null;}}
-        // Apply orbit/zoom input immediately. Only the collision correction eases.
-        if(offset&&lastDirect)offset.add(direct.clone().sub(lastDirect));lastDirect=direct.clone();
-        if(!offset)offset=wanted.clone();else{const delta=wanted.clone().sub(offset).multiplyScalar(1-Math.exp(-dt*7));delta.clampLength(0,Math.max(8,minimum*2)*dt);offset.add(delta);}
-        offset.clampLength(minimum,maximum);return target.clone().add(offset);
+    let correction=0,heldCorrection=0,clearFor=0;
+    return{reset(){correction=heldCorrection=clearFor=0;},resolve(navigation,target,desired,extra=[],minimum=3.6,maximum=35,seconds=1/30){
+        const dt=THREE.MathUtils.clamp(Number(seconds)||1/30,.001,.06),direct=cameraOffset(target,desired,minimum,maximum),distance=direct.length();
+        let wanted=distance-officeCameraPosition(navigation,target,desired,extra,minimum,maximum).distanceTo(target);
+        if(wanted>.01){heldCorrection=wanted;clearFor=0;}
+        else if(heldCorrection>0){clearFor+=dt;if(clearFor<.2)wanted=heldCorrection;else heldCorrection=0;}
+        // Smooth only the scalar collision correction. Mouse orbit and wheel
+        // input remain immediate, including during the doorway recovery hold.
+        const change=(wanted-correction)*(1-Math.exp(-dt*9));
+        correction+=THREE.MathUtils.clamp(change,-8*dt,8*dt);
+        correction=THREE.MathUtils.clamp(correction,0,Math.max(0,distance-minimum));
+        return target.clone().add(correction>.000001?direct.setLength(distance-correction):direct);
     }};
 }

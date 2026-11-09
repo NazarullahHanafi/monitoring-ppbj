@@ -33,7 +33,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->prepend(EnsureNotSoftMaintenance::class);
         // Session cookies must be decrypted and loaded before checking account
         // status. A global check ran before StartSession and missed locked users.
-        $middleware->web(append: [EnsureActiveUser::class]);
+        $middleware->web(append: [EnsureActiveUser::class, \App\Http\Middleware\RequireVirtualOfficeTutorial::class]);
         $middleware->prependToPriorityList(\Illuminate\View\Middleware\ShareErrorsFromSession::class, EnsureActiveUser::class);
         $middleware->append(SecurityHeaders::class);
         $middleware->append(MonitorPerformance::class);
