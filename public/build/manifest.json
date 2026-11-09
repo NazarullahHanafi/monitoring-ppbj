@@ -27,7 +27,7 @@
     "isDynamicEntry": true
   },
   "resources/js/virtual-office-scene.js": {
-    "file": "assets/virtual-office-scene-CQpN-29-.js",
+    "file": "assets/virtual-office-scene-BbQVbMBI.js",
     "name": "virtual-office-scene",
     "src": "resources/js/virtual-office-scene.js",
     "isDynamicEntry": true,
@@ -35,15 +35,22 @@
       "resources/js/virtual-office.js"
     ]
   },
+  "resources/js/virtual-office-tutorial.js": {
+    "file": "assets/virtual-office-tutorial-CJgXcG3v.js",
+    "name": "virtual-office-tutorial",
+    "src": "resources/js/virtual-office-tutorial.js",
+    "isDynamicEntry": true
+  },
   "resources/js/virtual-office.js": {
-    "file": "assets/virtual-office-DG6g5wFS.js",
+    "file": "assets/virtual-office-Cw9zK3Ic.js",
     "name": "virtual-office",
     "src": "resources/js/virtual-office.js",
     "isEntry": true,
     "dynamicImports": [
       "resources/js/virtual-office-play.js",
       "resources/js/virtual-office-music.js",
-      "resources/js/virtual-office-scene.js"
+      "resources/js/virtual-office-scene.js",
+      "resources/js/virtual-office-tutorial.js"
     ]
   }
 }

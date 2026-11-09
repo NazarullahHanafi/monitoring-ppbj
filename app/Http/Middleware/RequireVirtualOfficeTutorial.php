@@ -17,7 +17,7 @@ class RequireVirtualOfficeTutorial
         if (!config('virtual_office.tutorial_required') || !$user || !VirtualOfficeTutorial::eligible($user)
             || !$request->isMethod('GET') || $request->expectsJson() || $request->ajax()
             || $request->header('Sec-Fetch-Dest') === 'iframe'
-            || $request->routeIs('virtual-office.tutorial.*', 'login', 'logout', 'password.*', 'verification.*', 'profile.*', 'owner.*', 'account.*', 'pr.quick-sign')
+            || $request->routeIs('virtual-office.index', 'virtual-office.tutorial.*', 'login', 'logout', 'password.*', 'verification.*', 'profile.*', 'owner.*', 'account.*', 'pr.quick-sign')
             || $request->routeIs('*.export*', '*.print*', '*.download*', '*.pdf*', '*.excel*', '*.template', '*.archive-attachment')) {
             return $next($request);
         }

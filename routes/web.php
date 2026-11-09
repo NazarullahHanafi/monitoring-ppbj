@@ -91,6 +91,12 @@ Route::get('/virtual-office/tutorial', [\App\Http\Controllers\VirtualOfficeTutor
     ->middleware('auth')->name('virtual-office.tutorial.show');
 Route::post('/virtual-office/tutorial', [\App\Http\Controllers\VirtualOfficeTutorialController::class, 'advance'])
     ->middleware(['auth', 'throttle:60,1'])->name('virtual-office.tutorial.advance');
+Route::post('/virtual-office/tutorial/start', [\App\Http\Controllers\VirtualOfficeTutorialController::class, 'start'])
+    ->middleware(['auth', 'throttle:30,1'])->name('virtual-office.tutorial.start');
+Route::get('/virtual-office/tutorial/document', [\App\Http\Controllers\VirtualOfficeTutorialController::class, 'document'])
+    ->middleware('auth')->name('virtual-office.tutorial.document');
+Route::post('/virtual-office/tutorial/document', [\App\Http\Controllers\VirtualOfficeTutorialController::class, 'validateDocument'])
+    ->middleware(['auth', 'throttle:30,1'])->name('virtual-office.tutorial.document.validate');
 
 Route::post('/virtual-office/avatar', [\App\Http\Controllers\VirtualOfficeController::class, 'saveAvatar'])
     ->middleware(['auth', 'throttle:virtual-office'])->name('virtual-office.avatar');

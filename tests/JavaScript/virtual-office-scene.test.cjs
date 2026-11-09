@@ -6,7 +6,7 @@ const { pathToFileURL } = require('node:url');
 test('procedural 3D office builds valid batched geometry, bounds avatars and releases frames/resources', async () => {
     const THREE = await import('three');
     const { createOfficeScene } = await import(pathToFileURL(path.resolve(__dirname, '../../resources/js/virtual-office-scene.js')));
-    const previous = {},clickedGames=[],shots=[],windowEvents={},documentEvents={};let reportedState,drawn;
+    const previous = {},clickedGames=[],shots=[],windowEvents={},documentEvents={};let reportedState,drawn;const cameraInputs=[],controlEvents={};
     for (const key of ['window', 'document', 'ResizeObserver', 'MutationObserver', 'requestAnimationFrame', 'cancelAnimationFrame']) previous[key] = global[key];
     const frames = new Map(); let frameId = 0, rendered = null, disposed = false;
     class Node {
@@ -26,11 +26,11 @@ test('procedural 3D office builds valid batched geometry, bounds avatars and rel
         global.requestAnimationFrame = fn => { const id = ++frameId; frames.set(id, fn); return id; };
         global.cancelAnimationFrame = id => frames.delete(id);
         const host = new Node(), labels = new Node(), element = new Node(); let ratio;
-        const scene = createOfficeScene({ host, labels, onSelect() {}, onFailure() {},onGame:id=>clickedGames.push(id),onCombatFire:special=>shots.push(special),onPilotState:p=>reportedState=p,
+        const scene = createOfficeScene({ host, labels, onSelect() {}, onFailure() {},onGame:id=>clickedGames.push(id),onCombatFire:special=>shots.push(special),onPilotState:p=>reportedState=p,onUserCamera:value=>cameraInputs.push(value),
             getDate: () => new Date('2026-11-04T12:00:00Z'),
             rendererFactory: () => ({ domElement: element, setPixelRatio: value => { ratio = value; }, setSize() {},
                 render(world, camera) { world.updateMatrixWorld(true); camera.updateMatrixWorld(true); rendered = { world, camera };const ownMeshes=[];world.traverseVisible(n=>{if(n.isMesh&&n.userData.personId===1)ownMeshes.push(n);});drawn={camera:camera.clone(),ownMeshes,formVisible:world.children.some(n=>n.userData.officeTransformation===1&&n.visible)}; }, dispose() { disposed = true; }, forceContextLoss() {} }),
-            controlsFactory: camera => ({ target: new THREE.Vector3(), addEventListener() {}, update() { camera.lookAt(this.target); camera.updateMatrixWorld(true); }, dispose() {} }) });
+            controlsFactory: camera => ({ target: new THREE.Vector3(), addEventListener:(name,fn)=>{controlEvents[name]=fn;}, update() { camera.lookAt(this.target); camera.updateMatrixWorld(true); }, dispose() {} }) });
         const people = Array.from({ length: 100 }, (_, index) => ({ id: index + 1, name: `User ${index}`, department: index % 2 ? 'umum' : 'operasional', state: index % 3 === 0 ? 'online' : index % 3 === 1 ? 'idle' : 'offline' }));
         scene.setPeople(people);
         assert.deepEqual(scene.collisionBoxes(),JSON.parse(require('node:fs').readFileSync(path.resolve(__dirname,'../../resources/data/virtual-office-collisions.json'),'utf8')),'Server collision metadata must match every physical scene obstacle.');
@@ -38,7 +38,12 @@ test('procedural 3D office builds valid batched geometry, bounds avatars and rel
         assert.equal(ratio, 1.5, 'GPU resolution must be bounded on high-DPI screens.');
         const draw = now => { const [id, fn] = frames.entries().next().value; frames.delete(id); fn(now); };
         draw(100);
-        assert.ok(rendered); let meshCount = 0, coordinateCount = 0;
+        assert.ok(rendered);assert.equal(cameraInputs.length,0,'Programmatic setup cannot count as camera practice.');
+        const initialCamera=rendered.camera.position.clone();controlEvents.change();assert.equal(cameraInputs.length,0);
+        controlEvents.start();rendered.camera.position.x+=2;controlEvents.change();assert.ok(cameraInputs.at(-1).orbit>0);controlEvents.end();
+        const afterGesture=cameraInputs.length;rendered.camera.position.copy(initialCamera);controlEvents.change();assert.equal(cameraInputs.length,afterGesture,'Only an active user gesture may report orbit input.');
+        scene.zoom(1.05);assert.ok(cameraInputs.at(-1).zoom>0);rendered.camera.position.copy(initialCamera);
+        let meshCount = 0, coordinateCount = 0;
         rendered.world.traverse(node => {
             if (!node.isMesh) return; meshCount++;
             const coordinates = node.geometry.getAttribute('position');

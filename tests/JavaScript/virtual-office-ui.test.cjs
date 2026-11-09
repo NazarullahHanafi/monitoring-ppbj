@@ -6,7 +6,7 @@ const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const load = import(pathToFileURL(path.resolve(__dirname, '../../resources/js/virtual-office-state.js')));
 const tick = () => new Promise(setImmediate);
-async function fixture({ canChat = true, meetingReady = false } = {}) {
+async function fixture({ canChat = true, meetingReady = false, tutorial = false } = {}) {
     const state = await load, timers = new Map(), requests = [], calls = [], events = {}, documentEvents = {}, nodes = new Map(); let timerId = 0;
     class Element {
         constructor(id = '') { this.id = id; this.dataset = {}; this.attrs = {}; this.children = []; this.events = {}; this.hidden = false; this.value = ''; this.textContent = ''; this.scrollTop = 0; this.style = { setProperty() {} }; const classes = new Set(); this.classList = { add: x => classes.add(x), remove: x => classes.delete(x), contains: x => classes.has(x), toggle: x => classes.has(x) ? classes.delete(x) : classes.add(x) }; }
@@ -29,7 +29,7 @@ async function fixture({ canChat = true, meetingReady = false } = {}) {
         { id: 2, name: 'My account', department: 'operasional', state: 'online', mood: '', is_me: true }];
     const avatar = state.safeAvatar();
     get('voConfig').textContent = JSON.stringify({ canChat, canMeet: canChat, myId: 2, feedUrl: '/virtual-office/presence', profileUrl: '/virtual-office/avatar',
-        myProfile: { avatar, share_activity: true, version: 0 }, avatarOptions: Object.fromEntries(Object.entries(avatar).map(([key, value]) => [key, [value]])), initial: { people, updated_at: '2026-11-04T10:00:00Z' } });
+        tutorial: tutorial ? { active: true } : undefined, myProfile: { avatar, share_activity: true, version: 0 }, avatarOptions: Object.fromEntries(Object.entries(avatar).map(([key, value]) => [key, [value]])), initial: { people, updated_at: '2026-11-04T10:00:00Z' } });
     const document = { hidden: false, activeElement: null, fullscreenElement: null, getElementById: get,
         createElement: () => new Element(), createTextNode: text => Object.assign(new Element(), { textContent: text }),
         querySelector: () => ({ content: 'test-csrf-token' }), addEventListener: (name, fn) => (documentEvents[name] ??= []).push(fn) };
@@ -38,13 +38,13 @@ async function fixture({ canChat = true, meetingReady = false } = {}) {
     const scenePromise = new Promise(resolve => { resolveScene = resolve; });
     const window = { location: { origin: 'https://simon.example.test' }, matchMedia: () => ({ matches: false, addEventListener() {} }),
         addEventListener: (name, fn) => (events[name] ??= []).push(fn), SimonOfficeMention: person => { calls.push(person); return true; },
-        __loadOfficeScene: () => scenePromise };
+        __loadOfficeTutorial: async () => ({mountOfficeTutorial: options => {sceneState.tutorial=options;return {ready(){sceneState.tutorialReady=true;},avatar:changed=>{sceneState.avatarPracticed=changed;},camera:value=>{sceneState.cameraPracticed=value;},pose(){},hologram(){},panel(){}};}}), __loadOfficeScene: () => scenePromise };
     const {mountOfficeViewport}=await import(pathToFileURL(path.resolve('resources/js/virtual-office-viewport.js'))),{skillsFor}=await import(pathToFileURL(path.resolve('resources/js/virtual-office-abilities.js')));
     const sandbox = { ...state,mountOfficeCombat:()=>({open(){},pose(){},armed:()=>false,escape:()=>false}),mountOfficeViewport,skillsFor,mountOfficeHologram:()=>({open(){sceneState.holograms=(sceneState.holograms||0)+1;},close:()=>false,escape:()=>false,sync(){}}), mountOfficePilot:()=>({start(){},stop(){},interact:()=>true}), mountOfficeClub: () => ({start(){},stop(){},select(){},syncScene(){},openGame(id){sceneState.games.push(id);},chat(id){if(canChat)calls.push(id);}}), mountOfficeLive: () => ({ start() {}, stop() {}, state: () => ({ ready: meetingReady, room: meetingReady ? { from: 2, to: 1 } : null }), invite() {} }), window, document, localStorage: { getItem: () => 'list', setItem() {} }, URL, Date, AbortController,
         setTimeout: (fn, delay) => { const id = ++timerId; timers.set(id, { fn, delay }); return id; }, clearTimeout: id => timers.delete(id),
         fetch: (url, options) => new Promise(resolve => requests.push({ url, options, resolve })), console };
     let code = fs.readFileSync(path.resolve(__dirname, '../../resources/js/virtual-office.js'), 'utf8');
-    code = code.replace(/^import .*?;\s*/gm, '').replace("await import('./virtual-office-scene.js')", 'await window.__loadOfficeScene()');
+    code = code.replace(/^import .*?;\s*/gm, '').replace("await import('./virtual-office-scene.js')", 'await window.__loadOfficeScene()').replace("import('./virtual-office-tutorial.js')", 'window.__loadOfficeTutorial()');
     vm.runInNewContext(code, sandbox);
     return { get, people, calls, filters, rooms, requests, sceneState, timers,
         search(value) { get('voSearch').value = value; get('voSearch').events.input[0](); },
@@ -124,4 +124,14 @@ test('own avatar editor sends only own preference data with csrf and handles sta
     assert.equal(body.version, 0); assert.equal(request.options.headers['X-CSRF-TOKEN'], 'test-csrf-token');
     request.resolve({ ok: false, status: 409 }); await submit;
     assert.match(f.get('voAvatarStatus').textContent, /tab lain/); assert.equal(f.get('voSaveAvatar').disabled, false); f.hide(true);
+});
+
+test('mandatory practice opens the real 3D scene despite a saved list preference and observes the real avatar save',async()=>{
+    const f=await fixture({tutorial:true});await tick();assert.equal(f.get('voScene').hidden,false);assert.ok(f.sceneState.tutorial);
+    f.resolveScene();await tick();assert.equal(f.sceneState.tutorialReady,true);assert.ok(f.sceneState.people.length>0);
+    f.sceneState.tutorial.actions.avatar();assert.equal(f.get('voAvatarEditor').hidden,false);
+    const submit=f.get('voAvatarForm').events.submit[0]({preventDefault(){}});const request=f.requests.find(r=>String(r.url).includes('/virtual-office/avatar'));
+    const body=JSON.parse(request.options.body);body.avatar.color='navy';request.resolve({ok:true,json:async()=>({avatar:body.avatar,version:1,share_activity:true})});await submit;
+    assert.equal(f.sceneState.avatarPracticed,true,'The coach receives success only after the actual profile endpoint acknowledges saving.');
+    f.sceneState.tutorial.onStep(3);assert.equal(f.get('voAvatarEditor').hidden,true);f.hide(true);
 });

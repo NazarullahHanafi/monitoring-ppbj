@@ -20,11 +20,13 @@ if (root && !root.dataset.initialized) {
     let people = [], filter = 'all', selected = null, scene = null, sceneTicket = 0, sceneLoading = false, inView = true, leftPage = false;
     let requestedRoom = isOfficeNight() ? 'residences' : 'all', requestedHome = null;
     let worldConfig = config.initial?.world || {}, live = null, club = null, pilot = null, hologram=null, combat=null, viewport=null, sceneUnavailable = false;
+    let tutorial = null;
     let energySaver = window.matchMedia('(max-width: 650px)').matches || Number(window.navigator?.hardwareConcurrency || 8) <= 4 || Number(window.navigator?.deviceMemory || 8) <= 4;
     try { const preference = localStorage.getItem('simonpr:office:quality'); if (['low', 'standard'].includes(preference)) energySaver = preference === 'low'; } catch {}
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
     let paused = reduced.matches, mode = '3d';
     try { if (localStorage.getItem('simonpr:office:view') === 'list') mode = 'list'; } catch {}
+    if(config.tutorial?.active){mode='3d';requestedRoom='all';}
     const visible = () => !document.hidden && inView && !leftPage;
     const text = (id, value) => { $(id).textContent = value; };
     let statusTimer=null,lastStatus='';
@@ -125,7 +127,7 @@ if (root && !root.dataset.initialized) {
         try {
             const { createOfficeScene } = await import('./virtual-office-scene.js');
             if (ticket !== sceneTicket || mode !== '3d' || !visible()) return;
-            scene = createOfficeScene({ host: $('voScene'), labels: $('voLabels'), onSelect: id => select(id, true),onCombatFire:special=>combat?.fire?.(special),onAimChange:value=>{combat?.aimState?.(value);if(value)viewport?.closePanels();},onHologramAnchor:point=>hologram?.anchor?.(point), onVenue: venue => venue==='armory'?combat?.open?.():club?.openVenue?.(venue), onGame: id=>club?.openGame?.(id), onDoor:()=>pilot?.toggleDoor?.(), onFailure: () => { sceneUnavailable = true; switchView('list', false); text('voSync', 'Ruang 3D tidak tersedia. Tim tetap dapat dilihat di mode ringan.'); } });
+            scene = createOfficeScene({ host: $('voScene'), labels: $('voLabels'), onSelect: id => select(id, true),onCombatFire:special=>combat?.fire?.(special),onAimChange:value=>{combat?.aimState?.(value);if(value)viewport?.closePanels();},onHologramAnchor:point=>hologram?.anchor?.(point),onUserCamera:value=>tutorial?.camera?.(value), onVenue: venue => venue==='armory'?combat?.open?.():club?.openVenue?.(venue), onGame: id=>club?.openGame?.(id), onDoor:()=>pilot?.toggleDoor?.(), onFailure: () => { sceneUnavailable = true; switchView('list', false); text('voSync', 'Ruang 3D tidak tersedia. Tim tetap dapat dilihat di mode ringan.'); } });
             scene.configureHome?.(Number(config.myId),config.myHome,config.homePlots);scene.setPeople(people); scene.setPaused(paused); scene.setVisible(visible());
             scene.configureWorld?.(worldConfig); scene.setEnergySaver?.(energySaver);
             scene.focusRoom(requestedRoom);
@@ -134,10 +136,10 @@ if (root && !root.dataset.initialized) {
             if (live) scene.setMeeting?.(live.state());
             club?.syncScene();
             pilot?.start();
-            hologram?.sync();
+            hologram?.sync();tutorial?.ready();
             if (['follow', 'portrait'].includes($('voCameraMode').value)) scene.setCameraMode?.($('voCameraMode').value, selected || people.find(p => p.is_me)?.id);
         } catch {
-            if (ticket === sceneTicket) { sceneUnavailable = true; switchView('list', false); text('voSync', 'Ruang 3D belum dapat dibuka. Mode ringan tetap tersedia.'); }
+            if (ticket === sceneTicket) { sceneUnavailable = true; switchView('list', false); text('voSync', 'Ruang 3D belum dapat dibuka. Mode ringan tetap tersedia.');tutorial?.ready(); }
         } finally { if (ticket === sceneTicket) { sceneLoading = false; $('voLoading').hidden = true; } }
     }
     function switchView(next, persist = true) {
@@ -207,9 +209,9 @@ if (root && !root.dataset.initialized) {
         avatarFields.forEach((select, key) => { select.value = profile.avatar[key]; }); $('voShareActivity').checked = profile.share_activity;
         portrait($('voAvatarPreview'), profile.avatar); text('voAvatarStatus', 'Hanya avatar akun Anda yang dapat disimpan.');
         if (document.fullscreenElement) document.fullscreenElement.append($('voAvatarEditor'));
-        $('voAvatarEditor').hidden = false; $('voAvatarEditor').focus();
+        $('voAvatarEditor').hidden = false; $('voAvatarEditor').focus();tutorial?.panel('avatar',true);
     }
-    function closeEditor() { if (!$('voAvatarEditor').hidden) { $('voAvatarEditor').hidden = true; editorReturnFocus?.focus(); } }
+    function closeEditor() { if (!$('voAvatarEditor').hidden) { $('voAvatarEditor').hidden = true; editorReturnFocus?.focus();tutorial?.panel('avatar',false); } }
     $('voOpenAvatar').addEventListener('click', openEditor); $('voEditOwnAvatar').addEventListener('click', openEditor); $('voCloseAvatar').addEventListener('click', closeEditor);
     $('voAvatarEditor').addEventListener('keydown', event => {
         if (event.key !== 'Tab') return;
@@ -226,7 +228,9 @@ if (root && !root.dataset.initialized) {
             const response = await fetch(url, { method: 'POST', signal: controller.signal, credentials: 'same-origin', headers: { Accept: 'application/json', 'Content-Type': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || '' }, body: JSON.stringify({ avatar: avatarDraft(), share_activity: $('voShareActivity').checked, version: profile.version }) });
             if (!response.ok) throw new Error(response.status === 409 ? 'Avatar berubah di tab lain. Muat ulang halaman sebelum menyimpan.' : response.status === 419 || response.status === 401 ? 'Sesi berakhir. Muat ulang dan login kembali.' : 'Avatar belum tersimpan. Periksa koneksi lalu coba lagi.');
             const saved = await response.json(); if (controller.signal.aborted) return;
+            const previousAvatar=JSON.stringify(profile.avatar);
             profile = { avatar: safeAvatar(saved.avatar), share_activity: saved.share_activity === true, version: saved.version };
+            tutorial?.avatar(previousAvatar!==JSON.stringify(profile.avatar));
             if(scene?.activeTransformation?.())pilot?.endMode?.();
             skillButtons(profile.avatar);
             people = people.map(p => p.is_me ? { ...p, avatar: profile.avatar, share_activity: profile.share_activity } : p);
@@ -243,8 +247,15 @@ if (root && !root.dataset.initialized) {
     live = mountOfficeLive({ document, config, visible, getScene: () => scene, getPeople: () => people,
         onWorld: value => { worldConfig = value; scene?.configureWorld?.(value); },
         onRoom: value => { scene?.setMeeting?.(value); const person = people.find(p => p.id === selected); if (person) chatActions(person); if (value.room?.status === 'accepted' && mode !== '3d' && !sceneUnavailable) { switchView('3d'); text('voLiveStatus', 'Ruang 3D dibuka agar kedua avatar dapat bertatap muka.'); } } });
-    pilot=mountOfficePilot({document,window,config,visible,getScene:()=>scene,onStatus:showStatus,onPose:value=>{modeHud(value);combat?.pose?.(value);if($('voInteriorStatus'))$('voInteriorStatus').hidden=!value.interior;if($('voHomeDoor')){$('voHomeDoor').disabled=!value.atHome&&!value.nearDoor;$('voHomeDoor').textContent=value.doorOpen?'Tutup pintu':'Buka pintu';}if(value.target)text('voPilotTarget',`${(value.target==='home'?'Rumah saya':games.find(g=>g.id===value.target)?.name)||value.target} · ${value.distance} m · ikuti penanda emas`);}});
+    pilot=mountOfficePilot({document,window,config,visible,getScene:()=>scene,onStatus:showStatus,onPose:value=>{tutorial?.pose(value);modeHud(value);combat?.pose?.(value);if($('voInteriorStatus'))$('voInteriorStatus').hidden=!value.interior;if($('voHomeDoor')){$('voHomeDoor').disabled=!value.atHome&&!value.nearDoor;$('voHomeDoor').textContent=value.doorOpen?'Tutup pintu':'Buka pintu';}if(value.target)text('voPilotTarget',`${(value.target==='home'?'Rumah saya':games.find(g=>g.id===value.target)?.name)||value.target} · ${value.distance} m · ikuti penanda emas`);}});
     club = mountOfficeClub({ document, config, visible, getPeople: () => people, getScene: () => scene, focusArea, requireVenue:id=>pilot.interact(id) });
-    hologram=mountOfficeHologram({document,window,config,getScene:()=>scene,onOpen:()=>viewport?.closePanels(),onWork:()=>pilot?.suspendInput?.(),onActivity:()=>document.dispatchEvent(new Event('pointermove'))});
+    hologram=mountOfficeHologram({document,window,config,getScene:()=>scene,onOpen:()=>{viewport?.closePanels();tutorial?.hologram();},onWork:()=>pilot?.suspendInput?.(),onWorkState:value=>tutorial?.panel('document',value),onPractice:token=>tutorial?.document(token),onActivity:()=>document.dispatchEvent(new Event('pointermove'))});
+    if(config.tutorial?.active)import('./virtual-office-tutorial.js').then(({mountOfficeTutorial})=>{
+        tutorial=mountOfficeTutorial({document,window,config:config.tutorial,getScene:()=>scene,actions:{
+            focus(){pilot?.start();viewport?.closePanels();scene?.followPilot?.();scene?.focusPilot?.();},
+            immerse(){$('voWorkspace').classList.add('vo-expanded');viewport?.update();},
+            avatar(){openEditor();},hologram(){hologram?.open();},closeWork(){hologram?.close();}
+        },onStep:step=>{if($('voTutorialAvatarHint'))$('voTutorialAvatarHint').hidden=step!==2;if(step===3)closeEditor();}});tutorial?.ready();
+    }).catch(()=>{const note='Panduan praktik belum berhasil dimuat. Muat ulang halaman untuk mencoba kembali.';showStatus(note);if($('voTutorialStatus'))$('voTutorialStatus').textContent=note;const button=$('voTutorialAction');if(button){button.disabled=false;button.textContent='Muat ulang tutorial';button.addEventListener('click',()=>window.location.reload());}});
     combat=mountOfficeCombat({document,window,config,visible,getScene:()=>scene,getTarget:()=>selected,getPeople:()=>people,onOpen:()=>viewport?.closePanels(),onStatus:showStatus});apply(config.initial); motionButton(); switchView(mode, false); if (feedUrl) loop.start(); live.start(); club.start();
 }

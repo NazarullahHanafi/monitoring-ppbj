@@ -24,7 +24,7 @@ import { createOfficeAim } from './virtual-office-aim.js';
 // Original procedural scene: no models, textures, or code from the reference site.
 // Static furniture is batched by material; animation is capped at 30fps / 24 avatars.
 export function createOfficeScene({ host, labels, onSelect, onFailure, onVenue = () => {}, onGame = () => {}, onDoor=()=>{},onPilotState = () => {},
-    onHologramAnchor=()=>{},onCombatFire=()=>{},onAimChange=()=>{},rendererFactory = options => new THREE.WebGLRenderer(options), controlsFactory = (camera, element) => new OrbitControls(camera, element), getDate = () => new Date() }) {
+    onHologramAnchor=()=>{},onCombatFire=()=>{},onAimChange=()=>{},onUserCamera=()=>{},rendererFactory = options => new THREE.WebGLRenderer(options), controlsFactory = (camera, element) => new OrbitControls(camera, element), getDate = () => new Date() }) {
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(36, 1, .1, 1200);
     const renderer = rendererFactory({ antialias: true, alpha: false, powerPreference: 'low-power' });
@@ -720,7 +720,9 @@ export function createOfficeScene({ host, labels, onSelect, onFailure, onVenue =
     document.addEventListener?.('pointerlockchange',lockChanged);
     window.addEventListener?.('blur',cancelAim);window.addEventListener?.('pointerup',releaseRight);renderer.domElement.addEventListener('pointercancel',cancelAim);renderer.domElement.addEventListener('lostpointercapture',lostPointer);
     renderer.domElement.addEventListener('pointerdown', down,true); renderer.domElement.addEventListener('pointermove',move);renderer.domElement.addEventListener('pointerup', up);renderer.domElement.addEventListener('contextmenu',contextMenu); renderer.domElement.addEventListener('webglcontextlost', lost);
-    const changed = () => requestDraw(); controls.addEventListener('change', changed); controls.addEventListener('start', () => { easingCamera = false; });
+    let cameraGesture=null;
+    const changed = () => {if(cameraGesture){const next=camera.position.clone().sub(controls.target),before=cameraGesture.length(),after=next.length();if(before>.001&&after>.001)onUserCamera({orbit:cameraGesture.angleTo(next),zoom:Math.abs(Math.log(after/before))});cameraGesture=next;}requestDraw();};
+    controls.addEventListener('change', changed);controls.addEventListener('start', () => { easingCamera = false;cameraGesture=camera.position.clone().sub(controls.target); });controls.addEventListener('end',()=>{cameraGesture=null;});
     theme(); focusRoom('all'); camera.position.copy(cameraGoal); controls.target.copy(targetFocus); easingCamera = false; resize();
     return { setPeople, resize, focusRoom, visitHome, setCameraMode,
         setAiming,isAiming:()=>aiming,lockAim(){if(!aiming)return;try{renderer.domElement.requestPointerLock?.()?.catch?.(()=>{});}catch{}},aimPoint(range=65){if(!pilotPhysics)return null;const view=lastDrawCamera||camera;raycaster.setFromCamera(new THREE.Vector2(0,0),view);if(aiming){const p=pilotPhysics.state();raycaster.ray.origin.set(p.x,p.y+(abilities.form(controlledId)?.height*.55||1.2),p.z);raycaster.ray.direction.copy(aimLook.direction());}const from=raycaster.ray.origin.clone(),to=raycaster.ray.at(range+(aiming?0:camera.position.distanceTo(controls.target)),new THREE.Vector3()),limit=navigation.rayLimit(from,to);to.lerpVectors(from,to,limit);const hits=raycaster.intersectObjects([...figures.values()].filter(f=>f.person.id!==controlledId).map(f=>f.group).concat(abilities.targets().filter(r=>r.userData.officeAbility!==controlledId)),true);if(hits[0]&&hits[0].distance<from.distanceTo(to))to.copy(hits[0].point);pilotPhysics.face(to);requestDraw();return{x:to.x,y:to.y,z:to.z};},
@@ -774,7 +776,7 @@ export function createOfficeScene({ host, labels, onSelect, onFailure, onVenue =
             if (f && focus && f.pose === 'sleeping') { visitHome(id); return; }
             if (f && focus) { targetFocus.copy(f.target).add(new THREE.Vector3(0, 1, 0)); cameraGoal.copy(targetFocus).add(new THREE.Vector3(11, 11, 14)); if (paused) { camera.position.copy(cameraGoal); controls.target.copy(targetFocus); } else easingCamera = true; } requestDraw();
         },
-        zoom(factor) { if(!Number.isFinite(factor)||factor<=0)return;easingCamera=false;const offset=camera.position.clone().sub(controls.target);offset.setLength(THREE.MathUtils.clamp(offset.length()*factor,controls.minDistance,controls.maxDistance));camera.position.copy(controls.target).add(offset);controls.update();requestDraw(); },
+        zoom(factor) { if(!Number.isFinite(factor)||factor<=0)return;easingCamera=false;const offset=camera.position.clone().sub(controls.target),before=offset.length();offset.setLength(THREE.MathUtils.clamp(before*factor,controls.minDistance,controls.maxDistance));camera.position.copy(controls.target).add(offset);controls.update();if(before>.001)onUserCamera({orbit:0,zoom:Math.abs(Math.log(offset.length()/before))});requestDraw(); },
         setPaused(value) { paused = value; if(paused&&easingCamera){camera.position.copy(cameraGoal);controls.target.copy(targetFocus);easingCamera=false;}if (paused) for (const f of figures.values()) if (f.pose === 'meeting') { f.group.position.copy(f.home); f.group.rotation.y = f.facing; f.waypoints = []; } if (frame !== null) cancelAnimationFrame(frame); frame = null; requestDraw(); },
         setVisible(value) { visible = value; if (!value && frame !== null) { cancelAnimationFrame(frame); frame = null; } else if (value) { lastFrame = 0; resize(); requestDraw(); } },
         dispose() { disposed = true; if (frame !== null) cancelAnimationFrame(frame); frame = null; observer.disconnect(); themeObserver.disconnect(); controls.dispose();

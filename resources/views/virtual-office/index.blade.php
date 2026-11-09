@@ -5,6 +5,7 @@
 <link rel="stylesheet" href="{{ asset('assets/virtual-office/hologram.css') }}?v={{ filemtime(public_path('assets/virtual-office/hologram.css')) }}">
 <link rel="stylesheet" href="{{ asset('assets/virtual-office/combat.css') }}?v={{ filemtime(public_path('assets/virtual-office/combat.css')) }}">
 <link rel="stylesheet" href="{{ asset('assets/virtual-office/hud.css') }}?v={{ filemtime(public_path('assets/virtual-office/hud.css')) }}">
+@if(!empty($officeConfig['tutorial']['active']))<link rel="stylesheet" href="{{ asset('assets/virtual-office/tutorial.css') }}?v={{ filemtime(public_path('assets/virtual-office/tutorial.css')) }}">@endif
 @endpush
 @section('content')
 <div class="vo" id="virtualOffice">
@@ -61,13 +62,14 @@
             <div class="vo-team-footer"><span aria-hidden="true">✦</span><p><b>Ruang digital, koneksi nyata.</b>Pose makan, minum, atau tidur adalah ilustrasi status aplikasi, bukan aktivitas nyata atau penilaian kinerja.</p></div>
         </aside>
         @include('virtual-office.hologram-work')
+        @if(!empty($officeConfig['tutorial']['active']))@include('virtual-office.tutorial-coach')@endif
         @if($officeConfig['canConfigureWorld'])
         <section class="vo-world-panel" id="voWorldPanel" hidden role="dialog" aria-modal="true" aria-labelledby="voWorldTitle"><div class="vo-editor-card"><button type="button" class="vo-close" id="voCloseWorld" aria-label="Tutup pengaturan kawasan">×</button><span class="vo-eyebrow">WORLD STUDIO · SUPERADMIN UMUM</span><h2 id="voWorldTitle">Kawasan milik bersama.</h2><p>Perubahan ini berlaku untuk seluruh pengguna.</p><form id="voWorldForm"><div class="vo-avatar-fields"><label>Gaya kawasan<select id="voWorld_landscape"><option value="alps">Desa Alpen Eropa</option><option value="village">Desa pedesaan hangat</option><option value="nordic">Desa Nordik</option></select></label><label>Cuaca virtual<select id="voWorld_weather"><option value="auto">Bergantian otomatis</option><option value="clear">Cerah</option><option value="rain">Hujan</option><option value="snow">Salju</option><option value="aurora">Aurora</option><option value="mist">Kabut</option></select></label><label>Ganti cuaca setiap<select id="voWorld_cycle_hours"><option value="2">2 jam</option><option value="3">3 jam</option><option value="4">4 jam</option><option value="6">6 jam</option></select></label><label>Intensitas hujan / salju<select id="voWorld_precipitation"><option value="light">Ringan</option><option value="heavy">Lebat</option><option value="storm">Sangat lebat</option></select></label><label>Partikel cuaca<select id="voWorld_particles"><option value="low">Ringan</option><option value="medium">Sedang</option></select></label></div><label class="vo-share"><input type="checkbox" id="voWorld_mountains" checked> Tampilkan pegunungan</label><label class="vo-share"><input type="checkbox" id="voWorld_clouds" checked> Tampilkan awan bergerak</label><p id="voWorldSaveStatus" role="status"></p><button type="submit" class="vo-primary">Simpan untuk seluruh kawasan</button></form></div></section>
         @endif
     </div>
     <section class="vo-avatar-editor" id="voAvatarEditor" hidden role="dialog" aria-modal="true" aria-labelledby="voAvatarTitle" tabindex="-1">
         <div class="vo-editor-card"><button type="button" class="vo-close" id="voCloseAvatar" aria-label="Tutup pengaturan avatar">×</button><span class="vo-eyebrow">YOUR DIGITAL PERSONA</span><h2 id="voAvatarTitle">Dirancang oleh Anda.</h2><p>Personalisasi avatar akun Anda. Tampilan tersimpan di semua perangkat.</p>
-            <div class="vo-avatar-preview" id="voAvatarPreview" aria-label="Pratinjau avatar"></div><form id="voAvatarForm"><div class="vo-avatar-fields" id="voAvatarFields"></div>
+            <p id="voTutorialAvatarHint" class="vo-tutorial-inline" hidden>LATIHAN AVATAR · Ubah salah satu pilihan di bawah, lihat pratinjaunya, lalu simpan. Penampilan avatar Anda di dunia 3D ikut berubah.</p><div class="vo-avatar-preview" id="voAvatarPreview" aria-label="Pratinjau avatar"></div><form id="voAvatarForm"><div class="vo-avatar-fields" id="voAvatarFields"></div>
                 <label class="vo-share"><input type="checkbox" id="voShareActivity"> Bagikan menu dan riwayat kunjungan saya kepada rekan tim</label><small class="vo-privacy-note">Hanya nama menu dan waktu. Isi dokumen, pencarian, data pribadi, dan halaman pengelola tidak ditampilkan. Anda tetap bisa melihat riwayat sendiri saat berbagi dimatikan.</small>
                 <p id="voAvatarStatus" role="status" aria-live="polite"></p><button type="submit" class="vo-primary" id="voSaveAvatar">Simpan avatar saya</button></form>
         </div>

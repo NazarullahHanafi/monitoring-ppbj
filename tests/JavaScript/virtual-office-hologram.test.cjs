@@ -1,12 +1,12 @@
 const test=require('node:test'),assert=require('node:assert/strict'),path=require('node:path');const{pathToFileURL}=require('node:url');
-async function fixture(tools=[{id:'create',title:'Tambah TOR PR',description:'Dokumen asli',url:'/virtual-office/hologram/create'},{id:'tracking',title:'Tracking PR',description:'Lacak',url:'/virtual-office/hologram/tracking'}]){
-    const{mountOfficeHologram}=await import(pathToFileURL(path.resolve('resources/js/virtual-office-hologram.js'))),nodes=new Map(),events={},documentEvents={},timers=new Map(),shown=[];let id=0,allow=false,questions=0,suspended=0,activities=0;
+async function fixture(tools=[{id:'create',title:'Tambah TOR PR',description:'Dokumen asli',url:'/virtual-office/hologram/create'},{id:'tracking',title:'Tracking PR',description:'Lacak',url:'/virtual-office/hologram/tracking'}],tutorial=null){
+    const{mountOfficeHologram}=await import(pathToFileURL(path.resolve('resources/js/virtual-office-hologram.js'))),nodes=new Map(),events={},documentEvents={},timers=new Map(),shown=[],proofs=[];let id=0,allow=false,questions=0,suspended=0,activities=0;
     class Element{constructor(){this.hidden=true;this.events={};this.children=[];this.style={};this.attrs={};this.offsetWidth=330;this.offsetHeight=300;this.contentWindow={location:{pathname:'/virtual-office/hologram/create'}};}addEventListener(k,f){this.events[k]=f;}append(...items){this.children.push(...items);}setAttribute(k,v){this.attrs[k]=v;}removeAttribute(k){delete this[k];}focus(){doc.activeElement=this;}contains(target){return target===this||this.children.includes(target);}click(){return this.events.click?.();}}
     const get=id=>{if(!nodes.has(id))nodes.set(id,new Element());return nodes.get(id);};const doc={activeElement:null,getElementById:get,createElement:()=>new Element(),addEventListener:(k,f)=>documentEvents[k]=f};
     get('voHologram').parentElement={getBoundingClientRect:()=>({width:1000,height:600})};
     const win={location:{origin:'https://office.test'},addEventListener:(k,f)=>events[k]=f,setTimeout:(fn,ms)=>{timers.set(++id,{fn,ms});return id;},clearTimeout:id=>timers.delete(id),confirm:()=>{questions++;return allow;}};
-    const api=mountOfficeHologram({document:doc,window:win,config:{myId:7,hologramTools:tools},getScene:()=>({showHologram:id=>shown.push(id),focusPilot(){}}),onWork:()=>suspended++,onActivity:()=>activities++});
-    return{api,get,events,timers,shown,allow:v=>allow=v,get questions(){return questions;},get suspended(){return suspended;},get activities(){return activities;},message(type,value,overrides={}){events.message({origin:win.location.origin,source:get('voHologramFrame').contentWindow,data:{type,value,channel:'1'},...overrides});}};
+    const api=mountOfficeHologram({document:doc,window:win,config:{myId:7,hologramTools:tools,tutorial},getScene:()=>({showHologram:id=>shown.push(id),focusPilot(){}}),onWork:()=>suspended++,onPractice:token=>proofs.push(token),onActivity:()=>activities++});
+    return{api,get,events,timers,shown,proofs,allow:v=>allow=v,get questions(){return questions;},get suspended(){return suspended;},get activities(){return activities;},message(type,value,overrides={}){events.message({origin:win.location.origin,source:get('voHologramFrame').contentWindow,data:{type,value,channel:'1'},...overrides});}};
 }
 test('hologram opens above only its owner, loads a real tool only on explicit selection and releases its frame on close',async()=>{
     const f=await fixture();assert.equal(f.get('voHologramFrame').src,undefined);assert.equal(f.timers.size,0);f.get('voHologramOpen').click();assert.equal(f.get('voHologram').hidden,false);assert.deepEqual(f.shown,[7]);
@@ -35,4 +35,13 @@ test('3D projection stays batched, follows height changes and releases every geo
     const hologram=createOfficeHologramProjection(T,scene),figure={person:{id:7},group:new T.Group()};figure.group.position.set(2,-.12,3);let meshes=0,geometries=new Set(),materials=new Set(),disposed=0;
     hologram.root.traverse(node=>{if(node.isMesh){meshes++;geometries.add(node.geometry);materials.add(node.material);}});assert.equal(meshes,5);for(const resource of[...geometries,...materials])resource.addEventListener('dispose',()=>disposed++);
     const point=hologram.update(figure,camera,{height:6,reduced:true});assert.ok(point.toArray().every(Number.isFinite));assert.equal(hologram.root.position.y,7.43);assert.equal(hologram.root.visible,true);hologram.hide();assert.equal(hologram.root.visible,false);assert.equal(hologram.root.userData.officeAbility,null);hologram.dispose();assert.equal(scene.children.length,0);assert.equal(disposed,geometries.size+materials.size);
+});
+
+test('tutorial hologram offers only the isolated practice form and accepts proof only from its current same-origin frame',async()=>{
+    const f=await fixture([{id:'sp',title:'Live business',url:'/virtual-office/hologram/sp'}],{active:true,practiceTool:{id:'ppbj-create',title:'Latihan PPBJ',url:'/virtual-office/tutorial/document'}});
+    assert.equal(f.get('voHologramTools').children.length,1);f.api.open();f.get('voHologramTools').children[0].click();
+    assert.equal(f.get('voHologramFrame').src,'/virtual-office/tutorial/document?office_frame=1');assert.equal(f.get('voHologramExternal').hidden,true);
+    for(const override of[{origin:'https://evil.test'},{source:{}},{data:{type:'office-tutorial-document-complete',value:'forged',channel:'old'}}])f.message('office-tutorial-document-complete','forged',override);
+    assert.equal(f.proofs.length,0);f.message('office-tutorial-document-complete','signed-proof');assert.deepEqual(f.proofs,['signed-proof']);
+    f.api.close();f.message('office-tutorial-document-complete','late');assert.equal(f.proofs.length,1);
 });

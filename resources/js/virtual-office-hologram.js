@@ -1,24 +1,26 @@
-export function mountOfficeHologram({document:doc,window:win,config,getScene,onOpen=()=>{},onWork=()=>{},onActivity=()=>{}}) {
+export function mountOfficeHologram({document:doc,window:win,config,getScene,onOpen=()=>{},onWork=()=>{},onWorkState=()=>{},onPractice=()=>{},onActivity=()=>{}}) {
     const $=id=>doc.getElementById(id),menu=$('voHologram'),work=$('voHologramWork'),frame=$('voHologramFrame');
     if(!menu||!work||!frame)return{open(){},close:()=>false,sync(){},escape:()=>false};
     const allowed=['create','torpr','tracking','ppbj-create','ppbj','approval','sp','spph'];
-    const tools=(config.hologramTools||[]).filter(tool=>{
-        try{const url=new URL(tool.url,win.location.origin);return url.origin===win.location.origin&&allowed.includes(tool.id)&&url.pathname==='/virtual-office/hologram/'+tool.id&&!url.hash&&!url.search;}catch{return false;}
+    const practice=config.tutorial?.active===true;
+    const tools=(practice?[config.tutorial.practiceTool].filter(Boolean):config.hologramTools||[]).filter(tool=>{
+        try{const url=new URL(tool.url,win.location.origin);return url.origin===win.location.origin&&allowed.includes(tool.id)&&url.pathname===(practice?'/virtual-office/tutorial/document':'/virtual-office/hologram/'+tool.id)&&!url.hash&&!url.search;}catch{return false;}
     });
     let opened=false,dirty=false,current=null,returnFocus=null,deadline=null,generation=0,channel='';
     const navigation=new Map(),status=message=>{$('voHologramStatus').textContent=message;};
     function discard(){return !dirty||win.confirm('Perubahan dokumen belum disimpan. Tinggalkan perubahan ini?');}
     function sync(){getScene()?.showHologram?.(opened?Number(config.myId):null);}
     function open(){if(!tools.length)return;if(opened&&!work.hidden)return;returnFocus=doc.activeElement;onOpen();getScene()?.setAiming?.(false);opened=true;menu.hidden=false;$('voHologramOpen')?.setAttribute('aria-expanded','true');sync();$('voHologramClose').focus({preventScroll:true});}
-    function resetFrame(){if(deadline!==null)win.clearTimeout(deadline);deadline=null;frame.removeAttribute('src');frame.hidden=true;dirty=false;current=null;work.hidden=true;}
+    function resetFrame(){if(deadline!==null)win.clearTimeout(deadline);deadline=null;frame.removeAttribute('src');frame.hidden=true;dirty=false;current=null;work.hidden=true;onWorkState(false);}
     function close(){if(!opened&&work.hidden)return false;if(!discard())return true;resetFrame();opened=false;menu.hidden=true;sync();$('voHologramOpen')?.setAttribute('aria-expanded','false');returnFocus?.focus?.({preventScroll:true});getScene()?.focusPilot?.();return true;}
     function back(){if(!discard())return;resetFrame();menu.hidden=false;$('voHologramClose').focus({preventScroll:true});}
     function describe(tool){current=tool;$('voHologramTitle').textContent=tool.title;let page;
         try{page=new URL(tool.pageUrl||tool.url,win.location.origin);}catch{page=new URL(tool.url,win.location.origin);}
         $('voHologramExternal').href=page.origin===win.location.origin?page.pathname+page.search:tool.url;
+        $('voHologramExternal').hidden=practice;
         for(const[id,button]of navigation)button.setAttribute('aria-current',id===tool.id?'page':'false');
     }
-    function launch(tool){if(!discard())return;resetFrame();describe(tool);menu.hidden=true;work.hidden=false;getScene()?.setAiming?.(false);onWork();
+    function launch(tool){if(!discard())return;resetFrame();describe(tool);menu.hidden=true;work.hidden=false;getScene()?.setAiming?.(false);onWork();onWorkState(true);
         $('voHologramLoading').hidden=false;status('Menyiapkan dokumen…');frame.title=tool.title;frame.hidden=false;channel=String(++generation);const url=new URL(tool.url,win.location.origin);url.searchParams.set('office_frame',channel);frame.src=url.pathname+url.search;
         deadline=win.setTimeout(()=>{deadline=null;status('Koneksi belum merespons. Coba muat ulang atau buka halaman penuh.');$('voHologramLoading').hidden=true;},15000);$('voHologramBack').focus({preventScroll:true});
     }
@@ -37,6 +39,7 @@ export function mountOfficeHologram({document:doc,window:win,config,getScene,onO
         if(event.data?.type==='office-hologram-notice'&&typeof event.data.value==='string')status(event.data.value.slice(0,180));
         if(event.data?.type==='office-hologram-escape')close();
         if(event.data?.type==='office-hologram-activity')onActivity();
+        if(practice&&event.data?.type==='office-tutorial-document-complete'&&typeof event.data.value==='string'&&event.data.value.length<=4096){dirty=false;onPractice(event.data.value);}
     });
     frame.addEventListener('load',()=>{if(work.hidden)return;try{if(frame.contentWindow.location.pathname==='/login'){if(deadline!==null)win.clearTimeout(deadline);deadline=null;$('voHologramLoading').hidden=true;status('Sesi berakhir. Buka halaman penuh untuk login kembali.');}}catch{status('Halaman tidak tersedia dalam ruang kerja ini.');}});
     work.addEventListener('keydown',event=>{if(event.key==='Escape'){event.preventDefault();close();}if(event.key==='Tab'){const first=$('voHologramBack'),last=frame;if(event.shiftKey&&doc.activeElement===first){event.preventDefault();last.focus();}}});

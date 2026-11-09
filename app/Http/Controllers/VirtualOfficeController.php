@@ -30,7 +30,8 @@ class VirtualOfficeController extends Controller
             'homePlots'=>count(\App\Services\VirtualOfficeHomes::slots()),
             'privateSelf'=>!$request->user()->shouldDisplayInPresence()?['id'=>$request->user()->id,'name'=>'Anda · privat','department'=>$request->user()->department,'state'=>'online','is_me'=>true,'avatar'=>$profile['avatar'],'private'=>true]:null,
             'canConfigureWorld' => \App\Services\VirtualOfficeWorld::canConfigure($request->user()),
-            'canMeet' => \App\Services\VirtualOfficeMeetings::eligible($request->user())];
+            'canMeet' => \App\Services\VirtualOfficeMeetings::eligible($request->user()),
+            'tutorial' => app(\App\Services\VirtualOfficeTutorial::class)->configuration($request->user(), $request->boolean('tutorial'))];
 
         return response()->view('virtual-office.index', compact('officeConfig'))
             ->header('Cache-Control', 'private, no-store');
