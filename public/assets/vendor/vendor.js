@@ -46,31 +46,23 @@
             return false;
         }
 
-        // ===== SEARCH =====
-        let searchTimer = null;
+        // ===== MANUAL FILTERS (same behavior as SP/SPPH) =====
         const searchInput = document.getElementById('searchInput');
         const VENDOR_PAGE_CONFIG = window.VENDOR_PAGE_CONFIG || {};
         const vendorIndexUrl = VENDOR_PAGE_CONFIG.indexUrl || '/vendors';
 
-        searchInput.addEventListener('input', function () {
-            clearTimeout(searchTimer);
-            searchTimer = setTimeout(() => {
-                const q = this.value.trim();
-                window.location.href = q ? `${vendorIndexUrl}?search=${encodeURIComponent(q)}` : vendorIndexUrl;
-            }, 400);
-        });
-
-        searchInput.addEventListener('keydown', function (e) {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                clearTimeout(searchTimer);
-                const q = this.value.trim();
-                window.location.href = q ? `${vendorIndexUrl}?search=${encodeURIComponent(q)}` : vendorIndexUrl;
-            }
-        });
+        function doSearch() {
+            const params = new URLSearchParams();
+            const search = searchInput.value.trim();
+            if (search) params.set('search', search);
+            window.ProcurementFilters.navigate(vendorIndexUrl, params.toString());
+        }
+        function resetFilters() { window.ProcurementFilters.reset(); }
+        function clearSearch() { window.ProcurementFilters.clear('searchInput'); }
 
         // ===== INIT =====
         document.addEventListener('DOMContentLoaded', function () {
+            window.ProcurementFilters.bind({ apply: doSearch, lockedSearch: () => null });
             document.querySelector('button[onclick="openModal(\'addModal\')"]').addEventListener('click', () => {
                 document.getElementById('addVendorForm').reset();
                 document.getElementById('addIsActive').checked = true;

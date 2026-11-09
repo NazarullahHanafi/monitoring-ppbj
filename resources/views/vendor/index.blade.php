@@ -110,7 +110,7 @@
         @endif
 
         {{-- FILTER --}}
-        <div
+        <div id="procurementFilters"
             class="bg-white dark:bg-gray-800 rounded-2xl p-4 shadow-sm border border-gray-100 dark:border-gray-700">
             <div class="flex flex-col sm:flex-row gap-3">
                 <div class="relative flex-1">
@@ -119,17 +119,27 @@
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                             d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                     </svg>
-                    <input type="text" id="searchInput" value="{{ $search }}"
+                    <input type="text" id="searchInput" value="{{ $search }}" autocomplete="off" maxlength="160"
+                        data-lpignore="true" data-1p-ignore="true" data-bwignore="true" spellcheck="false" aria-label="Cari vendor"
                         placeholder="Cari nama vendor, alamat, telepon, email, NPWP, penandatangan, jabatan..."
                         class="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm">
                 </div>
-                @if($search)
-                    <button onclick="window.location.href='{{ route('vendor.index') }}'"
-                        class="flex items-center gap-1.5 px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 font-semibold text-sm whitespace-nowrap">
-                        🔄 Reset
-                    </button>
-                @endif
+                <button type="button" id="applyProcurementFilters"
+                    class="px-4 py-2.5 rounded-xl vendor-header-gradient text-white font-semibold text-sm whitespace-nowrap">Terapkan Filter</button>
+                <button type="button" onclick="resetFilters()" title="Hapus semua filter dan tampilkan ulang daftar"
+                    class="flex items-center gap-1.5 px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 font-semibold text-sm whitespace-nowrap">
+                    🔄 Reset Filter
+                </button>
             </div>
+            <p id="filterPendingHint" role="status" aria-live="polite" class="text-xs text-gray-600 dark:text-gray-300 mt-3">Pencarian tidak otomatis. Tekan Enter atau klik Terapkan Filter.</p>
+            @if($search !== '')
+                <div class="flex items-center gap-2 flex-wrap mt-3">
+                    <span class="inline-flex items-center gap-1 text-xs bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 px-2 py-0.5 rounded-full">
+                        Pencarian: {{ $search }}
+                        <button type="button" onclick="clearSearch()" aria-label="Hapus filter pencarian" title="Hapus filter pencarian" class="hover:text-red-500 ml-0.5">✕</button>
+                    </span>
+                </div>
+            @endif
         </div>
 
         {{-- TABLE --}}
@@ -488,5 +498,6 @@
     <script>
         window.VENDOR_PAGE_CONFIG = @json($vendorPageConfig);
     </script>
-    <script src="{{ asset('assets/vendor/vendor.js') }}?v=20260814a" defer></script>
+    <script src="{{ asset('assets/app/procurement-filters.js') }}?v={{ filemtime(public_path('assets/app/procurement-filters.js')) }}" defer></script>
+    <script src="{{ asset('assets/vendor/vendor.js') }}?v={{ filemtime(public_path('assets/vendor/vendor.js')) }}" defer></script>
 @endpush

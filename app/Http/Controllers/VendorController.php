@@ -14,7 +14,8 @@ class VendorController extends Controller
 
     public function index(Request $request)
     {
-        $search = $request->get('search', '');
+        $validated = $request->validate(['search' => 'nullable|string|max:160']);
+        $search = trim($validated['search'] ?? '');
 
         $vendors = Vendor::select([
             'id',
@@ -27,7 +28,7 @@ class VendorController extends Controller
             'direktur',
             'jabatan',
             'is_active',
-        ])->when($search, fn($q) => $q->where(function ($sub) use ($search) {
+        ])->when($search !== '', fn($q) => $q->where(function ($sub) use ($search) {
             $sub->where('nama_vendor', 'like', "%{$search}%")
                 ->orWhere('alamat', 'like', "%{$search}%")
                 ->orWhere('telepon', 'like', "%{$search}%")
