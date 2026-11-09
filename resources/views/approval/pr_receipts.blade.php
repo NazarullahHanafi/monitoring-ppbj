@@ -9,7 +9,7 @@
         $frame = request()->query('office_frame');
         $frameParams = $isHologram && is_scalar($frame) && preg_match('/^\d{1,12}$/D', (string) $frame) ? ['office_frame' => $frame] : [];
         $filterParams = array_filter($filters, fn ($value) => $value !== '');
-        $advancedActive = $filters['portofolio'] !== '' || $filters['dari'] !== '' || $filters['sampai'] !== '' || $filters['submission'] !== '';
+        $advancedActive = $filters['portofolio'] !== '' || $filters['dari'] !== '' || $filters['sampai'] !== '' || $filters['submission'] !== '' || $filters['nilai_min'] !== '' || $filters['nilai_max'] !== '';
         $clearUrl = function (array $keys) use ($filterUrl, $filterParams, $frameParams) {
             $params = array_diff_key($filterParams, array_flip($keys)) + $frameParams;
             return $filterUrl.($params ? '?'.http_build_query($params) : '');
@@ -169,7 +169,7 @@
             Gabungkan kata, misalnya <strong>kursi Atika</strong> atau <strong>inspeksi CON</strong>; urutan kata bebas.
         </p>
         <details class="mt-4" @if($advancedActive) open @endif>
-            <summary class="text-sm font-semibold text-gray-700 dark:text-gray-300 cursor-pointer">Filter lanjutan · portofolio, waktu pengajuan, dan pengajuan ulang</summary>
+            <summary class="text-sm font-semibold text-gray-700 dark:text-gray-300 cursor-pointer">Filter lanjutan · portofolio, waktu pengajuan, jenis pengajuan, dan nilai PR</summary>
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
                 <div>
                     <label for="approvalPortfolio" class="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Portofolio</label>
@@ -194,7 +194,16 @@
                         <option value="resubmit" @selected($filters['submission'] === 'resubmit')>Pengajuan ulang</option>
                     </select>
                 </div>
+                <div>
+                    <label for="approvalValueMin" class="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Nilai PR minimum (Rp)</label>
+                    <input type="number" id="approvalValueMin" name="nilai_min" min="0" max="9999999999999999.99" step="0.01" value="{{ $filters['nilai_min'] }}" placeholder="Contoh: 1000000" aria-describedby="approvalValueHelp" class="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-900 text-gray-900 dark:text-white">
+                </div>
+                <div>
+                    <label for="approvalValueMax" class="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Nilai PR maksimum (Rp)</label>
+                    <input type="number" id="approvalValueMax" name="nilai_max" min="0" max="9999999999999999.99" step="0.01" value="{{ $filters['nilai_max'] }}" placeholder="Contoh: 50000000" aria-describedby="approvalValueHelp" class="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-900 text-gray-900 dark:text-white">
+                </div>
             </div>
+            <p id="approvalValueHelp" class="text-xs text-gray-600 dark:text-gray-300 mt-3">Isi nominal tanpa pemisah ribuan. Boleh isi salah satu batas; isi keduanya dengan nominal yang sama untuk mencari nilai tepat.</p>
         </details>
         <p class="text-xs text-gray-600 dark:text-gray-300 mt-3">Pencarian berjalan setelah Enter atau Terapkan Filter. Export mengikuti filter yang sudah diterapkan. Reset kembali ke status menunggu approval.</p>
         <div class="flex flex-wrap items-center gap-2 mt-3 text-xs">
@@ -209,6 +218,11 @@
             @if($filters['dari'] !== '' || $filters['sampai'] !== '')
                 <a href="{{ $clearUrl(['dari', 'sampai']) }}" aria-label="Hapus filter waktu pengajuan" class="px-3 py-1.5 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300">Diajukan: {{ $filters['dari'] ?: 'Awal' }} – {{ $filters['sampai'] ?: 'Sekarang' }} ×</a>
             @endif
+            @foreach(['nilai_min' => 'Nilai PR minimum', 'nilai_max' => 'Nilai PR maksimum'] as $key => $label)
+                @if($filters[$key] !== '')
+                    <a href="{{ $clearUrl([$key]) }}" aria-label="Hapus filter {{ $label }}" class="px-3 py-1.5 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300">{{ $label }}: Rp {{ number_format((float) $filters[$key], 2, ',', '.') }} ×</a>
+                @endif
+            @endforeach
         </div>
     </form>
 

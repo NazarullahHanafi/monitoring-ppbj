@@ -90,12 +90,30 @@ class ApprovalPrFiltersTest extends TestCase
         $this->assertSame([], $this->ids(['q' => "' OR 1=1 --"]));
     }
 
+    public function test_value_bounds_are_inclusive_and_combine_with_other_filters(): void
+    {
+        $zero = $this->approval(prAttributes: ['jumlah_pr' => 0]);
+        $lower = $this->approval(prAttributes: ['jumlah_pr' => '1000000.25']);
+        $upper = $this->approval(prAttributes: ['jumlah_pr' => '2000000.50']);
+        $this->approval(prAttributes: ['jumlah_pr' => null]);
+        $this->approval(prAttributes: ['jumlah_pr' => '2000000.51']);
+        $this->approval(attributes: ['status' => 'APPROVED'], prAttributes: ['jumlah_pr' => '1500000']);
+        $otherPortfolio = $this->approval(prAttributes: ['jumlah_pr' => '1500000', 'portofolio' => 'LAB']);
+
+        $this->assertSame([$zero->id], $this->ids(['nilai_max' => '0']));
+        $this->assertSame([$lower->id], $this->ids(['nilai_min' => '1000000.25', 'nilai_max' => '1000000.25']));
+        $this->assertSame([$upper->id, $lower->id], $this->ids(['q' => 'kursi Atika', 'portofolio' => 'CON', 'nilai_min' => '1000000.25', 'nilai_max' => '2000000.50']));
+        $this->assertSame([$otherPortfolio->id], $this->ids(['nilai_min' => '1500000', 'portofolio' => 'LAB']));
+        $this->assertCount(5, $this->ids(['nilai_min' => '0']));
+        $this->assertCount(6, $this->ids());
+    }
+
     public function test_invalid_inputs_are_rejected_on_list_and_both_exports(): void
     {
         // Exercise validation independently of the deliberately lower export rate limit.
         $this->withoutMiddleware(\Illuminate\Routing\Middleware\ThrottleRequests::class);
         foreach (['approval.pr.index', 'approval.pr.export.excel', 'approval.pr.export.pdf'] as $name) {
-            foreach ([['q' => ['bad']], ['q' => str_repeat('a', 161)], ['status' => ['ALL']], ['portofolio' => ['CON']], ['dari' => 'invalid'], ['dari' => '2026-11-10', 'sampai' => '2026-11-09'], ['submission' => 'unknown']] as $query) {
+            foreach ([['q' => ['bad']], ['q' => str_repeat('a', 161)], ['status' => ['ALL']], ['portofolio' => ['CON']], ['dari' => 'invalid'], ['dari' => '2026-11-10', 'sampai' => '2026-11-09'], ['submission' => 'unknown'], ['nilai_min' => -1], ['nilai_max' => 'abc'], ['nilai_min' => ['100']], ['nilai_min' => '1.001'], ['nilai_max' => '10000000000000000'], ['nilai_min' => '200', 'nilai_max' => '100']] as $query) {
                 $this->getJson(route($name, $query))->assertUnprocessable();
             }
         }
@@ -107,11 +125,14 @@ class ApprovalPrFiltersTest extends TestCase
             $this->approval('Pengadaan kursi audit');
         }
         $this->approval('Pengadaan meja lain', prAttributes: ['portofolio' => 'LAB']);
-        $filters = ['q' => 'audit Atika', 'status' => 'ALL', 'portofolio' => 'CON', 'dari' => '2026-11-09', 'sampai' => '2026-11-09', 'submission' => 'first'];
+        $this->approval('Pengadaan kursi audit', prAttributes: ['jumlah_pr' => 999999]);
+        $this->approval('Pengadaan kursi audit', prAttributes: ['jumlah_pr' => 2000001]);
+        $filters = ['q' => 'audit Atika', 'status' => 'ALL', 'portofolio' => 'CON', 'dari' => '2026-11-09', 'sampai' => '2026-11-09', 'submission' => 'first', 'nilai_min' => '1000000', 'nilai_max' => '2000000'];
         $response = $this->get(route('approval.pr.index', $filters))->assertOk();
         $this->assertCount(10, $response->viewData('rows')->items());
         $this->assertSame(12, $response->viewData('rows')->total());
         $this->assertStringContainsString('submission=first', $response->viewData('rows')->url(2));
+        $this->assertStringContainsString('nilai_min=1000000', $response->viewData('rows')->url(2));
 
         $content = $this->get(route('approval.pr.export.excel', $filters))->assertOk()->streamedContent();
         $temp = tempnam(sys_get_temp_dir(), 'approval-filter-');
@@ -122,6 +143,8 @@ class ApprovalPrFiltersTest extends TestCase
             $this->assertSame(18, $sheet->getHighestDataRow());
             $this->assertStringContainsString('Portofolio: CON', $sheet->getCell('A3')->getValue());
             $this->assertStringContainsString('Waktu pengajuan:', $sheet->getCell('A3')->getValue());
+            $this->assertStringContainsString('Nilai PR minimum: Rp 1.000.000,00', $sheet->getCell('A3')->getValue());
+            $this->assertStringContainsString('Nilai PR maksimum: Rp 2.000.000,00', $sheet->getCell('A3')->getValue());
             foreach (range(7, 18) as $row) {
                 $this->assertSame('Pengadaan kursi audit', $sheet->getCell('D'.$row)->getValue());
             }
@@ -135,7 +158,8 @@ class ApprovalPrFiltersTest extends TestCase
         Pdf::shouldReceive('loadView')->once()->with('approval.exports.pr_receipts_pdf', \Mockery::on(function ($data) {
             return $data['rows']->count() === 12
                 && $data['rows']->every(fn ($row) => $row->tujuan_pengadaan === 'Pengadaan kursi audit')
-                && str_contains($data['filterSummary'], 'Portofolio: CON');
+                && str_contains($data['filterSummary'], 'Portofolio: CON')
+                && str_contains($data['filterSummary'], 'Nilai PR maksimum: Rp 2.000.000,00');
         }))->andReturn($pdf);
         $pdf->shouldReceive('setPaper')->with('a4', 'landscape')->andReturnSelf();
         $pdf->shouldReceive('setOptions')->once()->andReturnSelf();
@@ -147,7 +171,7 @@ class ApprovalPrFiltersTest extends TestCase
     {
         MasterPortofolio::create(['nama' => 'CON']);
         $this->approval();
-        $query = ['q' => 'kursi', 'status' => 'ALL', 'portofolio' => 'CON', 'dari' => '2026-11-09', 'submission' => 'first'];
+        $query = ['q' => 'kursi', 'status' => 'ALL', 'portofolio' => 'CON', 'dari' => '2026-11-09', 'submission' => 'first', 'nilai_min' => '0', 'nilai_max' => '2000000'];
         foreach ([false, true] as $hologram) {
             $url = $hologram ? route('virtual-office.hologram', $query + ['tool' => 'approval', 'office_frame' => 31]) : route('approval.pr.index', $query);
             $html = $this->get($url)->assertOk()->assertSee('Terapkan Filter')->assertSee('Filter lanjutan')->getContent();
@@ -159,6 +183,12 @@ class ApprovalPrFiltersTest extends TestCase
             $this->assertSame($hologram ? route('virtual-office.hologram', ['tool' => 'approval']) : route('approval.pr.index'), $form->getAttribute('action'));
             $this->assertSame(0, $xpath->query('//form[@id="approvalFilters"]//*[@oninput or @onchange]')->length);
             $this->assertSame($hologram ? 1 : 0, $xpath->query('//form[@id="approvalFilters"]//input[@name="office_frame" and @value="31"]')->length);
+            $this->assertSame(1, $xpath->query('//form[@id="approvalFilters"]//input[@name="nilai_min" and @value="0"]')->length);
+            $this->assertSame(1, $xpath->query('//form[@id="approvalFilters"]//input[@name="nilai_max" and @value="2000000"]')->length);
+            $clearValue = $xpath->query('//a[@aria-label="Hapus filter Nilai PR minimum"]')->item(0)->getAttribute('href');
+            parse_str(parse_url($clearValue, PHP_URL_QUERY), $valueParams);
+            $this->assertArrayNotHasKey('nilai_min', $valueParams);
+            $this->assertSame('2000000', $valueParams['nilai_max']);
             foreach ($xpath->query('//a[contains(@href,"/export/")]') as $link) {
                 parse_str(parse_url($link->getAttribute('href'), PHP_URL_QUERY), $params);
                 foreach ($query as $key => $value) {

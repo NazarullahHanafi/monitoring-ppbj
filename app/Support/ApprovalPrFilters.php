@@ -17,6 +17,13 @@ class ApprovalPrFilters
             'dari' => 'nullable|date_format:Y-m-d',
             'sampai' => ['nullable', 'date_format:Y-m-d', ...($request->filled('dari') ? ['after_or_equal:dari'] : [])],
             'submission' => 'nullable|in:first,resubmit',
+            'nilai_min' => 'nullable|numeric|min:0|max:9999999999999999.99|decimal:0,2',
+            'nilai_max' => ['nullable', 'numeric', 'min:0', 'max:9999999999999999.99', 'decimal:0,2', ...($request->filled('nilai_min') ? ['gte:nilai_min'] : [])],
+        ], [
+            'nilai_max.gte' => 'Nilai PR maksimum harus lebih besar atau sama dengan nilai PR minimum.',
+        ], [
+            'nilai_min' => 'nilai PR minimum',
+            'nilai_max' => 'nilai PR maksimum',
         ]);
         $status = strtoupper(trim($values['status'] ?? 'PENDING'));
 
@@ -27,6 +34,8 @@ class ApprovalPrFilters
             'dari' => $values['dari'] ?? '',
             'sampai' => $values['sampai'] ?? '',
             'submission' => $values['submission'] ?? '',
+            'nilai_min' => $values['nilai_min'] ?? '',
+            'nilai_max' => $values['nilai_max'] ?? '',
         ];
     }
 
@@ -38,6 +47,16 @@ class ApprovalPrFilters
         }
         if ($filters['portofolio'] !== '') {
             $query->whereHas('torpr', fn ($pr) => $pr->where('portofolio', $filters['portofolio']));
+        }
+        if ($filters['nilai_min'] !== '' || $filters['nilai_max'] !== '') {
+            $query->whereHas('torpr', function ($pr) use ($filters): void {
+                if ($filters['nilai_min'] !== '') {
+                    $pr->where('jumlah_pr', '>=', $filters['nilai_min']);
+                }
+                if ($filters['nilai_max'] !== '') {
+                    $pr->where('jumlah_pr', '<=', $filters['nilai_max']);
+                }
+            });
         }
         // Keep the timestamp column usable by an index, including the entire end date.
         if ($filters['dari'] !== '') {
@@ -105,6 +124,12 @@ class ApprovalPrFilters
         }
         if ($filters['submission'] !== '') {
             $parts[] = $filters['submission'] === 'first' ? 'Pengajuan pertama' : 'Pengajuan ulang';
+        }
+        if ($filters['nilai_min'] !== '') {
+            $parts[] = 'Nilai PR minimum: Rp '.number_format((float) $filters['nilai_min'], 2, ',', '.');
+        }
+        if ($filters['nilai_max'] !== '') {
+            $parts[] = 'Nilai PR maksimum: Rp '.number_format((float) $filters['nilai_max'], 2, ',', '.');
         }
 
         return implode(' · ', $parts);
