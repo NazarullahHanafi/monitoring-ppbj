@@ -1,5 +1,7 @@
 # Tutorial praktik langsung di Kantor Virtual
 
+Pembaruan 9 November 2026: tutorial kini **opsional**. Default dan konfigurasi produksi `VIRTUAL_OFFICE_TUTORIAL_REQUIRED=false`; navigasi menu dan kantor tidak lagi memaksa pengguna mengikuti panduan, termasuk akun baru dan akun dengan progres belum selesai. Tombol **Lihat tutorial** tetap tersedia. Panduan manual mempunyai tombol **Keluar tutorial**, dan progres lama tetap disimpan. Pemeriksaan perubahan opsional: 23 tes PHP (318 assertions) dan 21 tes JavaScript lulus. Uraian kewajiban di bawah merupakan riwayat rilis sebelumnya.
+
 Rilis aplikasi `f3b7ec426728c8717cf3b9e45e40faa068a10e1d`, diterapkan 9 November 2026. Menggantikan halaman tutorial bacaan pada rilis sebelumnya.
 
 ## Perilaku pengguna

@@ -133,7 +133,7 @@ class VirtualOfficeTutorial
             ['id' => 'document', 'title' => $kind === 'tracking' ? 'Coba menelusuri contoh PR.' : 'Coba tambah '.strtoupper($kind).' melalui hologram.', 'body' => $kind === 'tracking'
                 ? 'Pilih Latihan Tracking PR, masukkan nomor contoh, lalu telusuri alurnya. Akun baca tidak diberi izin menambah dokumen.'
                 : 'Pilih menu latihan di hologram. Isi form contoh, tekan Validasi & simpan latihan, lihat ringkasannya, lalu kembali ke avatar. Dokumen latihan tidak masuk daftar pengadaan.', 'action' => 'Tampilkan menu latihan', 'target' => 'voHologramTools'],
-            ['id' => 'finish', 'title' => 'Anda sudah mencobanya langsung.', 'body' => 'Berjalan, melompat, mengganti avatar, mengatur kamera, dan mencoba hologram sudah selesai. Setelah selesai, menu kerja kembali terhubung ke dokumen asli. Tutorial wajib tidak muncul lagi; pilih Lihat tutorial untuk praktik ulang.', 'action' => 'Selesai & lanjut menjelajah', 'target' => 'voScene'],
+            ['id' => 'finish', 'title' => 'Anda sudah mencobanya langsung.', 'body' => 'Berjalan, melompat, mengganti avatar, mengatur kamera, dan mencoba hologram sudah selesai. Setelah selesai, menu kerja kembali terhubung ke dokumen asli. Pilih Lihat tutorial kapan saja untuk praktik ulang.', 'action' => 'Selesai & lanjut menjelajah', 'target' => 'voScene'],
         ];
     }
 }

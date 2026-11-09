@@ -157,4 +157,19 @@ class VirtualOfficeTutorialTest extends TestCase
         $this->postJson(route('virtual-office.avatar'), [])->assertUnprocessable();$this->get(route('ppbj.template'))->assertOk();
         $this->assertDatabaseCount('virtual_office_tutorials', 0);
     }
+
+    public function test_optional_tutorial_never_redirects_new_or_unfinished_accounts_and_manual_practice_can_be_exited(): void
+    {
+        config(['virtual_office.tutorial_required' => false]);
+        foreach ([false, true] as $unfinished) {
+            $user = $this->person();
+            if ($unfinished) app(VirtualOfficeTutorial::class)->start($user);
+            $this->actingAs($user)->get(route('dashboard.indexumum'))->assertOk();
+            $this->get(route('ppbj.index'))->assertOk();
+            $this->get(route('virtual-office.index'))->assertOk()->assertDontSee('id="voTutorialCoach"', false)->assertSee('Lihat tutorial');
+            $this->get(route('virtual-office.index', ['tutorial' => 1]))->assertOk()->assertSee('id="voTutorialCoach"', false)->assertSee('Keluar tutorial');
+            $this->get(route('virtual-office.index'))->assertOk()->assertDontSee('id="voTutorialCoach"', false);
+            $this->assertFalse(app(VirtualOfficeTutorial::class)->completed($user));
+        }
+    }
 }

@@ -20,7 +20,7 @@ export function mountOfficeTutorial({document:doc,window:win,config,getScene,act
     function render(){
         const item=settings.steps[Math.min(6,step)];
         $('voTutorialStep').textContent=String(Math.min(7,step+1)).padStart(2,'0')+' / 07';
-        $('voTutorialMode').textContent=settings.replay?'Praktik ulang':'Satu kali per akun';
+        $('voTutorialMode').textContent=settings.replay?'Praktik ulang':'Tutorial pilihan';
         $('voTutorialTitle').textContent=item.title;$('voTutorialBody').textContent=item.body;$('voTutorialProgress').value=step;
         button.disabled=pending||!getScene();button.textContent=pending?'Menyimpan progres…':retry?'Coba simpan progres':!started?(getScene()?'Mulai / lanjutkan praktik':'Menyiapkan dunia 3D…'):item.action;
         highlight?.classList.remove('vo-tutorial-target');highlight=started?$(item.target):null;highlight?.classList.add('vo-tutorial-target');
