@@ -219,8 +219,10 @@ class SpController extends Controller
 
         $spVendorAuditMap = $this->buildSpVendorAuditMap($sps->getCollection());
         $itemSearchHints = ProcurementDocumentSearch::itemHints($sps->getCollection(), $search, true);
+        $detailSummaries = app(\App\Services\ProcurementDetailService::class)->summaries($sps->getCollection(), 'sp');
+        $attachmentSearchHints = ProcurementDocumentSearch::attachmentHints($sps->getCollection(), $search, true);
 
-        return view('sp.index', compact('pics', 'satuans', 'sps', 'lastNomor', 'search', 'pic', 'dari', 'sampai', 'stats', 'bidangIpItus', 'bidangPrs', 'penandatanganScis', 'jabatanScis', 'oracleMode', 'spVendorAuditMap', 'itemSearchHints'));
+        return view('sp.index', compact('pics', 'satuans', 'sps', 'lastNomor', 'search', 'pic', 'dari', 'sampai', 'stats', 'bidangIpItus', 'bidangPrs', 'penandatanganScis', 'jabatanScis', 'oracleMode', 'spVendorAuditMap', 'itemSearchHints', 'detailSummaries', 'attachmentSearchHints'));
     }
 
     // =========================================================
@@ -1165,6 +1167,7 @@ class SpController extends Controller
                 ]);
 
                 $this->syncItems($sp, $items);
+                app(\App\Services\ProcurementDetailService::class)->sync($sp, $request);
 
                 // Link ke PPBJ
                 if ($ppbjRecords->isNotEmpty()) {
@@ -1357,6 +1360,7 @@ class SpController extends Controller
                 ]);
 
                 $this->syncItems($sp, $items);
+                app(\App\Services\ProcurementDetailService::class)->sync($sp, $request);
 
                 $newIds = $newPpbjs->pluck('id')->all();
                 foreach ($oldPpbjs->whereNotIn('id', $newIds) as $oldPpbj) {

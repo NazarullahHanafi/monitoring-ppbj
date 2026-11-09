@@ -21,6 +21,25 @@ Artisan::command('office:prune-messages', function () {
 })->purpose('Keep only seven days of private virtual-office conversations');
 Schedule::command('office:prune-messages')->dailyAt('02:40')->withoutOverlapping();
 
+Artisan::command('procurement:prune-detail-drafts', function () {
+    $count = 0;
+    \App\Models\ProcurementDetailAttachment::whereNull('document_id')->where('created_at', '<', now()->subDays(2))
+        ->chunkById(100, function ($attachments) use (&$count) {
+            foreach ($attachments as $attachment) {
+                $path = \Illuminate\Support\Facades\DB::transaction(function () use ($attachment) {
+                    $draft = \App\Models\ProcurementDetailAttachment::whereKey($attachment->id)->whereNull('document_id')->lockForUpdate()->first();
+                    if (! $draft) return null;
+                    $path = $draft->path;
+                    $draft->delete();
+                    return $path;
+                });
+                if ($path) { \Illuminate\Support\Facades\Storage::disk('local')->delete($path); $count++; }
+            }
+        });
+    $this->info("Pruned {$count} unattached detail drafts older than two days.");
+})->purpose('Remove only expired, unclaimed procurement detail uploads');
+Schedule::command('procurement:prune-detail-drafts')->dailyAt('02:50')->withoutOverlapping();
+
 Schedule::command('owner:backup-email')
     ->weeklyOn(5, '02:00')
     ->timezone(config('app.timezone', 'Asia/Jakarta'))

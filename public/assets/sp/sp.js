@@ -1552,6 +1552,7 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
         ) {
             const editLoadId = ++editModalLoadSerial;
             document.getElementById('editFormSp').action = `/sp/${id}`;
+            window.ProcurementDetails?.reset(document.getElementById('editFormSp'));
             document.getElementById('editIdSp').value = id;
             document.getElementById('editNomorSp').value = nomor;
             document.getElementById('editTanggalSp').value = tgl || '';
@@ -2632,6 +2633,7 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
                 }
 
                 try {
+                    if (window.ProcurementDetails && !await window.ProcurementDetails.beforeSave(form)) return;
                     if (!await window.ProcurementReview.confirm(form, 'sp', isEdit)) return;
                     if (submitBtn) submitBtn.innerHTML = 'Menyimpan...';
                     const response = await fetch(form.action, {

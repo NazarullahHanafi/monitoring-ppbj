@@ -125,6 +125,8 @@ class SpphController extends Controller
 
         $onboardingSeen = Cache::has('spph_onboarding_'.auth()->id());
         $itemSearchHints = ProcurementDocumentSearch::itemHints($spphs->getCollection(), $search, false);
+        $detailSummaries = app(\App\Services\ProcurementDetailService::class)->summaries($spphs->getCollection(), 'spph');
+        $attachmentSearchHints = ProcurementDocumentSearch::attachmentHints($spphs->getCollection(), $search, false);
 
         return view('spph.index', compact(
             'vendors',
@@ -138,7 +140,9 @@ class SpphController extends Controller
             'dari',
             'sampai',
             'onboardingSeen',
-            'itemSearchHints'
+            'itemSearchHints',
+            'detailSummaries',
+            'attachmentSearchHints'
         ));
     }
 
@@ -479,6 +483,7 @@ class SpphController extends Controller
                 ]);
 
                 $this->syncItems($spph, $request->input('items', []));
+                app(\App\Services\ProcurementDetailService::class)->sync($spph, $request);
 
                 if ($nomorPrType === 'ppbj' && $ppbjRecords->isNotEmpty()) {
                     $this->syncSpphPpbjs($spph, $ppbjRecords);
@@ -603,6 +608,7 @@ class SpphController extends Controller
                 ]);
 
                 $this->syncItems($spph, $request->input('items', []));
+                app(\App\Services\ProcurementDetailService::class)->sync($spph, $request);
 
                 $newIds = $newPpbjs->pluck('id')->all();
                 foreach ($oldPpbjs->whereNotIn('id', $newIds) as $oldPpbj) {

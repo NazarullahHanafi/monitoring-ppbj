@@ -396,6 +396,7 @@
                 renderVendorUsagePanel('editVendor', 'editVendorUsagePanel');
             });
             document.getElementById('editForm').action = `/spph/${id}`;
+            window.ProcurementDetails?.reset(document.getElementById('editForm'));
             document.getElementById('editId').value = id;
             document.getElementById('editNomor').value = nomor;
             document.getElementById('editTanggal').value = tgl || '';
@@ -1527,6 +1528,7 @@
                 }
 
                 try {
+                    if (window.ProcurementDetails && !await window.ProcurementDetails.beforeSave(form)) return;
                     if (!await window.ProcurementReview.confirm(form, 'spph', isEdit)) return;
                     if (submitBtn) submitBtn.innerHTML = 'Menyimpan...';
                     const response = await fetch(form.action, {

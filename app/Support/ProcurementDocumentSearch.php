@@ -10,7 +10,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
-/** Shared by the document list and export; no attachment/OCR or background scan. */
+/** Shared by the document list and export; attachment text is searched only after review. */
 class ProcurementDocumentSearch
 {
     public static function term(Request $request): string
@@ -65,6 +65,12 @@ class ProcurementDocumentSearch
                     $items->selectRaw('1')->from($itemTable)->whereColumn($itemTable.'.'.$foreignKey, $table.'.id');
                     self::like($items, $itemTable.'.nama_barang', $pattern);
                 });
+                $match->orWhereExists(function ($attachments) use ($table, $pattern) {
+                    $attachments->selectRaw('1')->from('procurement_detail_attachments')
+                        ->where('kind', $table === 'sps' ? 'sp' : 'spph')
+                        ->whereColumn('document_id', $table.'.id')->whereNotNull('reviewed_at');
+                    self::like($attachments, 'reviewed_text', $pattern);
+                });
                 $prMatch = function ($pr) use ($pattern) {
                     $pr->where(function ($fields) use ($pattern) {
                         self::like($fields, 'ppbj.ppbj_no', $pattern);
@@ -100,6 +106,38 @@ class ProcurementDocumentSearch
         $charset = explode('_', $collation)[0];
 
         return "ppbj.ppbj_no = CONVERT({$table}.nomor_pr USING {$charset}) COLLATE {$collation}";
+    }
+
+    public static function attachmentHints(Collection $documents, string $term, bool $sp): array
+    {
+        if ($term === '' || $documents->isEmpty()) {
+            return [];
+        }
+        $rows = DB::table('procurement_detail_attachments')->where('kind', $sp ? 'sp' : 'spph')
+            ->whereIn('document_id', $documents->modelKeys())->whereNotNull('reviewed_at')
+            ->where(function ($query) use ($term) {
+                foreach (self::tokens($term) as $token) {
+                    self::like($query, 'reviewed_text', self::pattern($token), 'or');
+                }
+            })->select('id', 'document_id', 'original_name', 'reviewed_text')->orderBy('created_at')->get();
+        $hints = [];
+        foreach ($rows as $row) {
+            if (isset($hints[$row->document_id])) {
+                continue;
+            }
+            $text = preg_replace('/\s+/u', ' ', $row->reviewed_text) ?? '';
+            $start = 0;
+            foreach (self::tokens($term) as $token) {
+                if (($position = mb_stripos($text, $token)) !== false) {
+                    $start = max(0, $position - 45);
+                    break;
+                }
+            }
+            $hints[$row->document_id] = ['name' => $row->original_name,
+                'text' => ($start > 0 ? '…' : '').mb_substr($text, $start, 180).(mb_strlen($text) > $start + 180 ? '…' : '')];
+        }
+
+        return $hints;
     }
 
     /** One extra query for the ten displayed documents only; never load all items. */

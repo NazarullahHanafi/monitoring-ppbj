@@ -749,3 +749,5 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
 });
 
 require __DIR__.'/auth.php';
+
+require __DIR__.'/procurement-details.php';

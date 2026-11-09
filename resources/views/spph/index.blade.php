@@ -264,6 +264,10 @@
                                     @if(!empty($itemSearchHints[$s->id]))
                                         <div class="pr-search-match"><strong>Barang/jasa cocok:</strong> {{ $itemSearchHints[$s->id] }}</div>
                                     @endif
+                                    @if(!empty($attachmentSearchHints[$s->id]))
+                                        <div class="pd-source"><strong>Ditemukan di {{ $attachmentSearchHints[$s->id]['name'] }}</strong>{{ $attachmentSearchHints[$s->id]['text'] }}</div>
+                                    @endif
+                                    <button type="button" class="pd-state" data-detail-open data-kind="spph" data-id="{{ $s->id }}" data-state="{{ $detailSummaries[$s->id]['state'] }}" aria-label="Kelola lampiran rincian {{ $s->nomor_spph }}">{{ $detailSummaries[$s->id]['label'] }}</button>
                                 </td>
                                 <td class="px-4 py-3"><span
                                         class="inline-block bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 text-xs font-semibold px-2 py-0.5 rounded-full">{{ $s->pic }}</span>
@@ -570,6 +574,7 @@
                     </div>
                 </div>
 
+                @include('components.detail-attachment-form', ['detailKind' => 'spph'])
                 <div class="btn-row">
                     <button type="button" onclick="closeModal('addModal')" class="btn-cancel">Batal</button>
                     <button type="submit" class="btn-save spph-header-gradient">💾 Simpan</button>
@@ -681,6 +686,7 @@
                     </div>
                 </div>
 
+                @include('components.detail-attachment-form', ['detailKind' => 'spph'])
                 <div class="btn-row">
                     <button type="button" onclick="closeModal('editModal')" class="btn-cancel">Batal</button>
                     <button type="submit" class="btn-save bg-gradient-to-r from-amber-500 to-orange-500"
@@ -1001,3 +1007,4 @@
 @endpush
 
 @include('components.archive-upload-popup')
+@include('components.detail-attachment-assets')
