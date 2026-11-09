@@ -336,12 +336,12 @@
             if (q) p.set('search', q); if (pic) p.set('pic', pic); if (vendor) p.set('vendor', vendor); if (d) p.set('dari', d); if (s) p.set('sampai', s);
             return p.toString();
         }
-        function doSearch() { const qs = getQS(); window.location.href = qs ? `/spph?${qs}` : '/spph'; }
-        function doExport() { const qs = getQS(); window.location.href = qs ? `/spph/export?${qs}` : '/spph/export'; }
-        function clearSearch() { document.getElementById('searchInput').value = ''; window.ProcurementFilters.markDirty(); }
-        function clearPic() { document.getElementById('filterPic').value = ''; window.ProcurementFilters.markDirty(); }
-        function clearVendor() { document.getElementById('filterVendor').value = ''; window.ProcurementFilters.markDirty(); }
-        function clearDate() { document.getElementById('dariInput').value = ''; document.getElementById('sampaiInput').value = ''; window.ProcurementFilters.markDirty(); }
+        function doSearch() { window.ProcurementFilters.navigate('/spph', getQS()); }
+        function doExport() { window.ProcurementFilters.navigate('/spph/export', getQS()); }
+        function clearSearch() { window.ProcurementFilters.clear('searchInput'); }
+        function clearPic() { window.ProcurementFilters.clear('filterPic'); }
+        function clearVendor() { window.ProcurementFilters.clear('filterVendor'); }
+        function clearDate() { window.ProcurementFilters.clear(['dariInput', 'sampaiInput']); }
         function setQuickDate(t) {
             const d = document.getElementById('dariInput'), s = document.getElementById('sampaiInput'), n = new Date(), y = n.getFullYear(), m = String(n.getMonth() + 1).padStart(2, '0'), dd = String(n.getDate()).padStart(2, '0');
             if (t === 'today') { d.value = `${y}-${m}-${dd}`; s.value = `${y}-${m}-${dd}`; }
@@ -349,7 +349,7 @@
             else if (t === 'year') { d.value = `${y}-01-01`; s.value = `${y}-12-31`; }
             window.ProcurementFilters.markDirty();
         }
-        function resetDate() { clearDate(); }
+        function resetFilters() { window.ProcurementFilters.reset(); }
 
         // ════════════════════════════════════════════════════════════
         // MODAL

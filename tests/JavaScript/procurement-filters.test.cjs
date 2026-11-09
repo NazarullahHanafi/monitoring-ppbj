@@ -41,9 +41,9 @@ test('binding twice cannot duplicate requests and secure deletion prevents autof
     assert.equal(h.calls(), 1); assert.equal(h.search.value, 'PR lama');
 });
 for (const kind of ['sp', 'spph']) {
-    test(`${kind}: clear/quick date only stage filters, and save/delete use shared simulation`, () => {
+    test(`${kind}: quick dates remain staged and save/delete use shared simulation`, () => {
         const source = fs.readFileSync(path.join(__dirname, `../../public/assets/${kind}/${kind}.js`), 'utf8');
-        for (const name of ['clearSearch','clearPic','clearDate','setQuickDate']) {
+        for (const name of ['setQuickDate']) {
             const start = source.indexOf(`function ${name}(`);
             const end = source.indexOf('\n        }', start);
             const fragment = source.slice(start, Math.min(end + 10, source.indexOf('\n        function ', start + 1) > 0 ? source.indexOf('\n        function ', start + 1) : end + 10));

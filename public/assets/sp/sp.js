@@ -705,13 +705,13 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
         // FILTER HELPERS
         // ═══════════════════════════════════════
         function getFilterParams() { const p = new URLSearchParams(); const q = document.getElementById('searchInput').value.trim(); const pic = document.getElementById('filterPic').value; const d = document.getElementById('dariInput').value; const s = document.getElementById('sampaiInput').value; if (q) p.set('search', q); if (pic) p.set('pic', pic); if (d) p.set('dari', d); if (s) p.set('sampai', s); if (ORACLE_MODE_SP) p.set('mode', 'oracle'); return p.toString(); }
-        function doSearch() { const qs = getFilterParams(); window.location.href = qs ? `/sp?${qs}` : '/sp'; }
-        function doExport() { const qs = getFilterParams(); window.location.href = qs ? `/sp/export?${qs}` : '/sp/export'; }
-        function clearSearch() { document.getElementById('searchInput').value = ''; window.ProcurementFilters.markDirty(); }
-        function clearPic() { document.getElementById('filterPic').value = ''; window.ProcurementFilters.markDirty(); }
-        function clearDate() { document.getElementById('dariInput').value = ''; document.getElementById('sampaiInput').value = ''; window.ProcurementFilters.markDirty(); }
+        function doSearch() { window.ProcurementFilters.navigate('/sp', getFilterParams()); }
+        function doExport() { window.ProcurementFilters.navigate('/sp/export', getFilterParams()); }
+        function clearSearch() { window.ProcurementFilters.clear('searchInput'); }
+        function clearPic() { window.ProcurementFilters.clear('filterPic'); }
+        function clearDate() { window.ProcurementFilters.clear(['dariInput', 'sampaiInput']); }
         function setQuickDate(t) { const dr = document.getElementById('dariInput'), sp = document.getElementById('sampaiInput'), n = new Date(), y = n.getFullYear(), m = String(n.getMonth() + 1).padStart(2, '0'), d = String(n.getDate()).padStart(2, '0'); if (t === 'today') { dr.value = `${y}-${m}-${d}`; sp.value = `${y}-${m}-${d}`; } else if (t === 'month') { dr.value = `${y}-${m}-01`; sp.value = `${y}-${m}-${new Date(y, n.getMonth() + 1, 0).getDate()}`; } else if (t === 'year') { dr.value = `${y}-01-01`; sp.value = `${y}-12-31`; } window.ProcurementFilters.markDirty(); }
-        function resetDate() { clearDate(); }
+        function resetFilters() { window.ProcurementFilters.reset(); }
 
         // ═══════════════════════════════════════
         // PRESENCE

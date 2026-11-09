@@ -160,26 +160,26 @@
             <div class="flex flex-col sm:flex-row sm:items-center gap-2">
                 <div class="flex items-center gap-1.5 flex-wrap">
                     <span class="text-xs text-gray-400 mr-1">Quick:</span>
-                    <button onclick="setQuickDate('today')" class="quick-pill">📍 Hari Ini</button>
-                    <button onclick="setQuickDate('month')" class="quick-pill">📅 Bulan Ini</button>
-                    <button onclick="setQuickDate('year')" class="quick-pill">📆 Tahun Ini</button>
-                    <button onclick="resetDate()" class="quick-pill">🔄 Reset</button>
+                    <button type="button" onclick="setQuickDate('today')" title="Isi tanggal hari ini, lalu klik Terapkan Filter" class="quick-pill">📍 Hari Ini</button>
+                    <button type="button" onclick="setQuickDate('month')" title="Isi tanggal bulan ini, lalu klik Terapkan Filter" class="quick-pill">📅 Bulan Ini</button>
+                    <button type="button" onclick="setQuickDate('year')" title="Isi tanggal tahun ini, lalu klik Terapkan Filter" class="quick-pill">📆 Tahun Ini</button>
+                    <button type="button" onclick="resetFilters()" title="Hapus semua filter dan tampilkan ulang daftar" class="quick-pill">🔄 Reset Filter</button>
                 </div>
                 <div class="flex items-center gap-2 flex-wrap sm:ml-auto">
                     @if($search)<span
                         class="inline-flex items-center gap-1 text-xs bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 px-2 py-0.5 rounded-full font-mono">"{{ $search }}"
-                    <button onclick="clearSearch()" class="hover:text-red-500 ml-0.5">✕</button></span>@endif
+                    <button type="button" onclick="clearSearch()" aria-label="Hapus filter pencarian" title="Hapus filter pencarian" class="hover:text-red-500 ml-0.5">✕</button></span>@endif
                     @if($pic)<span
                         class="inline-flex items-center gap-1 text-xs bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 px-2 py-0.5 rounded-full">PIC:
-                    {{ $pic }} <button onclick="clearPic()" class="hover:text-red-500 ml-0.5">✕</button></span>@endif
+                    {{ $pic }} <button type="button" onclick="clearPic()" aria-label="Hapus filter PIC" title="Hapus filter PIC" class="hover:text-red-500 ml-0.5">✕</button></span>@endif
                     @if($vendorFilter)<span
                         class="inline-flex items-center gap-1 text-xs bg-sky-100 dark:bg-sky-900/40 text-sky-700 dark:text-sky-300 px-2 py-0.5 rounded-full">Vendor:
-                    {{ $vendorFilter }} <button onclick="clearVendor()" class="hover:text-red-500 ml-0.5">x</button></span>@endif
+                    {{ $vendorFilter }} <button type="button" onclick="clearVendor()" aria-label="Hapus filter vendor" title="Hapus filter vendor" class="hover:text-red-500 ml-0.5">x</button></span>@endif
                     @if($dari || $sampai)<span
                         class="inline-flex items-center gap-1 text-xs bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300 px-2 py-0.5 rounded-full">📅
                         {{ ($dari ? \Carbon\Carbon::parse($dari)->format('d/m/Y') : '...') }} –
                         {{ ($sampai ? \Carbon\Carbon::parse($sampai)->format('d/m/Y') : '...') }} <button
-                    onclick="clearDate()" class="hover:text-red-500 ml-0.5">✕</button></span>@endif
+                    type="button" onclick="clearDate()" aria-label="Hapus filter tanggal" title="Hapus filter tanggal" class="hover:text-red-500 ml-0.5">✕</button></span>@endif
                 </div>
             </div>
         </div>
