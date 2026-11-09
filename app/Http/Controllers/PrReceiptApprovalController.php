@@ -3,13 +3,14 @@
 namespace App\Http\Controllers;
 
 use App\Models\MasterBuyer;
+use App\Models\MasterPortofolio;
 use App\Models\Ppbj;
 use App\Models\PrReceiptApproval;
 use App\Services\PrNumberConflictService;
 use App\Services\ProcurementJourneyService;
+use App\Support\ApprovalPrFilters;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
-use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -39,6 +40,7 @@ class PrReceiptApprovalController extends Controller
 
     public function index(Request $request)
     {
+        $filters = ApprovalPrFilters::fromRequest($request);
         $q = PrReceiptApproval::query()
             ->select([
                 'id', 'torpr_id', 'requested_by_user_id', 'requested_name', 'requested_at',
@@ -56,11 +58,14 @@ class PrReceiptApprovalController extends Controller
             ])
             ->latest('id');
 
-        $this->applyFilters($q, $request);
+        ApprovalPrFilters::apply($q, $filters);
 
         $rows = $q->paginate(10)->withQueryString();
 
-        return view('approval.pr_receipts', compact('rows'));
+        $portofolios = collect(Cache::remember('master_portofolios', 3600, fn () => MasterPortofolio::orderBy('nama')->pluck('nama', 'id')))
+            ->values()->push($filters['portofolio'])->filter(fn ($name) => $name !== '')->unique()->sort()->values();
+
+        return view('approval.pr_receipts', compact('rows', 'filters', 'portofolios'));
     }
 
     /**
@@ -90,7 +95,7 @@ class PrReceiptApprovalController extends Controller
         $sheet->mergeCells("A2:{$lastColumn}2");
         $sheet->setCellValue('A2', 'SIMONPR - Monitoring Proses Pengadaan');
         $sheet->mergeCells("A3:{$lastColumn}3");
-        $sheet->setCellValue('A3', 'Status: '.$this->statusLabel($status).'. Pencarian: '.($this->filterSearch($request) ?: 'Semua').'. Total: '.$rows->count().' data.');
+        $sheet->setCellValue('A3', ApprovalPrFilters::summary(ApprovalPrFilters::fromRequest($request)).'. Total: '.$rows->count().' data.');
         $sheet->mergeCells("A4:{$lastColumn}4");
         $sheet->setCellValue('A4', 'Dibuat pada '.$generatedAt->translatedFormat('d F Y, H:i').' WIB oleh '.(auth()->user()?->name ?? 'SIMONPR'));
 
@@ -212,6 +217,7 @@ class PrReceiptApprovalController extends Controller
             'status' => $status,
             'statusLabel' => $this->statusLabel($status),
             'search' => $this->filterSearch($request),
+            'filterSummary' => ApprovalPrFilters::summary(ApprovalPrFilters::fromRequest($request)),
             'generatedAt' => $generatedAt,
             'summary' => $summary,
             'generatedBy' => auth()->user()?->name ?? 'SIMONPR',
@@ -225,19 +231,6 @@ class PrReceiptApprovalController extends Controller
         ]);
 
         return $pdf->download('Laporan_Approval_PR_'.$status.'_'.$generatedAt->format('Ymd_His').'.pdf');
-    }
-
-    private function applyFilters(EloquentBuilder $query, Request $request): void
-    {
-        $search = $this->filterSearch($request);
-
-        if ($search !== '') {
-            $query->whereHas('torpr', function (EloquentBuilder $torprQuery) use ($search): void {
-                $torprQuery->where('nomor_pr', 'like', '%'.$search.'%');
-            });
-        }
-
-        $query->where('status', $this->filterStatus($request));
     }
 
     private function reportRows(Request $request)
@@ -257,38 +250,28 @@ class PrReceiptApprovalController extends Controller
                 'requester.department as requester_department',
                 DB::raw("CASE WHEN approval.status = 'APPROVED' THEN approver.name WHEN approval.status = 'REJECTED' THEN rejecter.name ELSE NULL END as processed_by"),
                 DB::raw("CASE WHEN approval.status = 'APPROVED' THEN approval.approved_at WHEN approval.status = 'REJECTED' THEN approval.rejected_at ELSE NULL END as processed_at"),
-            ])
-            ->where('approval.status', $this->filterStatus($request));
+            ]);
 
-        $search = $this->filterSearch($request);
-        if ($search !== '') {
-            $query->where('torpr.nomor_pr', 'like', '%'.$search.'%');
-        }
+        // List and both export formats use exactly the same filtered IDs, without pagination.
+        $matching = ApprovalPrFilters::apply(PrReceiptApproval::query(), ApprovalPrFilters::fromRequest($request))->select('pr_receipt_approvals.id');
+        $query->whereIn('approval.id', $matching);
 
         return $query->orderByDesc('approval.id')->get();
     }
 
     private function filterStatus(Request $request): string
     {
-        $status = strtoupper(trim((string) $request->query('status', self::STATUS_PENDING)));
-
-        return in_array($status, [self::STATUS_PENDING, self::STATUS_APPROVED, self::STATUS_REJECTED], true)
-            ? $status
-            : self::STATUS_PENDING;
+        return ApprovalPrFilters::fromRequest($request)['status'];
     }
 
     private function filterSearch(Request $request): string
     {
-        return mb_substr(trim((string) $request->query('q', '')), 0, 100);
+        return ApprovalPrFilters::fromRequest($request)['q'];
     }
 
     private function statusLabel(string $status): string
     {
-        return match ($status) {
-            self::STATUS_APPROVED => 'Sudah Disetujui',
-            self::STATUS_REJECTED => 'Ditolak',
-            default => 'Belum Approval / Menunggu',
-        };
+        return ApprovalPrFilters::statusLabel($status);
     }
 
     private function excelDate(mixed $value): float|string

@@ -3,6 +3,18 @@
 @section('title', 'Approval PR (Umum)')
 
 @section('content')
+    @php
+        $isHologram = request()->attributes->get('office_hologram');
+        $filterUrl = $isHologram ? route('virtual-office.hologram', ['tool' => 'approval']) : route('approval.pr.index');
+        $frame = request()->query('office_frame');
+        $frameParams = $isHologram && is_scalar($frame) && preg_match('/^\d{1,12}$/D', (string) $frame) ? ['office_frame' => $frame] : [];
+        $filterParams = array_filter($filters, fn ($value) => $value !== '');
+        $advancedActive = $filters['portofolio'] !== '' || $filters['dari'] !== '' || $filters['sampai'] !== '' || $filters['submission'] !== '';
+        $clearUrl = function (array $keys) use ($filterUrl, $filterParams, $frameParams) {
+            $params = array_diff_key($filterParams, array_flip($keys)) + $frameParams;
+            return $filterUrl.($params ? '?'.http_build_query($params) : '');
+        };
+    @endphp
     {{-- HEADER --}}
     <div class="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
@@ -15,14 +27,14 @@
             </p>
         </div>
         <div class="flex flex-wrap items-center gap-2">
-            <a href="{{ route('approval.pr.export.excel', request()->only(['q', 'status'])) }}"
+            <a href="{{ route('approval.pr.export.excel', $filterParams) }}"
                 class="inline-flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm font-bold text-emerald-700 shadow-sm transition hover:-translate-y-0.5 hover:bg-emerald-100 hover:shadow-md dark:border-emerald-700/70 dark:bg-emerald-900/25 dark:text-emerald-300 dark:hover:bg-emerald-900/40">
                 <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2h-5.586a1 1 0 01-.707-.293l-1.414-1.414A1 1 0 0010.586 2H5a2 2 0 00-2 2v14a2 2 0 002 2z" />
                 </svg>
                 Export Excel
             </a>
-            <a href="{{ route('approval.pr.export.pdf', request()->only(['q', 'status'])) }}"
+            <a href="{{ route('approval.pr.export.pdf', $filterParams) }}"
                 class="inline-flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-sm font-bold text-rose-700 shadow-sm transition hover:-translate-y-0.5 hover:bg-rose-100 hover:shadow-md dark:border-rose-700/70 dark:bg-rose-900/25 dark:text-rose-300 dark:hover:bg-rose-900/40">
                 <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3M7 3h6l4 4v10a2 2 0 01-2 2H7a2 2 0 01-2-2V5a2 2 0 012-2z" />
@@ -92,15 +104,22 @@
     @endif
 
     {{-- FILTER FORM --}}
-    <form method="GET"
+    <form method="GET" action="{{ $filterUrl }}" id="approvalFilters"
         class="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-200 dark:border-gray-800 p-5 mb-6">
+        @foreach($frameParams as $key => $value)<input type="hidden" name="{{ $key }}" value="{{ $value }}">@endforeach
+        @if($errors->any())
+            <div role="alert" class="mb-4 p-4 rounded-xl bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-200">
+                @foreach($errors->all() as $error)<p>{{ $error }}</p>@endforeach
+            </div>
+        @endif
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
-                <label
+                <label for="approvalSearch"
                     class="block text-xs font-semibold dark:bg-gray-900 text-gray-700 dark:text-gray-300 mb-2 uppercase tracking-wide">
-                    🔍 Cari Nomor PR
+                    🔍 Cari Approval PR
                 </label>
-                <input type="text" name="q" placeholder="Ketik nomor PR..." value="{{ request('q') }}"
+                <input type="text" name="q" id="approvalSearch" placeholder="Nomor PR, pengadaan, pengaju, email, catatan..." value="{{ $filters['q'] }}"
+                    maxlength="160" autocomplete="off" data-lpignore="true" data-1p-ignore="true" data-bwignore="true" aria-describedby="approvalSearchHelp"
                     class="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-700 rounded-xl
                                                    bg-white dark:bg-gray-900 text-gray-900 dark:text-white
                                                    placeholder-gray-400 dark:placeholder-gray-600
@@ -108,16 +127,17 @@
             </div>
 
             <div class="dark:bg-gray-900">
-                <label class="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2 uppercase tracking-wide">
+                <label for="approvalStatus" class="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2 uppercase tracking-wide">
                     📊 Status
                 </label>
-                <select name="status"
+                <select name="status" id="approvalStatus"
                     class="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-700 rounded-xl
                                                    bg-white dark:bg-gray-900 text-gray-900 dark:text-white
                                                    focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all">
-                    <option value="PENDING" @selected(request('status', 'PENDING') === 'PENDING')>⏳ PENDING</option>
-                    <option value="APPROVED" @selected(request('status') === 'APPROVED')>✓ APPROVED</option>
-                    <option value="REJECTED" @selected(request('status') === 'REJECTED')>✗ REJECTED</option>
+                    <option value="ALL" @selected($filters['status'] === 'ALL')>Semua status</option>
+                    <option value="PENDING" @selected($filters['status'] === 'PENDING')>⏳ Menunggu approval</option>
+                    <option value="APPROVED" @selected($filters['status'] === 'APPROVED')>✓ Sudah disetujui</option>
+                    <option value="REJECTED" @selected($filters['status'] === 'REJECTED')>✗ Ditolak</option>
                 </select>
             </div>
 
@@ -130,9 +150,9 @@
                             d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z">
                         </path>
                     </svg>
-                    Filter
+                    Terapkan Filter
                 </button>
-                <a href="{{ route('approval.pr.index') }}"
+                <a href="{{ $filterUrl.($frameParams ? '?'.http_build_query($frameParams) : '') }}" title="Hapus semua filter dan kembali ke PR yang menunggu approval"
                     class="px-5 py-2.5 bg-gray-200 dark:bg-gray-800 text-gray-700 dark:text-gray-300 font-semibold rounded-xl
                                                    hover:bg-gray-300 dark:hover:bg-gray-700 transition-all duration-200 flex items-center justify-center gap-2">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -140,9 +160,55 @@
                             d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15">
                         </path>
                     </svg>
-                    Reset
+                    Reset Filter
                 </a>
             </div>
+        </div>
+        <p id="approvalSearchHelp" class="text-xs text-gray-600 dark:text-gray-300 mt-3">
+            Cari nomor PR, tujuan pengadaan, portofolio, nama/email pengaju, petugas pemroses, atau catatan penolakan/pengajuan ulang.
+            Gabungkan kata, misalnya <strong>kursi Atika</strong> atau <strong>inspeksi CON</strong>; urutan kata bebas.
+        </p>
+        <details class="mt-4" @if($advancedActive) open @endif>
+            <summary class="text-sm font-semibold text-gray-700 dark:text-gray-300 cursor-pointer">Filter lanjutan · portofolio, waktu pengajuan, dan pengajuan ulang</summary>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+                <div>
+                    <label for="approvalPortfolio" class="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Portofolio</label>
+                    <select name="portofolio" id="approvalPortfolio" class="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-900 text-gray-900 dark:text-white">
+                        <option value="">Semua portofolio</option>
+                        @foreach($portofolios as $portfolio)<option value="{{ $portfolio }}" @selected($filters['portofolio'] === $portfolio)>{{ $portfolio }}</option>@endforeach
+                    </select>
+                </div>
+                <div>
+                    <label for="approvalFrom" class="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Diajukan mulai</label>
+                    <input type="date" id="approvalFrom" name="dari" value="{{ $filters['dari'] }}" class="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-900 text-gray-900 dark:text-white">
+                </div>
+                <div>
+                    <label for="approvalUntil" class="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Diajukan sampai</label>
+                    <input type="date" id="approvalUntil" name="sampai" value="{{ $filters['sampai'] }}" class="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-900 text-gray-900 dark:text-white">
+                </div>
+                <div>
+                    <label for="approvalSubmission" class="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">Jenis pengajuan</label>
+                    <select name="submission" id="approvalSubmission" class="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-900 text-gray-900 dark:text-white">
+                        <option value="">Semua pengajuan</option>
+                        <option value="first" @selected($filters['submission'] === 'first')>Pengajuan pertama</option>
+                        <option value="resubmit" @selected($filters['submission'] === 'resubmit')>Pengajuan ulang</option>
+                    </select>
+                </div>
+            </div>
+        </details>
+        <p class="text-xs text-gray-600 dark:text-gray-300 mt-3">Pencarian berjalan setelah Enter atau Terapkan Filter. Export mengikuti filter yang sudah diterapkan. Reset kembali ke status menunggu approval.</p>
+        <div class="flex flex-wrap items-center gap-2 mt-3 text-xs">
+            <span class="px-3 py-1.5 rounded-lg bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400">{{ \App\Support\ApprovalPrFilters::statusLabel($filters['status']) }}</span>
+            @foreach(['q' => 'Pencarian', 'portofolio' => 'Portofolio', 'submission' => 'Jenis'] as $key => $label)
+                @if($filters[$key] !== '')
+                    <a href="{{ $clearUrl([$key]) }}" aria-label="Hapus filter {{ $label }}" class="px-3 py-1.5 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300">
+                        {{ $label }}: {{ $key === 'submission' ? ($filters[$key] === 'first' ? 'Pertama' : 'Pengajuan ulang') : $filters[$key] }} ×
+                    </a>
+                @endif
+            @endforeach
+            @if($filters['dari'] !== '' || $filters['sampai'] !== '')
+                <a href="{{ $clearUrl(['dari', 'sampai']) }}" aria-label="Hapus filter waktu pengajuan" class="px-3 py-1.5 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300">Diajukan: {{ $filters['dari'] ?: 'Awal' }} – {{ $filters['sampai'] ?: 'Sekarang' }} ×</a>
+            @endif
         </div>
     </form>
 
@@ -244,6 +310,9 @@
                                 <p class="text-sm text-gray-900 dark:text-gray-100 line-clamp-2 mb-2">
                                     {{ $row->torpr->tujuan_pengadaan ?? '—' }}
                                 </p>
+                                @if($row->torpr?->portofolio)
+                                    <p class="text-xs text-gray-600 dark:text-gray-300 mb-2">Portofolio: {{ $row->torpr->portofolio }}</p>
+                                @endif
                                 <button type="button"
                                     class="btn-detail-pr inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 text-xs font-semibold hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-all duration-200 border border-blue-200 dark:border-blue-800"
                                     data-pr-detail="{{ $prDetailJson }}">
@@ -558,9 +627,8 @@
                                             d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z">
                                         </path>
                                     </svg>
-                                    <p class="text-lg font-bold text-gray-700 dark:text-gray-300">Tidak ada data PR Receipt</p>
-                                    <p class="text-sm text-gray-500 dark:text-gray-600">Belum ada request approval yang masuk
-                                    </p>
+                                    <p class="text-lg font-bold text-gray-700 dark:text-gray-300">Tidak ada PR yang cocok</p>
+                                    <p class="text-sm text-gray-500 dark:text-gray-600">Coba kata lain, pilih semua status, atau kurangi filter.</p>
                                 </div>
                             </td>
                         </tr>

@@ -53,7 +53,7 @@
     </table>
 
     <div class="note">
-        <strong>Filter:</strong> Nomor PR {{ $search ?: 'semua' }} &middot; Status {{ $status }} &middot;
+        <strong>Filter:</strong> {{ $filterSummary }} &middot;
         Dibuat oleh {{ $generatedBy }}. Data berstatus PENDING merupakan PR yang masih menunggu tindakan Bagian Umum.
     </div>
 
