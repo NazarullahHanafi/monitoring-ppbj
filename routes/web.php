@@ -120,7 +120,7 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
     Route::get('/virtual-office', [\App\Http\Controllers\VirtualOfficeController::class, 'index'])
         ->name('virtual-office.index');
     Route::get('/virtual-office/hologram/{tool}', [\App\Http\Controllers\VirtualOfficeController::class, 'hologram'])
-        ->whereIn('tool', ['create','torpr','tracking'])->middleware('throttle:virtual-office')->name('virtual-office.hologram');
+        ->whereIn('tool', ['create','torpr','tracking','ppbj-create','ppbj','approval','sp','spph'])->middleware('throttle:virtual-office')->name('virtual-office.hologram');
     Route::get('/virtual-office/presence', [\App\Http\Controllers\VirtualOfficeController::class, 'presence'])
         ->middleware([\App\Http\Middleware\DisableLoggingForPolling::class, 'throttle:virtual-office'])
         ->name('virtual-office.presence');
@@ -386,7 +386,7 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
         Route::post('/sp/portfolio-mappings', [\App\Http\Controllers\SpPortfolioFieldMapController::class, 'save'])->middleware('throttle:20,1')->name('sp.portfolio-mappings.store');
         Route::put('/sp/portfolio-mappings/{id}', [\App\Http\Controllers\SpPortfolioFieldMapController::class, 'save'])->whereNumber('id')->middleware('throttle:20,1')->name('sp.portfolio-mappings.update');
 
-        Route::prefix('spph')->name('spph.')->middleware('auth')->group(function () {
+        Route::prefix('spph')->name('spph.')->middleware(['auth', \App\Http\Middleware\PreserveOfficeHologramContext::class])->group(function () {
 
             // ── Halaman Utama ──
             Route::get('/', [SpphController::class, 'index'])->name('index');
@@ -478,7 +478,7 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
         });
 
         // ── Resource Route (✅ Pisah agar parameter tidak bentrok) ──
-        Route::prefix('spph')->name('spph.')->middleware('auth')->group(function () {
+        Route::prefix('spph')->name('spph.')->middleware(['auth', \App\Http\Middleware\PreserveOfficeHologramContext::class])->group(function () {
             Route::put('/{spph}', [SpphController::class, 'update'])->name('update');
             Route::delete('/{spph}', [SpphController::class, 'destroy'])->middleware('throttle:10,1')->name('destroy');
             Route::post('/{spph}/archive-attachment', [ArchiveAttachmentController::class, 'storeSpph'])
@@ -496,7 +496,7 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
         });
 
         // ---- SP ----
-        Route::prefix('sp')->name('sp.')->middleware('auth')->group(function () {
+        Route::prefix('sp')->name('sp.')->middleware(['auth', \App\Http\Middleware\PreserveOfficeHologramContext::class])->group(function () {
             Route::get('/', [SpController::class, 'index'])->name('index');
             Route::post('/', [SpController::class, 'store'])->name('store');
             Route::get('/trash', [SpController::class, 'trash'])->name('trash');

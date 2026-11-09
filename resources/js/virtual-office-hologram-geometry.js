@@ -2,7 +2,10 @@
 export function createOfficeHologramProjection(THREE, scene) {
     const root=new THREE.Group(),screen=new THREE.Group(),geometries=[],materials=[];root.visible=false;root.userData.officeHologram=true;scene.add(root);root.add(screen);
     const material=(color,opacity)=>{const m=new THREE.MeshBasicMaterial({color,transparent:true,opacity,depthWrite:false,side:THREE.DoubleSide});materials.push(m);return m;};
-    const cyan=material('#77e6ed',.75),gold=material('#ddc38c',.85),glass=material('#244f69',.12),beam=material('#70dfe5',.09);beam.blending=THREE.AdditiveBlending;
+    const cyan=material('#77e6ed',.4),gold=material('#ddc38c',.55),glass=material('#244f69',.035),beam=material('#70dfe5',.045);beam.blending=THREE.AdditiveBlending;
+    // The projected frame sits behind the floating menu, rather than drawing
+    // another empty rectangle between the menu and the avatar's head.
+    screen.position.y=.85;
     const plane=new THREE.PlaneGeometry(2.9,1.6),bar=new THREE.BoxGeometry(1,1,.018),ring=new THREE.TorusGeometry(.48,.014,4,40),cone=new THREE.ConeGeometry(.95,1.6,12,1,true);geometries.push(plane,bar,ring,cone);
     const panel=new THREE.Mesh(plane,glass);screen.add(panel);
     const strips=new Map([[cyan,[]],[gold,[]]]),add=(x,y,w,h,mat=cyan)=>strips.get(mat).push({x,y,w,h});

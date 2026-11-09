@@ -1829,6 +1829,9 @@
         <div class="dot-bg"></div>
 
         {{-- ═══ HERO ═══ --}}
+        @if(request()->attributes->get('office_hologram'))
+            <header class="hf-track-intro"><span>PENGADAAN / TRACKING</span><h1>Lacak perjalanan pengadaan.</h1><p>Cari nomor PR atau PPBJ untuk melihat status dan langkah berikutnya.</p></header>
+        @else
         <section class="page-hero">
             <div class="page-hero-bg"></div>
             <div class="wrap-lg hero-inner">
@@ -1837,6 +1840,7 @@
                 <p class="sr d2">Monitor status dan progres pengadaan Anda secara langsung tanpa perlu login.</p>
             </div>
         </section>
+        @endif
 
         {{-- ═══ SEARCH ═══ --}}
         <section class="search-section">
@@ -2411,7 +2415,9 @@
         @endif
 
         {{-- ═══ HOW-TO (no keyword) ═══ --}}
-        @if(!$keyword)
+        @if(!$keyword && request()->attributes->get('office_hologram'))
+            <div class="hf-track-empty"><span aria-hidden="true">⌁</span><h2>Setiap proses, satu jejak.</h2><p>Hasil pencarian dan linimasa akan tampil di sini.</p><div><span>01 · Cari nomor</span><span>02 · Pilih dokumen</span><span>03 · Ikuti progres</span></div></div>
+        @elseif(!$keyword)
             <section class="how-section">
                 <div class="wrap-lg">
                     <div style="text-align:center">
@@ -2545,7 +2551,7 @@
             document.body.style.overflow = m.classList.contains('open') ? 'hidden' : '';
         }
         function closeModal(e) { if (e.target === document.getElementById('infoModal')) toggleModal(); }
-        document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && document.getElementById('infoModal').classList.contains('open')) toggleModal(); });
+        document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && document.getElementById('infoModal').classList.contains('open')) { e.preventDefault(); toggleModal(); } });
 
         (function () {
             /* Scroll reveal */
@@ -2598,7 +2604,7 @@
                 if (e.key === 'ArrowDown') { e.preventDefault(); ai = Math.min(items.length - 1, ai + 1); render(); }
                 else if (e.key === 'ArrowUp') { e.preventDefault(); ai = Math.max(0, ai - 1); render(); }
                 else if (e.key === 'Enter' && ai >= 0) { e.preventDefault(); sel(ai); }
-                else if (e.key === 'Escape') { close(); }
+                else if (e.key === 'Escape') { e.preventDefault(); close(); }
             });
             document.addEventListener('click', function (e) { if (!box.contains(e.target) && e.target !== input) close(); });
             input.addEventListener('focus', function () { if (items.length) open(); });

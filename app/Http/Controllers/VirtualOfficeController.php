@@ -45,36 +45,51 @@ class VirtualOfficeController extends Controller
 
     private function hologramTools(User $user): array
     {
-        $tool = fn (string $id, string $title, string $description) => ['id'=>$id,'title'=>$title,'description'=>$description,
-            'url'=>route('virtual-office.hologram', ['tool'=>$id], false)];
+        $tool = fn (string $id, string $title, string $description, string $page) => ['id'=>$id,'title'=>$title,'description'=>$description,
+            'url'=>route('virtual-office.hologram', ['tool'=>$id], false),'pageUrl'=>$page];
         $tools = [];
+        $canWrite=!$user->isReadOnly()&&!Cache::get('simonpr:read_only_mode',false);
         if ($user->department === 'operasional') {
-            if (! $user->isReadOnly() && ! Cache::get('simonpr:read_only_mode', false)) {
-                $tools[]=$tool('create', 'Tambah TOR PR', 'Susun pengadaan baru dari ruang kerja Anda.');
+            if ($canWrite) {
+                $tools[]=$tool('create', 'Tambah TOR PR', 'Susun permintaan pengadaan baru.',route('torpr.index',[],false));
             }
-            $tools[]=$tool('torpr', 'Daftar TOR PR', 'Buka dokumen, draft, dan progres pengajuan.');
+            $tools[]=$tool('torpr', 'Daftar TOR PR', 'Dokumen, draft, dan progres pengajuan.',route('torpr.index',[],false));
+        }elseif($user->department==='umum'){
+            if($canWrite)$tools[]=$tool('ppbj-create','Tambah PPBJ','Mulai proses pengadaan dari PR yang disetujui.',route('ppbj.index',[],false));
+            $tools[]=$tool('ppbj','Kelola PPBJ','Daftar pengadaan, SLA, dan dokumen.',route('ppbj.index',[],false));
+            $tools[]=$tool('approval','Approval PR','Tinjau penerimaan PR sebelum diproses.',route('approval.pr.index',[],false));
+            $tools[]=$tool('spph','Penomoran SPPH','Penawaran harga dan dokumen vendor.',route('spph.index',[],false));
+            $tools[]=$tool('sp','Penomoran SP','Surat pesanan dan kontrak pengadaan.',route('sp.index',[],false));
         }
-        $tools[]=$tool('tracking', 'Tracking PR', 'Telusuri perjalanan PR dan PPBJ.');
+        $tools[]=$tool('tracking', 'Tracking PR', 'Telusuri perjalanan PR dan PPBJ.',route($user->department==='operasional'?'tracking.index':'landing.track',[],false));
         return $tools;
     }
 
     public function hologram(Request $request, string $tool)
     {
         $this->authorizeDepartment($request);
-        abort_unless(in_array($tool, ['create','torpr','tracking'], true), 404);
-        if ($tool !== 'tracking') {
+        abort_unless(in_array($tool, ['create','torpr','tracking','ppbj-create','ppbj','approval','sp','spph'], true), 404);
+        if (in_array($tool,['create','torpr'],true)) {
             abort_unless($request->user()->department === 'operasional', 403);
+        }elseif($tool!=='tracking'){
+            abort_unless($request->user()->department==='umum',403);
         }
-        if ($tool === 'create') {
+        if (in_array($tool,['create','ppbj-create'],true)) {
             abort_if($request->user()->isReadOnly() || Cache::get('simonpr:read_only_mode', false), 403);
         }
         // A presentation context only: writes still use the original routes,
         // CSRF, department, ownership and read-only checks.
         $request->attributes->set('office_hologram', true);
-        $request->attributes->set('office_hologram_create', $tool === 'create');
-        $view = $tool === 'tracking'
-            ? app(TrackingPrController::class)->hologram($request)
-            : app(TorprController::class)->index($request);
+        $request->attributes->set('office_hologram_create', in_array($tool,['create','ppbj-create'],true));
+        $request->attributes->set('office_hologram_tool',$tool);
+        $view = match($tool){
+            'tracking'=>app(TrackingPrController::class)->hologram($request),
+            'ppbj','ppbj-create'=>app(PpbjController::class)->index($request),
+            'approval'=>app(PrReceiptApprovalController::class)->index($request),
+            'sp'=>app(SpController::class)->index($request),
+            'spph'=>app(SpphController::class)->index($request),
+            default=>app(TorprController::class)->index($request)
+        };
         return response()->view($view->name(), $view->getData())->header('Cache-Control', 'private, no-store');
     }
 

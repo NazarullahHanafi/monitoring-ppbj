@@ -1,4 +1,4 @@
-@extends('layouts.app')
+@extends(request()->attributes->get('office_hologram') ? 'virtual-office.hologram-layout' : 'layouts.app')
 
 @section('title', 'Penomoran SP')
 

@@ -23,7 +23,7 @@ class VirtualOfficeHologramTest extends TestCase
         $ops=User::factory()->create(['department'=>'operasional','role'=>'user']);
         $this->assertSame(['create','torpr','tracking'], array_column($this->config($ops)['hologramTools'], 'id'));
         $umum=User::factory()->create(['department'=>'umum','role'=>'superadmin']);
-        $this->assertSame(['tracking'], array_column($this->config($umum)['hologramTools'], 'id'));
+        $this->assertSame(['ppbj-create','ppbj','approval','spph','sp','tracking'], array_column($this->config($umum)['hologramTools'], 'id'));
         $viewer=User::factory()->create(['department'=>'operasional','role'=>'viewer']);
         $this->assertSame(['torpr','tracking'], array_column($this->config($viewer)['hologramTools'], 'id'));
         Cache::put('simonpr:read_only_mode', true, 60);
@@ -83,5 +83,53 @@ class VirtualOfficeHologramTest extends TestCase
         $this->assertSame($body['session_id'], $state['session_id']);
         $this->assertDatabaseCount('torprs', 0);
         $this->assertSame('virtual-office', Cache::get('office:menu:'.$user->id));
+    }
+    public function test_umum_tools_render_real_documents_without_a_second_application_shell(): void
+    {
+        $user=User::factory()->create(['department'=>'umum','role'=>'user','is_active'=>true]);
+        foreach(['ppbj-create'=>'ppbjForm','ppbj'=>'ppbjForm','approval'=>'Approval PR','sp'=>'addFormSp','spph'=>'addForm']as$tool=>$marker){
+            $this->actingAs($user)->get(route('virtual-office.hologram',['tool'=>$tool,'office_frame'=>'17']))->assertOk()->assertSee($marker,false)->assertSee('data-tool="'.$tool.'"',false)->assertDontSee('id="sidebarDesktop"',false)->assertDontSee('assets/app/app-shell.js',false)->assertHeader('Cache-Control','no-store, private');
+        }
+        $this->get(route('virtual-office.hologram','ppbj-create'))->assertSee('data-create="1"',false)->assertSee('assets/ppbj/ppbj.js',false);
+        $this->postJson(route('ppbj.store'),[])->assertUnprocessable();$this->assertDatabaseCount('ppbj',0);
+        $this->get(route('ppbj.index'))->assertOk()->assertSee('id="sidebarDesktop"',false);
+    }
+    public function test_umum_viewers_can_read_but_cannot_create_and_operasional_cannot_load_umum_tools(): void
+    {
+        $viewer=User::factory()->create(['department'=>'umum','role'=>'viewer','is_active'=>true]);
+        $this->assertSame(['ppbj','approval','spph','sp','tracking'],array_column($this->config($viewer)['hologramTools'],'id'));
+        $this->get(route('virtual-office.hologram','ppbj-create'))->assertForbidden();$this->get(route('virtual-office.hologram','ppbj'))->assertOk()->assertSee('data-readonly="1"',false);
+        foreach(['ppbj.store','sp.store','spph.store']as$route)$this->postJson(route($route),[])->assertForbidden();
+        $ops=User::factory()->create(['department'=>'operasional','role'=>'user','is_active'=>true]);
+        foreach(['ppbj-create','ppbj','approval','sp','spph']as$tool)$this->actingAs($ops)->get(route('virtual-office.hologram',$tool))->assertForbidden();
+        $umum=User::factory()->create(['department'=>'umum','role'=>'user','is_active'=>true]);Cache::put('simonpr:read_only_mode',true);
+        $this->assertSame(['ppbj','approval','spph','sp','tracking'],array_column($this->config($umum)['hologramTools'],'id'));$this->get(route('virtual-office.hologram','ppbj-create'))->assertForbidden();$this->postJson(route('ppbj.store'),[])->assertForbidden();
+    }
+    public function test_hologram_tracking_removes_public_marketing_hero_and_keeps_search_and_results(): void
+    {
+        $u=User::factory()->create(['department'=>'umum','role'=>'user','is_active'=>true]);
+        $this->actingAs($u)->get(route('virtual-office.hologram','tracking'))->assertOk()->assertSee('Lacak perjalanan pengadaan.')->assertSee('id="qInput"',false)->assertDontSee('class="page-hero"',false)->assertDontSee('Cara Tracking PR')->assertDontSee('Semua proses, dalam jangkauan.')->assertDontSee('name="_token"',false);
+        $this->get(route('virtual-office.hologram',['tool'=>'tracking','q'=>'DOES-NOT-EXIST']))->assertOk()->assertSee('DOES-NOT-EXIST')->assertDontSee('Cara Tracking PR');
+        $this->get(route('landing.track'))->assertOk()->assertSee('class="page-hero"',false)->assertSee('Cara Tracking PR');
+    }
+    public function test_document_save_returns_to_its_hologram_in_native_and_json_responses(): void
+    {
+        $middleware=new \App\Http\Middleware\PreserveOfficeHologramContext();
+        $request=\Illuminate\Http\Request::create('https://office.test/sp','POST',['office_frame'=>'17']);
+        foreach(['sp','spph']as$tool){
+            $response=$middleware->handle($request,fn()=>redirect('https://office.test/'.$tool.'?mode=oracle'));
+            $this->assertSame(route('virtual-office.hologram',['tool'=>$tool,'mode'=>'oracle','office_frame'=>'17']),$response->getTargetUrl());
+            $response=$middleware->handle($request,fn()=>response()->json(['message'=>'Tersimpan','redirect'=>'https://office.test/'.$tool]));
+            $this->assertSame(route('virtual-office.hologram',['tool'=>$tool,'office_frame'=>'17']),$response->getData(true)['redirect']);
+        }
+        foreach([null,'bad',str_repeat('1',11)]as$value){$request=\Illuminate\Http\Request::create('https://office.test/sp','POST',['office_frame'=>$value]);$response=$middleware->handle($request,fn()=>redirect('https://office.test/sp'));$this->assertSame('https://office.test/sp',$response->getTargetUrl());}
+        $request=\Illuminate\Http\Request::create('https://office.test/sp','POST',['office_frame'=>'17']);$response=$middleware->handle($request,fn()=>redirect('https://other.test/sp'));$this->assertSame('https://other.test/sp',$response->getTargetUrl());
+    }
+    public function test_umum_saves_ppbj_from_hologram_through_original_validated_route(): void
+    {
+        $u=User::factory()->create(['department'=>'umum','role'=>'user','is_active'=>true]);
+        $this->actingAs($u)->withHeader('Referer',route('virtual-office.hologram','ppbj-create'))->postJson(route('ppbj.store'),['ppbj_no'=>'HOLOGRAM-PPBJ-TEST','uraian'=>'Pengadaan uji hologram','office_frame'=>'17'])->assertOk();
+        $this->assertDatabaseHas('ppbj',['ppbj_no'=>'HOLOGRAM-PPBJ-TEST','created_by_user_id'=>$u->id]);
+        $this->postJson(route('ppbj.store'),['ppbj_no'=>'HOLOGRAM-PPBJ-TEST','office_frame'=>'17'])->assertUnprocessable();$this->assertDatabaseCount('ppbj',1);
     }
 }
