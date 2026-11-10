@@ -30,11 +30,16 @@ try {
     $documentColumns = ['id', 'judul', 'nomor_surat', 'jenis_dokumen', 'status', 'deleted_at', 'file_path', 'file_checksum', 'perihal', 'pengirim', 'catatan', 'kode_dokumen'];
     $query = $attachment ? $model->newQuery()->select(['id', 'dokumen_id', 'source_module', 'document_number', 'original_name', 'document_type', 'file_path', 'extension', 'remote_item_id', 'content_checksum', 'remote_size', 'size', 'metadata', 'notes', 'cloud_deleted_at', 'storage_provider'])
         ->with(['dokumen' => fn ($q) => $q->withTrashed()->select($documentColumns)]) : $model->newQuery()->withTrashed()->select($documentColumns);
-    $describe = function ($row) use ($attachment, $kind) {
+    $sourceDisk = Illuminate\Support\Facades\Storage::disk('public');
+    $sourceRoot = realpath($sourceDisk->path(''));
+    $describe = function ($row) use ($attachment, $kind, $sourceDisk, $sourceRoot) {
         $parent = $attachment ? $row->dokumen : $row;
         $meta = $attachment ? ($row->metadata ?? []) : [];
         $active = $parent && ! $parent->deleted_at && $parent->status !== 'musnahkan' && (! $attachment || ! $row->cloud_deleted_at);
-        $active = $active && (filled($row->file_path) || ($attachment && filled($row->remote_item_id)));
+        $localPath = filled($row->file_path) ? realpath($sourceDisk->path($row->file_path)) : false;
+        $hasLocalFile = $localPath && $sourceRoot && str_starts_with($localPath, $sourceRoot.DIRECTORY_SEPARATOR) && is_file($localPath);
+        $hasRemoteFile = $attachment && $row->storage_provider === 'onedrive' && filled($row->remote_item_id);
+        $active = $active && ($hasLocalFile || $hasRemoteFile);
         if (! $attachment && (mb_strtolower((string) $row->jenis_dokumen) === 'paket simonpr' || str_starts_with((string) $row->kode_dokumen, 'SIMONPR-INBOX-D'))) {
             $active = false;
         }
