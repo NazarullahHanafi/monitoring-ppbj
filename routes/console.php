@@ -58,6 +58,10 @@ Schedule::command('security:scan-honeypot')
     ->withoutOverlapping(2)
     ->runInBackground();
 
+// One low-priority worker; OCR never runs in a user's upload/search request.
+Schedule::exec('nice -n 15 '.escapeshellarg(PHP_BINARY).' '.escapeshellarg(base_path('artisan')).' procurement:search-index --budget=15')
+    ->everyMinute()->when(fn () => PHP_OS_FAMILY !== 'Windows' && config('procurement_search.enabled'))->withoutOverlapping(5)->runInBackground();
+
 // Shared hosting tidak menjalankan daemon queue permanen. Worker singkat ini
 // menguras email dan notifikasi Telegram tiap menit lalu berhenti, sehingga
 // request web tidak menunggu koneksi eksternal dan worker PHP tetap tersedia.

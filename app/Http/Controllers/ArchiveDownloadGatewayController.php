@@ -6,6 +6,8 @@ use App\Models\Torpr;
 use App\Services\PrArchiveService;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -17,6 +19,31 @@ use Throwable;
 
 class ArchiveDownloadGatewayController extends Controller
 {
+    public function indexed(Request $request, int $source): Response
+    {
+        abort_unless($request->user()?->department === 'umum', 403);
+        abort_unless(config('procurement_search.enabled'), 404);
+        $row = DB::table('procurement_search_sources')->where('id', $source)->where('active', true)
+            ->whereIn('kind', ['archive_document', 'archive_attachment'])
+            ->where('verified_at', '>=', now()->subMinutes(config('procurement_search.archive_fresh_minutes')))
+            ->whereExists(fn ($links) => $links->selectRaw('1')->from('procurement_search_links')->join('ppbj', 'ppbj.id', '=', 'procurement_search_links.ppbj_id')->whereColumn('source_id', 'procurement_search_sources.id'))
+            ->first(['id', 'label', 'fingerprint']);
+        abort_unless($row, 404);
+        $target = Cache::get('procurement-search:download:'.$row->id);
+        abort_unless(is_array($target) && is_string($target['url'] ?? null) && ($target['fingerprint'] ?? '') === $row->fingerprint, 404, 'Tautan lampiran sedang disinkronkan. Coba kembali sebentar lagi.');
+        abort_unless($this->isTrustedArchiveUrl($target['url']), 404);
+
+        // Reuse the authenticated stream; no cloud URL/signature is exposed in search JSON.
+        $response = $this->streamArchiveFile($request, $target['url'], $row->label, false);
+        $mime = strtolower(trim(explode(';', (string) $response->headers->get('Content-Type'))[0]));
+        if (! in_array($mime, ['application/pdf', 'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'text/plain'], true)) {
+            $response->headers->set('Content-Disposition', HeaderUtils::makeDisposition('attachment', $this->safeFileName($row->label), 'dokumen-arsip'));
+            $response->headers->set('Content-Security-Policy', "sandbox; default-src 'none'");
+        }
+
+        return $response;
+    }
+
     public function __invoke(Request $request, PrArchiveService $archiveService): Response
     {
         $validated = $request->validate([

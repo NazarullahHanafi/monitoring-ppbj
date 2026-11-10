@@ -8,6 +8,7 @@
             'pic'=>'PIC','vendor'=>'Vendor','dari'=>'Tanggal mulai','sampai'=>'Tanggal akhir','mode'=>'Mode penomoran'],
         'saveUrl'=>route('procurement.workspace.save',['page'=>$workspacePage])];
 @endphp
+@include('components.procurement-search')
 <section class="ws-toolbar" aria-label="Ruang kerja tabel pribadi">
     <div><span class="ws-eyebrow">RUANG KERJA ANDA</span><p>Rincian cepat, filter favorit, dan tabel sesuai kebutuhan.</p></div>
     <div class="ws-buttons">

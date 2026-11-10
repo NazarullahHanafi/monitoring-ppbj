@@ -39,6 +39,25 @@ class ProcurementDocumentSearch
 
     public static function apply(Builder $query, string $term): Builder
     {
+        if ($term === '' || !config('procurement_search.enabled')) return self::native($query, $term);
+        $model = $query->getModel();
+        if (!$model instanceof Sp && !$model instanceof Spph) throw new \InvalidArgumentException('Unsupported procurement document.');
+        $sp = $model instanceof Sp;
+        $table = $model->getTable();
+        $pivot = $sp ? 'sp_ppbj' : 'spph_ppbj';
+        $key = $sp ? 'sp_id' : 'spph_id';
+        $matches = app(\App\Services\ProcurementUnifiedSearch::class)->prIds($term);
+        $legacy = self::legacyReference($query, $table);
+        $query->where(function ($combined) use ($term, $table, $pivot, $key, $matches, $legacy) {
+            $combined->where(fn ($native) => self::native($native, $term));
+            $combined->orWhereIn($table.'.id', DB::table($pivot)->select($key)->whereIn('ppbj_id', clone $matches));
+            $combined->orWhereExists(fn ($pr) => $pr->selectRaw('1')->from('ppbj')->whereRaw($legacy)->whereIn('ppbj.id', clone $matches));
+        });
+        return $query;
+    }
+
+    private static function native(Builder $query, string $term): Builder
+    {
         if ($term === '') {
             return $query;
         }

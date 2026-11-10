@@ -32,7 +32,7 @@ class SecurityHeaders
             "media-src 'self' data: blob:",
             "worker-src 'self' blob:",
             "manifest-src 'self'",
-        ]));
+        ]), false); // Keep stricter file-specific policies; browsers enforce all CSP policies together.
 
         if ($request->isSecure() && app()->isProduction()) {
             $response->headers->set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');

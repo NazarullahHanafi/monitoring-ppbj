@@ -68,6 +68,9 @@ final class PpbjListFilters
                 foreach (self::SEARCH_COLUMNS as $column) {
                     $part->orWhere($column, 'like', '%'.$search.'%');
                 }
+                if (config('procurement_search.enabled')) {
+                    $part->orWhereIn('ppbj.id', app(\App\Services\ProcurementUnifiedSearch::class)->prIds($search));
+                }
             });
         }
         if ($money && ! $money['with_text']) {

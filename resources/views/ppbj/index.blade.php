@@ -51,8 +51,8 @@
     <form method="GET" id="ulala" class="ppbj-smart-filters bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 mb-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-4 items-start">
         <div class="lg:col-span-2 sm:col-span-2 flex flex-col gap-1">
             <label for="ppbjSearch" class="ppbj-filter-label">Pencarian</label>
-            <input id="ppbjSearch" name="search" value="{{ request('search') }}" maxlength="255" placeholder="Nomor PR, uraian, SP, invoice, atau 8 juta..." class="ppbj-filter-input">
-            <small class="ppbj-filter-help">Cari dokumen atau ketik nominal langsung, contoh: nilai SP 8,375 juta.</small>
+            <input id="ppbjSearch" name="search" value="{{ request('search') }}" maxlength="255" placeholder="Nama barang, PR, SP/SPPH, isi arsip, atau 8 juta..." class="ppbj-filter-input">
+            <small class="ppbj-filter-help">Cari barang lintas dokumen dan lampiran yang sudah dibaca, atau nominal: nilai SP 8,375 juta.</small>
         </div>
         {{-- 2. Filter Tanggal: Tipe --}}
         <div class="lg:col-span-1 sm:col-span-1 flex flex-col gap-1">
@@ -257,7 +257,7 @@
 
                 <div class="flex-1 min-w-0">
                     <div class="text-sm font-semibold text-blue-800 dark:text-blue-200 mb-1">
-                        @if($hasMatch)
+                        @if($totalResults > 0)
                             Menampilkan <span class="font-bold">{{ number_format($totalResults) }}</span> hasil untuk
                             "<span class="font-bold italic">{{ $kw }}</span>"
                         @else
@@ -270,6 +270,8 @@
                             Ditemukan di kolom:
                             <span class="font-semibold">{{ implode(', ', $matchedFields) }}</span>
                         </div>
+                    @elseif($totalResults > 0)
+                        <div class="text-xs text-blue-700 dark:text-blue-300 mb-2.5">Kecocokan ditemukan melalui dokumen terkait atau filter nominal. Lihat panel pencarian terpadu untuk sumber barang/lampirannya.</div>
                     @else
                         <div class="text-xs text-blue-600 dark:text-blue-400 mb-2.5">
                             Pencarian dilakukan di semua kolom di bawah ini, namun tidak ada yang cocok.
@@ -301,7 +303,7 @@
                         @endforeach
                     </div>
 
-                    @if(!$hasMatch)
+                    @if($totalResults === 0)
                         <div class="mt-2.5 text-xs text-blue-600 dark:text-blue-400 flex items-center gap-1.5">
                             <svg class="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"

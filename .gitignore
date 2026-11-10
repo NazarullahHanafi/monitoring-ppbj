@@ -13,6 +13,7 @@
 /.zed
 /auth.json
 /node_modules
+/tools/procurement-ocr/node_modules/
 /public/assets/document-reader/
 /.npm-cache
 /public/hot
