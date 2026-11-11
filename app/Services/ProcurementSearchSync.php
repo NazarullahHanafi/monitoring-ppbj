@@ -27,13 +27,16 @@ class ProcurementSearchSync
                 $query = $class::withTrashed()->with(['items', 'ppbjs:id,ppbj_no']);
             }
             $rows = $query->where('id', '>', $cursor)->orderBy('id')->limit($batch)->get();
+            $tors = $kind === 'ppbj' && $rows->isNotEmpty() ? app(ProcurementSearchContext::class)->torMetadata($rows) : collect();
             $legacyNumbers = $kind === 'ppbj' ? collect() : Ppbj::whereIn('ppbj_no', $rows->pluck('nomor_pr')->filter()->unique())->pluck('id', 'ppbj_no');
             $details = $kind === 'ppbj' ? collect() : ProcurementDetailAttachment::where('kind', $kind)->whereIn('document_id', $rows->modelKeys())->whereNotNull('reviewed_at')->get()->groupBy('document_id');
             foreach ($rows as $row) {
                 if ($kind === 'ppbj') {
                     $reference = $row->ppbj_no;
-                    $metadata = implode(' ', array_filter([$row->ppbj_no, $row->uraian, $row->buyer, $row->portofolio, $row->penyedia_eksternal, $row->awarding_sp, $row->spph_rfq_1, $row->no_invoice]));
-                    $text = '';
+                    $torText = $tors->get(mb_strtolower(trim($row->ppbj_no)), '');
+                    $metadata = implode(' ', array_filter([$row->ppbj_no, $row->buyer, $row->portofolio, mb_substr($torText, 0, 2000),
+                        $row->penyedia_eksternal, $row->awarding_sp, $row->spph_rfq_1, $row->no_invoice, mb_substr(ProcurementSearchText::plain($row->uraian), 0, 2000)]));
+                    $text = $row->uraian.' '.$torText;
                     $ids = [$row->id];
                 } else {
                     $reference = $kind === 'sp' ? $row->nomor_sp : $row->nomor_spph;

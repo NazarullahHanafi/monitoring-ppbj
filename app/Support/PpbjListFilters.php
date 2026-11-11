@@ -7,7 +7,7 @@ use Illuminate\Validation\ValidationException;
 
 final class PpbjListFilters
 {
-    public const SEARCH_COLUMNS = ['uraian', 'ppbj_no', 'awarding_sp', 'sph', 'spph_rfq_1', 'do_no', 'bpg_no', 'bpb_no', 'no_invoice', 'general_registration_number'];
+    public const SEARCH_COLUMNS = ['uraian', 'ppbj_no', 'awarding_sp', 'sph', 'spph_rfq_1', 'do_no', 'bpg_no', 'bpb_no', 'no_invoice', 'general_registration_number', 'buyer', 'penyedia_eksternal', 'portofolio'];
 
     public static function values(Request $request, string $key): array
     {

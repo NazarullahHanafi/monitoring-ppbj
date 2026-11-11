@@ -23,10 +23,13 @@ async function read(input) {
                 logger() {}, errorHandler() {},
             });
         }
+        // Documents have columns, tables and scattered labels; SINGLE_BLOCK loses them.
+        await worker.setParameters({ tessedit_pageseg_mode: '3' });
         let result = score((await worker.recognize(canvas.toBuffer('image/png'), { rotateAuto: true })).data);
         // One optional retry for the entire pass, only for difficult, non-blank scans.
         if (result.confidence < 55 && retries < 1 && performance.now()-started < 20000 && enhance(canvas)) {
             retries++;
+            await worker.setParameters({ tessedit_pageseg_mode: '11' });
             const candidate = score((await worker.recognize(canvas.toBuffer('image/png'), { rotateAuto: true })).data);
             if (candidate.text && (!result.text || candidate.confidence > result.confidence)) result = candidate;
         }

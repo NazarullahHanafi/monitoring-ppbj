@@ -80,6 +80,84 @@ class ProcurementUnifiedSearchTest extends TestCase
         Http::assertNothingSent();
     }
 
+    public function test_scan_results_include_live_buyers_vendor_roles_and_real_tor_provenance(): void
+    {
+        $pr = $this->pr();
+        $pr->update(['penyedia_eksternal' => 'Vendor PPBJ', 'created_by_user_id' => $this->user->id]);
+        [$sp, $spph] = $this->documents($pr);
+        $sp->update(['nama_vendor' => 'Vendor kontrak']);
+        $spph->update(['vendor_names' => ['Vendor kandidat', 'Vendor A']]);
+        $creator = User::factory()->create(['name' => 'Ayu Pembuat TOR', 'department' => 'operasional']);
+        \App\Models\Torpr::create(['nomor_pr' => $pr->ppbj_no, 'tujuan_pengadaan' => 'Alat ukur', 'tanggal_pr' => '2026-11-01', 'portofolio' => 'CON',
+            'created_by_user_id' => $creator->id, 'sign_token_kabid' => 'PRIVATE-SIGN-TOKEN', 'signed_by_kabid_name' => 'Penandatangan Asli']);
+        $source = $this->archive($pr);
+        app(ProcurementSearchWriter::class)->append($source, ['text' => 'Spektrometer optik laboratorium', 'page' => 1, 'pages' => 1, 'done' => true]);
+        $response = $this->search('spektrometer', ['scope' => 'archive', 'buyer' => 'Nazar', 'vendor' => 'kandidat', 'creator' => 'Ayu'])
+            ->assertJsonPath('total', 1)->assertJsonPath('rows.0.context.buyer', 'Nazar')->assertJsonPath('rows.0.context.vendor', 'Vendor PPBJ')
+            ->assertJsonPath('rows.0.context.creator', 'Ayu Pembuat TOR · Operasional')
+            ->assertJsonPath('rows.0.context.provenance.signatures.0.name', 'Penandatangan Asli')
+            ->assertJsonPath('rows.0.context.documents.0.kind', 'sp')->assertJsonPath('rows.0.context.documents.0.vendors.0', 'Vendor kontrak')
+            ->assertDontSee('PRIVATE-SIGN-TOKEN');
+        $this->assertContains('Vendor kandidat', $response->json('rows.0.context.documents.1.vendors'));
+        $this->search('spektrometer', ['creator' => $this->user->name])->assertJsonPath('total', 0);
+        $this->search('spektrometer', ['buyer' => 'Ayu'])->assertJsonPath('total', 0);
+        $this->search('spektrometer', ['vendor' => 'kontrak'])->assertJsonPath('total', 1);
+        $sp->delete();
+        $this->search('spektrometer', ['vendor' => 'kontrak'])->assertJsonPath('total', 0);
+        $pr->update(['buyer' => 'Buyer Baru']);
+        $this->search('spektrometer')->assertJsonPath('rows.0.context.buyer', 'Buyer Baru');
+        foreach (['ppbj' => 'ppbj', 'sp' => 'sps', 'spph' => 'spphs'] as $kind => $key) {
+            if ($kind === 'sp') $sp->restore();
+            $this->assertCount(1, $this->get(route($kind.'.index', ['search' => 'spektrometer']))->assertOk()->viewData($key));
+        }
+        Http::assertNothingSent();
+    }
+
+    public function test_context_filters_handle_legacy_grouped_documents_literals_and_avoid_duplicate_context_rows(): void
+    {
+        $pr = $this->pr();
+        $pr->update(['buyer' => 'Buyer 100%_A']);
+        [$sp, $spph] = $this->documents($pr);
+        $second = $this->pr('PR-CONTEXT-GROUP');
+        $sp->ppbjs()->attach($second->id);
+        $sp->ppbjs()->detach($pr->id); // The original PR is now legacy-only.
+        $sp->update(['nama_vendor' => 'PT 100%_A']);
+        app(ProcurementSearchSync::class)->local();
+        $this->search('kursi', ['vendor' => '100%_A'])->assertJsonPath('total', 2);
+        $this->search('kursi', ['vendor' => '%_Z'])->assertJsonPath('total', 0);
+        $this->search('kursi', ['buyer' => '100%_A'])->assertJsonPath('total', 1)->assertJsonPath('rows.0.id', $pr->id);
+        $sp->ppbjs()->attach($pr->id); // Legacy plus pivot must not duplicate the document.
+        $this->assertCount(2, $this->search('kursi')->json('rows.1.context.documents'));
+        $response = $this->search('kursi')->assertJsonPath('rows.1.context.documents_truncated', false);
+        $this->assertCount(2, $response->json('rows.1.context.documents'));
+        $this->assertStringContainsString('belum dapat ditelusuri', $response->json('rows.1.context.creator'));
+        foreach (['buyer', 'vendor', 'creator'] as $field) {
+            $this->getJson(route('procurement.search', ['q' => 'kursi', $field => ['bad']]))->assertUnprocessable();
+            $this->getJson(route('procurement.search', ['q' => 'kursi', $field => str_repeat('x', 121)]))->assertUnprocessable();
+        }
+    }
+
+    public function test_tor_creator_and_purpose_enter_the_shared_index_for_all_three_native_filters(): void
+    {
+        $pr = $this->pr();
+        $this->documents($pr);
+        $creator = User::factory()->create(['name' => 'Melati Pembuat', 'department' => 'operasional']);
+        $tor = \App\Models\Torpr::create(['nomor_pr' => $pr->ppbj_no, 'tujuan_pengadaan' => 'Pengujian reologi', 'tanggal_pr' => '2026-11-01', 'portofolio' => 'CON', 'created_by_user_id' => $creator->id]);
+        $sync = app(ProcurementSearchSync::class); $sync->local();
+        $this->search('Melati')->assertJsonPath('total', 1);
+        $pr->update(['uraian' => str_repeat('Uraian panjang pengadaan. ', 200).' zetaterakhir']);
+        $sync->local();
+        $this->search('zetaterakhir')->assertJsonPath('total', 1);
+        foreach (['ppbj' => 'ppbj', 'sp' => 'sps', 'spph' => 'spphs'] as $kind => $key) {
+            $this->assertCount(1, $this->get(route($kind.'.index', ['search' => 'reologi']))->assertOk()->viewData($key));
+        }
+        $creator->update(['name' => 'Kenanga Baru']); $sync->local();
+        $this->search('Melati')->assertJsonPath('total', 0);
+        $this->search('Kenanga')->assertJsonPath('total', 1);
+        $tor->delete(); $sync->local();
+        $this->search('Kenanga')->assertJsonPath('total', 0);
+    }
+
     public function test_grouped_and_legacy_documents_return_all_linked_prs_without_inventing_item_allocations(): void
     {
         $first = $this->pr();
@@ -223,7 +301,7 @@ class ProcurementUnifiedSearchTest extends TestCase
         $response = $this->actingAs($viewer)->get(route('procurement.search.file', $source->id))->assertOk()->assertHeader('content-type', 'application/pdf');
         $this->assertSame('%PDF-indexed-fixture', $response->streamedContent());
         $this->assertStringContainsString('private', $response->headers->get('Cache-Control'));
-        $this->search('penawaran')->assertDontSee('signature')->assertDontSee('arsip.example.test');
+        $this->search('penawaran')->assertDontSee('signature=private')->assertDontSee('arsip.example.test');
     }
 
     public function test_indexed_file_gateway_rejects_stale_unlinked_deleted_and_untrusted_targets_before_network_io(): void
@@ -331,7 +409,7 @@ class ProcurementUnifiedSearchTest extends TestCase
         $this->assertCount(1, $response->json('rows.0.matches'));
         $this->assertCount(4, $response->json('rows.1.matches'));
         $this->assertSame(1, $response->json('rows.1.more_sources'));
-        $ranked = $queries->first(fn ($sql) => str_contains($sql, 'ROW_NUMBER()'));
+        $ranked = $queries->first(fn ($sql) => str_contains($sql, 'ROW_NUMBER()') && str_contains($sql, 'ranked_sources'));
         $this->assertStringNotContainsString('union', strtolower($ranked));
         $this->assertSame(2, substr_count($ranked, '"term" like'));
     }

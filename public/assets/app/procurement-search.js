@@ -6,7 +6,8 @@
     const get = name => root.querySelector(`[data-pus-${name}]`);
     const form = get('form'), input = get('query'), scope = get('scope'), status = get('status'), results = get('results');
     const pagination = get('pagination'), submit = form.querySelector('[type="submit"]');
-    let controller, sequence = 0, currentPage = 1, lastPage = 1, appliedQuery = '', appliedScope = 'all', pendingKey = '';
+    const filterNames = ['buyer', 'vendor', 'creator'];
+    let controller, sequence = 0, currentPage = 1, lastPage = 1, appliedQuery = '', appliedScope = 'all', appliedFilters = {}, pendingKey = '';
     const labels = { ppbj: 'PPBJ', sp: 'SP', spph: 'SPPH', archive_document: 'Arsip', archive_attachment: 'Lampiran arsip' };
     function element(tag, className, text) {
         const node = document.createElement(tag);
@@ -43,6 +44,52 @@
         if (position < text.length) node.append(element('span', '', text.slice(position)));
         return node;
     }
+    function field(list, label, value) {
+        const pair = element('div');
+        pair.append(element('dt', '', label), element('dd', '', value == null || value === '' ? 'Belum tercatat' : value));
+        list.append(pair);
+    }
+    function contextSummary(info) {
+        const list = element('dl', 'pus-context');
+        const sp = (info.documents || []).find(doc => doc.kind === 'sp' && doc.vendors?.length);
+        const spph = (info.documents || []).find(doc => doc.kind === 'spph' && doc.vendors?.length);
+        field(list, 'Buyer / PIC PPBJ', info.buyer);
+        field(list, info.vendor ? 'Vendor tercatat di PPBJ' : sp ? 'Vendor pada SP terbaru' : spph ? 'Kandidat SPPH terbaru' : 'Vendor tercatat di PPBJ',
+            info.vendor || (sp || spph)?.vendors.join('; '));
+        field(list, 'Pembuat TOR / PR', info.creator);
+        return list;
+    }
+    function contextDetails(info) {
+        const details = element('details', 'pus-details');
+        details.append(element('summary', '', 'Asal PR, penanggung jawab & dokumen terkait'));
+        const list = element('dl', 'pus-detail-fields');
+        field(list, 'Tanggal PPBJ', info.recorded_at);
+        field(list, 'Registrasi Umum', info.registration);
+        field(list, 'Status tercatat', info.status);
+        field(list, 'Progress tercatat', info.progress == null ? null : `${info.progress}%`);
+        for (const group of ['source_fields', 'receipt_fields', 'management_fields']) {
+            for (const item of info.provenance?.[group] || []) {
+                const value = item.type === 'money' && item.value !== '' && item.value != null && Number.isFinite(Number(item.value))
+                    ? new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR' }).format(Number(item.value)) : item.value;
+                field(list, item.label, value);
+            }
+        }
+        for (const signer of info.provenance?.signatures || []) field(list, signer.role, `${signer.name} · ${signer.date} · ${signer.status}`);
+        details.append(list);
+        const docs = element('div', 'pus-related');
+        for (const doc of info.documents || []) {
+            const item = element('dl', 'pus-detail-fields pus-related-document');
+            field(item, doc.kind === 'sp' ? 'SP terkait' : 'SPPH terkait', doc.number);
+            field(item, doc.kind === 'sp' ? 'Vendor pada SP' : 'Kandidat vendor penawaran', (doc.vendors || []).join('; '));
+            field(item, 'PIC dokumen', doc.pic); field(item, 'Tanggal dokumen', doc.date);
+            docs.append(item);
+        }
+        if (!(info.documents || []).length) docs.append(element('p', 'pus-note', 'SP/SPPH terkait belum tercatat.'));
+        if (info.documents_truncated) docs.append(element('p', 'pus-note', 'Menampilkan 5 SP dan 5 SPPH terbaru per PR. Buka menu dokumen untuk melihat seluruhnya.'));
+        details.append(docs);
+        if (info.provenance?.notice) details.append(element('p', 'pus-note', info.provenance.notice));
+        return details;
+    }
     function render(data) {
         results.replaceChildren();
         const summary = get('summary');
@@ -57,6 +104,7 @@
             title.append(element('h3', 'pus-number', row.number), element('p', 'pus-description', row.description));
             heading.append(title, element('span', 'pus-pill', row.portfolio || 'PR terkait'));
             card.append(heading);
+            if (row.context) card.append(contextSummary(row.context));
             const matches = element('div', 'pus-matches');
             for (const match of row.matches || []) {
                 const item = element('div', 'pus-match'), source = element('div', 'pus-source');
@@ -81,6 +129,7 @@
             const links = element('div', 'pus-links');
             for (const [kind, href] of Object.entries(row.links || {})) links.append(link(href, `Buka ${labels[kind] || kind} →`, ''));
             card.append(links);
+            if (row.context) card.append(contextDetails(row.context));
             if (row.more_sources) card.append(element('p', 'pus-more', 'Masih ada sumber terkait lainnya. Persempit kata atau pilih sumber untuk menelusurinya.'));
             results.append(card);
         }
@@ -108,6 +157,8 @@
             get('progressinfo').textContent = progress.join(' ');
         } else if (progress.length) status.textContent += ' ' + progress.join(' ');
         if (Object.keys(data.equivalents || {}).length) status.textContent += ' Padanan yang turut dicari: ' + Object.entries(data.equivalents).map(([word, equivalents]) => `${word} (${equivalents.join(', ')})`).join('; ') + '.';
+        const refinements = filterNames.filter(name => appliedFilters[name]).map(name => `${({ buyer: 'Buyer', vendor: 'Vendor', creator: 'Pembuat TOR' })[name]}: ${appliedFilters[name]}`);
+        if (refinements.length) status.textContent += ' Filter aktif — ' + refinements.join('; ') + '.';
         currentPage = data.page;
         lastPage = data.last_page;
         pagination.hidden = data.last_page <= 1;
@@ -116,7 +167,7 @@
         get('next').disabled = data.page >= data.last_page;
     }
     async function search(page = 1) {
-        const key = JSON.stringify([appliedQuery, appliedScope, page]);
+        const key = JSON.stringify([appliedQuery, appliedScope, appliedFilters, page]);
         if (pendingKey === key) return;
         controller?.abort();
         controller = new AbortController();
@@ -129,7 +180,7 @@
         const timeout = setTimeout(() => { if (serial === sequence) controller.abort(); }, 20000);
         try {
             const url = new URL(root.dataset.endpoint, window.location.origin);
-            url.search = new URLSearchParams({ q: appliedQuery, scope: appliedScope, page });
+            url.search = new URLSearchParams({ q: appliedQuery, scope: appliedScope, page, ...appliedFilters });
             const response = await fetch(url, { headers: { Accept: 'application/json' }, signal: controller.signal, credentials: 'same-origin' });
             if (serial !== sequence) return;
             if (!response.ok) throw new Error(response.status === 429 ? 'Pencarian terlalu sering. Tunggu sebentar, lalu coba lagi.' : response.status === 422 ? 'Periksa kata pencarian dan pilihan sumber.' : 'Pencarian belum dapat dimuat. Coba kembali.');
@@ -153,12 +204,16 @@
         event.preventDefault();
         if (!input.value.trim()) return;
         appliedQuery = input.value.trim(); appliedScope = scope.value;
+        appliedFilters = Object.fromEntries(filterNames.map(name => [name, get(name)?.value.trim() || '']).filter(([, value]) => value));
         search();
     });
     input.addEventListener('input', () => { status.textContent = 'Pilihan belum diterapkan. Tekan Enter atau klik Cari.'; });
     scope.addEventListener('change', () => { status.textContent = 'Pilihan belum diterapkan. Klik Cari untuk menerapkan.'; });
+    for (const name of filterNames) get(name)?.addEventListener('input', () => { status.textContent = 'Filter belum diterapkan. Klik Cari untuk menerapkan.'; });
     get('reset').addEventListener('click', () => {
         controller?.abort(); sequence++; pendingKey = ''; submit.disabled = false; input.value = ''; scope.value = 'all';
+        appliedFilters = {};
+        for (const name of filterNames) if (get(name)) get(name).value = '';
         currentPage = lastPage = 1;
         results.replaceChildren(); pagination.hidden = true;
         if (get('summary')) get('summary').hidden = true;

@@ -14,7 +14,7 @@ class Element {
 }
 function setup() {
     const nodes = {};
-    for (const name of ['form', 'query', 'scope', 'status', 'results', 'pagination', 'prev', 'next', 'reset', 'page', 'submit', 'summary', 'progress', 'progressinfo']) nodes[name] = new Element();
+    for (const name of ['form', 'query', 'scope', 'buyer', 'vendor', 'creator', 'status', 'results', 'pagination', 'prev', 'next', 'reset', 'page', 'submit', 'summary', 'progress', 'progressinfo']) nodes[name] = new Element();
     nodes.scope.value = 'all';
     nodes.form.querySelector = () => nodes.submit;
     const root = new Element(); root.dataset.endpoint = 'https://app.test/procurement/search';
@@ -40,6 +40,39 @@ test('unified search is manual; rebinding and typing do not trigger requests', (
     submit(f, 'kursi');
     assert.equal(f.requests.length, 1);
     assert.equal(new URL(f.requests[0].url).searchParams.get('q'), 'kursi');
+});
+
+test('context filters apply on submit, persist across pages, and reset together', async () => {
+    const f = setup();
+    f.nodes.buyer.value = 'Nazar'; f.nodes.vendor.value = '100%_Vendor'; f.nodes.creator.value = 'Ayu';
+    f.nodes.vendor.fire('input'); assert.equal(f.requests.length, 0);
+    submit(f, 'spektrometer');
+    const first = new URL(f.requests[0].url);
+    assert.equal(first.searchParams.get('vendor'), '100%_Vendor');
+    assert.equal(first.searchParams.get('creator'), 'Ayu');
+    f.requests[0].resolve({ ok: true, json: async () => ({ ...data(), last_page: 2 }) }); await flush();
+    assert.match(f.nodes.status.textContent, /Buyer: Nazar/);
+    f.nodes.creator.value = 'Unsubmitted'; f.nodes.next.fire('click');
+    assert.equal(new URL(f.requests[1].url).searchParams.get('creator'), 'Ayu');
+    f.nodes.reset.fire('click');
+    assert.equal(f.nodes.buyer.value, ''); assert.equal(f.nodes.vendor.value, ''); assert.equal(f.nodes.creator.value, '');
+    submit(f, 'kursi'); assert.equal(new URL(f.requests[2].url).searchParams.has('vendor'), false);
+});
+
+test('buyer vendor and TOR details are safe text inside a closed disclosure', async () => {
+    const f = setup(); submit(f, 'kursi');
+    const response = data();
+    response.rows[0].context = { buyer: '<script>Buyer</script>', vendor: 'Vendor PPBJ', creator: 'Ayu',
+        documents: [{ kind: 'spph', number: 'SPPH-01', vendors: ['Kandidat A', '<img>'], pic: 'PIC', date: '2026-11-01' }],
+        provenance: { source_fields: [{ label: 'Pembuat TOR', value: 'Ayu' }], signatures: [{ role: 'Kabid', name: '<script>', date: 'Belum tercatat', status: 'Belum ditandatangani' }] } };
+    f.requests[0].resolve({ ok: true, json: async () => response }); await flush();
+    const card = f.nodes.results.children[0], summary = card.children[1], details = card.children[4];
+    assert.equal(summary.children[0].children[1].textContent, '<script>Buyer</script>');
+    assert.equal(details.tag, 'details'); assert.notEqual(details.open, true);
+    const text = node => node.textContent + node.children.map(text).join(' ');
+    assert.match(text(details), /Kandidat vendor penawaran/);
+    assert.match(text(details), /Kandidat A; <img>/);
+    assert.match(text(details), /Pembuat TOR/);
 });
 
 test('results use text nodes and safe same-origin links for names and OCR content', async () => {

@@ -77,13 +77,17 @@ class ProcurementUnifiedSearch
         return $plan;
     }
 
-    public function search(string $term, string $scope = 'all', int $page = 1): array
+    public function search(string $term, string $scope = 'all', int $page = 1, array $filters = []): array
     {
         $started = hrtime(true);
         $plan = $this->resolve($term, $scope);
         $effective = implode(' ', $plan['used']);
-        $prs = Ppbj::select('id', 'ppbj_no', 'uraian', 'portofolio', 'buyer')->whereIn('id', $this->linkedPrIds($plan['used'], $scope))
-            ->orderByDesc('id')->paginate(10, ['*'], 'page', $page);
+        $query = Ppbj::select(array_values(array_unique(array_merge(ProcurementProvenanceService::PPBJ_COLUMNS,
+            ['penyedia_eksternal', 'tgl_ppbj', 'status', 'progres']))))->whereIn('id', $this->linkedPrIds($plan['used'], $scope));
+        $context = app(ProcurementSearchContext::class);
+        $context->apply($query, $filters);
+        $prs = $query->orderByDesc('id')->paginate(10, ['*'], 'page', $page);
+        $contexts = $context->forPrs($prs->getCollection());
         // Resolve token intersections once for all visible PRs, instead of repeating
         // every token subquery in ten UNION branches. The per-PR bound is preserved.
         $ranked = $this->sourceQuery($plan['used'], $scope)
@@ -115,10 +119,11 @@ class ProcurementUnifiedSearch
                 ->selectRaw('SUBSTR(passage.content, CASE WHEN INSTR(LOWER(passage.content), hit.term) > 60 THEN INSTR(LOWER(passage.content), hit.term) - 60 ELSE 1 END, 320) AS content')->get()->keyBy('source_id');
         }
 
-        return ['rows' => $prs->map(function ($pr) use ($matches, $texts, $pageTexts, $effective) {
+        return ['rows' => $prs->map(function ($pr) use ($matches, $texts, $pageTexts, $effective, $contexts) {
             $sources = $matches->get($pr->id, collect());
 
             return ['id' => $pr->id, 'number' => $pr->ppbj_no, 'description' => $pr->uraian, 'portfolio' => $pr->portofolio,
+                'context' => $contexts[$pr->id] ?? null,
                 'links' => ['ppbj' => route('ppbj.index', ['search' => $pr->ppbj_no]), 'sp' => route('sp.index', ['search' => $pr->ppbj_no]), 'spph' => route('spph.index', ['search' => $pr->ppbj_no])],
                 'matches' => $sources->take(4)->map(function ($source) use ($texts, $pageTexts, $effective) {
                     $text = $texts->get($source->id);

@@ -109,7 +109,7 @@ class ProcurementDocumentSearch
         return $query;
     }
 
-    private static function legacyReference(Builder $query, string $table): string
+    public static function legacyReference(Builder $query, string $table): string
     {
         $connection = $query->getModel()->getConnection();
         if ($connection->getDriverName() !== 'mysql') {

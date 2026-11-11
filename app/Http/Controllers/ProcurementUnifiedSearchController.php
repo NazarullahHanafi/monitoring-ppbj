@@ -10,7 +10,8 @@ class ProcurementUnifiedSearchController extends Controller
     public function __invoke(Request $request, ProcurementUnifiedSearch $search)
     {
         abort_unless(config('procurement_search.enabled'), 404);
-        $values = $request->validate(['q' => 'required|string|min:1|max:255', 'scope' => 'nullable|in:all,ppbj,sp,spph,archive', 'page' => 'nullable|integer|min:1|max:10000']);
+        $values = $request->validate(['q' => 'required|string|min:1|max:255', 'scope' => 'nullable|in:all,ppbj,sp,spph,archive', 'page' => 'nullable|integer|min:1|max:10000',
+            'buyer' => 'nullable|string|max:120', 'vendor' => 'nullable|string|max:120', 'creator' => 'nullable|string|max:120']);
         $words = \App\Support\ProcurementSearchText::words($values['q']);
         if (! $words) {
             throw \Illuminate\Validation\ValidationException::withMessages(['q' => 'Masukkan nama barang atau nomor yang mengandung huruf/angka.']);
@@ -19,7 +20,7 @@ class ProcurementUnifiedSearchController extends Controller
             throw \Illuminate\Validation\ValidationException::withMessages(['q' => 'Gunakan maksimal 16 kata agar pencarian tetap terarah.']);
         }
 
-        return response()->json($search->search(trim($values['q']), $values['scope'] ?? 'all', (int) ($values['page'] ?? 1)))
+        return response()->json($search->search(trim($values['q']), $values['scope'] ?? 'all', (int) ($values['page'] ?? 1), array_intersect_key($values, array_flip(['buyer', 'vendor', 'creator']))))
             ->header('Cache-Control', 'private, no-store');
     }
 }

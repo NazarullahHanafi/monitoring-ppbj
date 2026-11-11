@@ -43,6 +43,15 @@ test('private OCR recognizes a photo and resumes every page of a real scanned PD
         fs.writeFileSync(path.join(root, 'photo.png'), canvas.toBuffer('image/png'));
         fs.writeFileSync(path.join(root, 'scan.pdf'), scanPdf(canvas.toBuffer('image/jpeg'), canvas.width, canvas.height));
         fs.writeFileSync(path.join(root, 'mixed.pdf'), scanPdf(canvas.toBuffer('image/jpeg'), canvas.width, canvas.height, true));
+        const layout = createCanvas(1800, 1400), lc = layout.getContext('2d');
+        lc.fillStyle = '#fff'; lc.fillRect(0, 0, layout.width, layout.height); lc.fillStyle = '#111'; lc.font = '40px Arial';
+        lc.fillText('VENDOR NUSANTARA', 80, 110); lc.fillText('PR-2026-TEST-009', 1120, 110);
+        lc.fillText('SPEKTROMETER OPTIK', 90, 420); lc.fillText('SENSOR TEKANAN', 1090, 420);
+        lc.fillText('PEMBUAT TOR AYU', 90, 1180); lc.fillText('BUYER NAZAR', 1120, 1180);
+        fs.writeFileSync(path.join(root, 'layout.png'), layout.toBuffer('image/png'));
+        const scattered = JSON.parse(cp.execFileSync(process.execPath, [path.join(runtime, 'read.cjs')], { input: JSON.stringify({ file: path.join(root, 'layout.png'), root, extension: 'png', languages }), encoding: 'utf8', timeout: 20000, stdio: ['pipe', 'pipe', 'pipe'] }));
+        for (const keyword of ['VENDOR', 'SPEKTROMETER', 'SENSOR', 'PEMBUAT', 'BUYER']) assert.match(scattered.text, new RegExp(keyword, 'i'));
+        assert.ok(scattered.metrics.peak_rss_mb <= 448);
         for (const [file, extension, start] of [['photo.png', 'png', 1], ['scan.pdf', 'pdf', 1], ['scan.pdf', 'pdf', 2], ['scan.pdf', 'pdf', 3], ['mixed.pdf', 'pdf', 1]]) {
             const output = cp.execFileSync(process.execPath, [path.join(runtime, 'read.cjs')], { input: JSON.stringify({ file: path.join(root, file), root, extension, start, count: 1, languages }), encoding: 'utf8', timeout: 20000, stdio: ['pipe', 'pipe', 'pipe'] });
             const result = JSON.parse(output);
@@ -67,7 +76,7 @@ test('private OCR recognizes a photo and resumes every page of a real scanned PD
         assert.notEqual(bad.status, 0); assert.equal(bad.stdout, '');
     } finally {
         // Only known synthetic fixtures in this newly created test directory are removed.
-        for (const file of ['photo.png', 'scan.pdf', 'mixed.pdf', 'damaged.pdf']) if (fs.existsSync(path.join(root, file))) fs.unlinkSync(path.join(root, file));
+        for (const file of ['photo.png', 'scan.pdf', 'mixed.pdf', 'damaged.pdf', 'layout.png']) if (fs.existsSync(path.join(root, file))) fs.unlinkSync(path.join(root, file));
         fs.rmdirSync(root);
     }
 });
