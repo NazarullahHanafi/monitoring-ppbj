@@ -7,7 +7,8 @@
     const form = get('form'), input = get('query'), scope = get('scope'), status = get('status'), results = get('results');
     const pagination = get('pagination'), submit = form.querySelector('[type="submit"]');
     const filterNames = ['buyer', 'vendor', 'creator'];
-    let controller, sequence = 0, currentPage = 1, lastPage = 1, appliedQuery = '', appliedScope = 'all', appliedMatch = 'source', appliedSort = 'relevance', appliedFilters = {}, pendingKey = '';
+    let controller, sequence = 0, currentPage = 1, lastPage = 1, appliedQuery = '', appliedScope = 'all', appliedMatch = 'source', appliedSort = 'relevance', appliedLexical = 'expanded', appliedFilters = {}, pendingKey = '';
+    const evidenceControllers = new Set();
     const labels = { ppbj: 'PPBJ', sp: 'SP', spph: 'SPPH', archive_document: 'Arsip', archive_attachment: 'Lampiran arsip' };
     function element(tag, className, text) {
         const node = document.createElement(tag);
@@ -32,7 +33,7 @@
         text = String(text || '');
         const words = (data.query?.used || appliedQuery.toLowerCase().split(/[^a-z0-9]+/)).flatMap(word => [word, ...(data.equivalents?.[word] || [])]);
         const needles = [...new Set(words)].filter(word => /^[a-z0-9]{1,96}$/i.test(word)).slice(0, 64).sort((a, b) => b.length-a.length);
-        const pattern = needles.length ? new RegExp('\\b(?:' + needles.join('|') + ')', 'ig') : null;
+        const pattern = needles.length ? new RegExp('\\b(?:' + needles.join('|') + ')' + (data.lexical === 'exact' ? '\\b' : ''), 'ig') : null;
         const hits = pattern ? [...text.matchAll(pattern)] : [];
         if (!hits.length) { node.textContent = text; return node; }
         let position = 0;
@@ -90,6 +91,94 @@
         if (info.provenance?.notice) details.append(element('p', 'pus-note', info.provenance.notice));
         return details;
     }
+    function matchElement(match, data) {
+        const item = element('div', 'pus-match'), source = element('div', 'pus-source');
+        source.append(element('span', 'pus-badge', labels[match.kind] || 'Dokumen'), element('strong', '', match.label));
+        if (match.kind.startsWith('archive_')) source.append(element('span', 'pus-badge', ['pending', 'partial', 'failed'].includes(match.state) ? `Isi diproses · ${match.page || 0}/${match.pages || '?'} halaman` : 'Hasil pembacaan otomatis'));
+        if (['uncertain', 'empty', 'limited', 'unsupported'].includes(match.state)) source.append(element('span', 'pus-badge', 'Perlu diperiksa'));
+        if (match.inferred) source.append(element('span', 'pus-badge', 'Nomor PR terbaca dari scan · periksa kecocokan'));
+        const engines = { 'pdfjs-6-text': 'Teks asli PDF', 'pdfjs-6-tesseract-7': 'Teks PDF + scan', 'tesseract-7-ind-eng': 'Scan / foto', 'office-text': 'Teks dokumen' };
+        if (engines[match.reading?.engine]) source.append(element('span', 'pus-badge', engines[match.reading.engine]));
+        if (match.reading?.confidence != null && match.reading.confidence < 55) source.append(element('span', 'pus-badge pus-warning', 'Bacaan kurang jelas · periksa file asli'));
+        if (match.match_page) source.append(element('span', 'pus-badge pus-page-hit', `Ketemu di halaman ${match.match_page}`));
+        if (data.match === 'related' && match.matched_words?.length) source.append(element('span', 'pus-badge', `Kata cocok: ${match.matched_words.join(', ')}`));
+        if (data.match === 'reference') source.append(element('span', 'pus-badge', `Nomor persis: ${match.reference || ''}`));
+        item.append(source, snippet(match.snippet, data));
+        if (match.url) {
+            const anchor = link(match.url, match.kind.startsWith('archive_') ? (match.match_page ? `Buka halaman ${match.match_page} ↗` : 'Buka lampiran ↗') : 'Buka dokumen →', 'pus-open');
+            if (match.kind.startsWith('archive_')) { anchor.target = '_blank'; anchor.rel = 'noopener noreferrer'; }
+            item.append(anchor);
+        }
+        if (match.notice) item.append(element('p', 'pus-read-notice', match.notice));
+        return item;
+    }
+    async function readResponse(response) {
+        if (!response.ok) {
+            let message = response.status === 429 ? 'Pencarian terlalu sering. Tunggu sebentar, lalu coba lagi.' : response.status === 422 ? 'Periksa kata pencarian dan pilihan sumber.' : 'Pencarian belum dapat dimuat. Coba kembali.';
+            if (response.status === 422) {
+                try {
+                    const details = await response.json();
+                    const validation = Object.values(details.errors || {}).flat().find(value => typeof value === 'string' && value.length <= 240);
+                    if (validation) message = validation;
+                } catch (error) { if (error.name === 'AbortError') throw error; }
+            }
+            throw new Error(message);
+        }
+        let data;
+        try { data = await response.json(); } catch (error) {
+            if (error.name === 'AbortError') throw error;
+            throw new Error('Hasil belum dapat dibaca. Muat ulang halaman dan coba kembali.');
+        }
+        return data;
+    }
+    function cancelEvidence() {
+        for (const pending of evidenceControllers) pending.abort();
+        evidenceControllers.clear();
+    }
+    function evidencePanel(row) {
+        const panel = element('details', 'pus-details pus-evidence');
+        panel.append(element('summary', '', 'Telusuri sumber lainnya pada PR ini'));
+        const list = element('div', 'pus-matches'), message = element('p', 'pus-note', 'Lampiran tambahan dimuat saat Anda meminta.');
+        message.setAttribute?.('role', 'status');
+        const button = element('button', 'pus-secondary pus-evidence-load', 'Muat sumber lainnya'); button.type = 'button';
+        panel.append(message, list, button);
+        const params = { q: appliedQuery, scope: appliedScope, match: appliedMatch, sort: appliedSort, lexical: appliedLexical, ...appliedFilters, pr: row.id, page: 1 };
+        const seen = new Set((row.matches || []).map(source => source.id));
+        let after = 0, busy = false;
+        button.addEventListener('click', async () => {
+            if (busy) return;
+            busy = true; button.disabled = true;
+            const serial = sequence, pending = new AbortController(); evidenceControllers.add(pending);
+            const timeout = setTimeout(() => pending.abort(), 20000);
+            message.textContent = 'Memuat bukti tambahan…';
+            try {
+                const url = new URL(root.dataset.endpoint, window.location.origin);
+                url.search = new URLSearchParams({ ...params, after });
+                const response = await fetch(url, { headers: { Accept: 'application/json' }, signal: pending.signal, credentials: 'same-origin' });
+                if (serial !== sequence) return;
+                const next = await readResponse(response);
+                if (serial !== sequence) return;
+                const result = (next.rows || []).find(item => Number(item.id) === Number(row.id));
+                const sources = (result?.matches || []).slice(0, 8);
+                const cursor = result?.evidence?.after;
+                if (result?.evidence?.has_more && (!Number.isSafeInteger(cursor) || cursor <= after)) throw new Error('Bukti belum dapat dilanjutkan. Coba kembali.');
+                for (const source of sources) {
+                    if (!Number.isSafeInteger(source.id) || seen.has(source.id)) continue;
+                    seen.add(source.id); list.append(matchElement(source, next));
+                }
+                after = Number.isSafeInteger(cursor) ? cursor : after;
+                button.hidden = !result?.evidence?.has_more;
+                button.textContent = 'Muat 8 sumber berikutnya';
+                message.textContent = result ? (button.hidden ? 'Seluruh sumber cocok yang tersedia saat ini sudah ditampilkan.' : 'Masih ada sumber. Muat bertahap untuk melanjutkan.') : 'PR atau sumbernya sudah berubah. Jalankan pencarian lagi untuk memperbarui hasil.';
+            } catch (error) {
+                if (serial !== sequence) return;
+                message.textContent = error.name === 'AbortError' ? 'Pemuatan terlalu lama. Klik untuk mencoba lagi.' : error.message === 'Failed to fetch' ? 'Koneksi terputus. Klik untuk mencoba lagi.' : error.message;
+            } finally {
+                clearTimeout(timeout); evidenceControllers.delete(pending); busy = false; button.disabled = false;
+            }
+        });
+        return panel;
+    }
     function render(data) {
         results.replaceChildren();
         const suggestions = get('suggestions');
@@ -103,6 +192,7 @@
                     input.value = suggestion.query; appliedQuery = suggestion.query; scope.value = appliedScope;
                     if (get('match')) get('match').value = appliedMatch;
                     if (get('sort')) get('sort').value = appliedSort;
+                    if (get('lexical')) get('lexical').value = appliedLexical;
                     for (const name of filterNames) if (get(name)) get(name).value = appliedFilters[name] || '';
                     search();
                 });
@@ -125,32 +215,13 @@
             if (row.context) card.append(contextSummary(row.context));
             if (row.relevance?.reason) card.append(element('p', 'pus-relevance', row.relevance.reason));
             const matches = element('div', 'pus-matches');
-            for (const match of row.matches || []) {
-                const item = element('div', 'pus-match'), source = element('div', 'pus-source');
-                source.append(element('span', 'pus-badge', labels[match.kind] || 'Dokumen'), element('strong', '', match.label));
-                if (match.kind.startsWith('archive_')) source.append(element('span', 'pus-badge', ['pending', 'partial', 'failed'].includes(match.state) ? `Isi diproses · ${match.page || 0}/${match.pages || '?'} halaman` : 'Hasil pembacaan otomatis'));
-                if (['uncertain', 'empty', 'limited', 'unsupported'].includes(match.state)) source.append(element('span', 'pus-badge', 'Perlu diperiksa'));
-                if (match.inferred) source.append(element('span', 'pus-badge', 'Nomor PR terbaca dari scan · periksa kecocokan'));
-                const engines = { 'pdfjs-6-text': 'Teks asli PDF', 'pdfjs-6-tesseract-7': 'Teks PDF + scan', 'tesseract-7-ind-eng': 'Scan / foto', 'office-text': 'Teks dokumen' };
-                if (engines[match.reading?.engine]) source.append(element('span', 'pus-badge', engines[match.reading.engine]));
-                if (match.reading?.confidence != null && match.reading.confidence < 55) source.append(element('span', 'pus-badge pus-warning', 'Bacaan kurang jelas · periksa file asli'));
-                if (match.match_page) source.append(element('span', 'pus-badge pus-page-hit', `Ketemu di halaman ${match.match_page}`));
-                if (data.match === 'related' && match.matched_words?.length) source.append(element('span', 'pus-badge', `Kata cocok: ${match.matched_words.join(', ')}`));
-                item.append(source, snippet(match.snippet, data));
-                if (match.url) {
-                    const anchor = link(match.url, match.kind.startsWith('archive_') ? (match.match_page ? `Buka halaman ${match.match_page} ↗` : 'Buka lampiran ↗') : 'Buka dokumen →', 'pus-open');
-                    if (match.kind.startsWith('archive_')) { anchor.target = '_blank'; anchor.rel = 'noopener noreferrer'; }
-                    item.append(anchor);
-                }
-                if (match.notice) item.append(element('p', 'pus-read-notice', match.notice));
-                matches.append(item);
-            }
+            for (const match of row.matches || []) matches.append(matchElement(match, data));
             card.append(matches);
             const links = element('div', 'pus-links');
             for (const [kind, href] of Object.entries(row.links || {})) links.append(link(href, `Buka ${labels[kind] || kind} →`, ''));
             card.append(links);
             if (row.context) card.append(contextDetails(row.context));
-            if (row.more_sources) card.append(element('p', 'pus-more', 'Masih ada sumber terkait lainnya. Persempit kata atau pilih sumber untuk menelusurinya.'));
+            if (row.more_sources && Number.isSafeInteger(row.id) && row.id > 0) card.append(evidencePanel(row));
             results.append(card);
         }
         const backlog = (data.index?.pending || 0) + (data.index?.partial || 0);
@@ -180,6 +251,8 @@
         const refinements = filterNames.filter(name => appliedFilters[name]).map(name => `${({ buyer: 'Buyer', vendor: 'Vendor', creator: 'Pembuat TOR' })[name]}: ${appliedFilters[name]}`);
         if (refinements.length) status.textContent += ' Filter aktif — ' + refinements.join('; ') + '.';
         if (data.match === 'related') status.textContent += ' Kata dapat berasal dari dokumen berbeda dalam PR yang sama.';
+        if (data.match === 'reference') status.textContent += ' Seluruh nomor dokumen dicocokkan secara persis.';
+        else if (data.lexical === 'exact') status.textContent += ' Kata utuh, tanpa perluasan awalan atau padanan; urutan kata bebas.';
         currentPage = data.page;
         lastPage = data.last_page;
         pagination.hidden = data.last_page <= 1;
@@ -188,9 +261,9 @@
         get('next').disabled = data.page >= data.last_page;
     }
     async function search(page = 1) {
-        const key = JSON.stringify([appliedQuery, appliedScope, appliedMatch, appliedSort, appliedFilters, page]);
+        const key = JSON.stringify([appliedQuery, appliedScope, appliedMatch, appliedSort, appliedLexical, appliedFilters, page]);
         if (pendingKey === key) return;
-        controller?.abort();
+        controller?.abort(); cancelEvidence();
         controller = new AbortController();
         pendingKey = key;
         const serial = ++sequence;
@@ -202,25 +275,10 @@
         const timeout = setTimeout(() => { if (serial === sequence) controller.abort(); }, 20000);
         try {
             const url = new URL(root.dataset.endpoint, window.location.origin);
-            url.search = new URLSearchParams({ q: appliedQuery, scope: appliedScope, match: appliedMatch, sort: appliedSort, page, ...appliedFilters });
+            url.search = new URLSearchParams({ q: appliedQuery, scope: appliedScope, match: appliedMatch, sort: appliedSort, lexical: appliedLexical, page, ...appliedFilters });
             const response = await fetch(url, { headers: { Accept: 'application/json' }, signal: controller.signal, credentials: 'same-origin' });
             if (serial !== sequence) return;
-            if (!response.ok) {
-                let message = response.status === 429 ? 'Pencarian terlalu sering. Tunggu sebentar, lalu coba lagi.' : response.status === 422 ? 'Periksa kata pencarian dan pilihan sumber.' : 'Pencarian belum dapat dimuat. Coba kembali.';
-                if (response.status === 422) {
-                    try {
-                        const details = await response.json();
-                        const validation = Object.values(details.errors || {}).flat().find(value => typeof value === 'string' && value.length <= 240);
-                        if (validation) message = validation;
-                    } catch (error) { if (error.name === 'AbortError') throw error; }
-                }
-                throw new Error(message);
-            }
-            let data;
-            try { data = await response.json(); } catch (error) {
-                if (error.name === 'AbortError') throw error;
-                throw new Error('Hasil belum dapat dibaca. Muat ulang halaman dan coba kembali.');
-            }
+            const data = await readResponse(response);
             if (serial !== sequence) return;
             render(data);
         } catch (error) {
@@ -237,17 +295,20 @@
         if (!input.value.trim()) return;
         appliedQuery = input.value.trim(); appliedScope = scope.value;
         appliedMatch = get('match')?.value || 'source'; appliedSort = get('sort')?.value || 'relevance';
+        appliedLexical = appliedMatch === 'reference' ? 'exact' : get('lexical')?.value || 'expanded';
+        if (get('lexical')) get('lexical').value = appliedLexical;
         appliedFilters = Object.fromEntries(filterNames.map(name => [name, get(name)?.value.trim() || '']).filter(([, value]) => value));
         search();
     });
     input.addEventListener('input', () => { status.textContent = 'Pilihan belum diterapkan. Tekan Enter atau klik Cari.'; });
     scope.addEventListener('change', () => { status.textContent = 'Pilihan belum diterapkan. Klik Cari untuk menerapkan.'; });
     for (const name of filterNames) get(name)?.addEventListener('input', () => { status.textContent = 'Filter belum diterapkan. Klik Cari untuk menerapkan.'; });
-    for (const name of ['match', 'sort']) get(name)?.addEventListener('change', () => { status.textContent = 'Pilihan belum diterapkan. Klik Cari untuk menerapkan.'; });
+    for (const name of ['match', 'sort', 'lexical']) get(name)?.addEventListener('change', () => { status.textContent = 'Pilihan belum diterapkan. Klik Cari untuk menerapkan.'; });
     get('reset').addEventListener('click', () => {
-        controller?.abort(); sequence++; pendingKey = ''; submit.disabled = false; input.value = ''; scope.value = 'all';
+        controller?.abort(); cancelEvidence(); sequence++; pendingKey = ''; submit.disabled = false; input.value = ''; scope.value = 'all';
         appliedFilters = {};
-        appliedMatch = 'source'; appliedSort = 'relevance';
+        appliedMatch = 'source'; appliedSort = 'relevance'; appliedLexical = 'expanded';
+        if (get('lexical')) get('lexical').value = appliedLexical;
         if (get('match')) get('match').value = appliedMatch;
         if (get('sort')) get('sort').value = appliedSort;
         if (get('suggestions')) { get('suggestions').replaceChildren(); get('suggestions').hidden = true; }

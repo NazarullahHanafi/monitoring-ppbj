@@ -60,6 +60,115 @@ class ProcurementUnifiedSearchTest extends TestCase
         return $this->getJson(route('procurement.search', ['q' => $q] + $params))->assertOk();
     }
 
+    public function test_whole_tokens_do_not_expand_prefixes_synonyms_or_drop_unknown_words(): void
+    {
+        $pr = $this->pr();
+        $writer = app(ProcurementSearchWriter::class);
+        $writer->source('ppbj', 'precision', 'Komponen', 'DOC-01', 'plastik sensor', '', [$pr->id], hash('sha256', 'precision'));
+        $this->search('plast')->assertJsonPath('total', 1);
+        $this->search('plast', ['lexical' => 'exact'])->assertJsonPath('total', 0)->assertJsonPath('suggestions', []);
+        $this->search('plastik wefwef')->assertJsonPath('total', 1);
+        $this->search('plastik wefwef', ['lexical' => 'exact'])->assertJsonPath('total', 0)->assertJsonPath('query.strict', true);
+        $this->search('sensor plastik', ['lexical' => 'exact'])->assertJsonPath('total', 1)->assertJsonPath('lexical', 'exact')->assertJsonPath('equivalents', []);
+        $writer->source('sp', 'synonym', 'Kursi', 'DOC-02', 'kursi', '', [$pr->id], hash('sha256', 'synonym'));
+        $this->search('chair')->assertJsonPath('total', 1);
+        $this->search('chair', ['lexical' => 'exact'])->assertJsonPath('total', 0);
+        Http::assertNothingSent();
+    }
+
+    public function test_whole_tokens_apply_to_cross_document_evidence_and_page_positions(): void
+    {
+        $pr = $this->pr();
+        $writer = app(ProcurementSearchWriter::class);
+        $first = $writer->source('archive_attachment', 'exact-pages', 'Scan', 'SCAN-1', '', '', [$pr->id], hash('sha256', 'exact-pages'), true);
+        $writer->passages($first, [['page' => 1, 'text' => 'sensorium'], ['page' => 2, 'text' => 'sensor']]);
+        $second = $writer->source('sp', 'exact-related', 'Dokumen', 'SP-01', 'kalibrasi', '', [$pr->id], hash('sha256', 'exact-related'));
+        $this->search('sensor', ['lexical' => 'exact', 'scope' => 'archive'])->assertJsonPath('rows.0.matches.0.match_page', 2);
+        $response = $this->search('sensor kalibrasi', ['match' => 'related', 'lexical' => 'exact'])->assertJsonPath('total', 1);
+        $matches = collect($response->json('rows.0.matches'))->keyBy('id');
+        $this->assertSame(['sensor'], $matches[$first]['matched_words']);
+        $this->assertSame(['kalibrasi'], $matches[$second]['matched_words']);
+        $this->search('sens kalibrasi', ['match' => 'related', 'lexical' => 'exact'])->assertJsonPath('total', 0);
+    }
+
+    public function test_reference_lookup_is_whole_literal_scoped_and_never_invents_a_page_hit(): void
+    {
+        $pr = $this->pr();
+        $writer = app(ProcurementSearchWriter::class);
+        $reference = 'RFQ/26_%!\\015';
+        $id = $writer->source('archive_attachment', 'literal-ref', 'Scan', $reference, 'Dokumen penawaran', '', [$pr->id], hash('sha256', 'literal-ref'), true);
+        $writer->passages($id, [['page' => 7, 'text' => 'RFQ 26 isi tidak membuktikan nomor di halaman ini']]);
+        $writer->source('ppbj', 'other-ref', 'Nomor lain', 'RFQ/26XA!\\015', $reference, '', [$pr->id], hash('sha256', 'other-ref'));
+        $this->search(strtolower($reference), ['match' => 'reference'])->assertJsonPath('total', 1)->assertJsonCount(1, 'rows.0.matches')
+            ->assertJsonPath('rows.0.matches.0.id', $id)->assertJsonPath('rows.0.matches.0.match_page', null)->assertJsonPath('lexical', 'exact')->assertJsonPath('suggestions', []);
+        $response = $this->search($reference, ['match' => 'reference', 'scope' => 'archive']);
+        $this->assertStringNotContainsString('#page=', $response->json('rows.0.matches.0.url'));
+        $this->search('RFQ/26', ['match' => 'reference'])->assertJsonPath('total', 0);
+        $this->search($reference, ['match' => 'reference', 'scope' => 'sp'])->assertJsonPath('total', 0);
+        DB::table('procurement_search_sources')->where('id', $id)->update(['verified_at' => now()->subHour()]);
+        $this->search($reference, ['match' => 'reference'])->assertJsonPath('total', 0);
+        Http::assertNothingSent();
+    }
+
+    public function test_evidence_cursor_reaches_all_sources_with_bounded_payloads_and_live_filters(): void
+    {
+        $pr = $this->pr();
+        $other = $this->pr('OTHER-PR');
+        $writer = app(ProcurementSearchWriter::class);
+        $ids = [];
+        for ($i = 0; $i < 21; $i++) {
+            $ids[] = $writer->source('archive_attachment', 'evidence-'.$i, 'Scan '.$i, 'SCAN-'.$i, 'plastik', '', [$pr->id], hash('sha256', 'evidence-'.$i), true);
+        }
+        $writer->source('archive_attachment', 'evidence-other', 'Other', 'OTHER', 'plastik', '', [$other->id], hash('sha256', 'evidence-other'), true);
+        $this->search('plastik', ['pr' => $pr->id, 'after' => 0, 'buyer' => 'Tidak cocok'])->assertJsonPath('total', 0);
+        $main = $this->search('plastik', ['buyer' => 'Nazar'])->json('rows');
+        $main = collect($main)->firstWhere('id', $pr->id);
+        $this->assertCount(4, $main['matches']);
+        $this->assertTrue($main['evidence']['has_more']);
+        $cursor = 0;
+        $found = [];
+        do {
+            $response = $this->search('plastik', ['pr' => $pr->id, 'after' => $cursor, 'buyer' => 'Nazar'])->assertJsonCount(1, 'rows')->assertJsonPath('rows.0.context', null)->assertJsonPath('suggestions', []);
+            $row = $response->json('rows.0');
+            $this->assertLessThanOrEqual(8, count($row['matches']));
+            foreach ($row['matches'] as $source) {
+                $this->assertGreaterThan($cursor, $source['id']);
+                $found[] = $source['id'];
+            }
+            $this->assertGreaterThan($cursor, $row['evidence']['after']);
+            $cursor = $row['evidence']['after'];
+        } while ($row['evidence']['has_more']);
+        $this->assertSame($ids, $found);
+        $this->search('plastik', ['pr' => $pr->id, 'after' => $cursor])->assertJsonPath('rows.0.matches', [])->assertJsonPath('rows.0.evidence.after', $cursor)->assertJsonPath('rows.0.evidence.has_more', false);
+        $pr->delete();
+        $this->search('plastik', ['pr' => $pr->id, 'after' => 0])->assertJsonPath('rows', []);
+        Http::assertNothingSent();
+    }
+
+    public function test_evidence_cursor_does_not_skip_sources_after_earlier_rows_are_removed(): void
+    {
+        $pr = $this->pr();
+        $writer = app(ProcurementSearchWriter::class);
+        $ids = [];
+        for ($i = 0; $i < 12; $i++) {
+            $ids[] = $writer->source('archive_document', 'cursor-'.$i, 'Scan', 'CURSOR-'.$i, 'sensor', '', [$pr->id], hash('sha256', 'cursor-'.$i), true);
+        }
+        $first = $this->search('sensor', ['pr' => $pr->id, 'after' => 0])->json('rows.0');
+        DB::table('procurement_search_sources')->whereIn('id', array_slice($ids, 0, 3))->delete();
+        DB::table('procurement_search_sources')->where('id', $ids[9])->update(['verified_at' => now()->subHour()]);
+        DB::table('procurement_search_sources')->where('id', $ids[10])->update(['active' => false]);
+        DB::table('procurement_search_links')->where('source_id', $ids[11])->delete();
+        $next = $this->search('sensor', ['pr' => $pr->id, 'after' => $first['evidence']['after']])->assertJsonPath('rows.0.evidence.has_more', false);
+        $this->assertSame([$ids[8]], array_column($next->json('rows.0.matches'), 'id'));
+    }
+
+    public function test_precision_and_evidence_options_reject_invalid_requests(): void
+    {
+        foreach ([['lexical' => 'ai'], ['pr' => 0], ['pr' => 'x'], ['after' => 0], ['pr' => 1, 'after' => -1], ['pr' => 1, 'after' => 'x']] as $params) {
+            $this->getJson(route('procurement.search', ['q' => 'sensor'] + $params))->assertUnprocessable();
+        }
+    }
+
     public function test_one_pr_search_connects_all_three_lists_and_preserves_native_exports(): void
     {
         $pr = $this->pr();
@@ -86,71 +195,83 @@ class ProcurementUnifiedSearchTest extends TestCase
         $inferred = $this->pr('PR-RELEVANCE-2');
         $new = $this->pr('PR-RELEVANCE-3');
         $writer = app(ProcurementSearchWriter::class);
-        $writer->source('ppbj', 'rank-old', 'Sensor', $old->ppbj_no, 'sensor', '', [$old->id], hash('sha256','rank-old'));
-        foreach ([$inferred,$new] as $pr) {
-            $id=$writer->source('archive_attachment', 'rank-'.$pr->id, 'Sensor.pdf', 'SCAN-'.$pr->id, 'sensor', '', [$pr->id],hash('sha256','rank-'.$pr->id),true);
-            DB::table('procurement_search_sources')->where('id',$id)->update(['state'=>'ready','reading_confidence'=>94]);
-            if ($pr->id===$inferred->id) DB::table('procurement_search_links')->where('source_id',$id)->update(['inferred'=>true]);
+        $writer->source('ppbj', 'rank-old', 'Sensor', $old->ppbj_no, 'sensor', '', [$old->id], hash('sha256', 'rank-old'));
+        foreach ([$inferred, $new] as $pr) {
+            $id = $writer->source('archive_attachment', 'rank-'.$pr->id, 'Sensor.pdf', 'SCAN-'.$pr->id, 'sensor', '', [$pr->id], hash('sha256', 'rank-'.$pr->id), true);
+            DB::table('procurement_search_sources')->where('id', $id)->update(['state' => 'ready', 'reading_confidence' => 94]);
+            if ($pr->id === $inferred->id) {
+                DB::table('procurement_search_links')->where('source_id', $id)->update(['inferred' => true]);
+            }
         }
-        $this->search('sensor')->assertJsonPath('rows.0.id',$old->id)->assertJsonPath('rows.1.id',$new->id)->assertJsonPath('rows.2.id',$inferred->id);
-        $this->search('sensor',['sort'=>'newest'])->assertJsonPath('rows.0.id',$new->id)->assertJsonPath('sort','newest');
-        $inferred->update(['ppbj_no'=>'SENSOR']);
-        $this->search('sensor')->assertJsonPath('rows.0.id',$inferred->id)->assertJsonPath('rows.0.relevance.reason','Nomor PR persis');
+        $this->search('sensor')->assertJsonPath('rows.0.id', $old->id)->assertJsonPath('rows.1.id', $new->id)->assertJsonPath('rows.2.id', $inferred->id);
+        $this->search('sensor', ['sort' => 'newest'])->assertJsonPath('rows.0.id', $new->id)->assertJsonPath('sort', 'newest');
+        $inferred->update(['ppbj_no' => 'SENSOR']);
+        $this->search('sensor')->assertJsonPath('rows.0.id', $inferred->id)->assertJsonPath('rows.0.relevance.reason', 'Nomor PR persis');
     }
 
     public function test_pathological_short_letter_queries_are_rejected_before_any_search_table_query(): void
     {
         DB::enableQueryLog();
-        foreach ([['q'=>'a b c d e f g h'],['q'=>'sensor x','match'=>'related'],['q'=>'sensor pompa pipa baja plastik meja kursi kantor kertas','match'=>'related']] as $input) {
-            $this->getJson(route('procurement.search',$input))->assertUnprocessable()->assertJsonValidationErrors('q');
+        foreach ([['q' => 'a b c d e f g h'], ['q' => 'sensor x', 'match' => 'related'], ['q' => 'sensor pompa pipa baja plastik meja kursi kantor kertas', 'match' => 'related']] as $input) {
+            $this->getJson(route('procurement.search', $input))->assertUnprocessable()->assertJsonValidationErrors('q');
         }
-        $queries=collect(DB::getQueryLog())->pluck('query'); DB::disableQueryLog();
-        $this->assertCount(0,$queries->filter(fn ($sql)=>str_contains($sql,'procurement_search')));
-        $this->search('sensor 2')->assertJsonPath('total',0);
+        $queries = collect(DB::getQueryLog())->pluck('query');
+        DB::disableQueryLog();
+        $this->assertCount(0, $queries->filter(fn ($sql) => str_contains($sql, 'procurement_search')));
+        $this->search('sensor 2')->assertJsonPath('total', 0);
     }
 
     public function test_related_mode_combines_evidence_only_within_the_same_live_pr_and_keeps_word_provenance(): void
     {
-        $first=$this->pr('PR-CROSS-1'); $second=$this->pr('PR-CROSS-2'); $third=$this->pr('PR-CROSS-3');
-        $writer=app(ProcurementSearchWriter::class);
-        $source=$this->archive($first);
-        $writer->append($source,['text'=>'sensor','page'=>1,'pages'=>1,'done'=>true]);
-        $writer->source('sp','cross-cal','Kalibrasi', 'SP-CROSS','kalibrasi','',[$first->id],hash('sha256','cross-cal'));
-        $writer->source('ppbj','cross-other-sensor','Sensor',$second->ppbj_no,'sensor','',[$second->id],hash('sha256','cross-other-sensor'));
-        $writer->source('archive_document','cross-other-cal','Kalibrasi',$third->ppbj_no,'kalibrasi','',[$third->id],hash('sha256','cross-other-cal'),true);
-        $this->search('sensor kalibrasi')->assertJsonPath('total',0)->assertJsonPath('suggestions',[]);
+        $first = $this->pr('PR-CROSS-1');
+        $second = $this->pr('PR-CROSS-2');
+        $third = $this->pr('PR-CROSS-3');
+        $writer = app(ProcurementSearchWriter::class);
+        $source = $this->archive($first);
+        $writer->append($source, ['text' => 'sensor', 'page' => 1, 'pages' => 1, 'done' => true]);
+        $writer->source('sp', 'cross-cal', 'Kalibrasi', 'SP-CROSS', 'kalibrasi', '', [$first->id], hash('sha256', 'cross-cal'));
+        $writer->source('ppbj', 'cross-other-sensor', 'Sensor', $second->ppbj_no, 'sensor', '', [$second->id], hash('sha256', 'cross-other-sensor'));
+        $writer->source('archive_document', 'cross-other-cal', 'Kalibrasi', $third->ppbj_no, 'kalibrasi', '', [$third->id], hash('sha256', 'cross-other-cal'), true);
+        $this->search('sensor kalibrasi')->assertJsonPath('total', 0)->assertJsonPath('suggestions', []);
         DB::enableQueryLog();
-        $response=$this->search('sensor kalibrasi',['match'=>'related'])->assertJsonPath('total',1)->assertJsonPath('rows.0.id',$first->id)->assertJsonPath('match','related');
-        $queries=collect(DB::getQueryLog())->pluck('query'); DB::disableQueryLog();
-        $this->assertCount(0,$queries->filter(fn ($sql)=>preg_match('/^\s*(insert|update|delete)\b/i',$sql)));
-        $this->assertCount(2,$response->json('rows.0.matches'));
-        $evidence=collect($response->json('rows.0.matches'))->keyBy('kind');
-        $this->assertSame(['sensor'],$evidence['archive_attachment']['matched_words']);
-        $this->assertSame(['kalibrasi'],$evidence['sp']['matched_words']);
-        $this->search('sensor kalibrasi',['match'=>'related','scope'=>'archive'])->assertJsonPath('total',0);
-        $this->search('sensor kalibrasi',['match'=>'related','buyer'=>'Other buyer'])->assertJsonPath('total',0);
-        DB::table('procurement_search_sources')->where('id',$source->id)->update(['verified_at'=>now()->subMinutes(20)]);
-        $this->search('sensor kalibrasi',['match'=>'related'])->assertJsonPath('total',0);
-        foreach ([['match'=>'anything'],['sort'=>['bad']],['sort'=>'random']] as $bad) $this->getJson(route('procurement.search',$bad+['q'=>'sensor']))->assertUnprocessable();
+        $response = $this->search('sensor kalibrasi', ['match' => 'related'])->assertJsonPath('total', 1)->assertJsonPath('rows.0.id', $first->id)->assertJsonPath('match', 'related');
+        $queries = collect(DB::getQueryLog())->pluck('query');
+        DB::disableQueryLog();
+        $this->assertCount(0, $queries->filter(fn ($sql) => preg_match('/^\s*(insert|update|delete)\b/i', $sql)));
+        $this->assertCount(2, $response->json('rows.0.matches'));
+        $evidence = collect($response->json('rows.0.matches'))->keyBy('kind');
+        $this->assertSame(['sensor'], $evidence['archive_attachment']['matched_words']);
+        $this->assertSame(['kalibrasi'], $evidence['sp']['matched_words']);
+        $this->search('sensor kalibrasi', ['match' => 'related', 'scope' => 'archive'])->assertJsonPath('total', 0);
+        $this->search('sensor kalibrasi', ['match' => 'related', 'buyer' => 'Other buyer'])->assertJsonPath('total', 0);
+        DB::table('procurement_search_sources')->where('id', $source->id)->update(['verified_at' => now()->subMinutes(20)]);
+        $this->search('sensor kalibrasi', ['match' => 'related'])->assertJsonPath('total', 0);
+        foreach ([['match' => 'anything'], ['sort' => ['bad']], ['sort' => 'random']] as $bad) {
+            $this->getJson(route('procurement.search', $bad + ['q' => 'sensor']))->assertUnprocessable();
+        }
     }
 
     public function test_typo_suggestions_are_explicit_scoped_and_never_replace_business_references_or_dimensions(): void
     {
-        $pr=$this->pr(); $source=$this->archive($pr);
-        app(ProcurementSearchWriter::class)->append($source,['text'=>'plastik kursi kantor spektrometer','page'=>1,'pages'=>1,'done'=>true]);
-        foreach (['plastikk','palstik','klastik'] as $typo) {
-            $response=$this->search($typo,['scope'=>'archive'])->assertJsonPath('total',0)->assertJsonPath('query.used.0',$typo);
-            $this->assertContains('plastik',array_column($response->json('suggestions'),'replacement'));
+        $pr = $this->pr();
+        $source = $this->archive($pr);
+        app(ProcurementSearchWriter::class)->append($source, ['text' => 'plastik kursi kantor spektrometer', 'page' => 1, 'pages' => 1, 'done' => true]);
+        foreach (['plastikk', 'palstik', 'klastik'] as $typo) {
+            $response = $this->search($typo, ['scope' => 'archive'])->assertJsonPath('total', 0)->assertJsonPath('query.used.0', $typo);
+            $this->assertContains('plastik', array_column($response->json('suggestions'), 'replacement'));
         }
-        $response=$this->search('kursii kantor',['scope'=>'archive'])->assertJsonPath('total',1)->assertJsonPath('query.missing.0','kursii');
-        $this->assertContains('kursi kantor',array_column($response->json('suggestions'),'query'));
-        foreach (['plastikk 10','PR-plastikk','"plastikk"','plastikk/baru'] as $strict) $this->search($strict)->assertJsonPath('suggestions',[]);
-        $this->search('plastikk',['scope'=>'sp'])->assertJsonPath('suggestions',[]);
-        $this->search('plastikk',['buyer'=>'Someone else'])->assertJsonPath('suggestions',[]);
-        DB::table('procurement_search_sources')->where('id',$source->id)->update(['verified_at'=>now()->subMinutes(20)]);
-        $this->search('plastikk')->assertJsonPath('suggestions',[]);
-        DB::table('procurement_search_sources')->where('id',$source->id)->update(['verified_at'=>now()]);
-        $pr->delete(); $this->search('plastikk')->assertJsonPath('suggestions',[]);
+        $response = $this->search('kursii kantor', ['scope' => 'archive'])->assertJsonPath('total', 1)->assertJsonPath('query.missing.0', 'kursii');
+        $this->assertContains('kursi kantor', array_column($response->json('suggestions'), 'query'));
+        foreach (['plastikk 10', 'PR-plastikk', '"plastikk"', 'plastikk/baru'] as $strict) {
+            $this->search($strict)->assertJsonPath('suggestions', []);
+        }
+        $this->search('plastikk', ['scope' => 'sp'])->assertJsonPath('suggestions', []);
+        $this->search('plastikk', ['buyer' => 'Someone else'])->assertJsonPath('suggestions', []);
+        DB::table('procurement_search_sources')->where('id', $source->id)->update(['verified_at' => now()->subMinutes(20)]);
+        $this->search('plastikk')->assertJsonPath('suggestions', []);
+        DB::table('procurement_search_sources')->where('id', $source->id)->update(['verified_at' => now()]);
+        $pr->delete();
+        $this->search('plastikk')->assertJsonPath('suggestions', []);
         Http::assertNothingSent();
     }
 
@@ -181,7 +302,9 @@ class ProcurementUnifiedSearchTest extends TestCase
         $pr->update(['buyer' => 'Buyer Baru']);
         $this->search('spektrometer')->assertJsonPath('rows.0.context.buyer', 'Buyer Baru');
         foreach (['ppbj' => 'ppbj', 'sp' => 'sps', 'spph' => 'spphs'] as $kind => $key) {
-            if ($kind === 'sp') $sp->restore();
+            if ($kind === 'sp') {
+                $sp->restore();
+            }
             $this->assertCount(1, $this->get(route($kind.'.index', ['search' => 'spektrometer']))->assertOk()->viewData($key));
         }
         Http::assertNothingSent();
@@ -221,7 +344,8 @@ class ProcurementUnifiedSearchTest extends TestCase
         $this->documents($pr);
         $creator = User::factory()->create(['name' => 'Melati Pembuat', 'department' => 'operasional']);
         $tor = \App\Models\Torpr::create(['nomor_pr' => $pr->ppbj_no, 'tujuan_pengadaan' => 'Pengujian reologi', 'tanggal_pr' => '2026-11-01', 'portofolio' => 'CON', 'created_by_user_id' => $creator->id]);
-        $sync = app(ProcurementSearchSync::class); $sync->local();
+        $sync = app(ProcurementSearchSync::class);
+        $sync->local();
         $this->search('Melati')->assertJsonPath('total', 1);
         $pr->update(['uraian' => str_repeat('Uraian panjang pengadaan. ', 200).' zetaterakhir']);
         $sync->local();
@@ -229,10 +353,12 @@ class ProcurementUnifiedSearchTest extends TestCase
         foreach (['ppbj' => 'ppbj', 'sp' => 'sps', 'spph' => 'spphs'] as $kind => $key) {
             $this->assertCount(1, $this->get(route($kind.'.index', ['search' => 'reologi']))->assertOk()->viewData($key));
         }
-        $creator->update(['name' => 'Kenanga Baru']); $sync->local();
+        $creator->update(['name' => 'Kenanga Baru']);
+        $sync->local();
         $this->search('Melati')->assertJsonPath('total', 0);
         $this->search('Kenanga')->assertJsonPath('total', 1);
-        $tor->delete(); $sync->local();
+        $tor->delete();
+        $sync->local();
         $this->search('Kenanga')->assertJsonPath('total', 0);
     }
 

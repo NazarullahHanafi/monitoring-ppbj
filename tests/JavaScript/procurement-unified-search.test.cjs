@@ -14,9 +14,9 @@ class Element {
 }
 function setup() {
     const nodes = {};
-    for (const name of ['form', 'query', 'scope', 'match', 'sort', 'suggestions', 'buyer', 'vendor', 'creator', 'status', 'results', 'pagination', 'prev', 'next', 'reset', 'page', 'submit', 'summary', 'progress', 'progressinfo']) nodes[name] = new Element();
+    for (const name of ['form', 'query', 'scope', 'match', 'sort', 'lexical', 'suggestions', 'buyer', 'vendor', 'creator', 'status', 'results', 'pagination', 'prev', 'next', 'reset', 'page', 'submit', 'summary', 'progress', 'progressinfo']) nodes[name] = new Element();
     nodes.scope.value = 'all';
-    nodes.match.value = 'source'; nodes.sort.value = 'relevance';
+    nodes.match.value = 'source'; nodes.sort.value = 'relevance'; nodes.lexical.value = 'expanded';
     nodes.form.querySelector = () => nodes.submit;
     const root = new Element(); root.dataset.endpoint = 'https://app.test/procurement/search';
     root.querySelector = selector => nodes[selector.match(/data-pus-(\w+)/)?.[1]];
@@ -238,4 +238,70 @@ test('scan diagnostics use a separate collapsible panel and reset hides it', asy
     assert.match(f.nodes.progressinfo.textContent, /3 halaman bermasalah/);
     assert.doesNotMatch(f.nodes.status.textContent, /20 lampiran/);
     f.nodes.reset.fire('click'); assert.equal(f.nodes.progress.hidden, true);
+});
+
+function walk(node, predicate) { return [node, ...node.children.flatMap(child => walk(child, predicate))].filter(predicate); }
+function sourceBatch(start, end, more = false) {
+    const response = data(); response.rows[0].id = 17;
+    response.rows[0].matches = Array.from({length:end-start+1}, (_,i) => ({...data().rows[0].matches[0], id:start+i}));
+    response.rows[0].evidence = {after:end,has_more:more}; response.rows[0].more_sources = more ? 1 : 0;
+    return response;
+}
+test('whole token precision is manual, retained across pages, and does not highlight a prefix', async () => {
+    const f=setup(); f.nodes.lexical.value='exact'; f.nodes.lexical.fire('change'); assert.equal(f.requests.length,0);
+    submit(f,'sensor'); assert.equal(new URL(f.requests[0].url).searchParams.get('lexical'),'exact');
+    const response={...data(),lexical:'exact',query:{used:['sensor']},last_page:2}; response.rows[0].matches[0].snippet='sensorium sensor';
+    f.requests[0].resolve({ok:true,json:async()=>response}); await flush();
+    assert.deepEqual(walk(f.nodes.results,node=>node.tag==='mark').map(node=>node.textContent),['sensor']);
+    assert.match(f.nodes.status.textContent,/Kata utuh/);
+    f.nodes.lexical.value='expanded'; f.nodes.next.fire('click'); assert.equal(new URL(f.requests[1].url).searchParams.get('lexical'),'exact');
+    f.nodes.reset.fire('click'); assert.equal(f.nodes.lexical.value,'expanded');
+    f.nodes.match.value='reference'; submit(f,'RFQ_%01'); assert.equal(new URL(f.requests[2].url).searchParams.get('lexical'),'exact'); assert.equal(f.nodes.lexical.value,'exact');
+    const exact={...data(),match:'reference',lexical:'exact'}; exact.rows[0].matches[0].reference='RFQ_%01';
+    f.requests[2].resolve({ok:true,json:async()=>exact}); await flush();
+    assert.equal(walk(f.nodes.results,node=>node.textContent==='Nomor persis: RFQ_%01').length,1);
+});
+test('additional evidence is lazy, deduplicated, bounded and uses the applied query snapshot', async () => {
+    const f=setup(); f.nodes.lexical.value='exact'; f.nodes.buyer.value='Nazar'; submit(f,'sensor');
+    const first=sourceBatch(1,4,true); f.requests[0].resolve({ok:true,json:async()=>first}); await flush();
+    const panel=walk(f.nodes.results,node=>node.className==='pus-details pus-evidence')[0];
+    assert.notEqual(panel.open,true); panel.fire('toggle'); assert.equal(f.requests.length,1);
+    const button=panel.children[3], list=panel.children[2];
+    f.nodes.query.value='Unsubmitted'; f.nodes.buyer.value='Draft'; f.nodes.lexical.value='expanded'; f.nodes.scope.value='sp';
+    button.fire('click'); button.fire('click'); assert.equal(f.requests.length,2); assert.equal(button.disabled,true);
+    let params=new URL(f.requests[1].url).searchParams;
+    assert.equal(params.get('q'),'sensor'); assert.equal(params.get('buyer'),'Nazar'); assert.equal(params.get('scope'),'all'); assert.equal(params.get('lexical'),'exact'); assert.equal(params.get('pr'),'17'); assert.equal(params.get('after'),'0');
+    f.requests[1].resolve({ok:true,json:async()=>sourceBatch(1,8,true)}); await flush();
+    assert.equal(list.children.length,4); assert.equal(button.disabled,false); assert.equal(button.hidden,false);
+    button.fire('click'); assert.equal(new URL(f.requests[2].url).searchParams.get('after'),'8');
+    f.requests[2].resolve({ok:true,json:async()=>sourceBatch(9,11,false)}); await flush();
+    assert.equal(list.children.length,7); assert.equal(button.hidden,true);
+    assert.equal(walk(f.nodes.results,node=>node.className==='pus-match').length,11);
+});
+test('evidence failures can retry without advancing the cursor or duplicating sources', async () => {
+    const f=setup(); submit(f,'sensor'); f.requests[0].resolve({ok:true,json:async()=>sourceBatch(1,4,true)}); await flush();
+    const panel=walk(f.nodes.results,node=>node.className==='pus-details pus-evidence')[0], button=panel.children[3];
+    button.fire('click'); f.requests[1].resolve({ok:false,status:429}); await flush(); assert.match(panel.children[1].textContent,/Tunggu/); assert.equal(button.disabled,false);
+    button.fire('click'); assert.equal(new URL(f.requests[2].url).searchParams.get('after'),'0');
+    const invalid=sourceBatch(1,8,true); invalid.rows[0].evidence.after=0;
+    f.requests[2].resolve({ok:true,json:async()=>invalid}); await flush(); assert.equal(panel.children[2].children.length,0); assert.match(panel.children[1].textContent,/belum dapat/);
+    button.fire('click'); f.requests[3].resolve({ok:true,json:async()=>sourceBatch(1,8,true)}); await flush(); assert.equal(panel.children[2].children.length,4);
+});
+test('new searches and reset cancel additional evidence and discard late responses', async () => {
+    for (const action of ['reset','search']) {
+        const f=setup(); submit(f,'sensor'); f.requests[0].resolve({ok:true,json:async()=>sourceBatch(1,4,true)}); await flush();
+        const panel=walk(f.nodes.results,node=>node.className==='pus-details pus-evidence')[0], button=panel.children[3];
+        button.fire('click');
+        if(action==='reset') f.nodes.reset.fire('click'); else submit(f,'plastik');
+        assert.equal(f.requests[1].options.signal.aborted,true);
+        f.requests[1].resolve({ok:true,json:async()=>sourceBatch(1,8,true)}); await flush(); assert.equal(panel.children[2].children.length,0);
+    }
+});
+test('additional evidence uses safe text and never trusts external source links', async () => {
+    const f=setup(); submit(f,'sensor'); f.requests[0].resolve({ok:true,json:async()=>sourceBatch(1,4,true)}); await flush();
+    const panel=walk(f.nodes.results,node=>node.className==='pus-details pus-evidence')[0]; panel.children[3].fire('click');
+    const response=sourceBatch(5,5,false); response.rows[0].matches[0].url='https://evil.test/steal';
+    f.requests[1].resolve({ok:true,json:async()=>response}); await flush();
+    assert.equal(panel.children[2].children[0].children[0].children[1].textContent,'<img src=x onerror=alert(1)>');
+    assert.equal(walk(panel.children[2],node=>Boolean(node.href)).length,0);
 });
