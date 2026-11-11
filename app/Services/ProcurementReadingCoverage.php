@@ -16,7 +16,8 @@ class ProcurementReadingCoverage
 
     public function repairable(object $page): bool
     {
-        return (int) $page->bytes === 0 && (int) $page->repair_attempts < 2 && ! in_array($page->error, ['page_text_limit', 'office_images', 'office_limit'], true);
+        return ((int) $page->bytes === 0 || in_array($page->error, ['legacy_unverified', 'legacy_truncated'], true))
+            && (int) $page->repair_attempts < 2 && ! in_array($page->error, ['page_text_limit', 'office_images', 'office_limit'], true);
     }
 
     public function audit(int $id): void
@@ -26,6 +27,11 @@ class ProcurementReadingCoverage
                 ->lockForUpdate()->first();
             if (! $source || ! $source->active || ! str_starts_with($source->kind, 'archive_')) {
                 return;
+            }
+            // Legacy summaries may contain a truncated final page. Retain that
+            // text for search, but require a bounded reread before completion.
+            if ($source->passages_version && $source->reader_revision < 2) {
+                DB::table('procurement_search_passages')->where('source_id', $id)->whereNull('error')->update(['error' => 'legacy_unverified']);
             }
             $pages = $this->pages($id);
             $known = $source->pages === null ? null : (int) $source->pages;
@@ -41,13 +47,15 @@ class ProcurementReadingCoverage
             }
             // Older Office readers did not check embedded images, notes, or
             // text beyond the summary limit. Revalidate each legacy file once.
-            if ($source->reading_engine === 'office-text' && $source->reader_revision < 3) {
+            $legacyOffice = $source->reading_engine === 'office-text' && $source->reader_revision < 3;
+            if ($legacyOffice
+                && ! in_array($source->state, ['unsupported', 'limited', 'failed'], true)) {
                 DB::table('procurement_search_sources')->where('id', $id)->update($values + ['coverage_state' => 'in_progress', 'state' => 'partial', 'page' => 0, 'failure_code' => 'legacy_text_limit']);
 
                 return;
             }
             $terminal = in_array($source->state, ['unsupported', 'limited'], true);
-            $complete = $known !== null && ! $missing && $source->passages_version;
+            $complete = $known !== null && ! $missing && $source->passages_version && ! $legacyOffice;
             $values['coverage_state'] = $terminal || $problems->isNotEmpty() || ($source->state === 'failed' && $source->attempts >= 3 && $source->recovery_round >= 3)
                 ? 'review' : ($complete ? 'processed' : 'in_progress');
             if (! $terminal && $complete && ! $retryPages) {

@@ -164,6 +164,8 @@ class ProcurementSearchSync
                     // Re-read the final capped pass; its original text may extend beyond the old summary.
                     $rewind = max(0, (int) $source->page - 2);
                     $values += ['page' => $rewind, 'state' => 'partial', 'attempts' => 0, 'retry_at' => null, 'error' => null];
+                    DB::table('procurement_search_passages')->where('source_id', $source->id)->where('page', '>', $rewind)
+                        ->whereNull('error')->update(['error' => 'legacy_truncated']);
                 }
                 DB::table('procurement_search_sources')->where('id', $source->id)->update($values);
             }

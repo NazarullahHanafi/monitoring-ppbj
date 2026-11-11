@@ -62,6 +62,7 @@ class ProcurementOcrProcessor
             $checksum = hash_file('sha256', $path);
             $duplicate = (int) $source->page === 0 ? DB::table('procurement_search_sources')->where('checksum', $checksum)->where('active', true)
                 ->where('state', 'ready')->where('passages_version', true)->where('id', '!=', $source->id)
+                ->where('reader_revision', '>=', 2)
                 ->where(fn ($query) => $query->whereNull('reading_engine')->orWhere('reading_engine', '!=', 'office-text')->orWhere('reader_revision', '>=', 3))
                 ->first(['id', 'content', 'pages', 'reading_engine', 'reading_confidence', 'reader_revision']) : null;
             if ($duplicate && $this->writer->copy($source, $duplicate)) {
@@ -73,8 +74,9 @@ class ProcurementOcrProcessor
             // Skip already retained pages while repairing a gap. Empty failed
             // pages get at most two additional attempts; existing text is kept.
             $coverage = app(ProcurementReadingCoverage::class);
-            $stored = $source->passages_version && $source->failure_code !== 'legacy_text_limit' ? $coverage->pages($source->id) : collect();
-            $cursor = (int) $source->page;
+            $legacyOffice = $source->reading_engine === 'office-text' && $source->reader_revision < 3;
+            $stored = $source->passages_version && ! $legacyOffice ? $coverage->pages($source->id) : collect();
+            $cursor = $legacyOffice ? 0 : (int) $source->page;
             foreach ($stored->where('page', '>', $cursor) as $page) {
                 if ((int) $page->page !== $cursor + 1 || $coverage->repairable($page)) {
                     break;
@@ -85,7 +87,7 @@ class ProcurementOcrProcessor
                 DB::table('procurement_search_sources')->where('id', $source->id)->where('fingerprint', $source->fingerprint)->update(['page' => $cursor]);
                 $source->page = $cursor;
             }
-            if ($source->failure_code !== 'legacy_text_limit' && $source->pages !== null && $cursor >= (int) $source->pages) {
+            if (! $legacyOffice && $source->pages !== null && $cursor >= (int) $source->pages) {
                 $coverage->audit($source->id);
 
                 return true;
@@ -129,6 +131,12 @@ class ProcurementOcrProcessor
                 DB::table('procurement_search_sources')->where('id', $source->id)->update(['state' => 'unsupported', 'error' => 'Format perlu dikonversi ke PDF/foto agar isinya bisa dibaca.', 'updated_at' => now()]);
 
                 return true;
+            }
+            if ((($repair && (int) $repair->bytes > 0) || ($legacyOffice && trim($source->content ?? '') !== ''))
+                && trim($result['text'] ?? '') === '') {
+                // An empty reread cannot erase retained legacy text. Keep its
+                // review marker and use the existing bounded failure handling.
+                throw new \RuntimeException('legacy_empty_reread');
             }
             $this->writer->append($source, $result);
             if (! isset($result['confidence']) || $result['confidence'] >= 55) {

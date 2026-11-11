@@ -892,6 +892,7 @@ class ProcurementUnifiedSearchTest extends TestCase
         $this->assertTrue((bool) $row->passages_version);
         $this->assertSame('partial', $row->state);
         $this->assertSame(0, $row->page);
+        $this->assertDatabaseHas('procurement_search_passages', ['source_id' => $source->id, 'page' => 2, 'error' => 'legacy_truncated']);
         $this->search('sensor')->assertJsonPath('rows.0.matches.0.match_page', 2);
     }
 

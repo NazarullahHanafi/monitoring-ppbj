@@ -52,7 +52,7 @@ class ProcurementReadingCoverageTest extends TestCase
                 return ['checksum' => hash_file('sha256', $input['destination'])];
             });
             $processor = new ProcurementOcrProcessor($bridge, app(ProcurementSearchWriter::class));
-            $run($processor, $id);
+            $run($processor, $id, $bridge);
         } finally {
             $this->app->useStoragePath($storage);
             $resolved = realpath($temporary);
@@ -224,6 +224,73 @@ class ProcurementReadingCoverageTest extends TestCase
         });
     }
 
+    public function test_failed_legacy_office_revalidation_keeps_backoff_and_really_rereads_the_file(): void
+    {
+        $this->withReader('catatanvalidasibaru', 'txt', function ($processor, $id) {
+            app(ProcurementSearchWriter::class)->passages($id, [['page' => 1, 'text' => 'lama', 'engine' => 'office-text']]);
+            DB::table('procurement_search_sources')->where('id', $id)->update(['state' => 'failed', 'reading_engine' => 'office-text', 'reader_revision' => 2, 'page' => 1, 'pages' => 1, 'attempts' => 3, 'failure_code' => 'reader_failed', 'retry_at' => now()->addDay()]);
+            app(ProcurementReadingCoverage::class)->audit($id);
+            $this->assertDatabaseHas('procurement_search_sources', ['id' => $id, 'state' => 'failed', 'failure_code' => 'reader_failed', 'attempts' => 3]);
+            $this->assertFalse($processor->next($id));
+            $this->travel(25)->hours();
+            $this->assertTrue($processor->next($id));
+            $this->assertDatabaseHas('procurement_search_passages', ['source_id' => $id, 'page' => 1, 'content' => 'catatanvalidasibaru']);
+            DB::table('procurement_search_sources')->where('id', $id)->update(['verified_at' => now()]);
+            $this->getJson(route('procurement.search', ['q' => 'catatanvalidasibaru']))->assertOk()->assertJsonPath('total', 1);
+            DB::table('procurement_search_sources')->where('id', $id)->update(['state' => 'unsupported', 'reader_revision' => 2, 'failure_code' => 'office_limit']);
+            app(ProcurementReadingCoverage::class)->audit($id);
+            $this->assertDatabaseHas('procurement_search_sources', ['id' => $id, 'state' => 'unsupported', 'coverage_state' => 'review', 'failure_code' => 'office_limit']);
+        });
+    }
+
+    public function test_legacy_scan_text_is_reread_without_skipping_a_truncated_page_or_erasing_text_on_an_empty_retry(): void
+    {
+        $this->withReader('synthetic-pdf', 'pdf', function ($unused, $id, $bridge) {
+            $writer = app(ProcurementSearchWriter::class);
+            $writer->passages($id, [['page' => 1, 'text' => 'bacaanawal', 'engine' => 'pdfjs-6-text'], ['page' => 2, 'text' => 'bacaanterakhir', 'engine' => 'pdfjs-6-text']]);
+            DB::table('procurement_search_sources')->where('id', $id)->update(['page' => 2, 'pages' => 2, 'state' => 'ready', 'reader_revision' => 1, 'reading_engine' => 'pdfjs-6-text']);
+            app(ProcurementReadingCoverage::class)->audit($id);
+            $this->assertDatabaseHas('procurement_search_sources', ['id' => $id, 'state' => 'partial', 'page' => 0, 'coverage_state' => 'review']);
+            $processor = new class($bridge, $writer) extends ProcurementOcrProcessor
+            {
+                public bool $empty = true;
+
+                public array $starts = [];
+
+                public function read(string $file, string $extension, int $start = 1, ?int $count = null, ?int $pixels = null): array
+                {
+                    $this->starts[] = [$start, $count];
+                    $text = $this->empty ? '' : ($start === 1 ? 'bacaanawal lengkapawal' : 'bacaanterakhir lengkapakhir');
+
+                    return ['page' => $start, 'pages' => 2, 'done' => $start === 2, 'text' => $text, 'engine' => 'pdfjs-6-text', 'confidence' => 95, 'passages' => [['page' => $start, 'text' => $text, 'confidence' => 95, 'engine' => 'pdfjs-6-text']]];
+                }
+            };
+            $this->assertTrue($processor->next($id));
+            $this->assertDatabaseHas('procurement_search_passages', ['source_id' => $id, 'page' => 1, 'content' => 'bacaanawal', 'error' => 'legacy_unverified']);
+            $this->assertDatabaseHas('procurement_search_sources', ['id' => $id, 'state' => 'failed']);
+            $this->travel(6)->minutes();
+            $processor->empty = false;
+            $this->assertTrue($processor->next($id));
+            $this->assertTrue($processor->next($id));
+            $this->assertSame([[1, 1], [1, 1], [2, 1]], $processor->starts);
+            $this->assertDatabaseHas('procurement_search_sources', ['id' => $id, 'state' => 'ready', 'coverage_state' => 'processed', 'problem_pages' => 0]);
+            DB::table('procurement_search_sources')->where('id', $id)->update(['verified_at' => now()]);
+            $this->getJson(route('procurement.search', ['q' => 'lengkapakhir']))->assertOk()->assertJsonPath('total', 1);
+        });
+    }
+
+    public function test_empty_office_revalidation_does_not_erase_retained_legacy_text(): void
+    {
+        $this->withReader('', 'txt', function ($processor, $id) {
+            app(ProcurementSearchWriter::class)->passages($id, [['page' => 1, 'text' => 'tekslamatetapada', 'engine' => 'office-text']]);
+            DB::table('procurement_search_sources')->where('id', $id)->update(['state' => 'ready', 'content' => 'tekslamatetapada', 'reading_engine' => 'office-text', 'reader_revision' => 2, 'page' => 1, 'pages' => 1]);
+            app(ProcurementReadingCoverage::class)->audit($id);
+            $this->assertTrue($processor->next($id));
+            $this->assertDatabaseHas('procurement_search_sources', ['id' => $id, 'state' => 'failed', 'content' => 'tekslamatetapada']);
+            $this->assertDatabaseHas('procurement_search_passages', ['source_id' => $id, 'page' => 1, 'content' => 'tekslamatetapada']);
+        });
+    }
+
     public function test_coverage_api_lists_every_page_including_missing_pages_and_respects_live_archive_access(): void
     {
         $id = $this->source();
@@ -234,8 +301,8 @@ class ProcurementReadingCoverageTest extends TestCase
         $this->assertStringContainsString('private', $response->headers->get('Cache-Control'));
         DB::table('procurement_search_sources')->where('id', $id)->update(['verified_at' => now()->subHour()]);
         $this->getJson(route('procurement.search.coverage', ['source' => $id]))->assertNotFound();
-        $this->getJson(route('procurement.search.coverage'))->assertOk()->assertJsonPath('total',0);
-        $this->getJson(route('procurement.search.coverage',['page' => 0]))->assertUnprocessable();
+        $this->getJson(route('procurement.search.coverage'))->assertOk()->assertJsonPath('total', 0);
+        $this->getJson(route('procurement.search.coverage', ['page' => 0]))->assertUnprocessable();
         $this->actingAs(User::factory()->create(['department' => 'operasional']));
         $this->getJson(route('procurement.search.coverage'))->assertForbidden();
     }
