@@ -166,4 +166,19 @@ class ProcurementReadingRecoveryTest extends TestCase
             unlink($path);
         }
     }
+
+    public function test_offload_keeps_metadata_and_legacy_migration_running_and_throttles_sync_between_passes(): void
+    {
+        $sync = \Mockery::mock(ProcurementSearchSync::class);
+        $sync->shouldReceive('local')->with(160)->once()->andReturn(0);
+        $sync->shouldReceive('localFiles')->with(160)->once()->andReturn(0);
+        $sync->shouldReceive('archives')->with(160)->once()->andReturn(0);
+        $sync->shouldReceive('passages')->twice()->andReturn(0);
+        $sync->shouldReceive('progress')->twice()->andReturn(['waiting' => 0, 'coverage' => ['stored_pages' => 0], 'checked_at' => now()->toIso8601String()]);
+        $this->app->instance(ProcurementSearchSync::class, $sync);
+        $this->artisan('procurement:search-offload')->assertSuccessful();
+        $this->artisan('procurement:search-offload')->assertSuccessful();
+        $this->assertFalse(app(ProcurementOcrQueue::class)->deep);
+        $this->assertSame('connected', Cache::get('procurement-search:archive-state'));
+    }
 }

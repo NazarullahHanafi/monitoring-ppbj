@@ -31,10 +31,31 @@ class OffloadProcurementSearch extends Command
             $queue = app(\App\Services\ProcurementOcrQueue::class);
             $queue->deep = true;
             app()->instance(\App\Services\ProcurementOcrQueue::class, $queue);
+            $sync = app(ProcurementSearchSync::class);
+            // A busy offload worker must not starve metadata sync or legacy
+            // migration while holding the same lock as the hosting scheduler.
+            if (Cache::add('procurement-search:offload-sync', true, 45)) {
+                $sync->local(160);
+                $sync->localFiles(160);
+                try {
+                    $sync->archives(160);
+                    Cache::forever('procurement-search:archive-state', 'connected');
+                    Cache::forever('procurement-search:archive-sync', now()->toIso8601String());
+                } catch (\Throwable) {
+                    Cache::forever('procurement-search:archive-state', 'deferred');
+                }
+            }
+            $started = microtime(true);
+            for ($round = 0; $round < 4 && microtime(true) - $started < 3; $round++) {
+                if ($sync->passages() === 0) {
+                    break;
+                }
+            }
+            app(\App\Services\ProcurementReadingCoverage::class)->batch(10);
             app(ProcurementReadingReviews::class)->next();
             $processor = new ProcurementStdioOcrProcessor(app(ProcurementArchiveBridge::class), app(ProcurementSearchWriter::class));
             $worked = $processor->next();
-            $progress = app(ProcurementSearchSync::class)->progress();
+            $progress = $sync->progress();
             $this->line(json_encode(['type' => 'done', 'worked' => $worked, 'waiting' => $progress['waiting'], 'stored_pages' => $progress['coverage']['stored_pages'], 'checked_at' => $progress['checked_at']]));
 
             return self::SUCCESS;
