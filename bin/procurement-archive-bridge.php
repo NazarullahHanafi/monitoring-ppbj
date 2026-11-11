@@ -36,17 +36,20 @@ try {
         $parent = $attachment ? $row->dokumen : $row;
         $meta = $attachment ? ($row->metadata ?? []) : [];
         $active = $parent && ! $parent->deleted_at && $parent->status !== 'musnahkan' && (! $attachment || ! $row->cloud_deleted_at);
+        $permitted = $active;
         $localPath = filled($row->file_path) ? realpath($sourceDisk->path($row->file_path)) : false;
         $hasLocalFile = $localPath && $sourceRoot && str_starts_with($localPath, $sourceRoot.DIRECTORY_SEPARATOR) && is_file($localPath);
         $hasRemoteFile = $attachment && $row->storage_provider === 'onedrive' && filled($row->remote_item_id);
         $active = $active && ($hasLocalFile || $hasRemoteFile);
-        if (! $attachment && (mb_strtolower((string) $row->jenis_dokumen) === 'paket simonpr' || str_starts_with((string) $row->kode_dokumen, 'SIMONPR-INBOX-D'))) {
+        $container = ! $attachment && (mb_strtolower((string) $row->jenis_dokumen) === 'paket simonpr' || str_starts_with((string) $row->kode_dokumen, 'SIMONPR-INBOX-D'));
+        if ($container) {
             $active = false;
         }
         $extension = strtolower($attachment ? ($row->extension ?: pathinfo((string) $row->file_path, PATHINFO_EXTENSION)) : pathinfo((string) $row->file_path, PATHINFO_EXTENSION));
         $version = [$row->file_path, $attachment ? $row->remote_item_id : null, $attachment ? $row->content_checksum : $row->file_checksum, $attachment ? ($row->remote_size ?: $row->size) : null];
 
         return ['kind' => $kind, 'key' => (string) $row->id, 'active' => (bool) $active, 'extension' => $extension,
+            'availability' => ! $permitted ? 'retired' : ($container ? 'container' : (($hasLocalFile || $hasRemoteFile) ? 'available' : 'missing')),
             'size' => $hasLocalFile ? filesize($localPath) : ($attachment ? (int) ($row->remote_size ?: $row->size) : null),
             'label' => (string) ($attachment ? ($row->original_name ?: $row->document_type) : $row->judul),
             'reference' => (string) ($attachment ? $row->document_number : $row->nomor_surat),

@@ -94,6 +94,9 @@ class ProcurementSearchSync
                 $metadata = implode(' ', [$row['label'], $row['reference'], $row['pr'], $row['metadata']]);
                 $fingerprint = hash('sha256', $metadata.'|'.$row['version']);
                 $id = $this->writer->source($kind, $row['key'], $row['label'], $row['reference'], $metadata, '', $ids, $fingerprint, true, $active, $row['pr']);
+                if (($row['availability'] ?? '') === 'missing') {
+                    DB::table('procurement_search_sources')->where('id', $id)->update(['failure_code' => 'missing_file', 'coverage_state' => 'review', 'coverage_checked_at' => now(), 'error' => 'File tercatat di arsip, tetapi berkas sumber belum tersedia. Pulihkan file asli dari cadangan.']);
+                }
                 if ($active && ! empty($row['download_target'])) {
                     Cache::put('procurement-search:download:'.$id, ['url' => $row['download_target'], 'fingerprint' => $fingerprint], now()->addMinutes(14));
                 } else {
@@ -107,10 +110,29 @@ class ProcurementSearchSync
         return $count;
     }
 
+    public function localFiles(int $batch = 80): int
+    {
+        $count = 0;
+        foreach (['local_sp_attachment', 'local_spph_attachment'] as $kind) {
+            $key = 'procurement-search:cursor:'.$kind;
+            $page = app(ProcurementLocalFiles::class)->call(['action' => 'manifest', 'kind' => $kind, 'after' => Cache::get($key, ''), 'limit' => $batch]);
+            foreach ($page['rows'] as $row) {
+                $metadata = implode(' ', [$row['label'], $row['reference'], $row['pr'], $row['metadata']]);
+                $this->writer->source($kind, $row['key'], $row['label'], $row['reference'], $metadata, '', $row['pr_ids'], hash('sha256', $metadata.'|'.$row['version']), true, $row['active'], $row['pr']);
+                $count++;
+            }
+            Cache::forever($key, $page['has_more'] ? $page['last'] : '');
+            DB::table('procurement_search_sources')->where('kind', $kind)->where('active', true)
+                ->whereNotIn('source_key', ProcurementDetailAttachment::where('kind', $kind === 'local_sp_attachment' ? 'sp' : 'spph')->whereNotNull('document_id')->select('id'))->update(['active' => false, 'content' => null]);
+        }
+
+        return $count;
+    }
+
     public function progress(): array
     {
         $counts = DB::table('procurement_search_sources')->where('active', true)->select('state')->selectRaw('COUNT(*) as total')->groupBy('state')->pluck('total', 'state');
-        $pages = DB::table('procurement_search_sources')->where('active', true)->whereIn('kind', ['archive_document', 'archive_attachment'])
+        $pages = DB::table('procurement_search_sources')->where('active', true)->whereIn('kind', \App\Services\ProcurementFileSources::KINDS)
             ->selectRaw('SUM(page) as processed, SUM(pages) as known, SUM(CASE WHEN pages IS NULL THEN 1 ELSE 0 END) as unknown')->first();
         $progress = ['state' => 'running', 'ready' => (int) ($counts['ready'] ?? 0), 'pending' => (int) ($counts['pending'] ?? 0),
             'partial' => (int) ($counts['partial'] ?? 0), 'failed' => (int) ($counts['failed'] ?? 0),
@@ -121,12 +143,14 @@ class ProcurementSearchSync
         $progress['files_unmapped'] = (int) ($pages->unknown ?? 0);
         $progress['unreadable_pages'] = DB::table('procurement_search_passages as page')->join('procurement_search_sources as source', 'source.id', '=', 'page.source_id')
             ->where('source.active', true)->where(fn ($q) => $q->whereNotNull('page.error')->orWhere('page.confidence', '<', 55))->count();
-        $progress['unlinked_files'] = DB::table('procurement_search_sources as source')->where('source.active', true)->whereIn('source.kind', ['archive_document', 'archive_attachment'])
+        $progress['unlinked_files'] = DB::table('procurement_search_sources as source')->where('source.active', true)->whereIn('source.kind', \App\Services\ProcurementFileSources::KINDS)
             ->whereNotExists(fn ($q) => $q->selectRaw('1')->from('procurement_search_links as link')->join('ppbj as pr', 'pr.id', '=', 'link.ppbj_id')->whereColumn('link.source_id', 'source.id'))->count();
         $queue = app(ProcurementOcrQueue::class);
         $progress['waiting'] = $queue->eligible()->count();
         $progress['priority_waiting'] = $queue->priority($queue->eligible())->count();
-        $coverage = DB::table('procurement_search_sources')->where('active', true)->whereIn('kind', ['archive_document', 'archive_attachment'])
+        $progress['enhancement_waiting'] = DB::table('procurement_search_sources')->where('active', true)->where('state', 'enhance')->count();
+        $progress['missing_files'] = DB::table('procurement_search_sources')->where('failure_code', 'missing_file')->count();
+        $coverage = DB::table('procurement_search_sources')->where('active', true)->whereIn('kind', \App\Services\ProcurementFileSources::KINDS)
             ->selectRaw("SUM(CASE WHEN coverage_state = 'processed' THEN 1 ELSE 0 END) AS processed, SUM(CASE WHEN coverage_state = 'review' THEN 1 ELSE 0 END) AS review, SUM(CASE WHEN coverage_state = 'unchecked' THEN 1 ELSE 0 END) AS unchecked, SUM(indexed_pages) AS stored, SUM(problem_pages) AS problems")->first();
         $progress['coverage'] = ['processed_files' => (int) $coverage->processed, 'review_files' => (int) $coverage->review,
             'unchecked_files' => (int) $coverage->unchecked, 'stored_pages' => (int) $coverage->stored, 'problem_pages' => (int) $coverage->problems];
@@ -140,7 +164,7 @@ class ProcurementSearchSync
         // Migrate retained legacy text without opening/downloading/OCR'ing the file again.
         return DB::transaction(function () use ($limit) {
             $source = DB::table('procurement_search_sources')->where('active', true)->where('passages_version', false)
-                ->whereIn('kind', ['archive_document', 'archive_attachment'])->whereNotNull('content')->where('content', '!=', '')
+                ->whereIn('kind', \App\Services\ProcurementFileSources::KINDS)->whereNotNull('content')->where('content', '!=', '')
                 ->orderBy('id')->lockForUpdate()->first();
             if (! $source) {
                 return 0;

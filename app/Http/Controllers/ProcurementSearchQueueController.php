@@ -14,9 +14,19 @@ class ProcurementSearchQueueController extends Controller
     {
         abort_unless(config('procurement_search.enabled'), 404);
         $values = $request->validate(['page' => 'nullable|integer|min:1|max:10000', 'source' => 'nullable|integer|min:1']);
-        $query = DB::table('procurement_search_sources as s')->where('s.active', true)->whereIn('s.kind', ['archive_document', 'archive_attachment'])
+        $query = DB::table('procurement_search_sources as s')->where(function ($active) use ($request) {
+            $active->where('s.active', true);
+            if ($request->user()?->role === 'superadmin') {
+                $active->orWhere('s.failure_code', 'missing_file');
+            }
+        })->whereIn('s.kind', \App\Services\ProcurementFileSources::KINDS)
             ->where('s.verified_at', '>=', now()->subMinutes(config('procurement_search.archive_fresh_minutes')))
-            ->whereExists(fn ($links) => $links->selectRaw('1')->from('procurement_search_links as l')->join('ppbj', 'ppbj.id', '=', 'l.ppbj_id')->whereColumn('l.source_id', 's.id'));
+            ->where(function ($access) use ($request) {
+                if ($request->user()?->role !== 'superadmin') {
+                    $access->whereExists(fn ($links) => $links->selectRaw('1')->from('procurement_search_links as l')->join('ppbj', 'ppbj.id', '=', 'l.ppbj_id')->whereColumn('l.source_id', 's.id'));
+                }
+            });
+        \App\Services\ProcurementFileSources::liveLocal($query, 's');
         if (isset($values['source'])) {
             $source = (clone $query)->where('s.id', $values['source'])->first(['s.id', 's.label', 's.pages', 's.reading_engine']);
             abort_unless($source, 404);
@@ -25,12 +35,12 @@ class ProcurementSearchQueueController extends Controller
             $start = ($page - 1) * 25 + 1;
             $end = min($total, $start + 24);
             $stored = DB::table('procurement_search_passages')->where('source_id', $source->id)->whereBetween('page', [$start, $end])
-                ->select('page', 'confidence', 'error', 'repair_attempts')->selectRaw("LENGTH(COALESCE(content, '')) AS bytes")->get()->keyBy('page');
+                ->select('page', 'confidence', 'error', 'repair_attempts', 'human_review_id')->selectRaw("LENGTH(COALESCE(content, '')) AS bytes")->get()->keyBy('page');
             $rows = [];
             if ($start <= $end) {
                 foreach (range($start, $end) as $number) {
                     $entry = $stored->get($number);
-                    $rows[] = ['page' => $number, 'state' => ! $entry ? 'Belum diproses' : ($entry->error !== null || (int) $entry->bytes === 0 || ($entry->confidence !== null && $entry->confidence < 55) ? 'Perlu diperiksa' : 'Diproses otomatis'),
+                    $rows[] = ['page' => $number, 'state' => ! $entry ? 'Belum diproses' : ($entry->human_review_id ? 'Sudah diperiksa manusia' : ($entry->error !== null || (int) $entry->bytes === 0 || ($entry->confidence !== null && $entry->confidence < 55) ? 'Perlu diperiksa' : 'Diproses otomatis')),
                         'reason' => $entry?->error ? (['legacy_unverified' => 'Teks pembaca lama dipertahankan; kelengkapannya menunggu validasi ulang.', 'legacy_truncated' => 'Ringkasan lama pernah terpotong; halaman ini menunggu pembacaan ulang.', 'office_images' => 'Gambar di dalam Office belum dibaca. Konversi ke PDF atau periksa teksnya.', 'page_text_limit' => 'Teks melampaui batas aman satu halaman; perlu penanganan khusus.', 'memory' => 'Pembacaan melampaui batas memori.', 'page_unreadable' => 'Halaman belum berhasil dibaca.', 'timeout' => 'Pembacaan halaman kehabisan waktu.', 'resource_limit' => 'Pembacaan dihentikan batas sumber daya.'][$entry->error] ?? 'Halaman belum berhasil dibaca seluruhnya.') : null,
                         'confidence' => $entry?->confidence, 'repair_attempts' => $entry?->repair_attempts ?? 0,
                         'url' => $source->reading_engine === 'office-text' ? null : route('procurement.search.file', ['source' => $source->id]).'#page='.$number];

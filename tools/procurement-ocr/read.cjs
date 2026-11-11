@@ -5,13 +5,15 @@ const path = require('node:path');
 const { createRequire } = require('node:module');
 const { pathToFileURL } = require('node:url');
 const { score, mergeText, largeRaster, enhance } = require('./quality.cjs');
+const { prepare, regions } = require('./recovery.cjs');
 
 async function read(input) {
     const filename = fs.realpathSync(input.file);
     const root = fs.realpathSync(input.root);
     if (!filename.startsWith(root + path.sep) || fs.statSync(filename).size > 30 * 1024 * 1024) throw Error('invalid_source');
     const extension = String(input.extension || '').toLowerCase();
-    const maxPixels = Math.max(1000000, Math.min(4000000, Number(input.max_pixels) || 4000000));
+    const deep = input.profile === 'deep';
+    const maxPixels = Math.max(1000000, Math.min(deep ? 8000000 : 4000000, Number(input.max_pixels) || 4000000));
     const canvasLib = require('@napi-rs/canvas');
     let worker, retries = 0;
     const started = performance.now();
@@ -33,11 +35,32 @@ async function read(input) {
             const candidate = score((await worker.recognize(canvas.toBuffer('image/png'), { rotateAuto: true })).data);
             if (candidate.text && (!result.text || candidate.confidence > result.confidence)) result = candidate;
         }
+        if (deep && (result.confidence < 75 || result.text.replace(/\s/g, '').length < 80) && performance.now() - started < 90000) {
+            const cleaned = prepare(canvas, canvasLib);
+            try {
+                await worker.setParameters({ tessedit_pageseg_mode: '6' });
+                const candidate = score((await worker.recognize(cleaned.toBuffer('image/png'), { rotateAuto: true })).data);
+                if (candidate.text && candidate.confidence > result.confidence) result = candidate;
+                if (result.confidence < 65 && performance.now() - started < 100000) {
+                    const chunks = [];
+                    for (const region of regions(cleaned.width, cleaned.height)) {
+                        if (performance.now() - started >= 120000) break;
+                        await worker.setParameters({ tessedit_pageseg_mode: '11' });
+                        const part = score((await worker.recognize(cleaned.toBuffer('image/png'), { rectangle: { left: region.x, top: region.y, width: region.width, height: region.height } })).data);
+                        if (part.text && part.confidence >= 55) chunks.push(part);
+                    }
+                    if (chunks.length === 2) {
+                        const combined = { text: mergeText(chunks[0].text, chunks[1].text), confidence: Math.min(...chunks.map(item => item.confidence)) };
+                        if (combined.confidence > result.confidence) result = combined;
+                    }
+                }
+            } finally { cleaned.width = cleaned.height = 0; }
+        }
         return result;
     }
     let task;
     try {
-        if (['jpg', 'jpeg', 'png'].includes(extension)) {
+        if (['jpg', 'jpeg', 'png', 'webp', 'bmp', 'gif'].includes(extension)) {
             if (input.progress === true && require.main === module) process.stderr.write('OCR_PAGES=1\n');
             const image = await canvasLib.loadImage(filename);
             if (image.width * image.height > 25000000) throw Error('image_dimensions');
@@ -85,10 +108,11 @@ async function read(input) {
                     text = textContent.items.map(item => (item.str || '') + (item.hasEOL ? '\n' : ' ')).join('').trim();
                 } catch (_) {}
                 const operators = await page.getOperatorList();
-                const hasImage = operators.fnArray.some(op => [pdfjs.OPS.paintImageXObject, pdfjs.OPS.paintInlineImageXObject, pdfjs.OPS.paintImageMaskXObject].includes(op));
+                const imageOps = ['paintImageXObject', 'paintInlineImageXObject', 'paintImageMaskXObject', 'paintImageXObjectRepeat', 'paintInlineImageXObjectGroup', 'paintImageMaskXObjectRepeat', 'paintImageMaskXObjectGroup'].map(name => pdfjs.OPS[name]).filter(Number.isInteger);
+                const hasImage = operators.fnArray.some(op => imageOps.includes(op));
                 const normal = page.getViewport({ scale: 1 });
-                if (text.replace(/\s/g, '').length < 40 || (hasImage && text.length < 250) || largeRaster(operators, pdfjs.OPS, normal.width*normal.height)) {
-                    const scale = Math.min(2.5, Math.sqrt(maxPixels / (normal.width * normal.height)));
+                if (text.replace(/\s/g, '').length < 40 || (hasImage && (deep || text.length < 250)) || largeRaster(operators, pdfjs.OPS, normal.width*normal.height)) {
+                    const scale = Math.min(deep ? 4.2 : 2.5, Math.sqrt(maxPixels / (normal.width * normal.height)));
                     const viewport = page.getViewport({ scale });
                     const canvas = canvasLib.createCanvas(Math.ceil(viewport.width), Math.ceil(viewport.height));
                     try {

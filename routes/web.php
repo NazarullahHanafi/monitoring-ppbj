@@ -5,8 +5,8 @@ use App\Http\Controllers\ActivityBroadcastController;
 use App\Http\Controllers\ArchiveAttachmentController;
 use App\Http\Controllers\ArchiveDownloadGatewayController;
 use App\Http\Controllers\ChatController;
-use App\Http\Controllers\CollaborationCalendarController;
 use App\Http\Controllers\CollaborationActionInboxController;
+use App\Http\Controllers\CollaborationCalendarController;
 use App\Http\Controllers\CommandCenterController;
 use App\Http\Controllers\ContactMessageController;
 use App\Http\Controllers\DashboardController;
@@ -92,6 +92,12 @@ Route::get('/procurement/search/status', [\App\Http\Controllers\ProcurementSearc
     ->middleware(['auth', 'dept:umum', 'throttle:30,1'])->name('procurement.search.status');
 Route::get('/procurement/search/coverage', [\App\Http\Controllers\ProcurementSearchQueueController::class, 'coverage'])
     ->middleware(['auth', 'dept:umum', 'throttle:30,1'])->name('procurement.search.coverage');
+Route::get('/procurement/search/archive-catalog', [\App\Http\Controllers\ProcurementReadingReviewController::class, 'catalog'])
+    ->middleware(['auth', 'dept:umum', 'throttle:30,1'])->name('procurement.search.catalog');
+Route::get('/procurement/search/reviews/{source}/{page}', [\App\Http\Controllers\ProcurementReadingReviewController::class, 'show'])
+    ->whereNumber(['source', 'page'])->middleware(['auth', 'dept:umum', 'throttle:30,1'])->name('procurement.search.review');
+Route::post('/procurement/search/reviews/{source}/{page}', [\App\Http\Controllers\ProcurementReadingReviewController::class, 'store'])
+    ->whereNumber(['source', 'page'])->middleware(['auth', 'dept:umum', 'readonly.block', 'throttle:6,1']);
 Route::post('/procurement/search/prs/{ppbj}/priority', [\App\Http\Controllers\ProcurementSearchQueueController::class, 'priority'])
     ->whereNumber('ppbj')->middleware(['auth', 'dept:umum', 'readonly.block', 'throttle:6,1'])->name('procurement.search.priority');
 Route::get('/procurement/search/files/{source}', [ArchiveDownloadGatewayController::class, 'indexed'])
@@ -111,9 +117,9 @@ Route::post('/virtual-office/tutorial/document', [\App\Http\Controllers\VirtualO
 
 Route::post('/virtual-office/avatar', [\App\Http\Controllers\VirtualOfficeController::class, 'saveAvatar'])
     ->middleware(['auth', 'throttle:virtual-office'])->name('virtual-office.avatar');
-Route::post('/virtual-office/pilot', [\App\Http\Controllers\VirtualOfficePilotController::class, 'pulse'])->middleware(['auth','throttle:virtual-office'])->name('virtual-office.pilot');
-Route::post('/virtual-office/home/door', [\App\Http\Controllers\VirtualOfficePilotController::class, 'door'])->middleware(['auth','throttle:virtual-office'])->name('virtual-office.home.door');
-Route::post('/virtual-office/pilot/leave', [\App\Http\Controllers\VirtualOfficePilotController::class, 'leave'])->middleware(['auth','throttle:virtual-office'])->name('virtual-office.pilot.leave');
+Route::post('/virtual-office/pilot', [\App\Http\Controllers\VirtualOfficePilotController::class, 'pulse'])->middleware(['auth', 'throttle:virtual-office'])->name('virtual-office.pilot');
+Route::post('/virtual-office/home/door', [\App\Http\Controllers\VirtualOfficePilotController::class, 'door'])->middleware(['auth', 'throttle:virtual-office'])->name('virtual-office.home.door');
+Route::post('/virtual-office/pilot/leave', [\App\Http\Controllers\VirtualOfficePilotController::class, 'leave'])->middleware(['auth', 'throttle:virtual-office'])->name('virtual-office.pilot.leave');
 
 Route::middleware(['auth', 'readonly.block'])->group(function () {
     Route::get('/virtual-office/recreation', [\App\Http\Controllers\VirtualOfficeRecreationController::class, 'account'])->middleware('throttle:virtual-office')->name('virtual-office.recreation');
@@ -142,7 +148,7 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
     Route::get('/virtual-office', [\App\Http\Controllers\VirtualOfficeController::class, 'index'])
         ->name('virtual-office.index');
     Route::get('/virtual-office/hologram/{tool}', [\App\Http\Controllers\VirtualOfficeController::class, 'hologram'])
-        ->whereIn('tool', ['create','torpr','tracking','ppbj-create','ppbj','approval','sp','spph'])->middleware('throttle:virtual-office')->name('virtual-office.hologram');
+        ->whereIn('tool', ['create', 'torpr', 'tracking', 'ppbj-create', 'ppbj', 'approval', 'sp', 'spph'])->middleware('throttle:virtual-office')->name('virtual-office.hologram');
     Route::get('/virtual-office/presence', [\App\Http\Controllers\VirtualOfficeController::class, 'presence'])
         ->middleware([\App\Http\Middleware\DisableLoggingForPolling::class, 'throttle:virtual-office'])
         ->name('virtual-office.presence');

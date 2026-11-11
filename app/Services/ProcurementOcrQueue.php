@@ -9,10 +9,13 @@ use Illuminate\Support\Facades\DB;
 /** One shared worker: two priority turns, then one oldest-work turn. */
 class ProcurementOcrQueue
 {
+    public bool $deep = false;
+
     public function eligible()
     {
         return DB::table('procurement_search_sources')->where('active', true)
-            ->whereIn('kind', ['archive_document', 'archive_attachment'])->whereIn('state', ['pending', 'partial', 'failed'])
+            ->whereIn('kind', \App\Services\ProcurementFileSources::KINDS)->whereIn('state', $this->deep ? ['pending', 'partial', 'failed', 'enhance'] : ['pending', 'partial', 'failed'])
+            ->whereNotExists(fn ($q) => $q->selectRaw('1')->from('procurement_reading_reviews')->whereColumn('source_id', 'procurement_search_sources.id')->where('state', 'pending'))
             ->where(fn ($q) => $q->where('attempts', '<', 3)->orWhere('reader_revision', '<', 2)
                 ->orWhere(fn ($recovery) => $recovery->where('recovery_round', '<', 3)->where(fn ($reason) => $reason->whereNull('failure_code')->orWhereIn('failure_code', ['memory', 'timeout', 'resource_limit', 'reader_failed', 'source_changed', 'checksum']))))
             ->where(fn ($q) => $q->whereNull('retry_at')->orWhere('retry_at', '<=', now()));

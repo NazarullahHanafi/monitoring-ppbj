@@ -39,6 +39,7 @@ class IndexProcurementSearch extends Command
             if (! $this->option('ocr-only')) {
                 $limit = min(200, max(1, (int) $this->option('limit')));
                 $sources = $sync->local($limit);
+                $sources += $sync->localFiles($limit);
                 try {
                     $sources += $sync->archives($limit);
                     Cache::forever('procurement-search:archive-sync', now()->toIso8601String());
@@ -49,6 +50,7 @@ class IndexProcurementSearch extends Command
                 }
             }
             app(\App\Services\ProcurementReadingCoverage::class)->batch(10);
+            app(\App\Services\ProcurementReadingReviews::class)->next();
             // Bounded legacy migration; retain OCR time instead of rebuilding an entire index in one request.
             $legacyStarted = microtime(true);
             for ($round = 0; $round < 4 && microtime(true) - $started < $budget && microtime(true) - $legacyStarted < min(3, $budget / 3); $round++) {

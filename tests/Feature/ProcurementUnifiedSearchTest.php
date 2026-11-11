@@ -715,7 +715,7 @@ class ProcurementUnifiedSearchTest extends TestCase
         $writer->append($source, ['text' => 'Sensor tekanan', 'page' => 1, 'pages' => 2, 'done' => false, 'confidence' => 42, 'engine' => 'pdfjs-6-tesseract-7']);
         $source = DB::table('procurement_search_sources')->find($source->id);
         $writer->append($source, ['text' => 'Kalibrasi digital', 'page' => 2, 'pages' => 2, 'done' => true, 'engine' => 'pdfjs-6-text']);
-        $this->search('sensor')->assertJsonPath('rows.0.matches.0.state', 'uncertain')
+        $this->search('sensor')->assertJsonPath('rows.0.matches.0.state', 'enhance')
             ->assertJsonPath('rows.0.matches.0.reading.confidence', 42)->assertJsonPath('rows.0.matches.0.reading.engine', 'pdfjs-6-tesseract-7');
         $this->archive($pr);
         $this->assertSame(42, DB::table('procurement_search_sources')->find($source->id)->reading_confidence);

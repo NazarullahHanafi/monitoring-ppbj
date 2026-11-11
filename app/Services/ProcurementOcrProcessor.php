@@ -11,6 +11,11 @@ use ZipArchive;
 
 class ProcurementOcrProcessor
 {
+    protected function deepReader(): bool
+    {
+        return false;
+    }
+
     public function __construct(private ProcurementArchiveBridge $archive, private ProcurementSearchWriter $writer) {}
 
     public function next(?int $sourceId = null): bool
@@ -37,7 +42,7 @@ class ProcurementOcrProcessor
             $input = ['action' => 'file', 'kind' => $source->kind, 'id' => $source->source_key,
                 'destination' => $path, 'max_bytes' => config('procurement_search.max_bytes')];
             // Always revalidate archive access/version, even when a partial PDF is cached.
-            $manifest = $this->archive->call(['action' => 'manifest', 'kind' => $source->kind, 'after' => (int) $source->source_key - 1, 'limit' => 1]);
+            $manifest = $this->archive->call(['action' => 'manifest', 'kind' => $source->kind, 'key' => $source->source_key, 'after' => (int) $source->source_key - 1, 'limit' => 1]);
             $entry = $manifest['rows'][0] ?? null;
             if (! $entry || $entry['key'] !== $source->source_key || ! $entry['active']) {
                 DB::table('procurement_search_sources')->where('id', $source->id)->where('fingerprint', $source->fingerprint)->update(['active' => false, 'content' => null]);
@@ -63,7 +68,7 @@ class ProcurementOcrProcessor
             $duplicate = (int) $source->page === 0 ? DB::table('procurement_search_sources')->where('checksum', $checksum)->where('active', true)
                 ->where('state', 'ready')->where('passages_version', true)->where('id', '!=', $source->id)
                 ->where('reader_revision', '>=', 2)
-                ->where(fn ($query) => $query->whereNull('reading_engine')->orWhere('reading_engine', '!=', 'office-text')->orWhere('reader_revision', '>=', 3))
+                ->where(fn ($query) => $query->whereNull('reading_engine')->orWhere('reading_engine', '!=', 'office-text')->orWhere('reader_revision', '>=', 4))
                 ->first(['id', 'content', 'pages', 'reading_engine', 'reading_confidence', 'reader_revision']) : null;
             if ($duplicate && $this->writer->copy($source, $duplicate)) {
                 @unlink($path);
@@ -74,11 +79,11 @@ class ProcurementOcrProcessor
             // Skip already retained pages while repairing a gap. Empty failed
             // pages get at most two additional attempts; existing text is kept.
             $coverage = app(ProcurementReadingCoverage::class);
-            $legacyOffice = $source->reading_engine === 'office-text' && $source->reader_revision < 3;
+            $legacyOffice = $source->reading_engine === 'office-text' && $source->reader_revision < 4;
             $stored = $source->passages_version && ! $legacyOffice ? $coverage->pages($source->id) : collect();
             $cursor = $legacyOffice ? 0 : (int) $source->page;
             foreach ($stored->where('page', '>', $cursor) as $page) {
-                if ((int) $page->page !== $cursor + 1 || $coverage->repairable($page)) {
+                if ((int) $page->page !== $cursor + 1 || $coverage->repairable($page, $this->deepReader())) {
                     break;
                 }
                 $cursor++;
@@ -93,19 +98,20 @@ class ProcurementOcrProcessor
                 return true;
             }
             $repair = $stored->firstWhere('page', $cursor + 1);
-            if ($repair && $coverage->repairable($repair)) {
-                DB::table('procurement_search_passages')->where('source_id', $source->id)->where('page', $repair->page)->increment('repair_attempts');
+            if ($repair && $coverage->repairable($repair, $this->deepReader())) {
+                $enhanced = $this->deepReader() && (int) $repair->bytes > 0 && $repair->confidence !== null && $repair->confidence < 55;
+                DB::table('procurement_search_passages')->where('source_id', $source->id)->where('page', $repair->page)->increment($enhanced ? 'enhancement_attempts' : 'repair_attempts');
             }
-            if (in_array($extension, ['jpg', 'jpeg', 'png'], true)) {
+            if (in_array($extension, ['jpg', 'jpeg', 'png', 'webp', 'bmp', 'gif'], true)) {
                 $size = @getimagesize($path);
                 if (! $size || $size[0] * $size[1] > 25000000) {
                     throw new \RuntimeException('image_dimensions');
                 }
             }
-            if (in_array($extension, ['pdf', 'jpg', 'jpeg', 'png'], true)) {
+            if (in_array($extension, ['pdf', 'jpg', 'jpeg', 'png', 'webp', 'bmp', 'gif'], true)) {
                 // Difficult files retry one page at a time and reduce raster memory progressively.
                 $count = $source->state === 'failed' || $source->attempts > 0 ? 1 : (int) config('procurement_search.pages_per_pass');
-                $nextStored = $stored->first(fn ($page) => $page->page > $cursor + 1 && ! $coverage->repairable($page));
+                $nextStored = $stored->first(fn ($page) => $page->page > $cursor + 1 && ! $coverage->repairable($page, $this->deepReader()));
                 if ($repair) {
                     $count = 1;
                 }
@@ -120,15 +126,23 @@ class ProcurementOcrProcessor
             } elseif (in_array($extension, ['txt', 'csv', 'docx', 'xlsx', 'pptx'], true)) {
                 $office = $this->officeText($path, $extension);
                 $parts = $this->officeParts($office['text']);
-                if (! $parts) {
+                if (! $parts && ! $office['images']) {
                     $parts = [''];
                 }
                 $start = (int) $source->page + 1;
-                $part = $parts[$start - 1] ?? '';
-                $result = ['text' => $part, 'page' => $start, 'pages' => count($parts), 'done' => $start >= count($parts), 'engine' => 'office-text', 'unreadable' => $office['embedded_images'] ? 1 : 0,
-                    'passages' => [['page' => $start, 'text' => $part, 'engine' => 'office-text', 'error' => $office['embedded_images'] ? 'office_images' : null]]];
+                $total = count($parts) + count($office['images']);
+                $image = $start > count($parts);
+                $asset = $image ? app(ProcurementOfficeImages::class)->read($path, $office['images'][$start - count($parts) - 1], fn ($file, $format) => $this->read($file, $format, 1, 1)) : ['text' => $parts[$start - 1], 'confidence' => null, 'error' => null];
+                $result = ['text' => $asset['text'], 'page' => $start, 'pages' => $total, 'done' => $start >= $total, 'engine' => 'office-text',
+                    'confidence' => $asset['confidence'], 'unreadable' => $asset['error'] ? 1 : 0,
+                    'passages' => [['page' => $start, 'text' => $asset['text'], 'confidence' => $asset['confidence'], 'engine' => $image ? 'office-image-ocr' : 'office-text', 'error' => $asset['error']]]];
             } else {
                 DB::table('procurement_search_sources')->where('id', $source->id)->update(['state' => 'unsupported', 'error' => 'Format perlu dikonversi ke PDF/foto agar isinya bisa dibaca.', 'updated_at' => now()]);
+
+                return true;
+            }
+            if ($repair && $this->deepReader() && (int) $repair->bytes > 0 && $repair->confidence !== null && isset($result['confidence']) && $result['confidence'] <= $repair->confidence) {
+                $coverage->audit($source->id);
 
                 return true;
             }
@@ -171,7 +185,7 @@ class ProcurementOcrProcessor
                 default => 'Pembacaan belum selesai; sistem mencoba ulang terbatas.',
             };
             DB::table('procurement_search_sources')->where('id', $source->id)->where('fingerprint', $source->fingerprint)->update([
-                'state' => $permanent ? 'unsupported' : 'failed', 'attempts' => $source->attempts + 1, 'reader_revision' => 2, 'pages' => $source->pages, 'error' => $message,
+                'state' => $permanent ? 'unsupported' : 'failed', 'attempts' => $source->attempts + 1, 'reader_revision' => DB::raw('CASE WHEN reader_revision < 2 THEN 2 ELSE reader_revision END'), 'pages' => $source->pages, 'error' => $message,
                 'retry_at' => now()->addMinutes(5 * ($source->attempts + 1)), 'updated_at' => now(),
                 'failure_code' => $reason, 'coverage_state' => 'review', 'coverage_checked_at' => null,
             ]);
@@ -261,18 +275,27 @@ class ProcurementOcrProcessor
             throw new \App\Exceptions\ProcurementReadFailure($failure, $pages);
         }
         $result = json_decode($process->getOutput(), true, flags: JSON_THROW_ON_ERROR);
+
+        return $this->validateReadResult($result, $start, $count ?? (int) config('procurement_search.pages_per_pass'));
+    }
+
+    protected function validateReadResult(mixed $result, int $start, int $count): array
+    {
         if (! is_array($result) || ! is_string($result['text'] ?? null) || ! isset($result['page'], $result['pages'], $result['done'])) {
             throw new \RuntimeException('invalid_ocr_result');
         }
         if (! is_int($result['page']) || ! is_int($result['pages']) || ! is_bool($result['done'])
-            || $result['page'] < $start || $result['page'] > $result['pages'] || $result['pages'] > 2000
+            || $result['page'] < $start || $result['page'] >= $start + max(1, min(3, $count)) || $result['page'] > $result['pages'] || $result['pages'] > 2000
             || $result['done'] !== ($result['page'] >= $result['pages']) || ! is_array($result['passages'] ?? null)
             || count($result['passages']) !== $result['page'] - $start + 1) {
             throw new \RuntimeException('invalid_ocr_pages');
         }
         foreach ($result['passages'] as $index => $passage) {
             if (($passage['page'] ?? null) !== $start + $index || ! is_string($passage['text'] ?? null)
-                || mb_strlen($passage['text']) > (int) config('procurement_search.max_page_text')) {
+                || mb_strlen($passage['text']) > (int) config('procurement_search.max_page_text')
+                || (isset($passage['confidence']) && (! is_numeric($passage['confidence']) || $passage['confidence'] < 0 || $passage['confidence'] > 100))
+                || (isset($passage['engine']) && ! in_array($passage['engine'], ['pdfjs-6-text', 'pdfjs-6-tesseract-7', 'tesseract-7-ind-eng'], true))
+                || (isset($passage['error']) && ! in_array($passage['error'], ['page_unreadable', 'page_text_limit'], true))) {
                 throw new \RuntimeException('invalid_ocr_passage');
             }
         }
@@ -339,7 +362,7 @@ class ProcurementOcrProcessor
                 throw new \RuntimeException('office_limit');
             }
 
-            return ['text' => mb_convert_encoding(file_get_contents($path), 'UTF-8', 'UTF-8,ISO-8859-1'), 'embedded_images' => false];
+            return ['text' => mb_convert_encoding(file_get_contents($path), 'UTF-8', 'UTF-8,ISO-8859-1'), 'images' => []];
         }
         $zip = new ZipArchive;
         if ($zip->open($path) !== true) {
@@ -347,17 +370,17 @@ class ProcurementOcrProcessor
         }
         $text = '';
         $bytes = 0;
-        $embedded = false;
+        $images = [];
         try {
             if ($zip->numFiles > 1000) {
                 throw new \RuntimeException('office_limit');
             }
             for ($i = 0; $i < min($zip->numFiles, 1000); $i++) {
                 $info = $zip->statIndex($i);
-                if (preg_match('#^(word|xl|ppt)/media/#', $info['name'])) {
-                    $embedded = true;
+                if ($info['size'] > 0 && preg_match('#^(word|xl|ppt)/(media|embeddings)/#', $info['name'])) {
+                    $images[] = $info['name'];
                 }
-                if (! preg_match('#^(word/(document|header\d+|footer\d+|footnotes|endnotes|comments)\.xml|xl/(sharedStrings|worksheets/sheet\d+)\.xml|ppt/(slides/slide\d+|notesSlides/notesSlide\d+)\.xml)$#', $info['name'])) {
+                if (! preg_match('#^(word/(document|header\d+|footer\d+|footnotes|endnotes|comments)\.xml|xl/(sharedStrings|worksheets/sheet\d+|comments\d+|drawings/drawing\d+|charts/chart\d+)\.xml|ppt/(slides/slide\d+|notesSlides/notesSlide\d+|charts/chart\d+|comments/comment\d+)\.xml)$#', $info['name'])) {
                     continue;
                 }
                 $bytes += $info['size'];
@@ -371,6 +394,8 @@ class ProcurementOcrProcessor
             $zip->close();
         }
 
-        return ['text' => trim($text), 'embedded_images' => $embedded];
+        natsort($images);
+
+        return ['text' => trim($text), 'images' => array_values($images)];
     }
 }

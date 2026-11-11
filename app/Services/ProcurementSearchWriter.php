@@ -69,6 +69,9 @@ class ProcurementSearchWriter
     {
         foreach ($passages as $passage) {
             $page = (int) $passage['page'];
+            if (DB::table('procurement_search_passages')->where('source_id', $sourceId)->where('page', $page)->whereNotNull('human_review_id')->exists()) {
+                continue;
+            }
             if ($page < 1 || mb_strlen($passage['text']) > (int) config('procurement_search.max_page_text')) {
                 throw new \RuntimeException('page_text_limit');
             }
@@ -105,7 +108,7 @@ class ProcurementSearchWriter
             if ($row->reading_engine === 'pdfjs-6-tesseract-7') {
                 $engine = $row->reading_engine;
             }
-            $archive = str_starts_with($row->kind, 'archive_');
+            $archive = ProcurementFileSources::file($row->kind);
             if ($archive) {
                 $passages = $result['passages'] ?? [['page' => (int) ($result['page'] ?? 1), 'text' => $result['text'] ?? '', 'engine' => $engine, 'confidence' => $confidence]];
                 $this->passages($row->id, $passages);
@@ -115,7 +118,7 @@ class ProcurementSearchWriter
                 'state' => $capped && ! $archive ? 'limited' : ($done ? ($text !== '' ? ($unreadable ? 'uncertain' : 'ready') : 'empty') : 'partial'),
                 'attempts' => 0, 'error' => $capped && ! $archive ? 'Batas teks tercapai; sebagian isi tersedia.' : ($unreadable ? 'Sebagian halaman belum terbaca; periksa dokumen asli.' : null), 'retry_at' => null, 'updated_at' => now(),
                 'reading_engine' => $engine, 'reading_confidence' => $confidence,
-                'reader_revision' => $engine === 'office-text' ? 3 : 2,
+                'reader_revision' => $engine === 'office-text' ? 4 : 2,
                 'failure_code' => null,
             ]);
             // Only retained text may enter the index, including the final capped pass.
@@ -137,6 +140,9 @@ class ProcurementSearchWriter
                 return false;
             }
             $count = DB::table('procurement_search_passages')->where('source_id', $duplicate->id)->count();
+            if (DB::table('procurement_search_passages')->where('source_id', $duplicate->id)->whereNotNull('human_review_id')->exists()) {
+                return false;
+            }
             if ($count !== (int) $duplicate->pages) {
                 return false;
             }

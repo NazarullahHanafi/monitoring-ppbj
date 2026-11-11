@@ -14,7 +14,8 @@ class Element {
 }
 function setup(initialQuery = '') {
     const nodes = {};
-    for (const name of ['form', 'query', 'scope', 'match', 'sort', 'lexical', 'suggestions', 'buyer', 'vendor', 'creator', 'exclude', 'status', 'results', 'pagination', 'prev', 'next', 'reset', 'page', 'submit', 'summary', 'progress', 'progressinfo', 'check-status', 'check-coverage', 'coverage', 'coverage-info', 'coverage-rows', 'coverage-page', 'coverage-prev', 'coverage-next', 'coverage-back']) nodes[name] = new Element();
+    for (const name of ['form', 'query', 'scope', 'match', 'sort', 'lexical', 'suggestions', 'buyer', 'vendor', 'creator', 'exclude', 'status', 'results', 'pagination', 'prev', 'next', 'reset', 'page', 'submit', 'summary', 'progress', 'progressinfo', 'check-status', 'check-coverage', 'coverage', 'coverage-info', 'coverage-rows', 'coverage-page', 'coverage-prev', 'coverage-next', 'coverage-back', 'catalog-form', 'catalog-query', 'catalog-rows', 'catalog-info', 'catalog-more']) nodes[name] = new Element();
+    nodes['catalog-form'].dataset.endpoint = '/procurement/search/archive-catalog';
     nodes['check-coverage'].dataset.coverageEndpoint = '/procurement/search/coverage';
     nodes.scope.value = 'all';
     nodes.query.value = initialQuery;
@@ -22,6 +23,7 @@ function setup(initialQuery = '') {
     nodes.form.querySelector = () => nodes.submit;
     const root = new Element(); root.dataset.endpoint = 'https://app.test/procurement/search';
     root.dataset.statusEndpoint = '/procurement/search/status'; root.dataset.priorityBase = '/procurement/search/prs'; root.dataset.csrf = 'session-csrf';
+    root.dataset.reviewBase = '/procurement/search/reviews';
     root.querySelector = selector => nodes[selector.match(/data-pus-([\w-]+)/)?.[1]];
     const requests = [];
     const context = { window: { location: { origin: 'https://app.test' } }, document: { getElementById: () => root, createElement: tag => { const node = new Element(); node.tag = tag; return node; } }, URL, URLSearchParams, AbortController, setTimeout: fn => { context.timeout = fn; return 1; }, clearTimeout() {},
@@ -35,6 +37,31 @@ function data(number = 'PR-001') {
 }
 const flush = () => new Promise(resolve => setImmediate(resolve));
 function submit(f, query) { f.nodes.query.value = query; f.nodes.form.fire('submit', { preventDefault() {} }); }
+
+test('global archive catalog is manual, uses safe text and freezes its own pagination query', async () => {
+    const f = setup(); f.nodes['catalog-query'].value = 'plastik'; assert.equal(f.requests.length, 0);
+    f.nodes['catalog-form'].fire('submit', { preventDefault() {} });
+    assert.equal(new URL(f.requests[0].url).pathname, '/procurement/search/archive-catalog');
+    f.requests[0].resolve({ ok: true, json: async () => ({ rows: [{ label: '<img onerror=1>', id: 5, reference: 'REF', prs: [], url: 'https://evil.test/file' }], has_more: true, after: 5 }) }); await flush();
+    assert.equal(walk(f.nodes['catalog-rows'], node => node.textContent === '<img onerror=1>').length, 1); assert.equal(walk(f.nodes['catalog-rows'], node => Boolean(node.href)).length, 0);
+    f.nodes['catalog-query'].value = 'draft'; f.nodes['catalog-more'].fire('click');
+    assert.equal(new URL(f.requests[1].url).searchParams.get('q'), 'plastik'); assert.equal(new URL(f.requests[1].url).searchParams.get('after'), '5');
+    f.nodes.reset.fire('click'); assert.equal(f.requests[1].options.signal.aborted, true);
+    f.requests[1].resolve({ ok: true, json: async () => ({ rows: [{ label: 'late' }], has_more: false }) }); await flush(); assert.equal(f.nodes['catalog-rows'].children.length, 0);
+});
+
+test('human review loads on click and submits an explicit versioned CSRF protected correction', async () => {
+    const f = setup(); f.root.dataset.canReview = '1'; f.root.dataset.canPrioritize = '1'; f.nodes['check-coverage'].fire('click');
+    f.requests[0].resolve({ ok: true, json: async () => ({ source: 55, label: 'Scan', total: 1, page: 1, last_page: 1, rows: [{ page: 1, state: 'Perlu diperiksa' }] }) }); await flush();
+    const trigger = walk(f.nodes['coverage-rows'], node => node.textContent === 'Periksa teks & riwayat')[0]; trigger.fire('click');
+    assert.equal(new URL(f.requests[1].url).pathname, '/procurement/search/reviews/55/1');
+    f.requests[1].resolve({ ok: true, json: async () => ({ text: '<script>inert</script>', version: 'fingerprint', history: [{ created_at: 'today', name: '<img>', state: 'applied', reason: 'Asli' }] }) }); await flush();
+    const textareas = walk(f.nodes['coverage-rows'], node => node.tag === 'textarea'); assert.equal(textareas[0].value, '<script>inert</script>'); textareas[0].value = 'Bacaan benar'; textareas[1].value = 'Dicocokkan dengan asli';
+    const save = walk(f.nodes['coverage-rows'], node => node.textContent === 'Simpan pemeriksaan')[0]; save.fire('click'); save.fire('click'); assert.equal(f.requests.length, 3);
+    assert.equal(f.requests[2].options.method, 'POST'); assert.equal(f.requests[2].options.headers['X-CSRF-TOKEN'], 'session-csrf'); assert.equal(JSON.parse(f.requests[2].options.body).version, 'fingerprint');
+    f.requests[2].resolve({ ok: true, json: async () => ({ message: 'Menunggu indeks' }) }); await flush(); assert.equal(textareas[0].disabled, true); assert.equal(save.disabled, true);
+    walk(f.nodes['coverage-rows'], node => node.textContent === 'Tutup')[0].fire('click'); assert.equal(trigger.disabled, false);
+});
 
 test('coverage is requested manually and browsing every page leaves search results intact', async () => {
     const f = setup(); assert.equal(f.requests.length, 0); submit(f, 'sensor');

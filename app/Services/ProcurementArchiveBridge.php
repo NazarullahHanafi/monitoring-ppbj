@@ -8,6 +8,9 @@ class ProcurementArchiveBridge
 {
     public function call(array $input): array
     {
+        if (in_array($input['kind'] ?? '', ['local_sp_attachment', 'local_spph_attachment'], true)) {
+            return app(ProcurementLocalFiles::class)->call($input);
+        }
         $root = (string) config('procurement_search.archive_root');
         if ($root === '' || ! is_dir($root)) {
             throw new \RuntimeException('Sumber arsip belum terhubung.');

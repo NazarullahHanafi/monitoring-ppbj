@@ -9,7 +9,7 @@
     const filterNames = ['buyer', 'vendor', 'creator', 'exclude'];
     let controller, sequence = 0, currentPage = 1, lastPage = 1, appliedQuery = '', appliedScope = 'all', appliedMatch = 'source', appliedSort = 'relevance', appliedLexical = 'expanded', appliedFilters = {}, pendingKey = '';
     const evidenceControllers = new Set();
-    const labels = { ppbj: 'PPBJ', sp: 'SP', spph: 'SPPH', archive_document: 'Arsip', archive_attachment: 'Lampiran arsip' };
+    const labels = { ppbj: 'PPBJ', sp: 'SP', spph: 'SPPH', archive_document: 'Arsip', archive_attachment: 'Lampiran arsip', local_sp_attachment: 'Lampiran SP', local_spph_attachment: 'Lampiran SPPH' };
     let coverageController, coverageSequence = 0, coveragePage = 1, coverageLast = 1, coverageSource = null;
     async function loadCoverage(page = 1, source = null) {
         const trigger = get('check-coverage'); if (!trigger) return;
@@ -31,6 +31,7 @@
                     row.append(element('strong', '', `${data.unit || 'Halaman'} ${item.page}: ${item.state}`));
                     if (item.reason) row.append(element('p', 'pus-note', `Catatan: ${item.reason}`));
                     if (item.url) { const anchor = link(item.url, 'Buka halaman asli', 'pus-open'); anchor.target = '_blank'; anchor.rel = 'noopener noreferrer'; row.append(anchor); }
+                    if (root.dataset.canReview === '1') { const button = element('button', 'pus-secondary', 'Periksa teks & riwayat'); button.type = 'button'; button.addEventListener('click', () => reviewPanel(row, data.source, item.page, button)); row.append(button); }
                 } else {
                     const states = { unchecked: 'Belum diaudit', in_progress: 'Belum selesai', review: 'Perlu diperiksa', processed: 'Seluruh halaman diproses otomatis' };
                     row.append(element('strong', '', `${item.label} · ${item.reference || ''}`));
@@ -51,6 +52,59 @@
     get('coverage-prev')?.addEventListener('click', () => loadCoverage(Math.max(1, coveragePage - 1), coverageSource));
     get('coverage-next')?.addEventListener('click', () => loadCoverage(coveragePage + 1, coverageSource));
     get('coverage-back')?.addEventListener('click', () => loadCoverage());
+    async function reviewPanel(row, source, page, trigger) {
+        if (trigger.disabled) return; trigger.disabled = true;
+        const serial = coverageSequence, pending = new AbortController(); evidenceControllers.add(pending); const timeout = setTimeout(() => pending.abort(), 20000);
+        const panel = element('div', 'pus-details'), message = element('p', 'pus-note', 'Memuat teks untuk pemeriksaan…'); panel.append(message); row.append(panel);
+        try {
+            const url = new URL(`${root.dataset.reviewBase}/${source}/${page}`, window.location.origin); if (url.origin !== window.location.origin) throw Error('Alamat pemeriksaan tidak valid.');
+            const data = await readResponse(await fetch(url, { credentials: 'same-origin', headers: { Accept: 'application/json' }, signal: pending.signal })); if (serial !== coverageSequence) return;
+            const editor = element('textarea', 'pus-review-text'); editor.value = data.text || ''; editor.maxLength = 1000000; editor.rows = 12;
+            const reason = element('textarea'); reason.maxLength = 1000; reason.rows = 2; reason.placeholder = 'Alasan koreksi dan bagian yang dicocokkan dengan file asli';
+            const textLabel = element('label', 'pus-field', 'Teks sesuai file asli'); textLabel.append(editor);
+            const reasonLabel = element('label', 'pus-field', 'Catatan pemeriksaan (minimal 8 karakter)'); reasonLabel.append(reason);
+            const blank = element('input'); blank.type = 'checkbox'; blank.className = 'pus-blank-check'; const blankLabel = element('label', '', 'Saya sudah memeriksa file asli dan bagian ini tidak memiliki teks'); blankLabel.append(blank);
+            const save = element('button', 'pus-primary', 'Simpan pemeriksaan'); save.type = 'button'; save.disabled = data.pending || root.dataset.canPrioritize !== '1';
+            const close = element('button', 'pus-secondary', 'Tutup'); close.type = 'button'; close.addEventListener('click', () => { panel.replaceChildren(); panel.hidden = true; trigger.disabled = false; });
+            message.textContent = data.pending ? 'Pemeriksaan sebelumnya masih menunggu pembaruan indeks. Muat lagi untuk melihat hasilnya.' : 'Cocokkan dengan file asli. Koreksi dicatat beserta pemeriksanya dan diterapkan di latar belakang.';
+            panel.append(textLabel, reasonLabel, blankLabel, save, close);
+            for (const history of data.history || []) panel.append(element('p', 'pus-note', `${history.created_at} · ${history.name || 'Pemeriksa'} · ${history.state} · ${history.reason}`));
+            let busy = false;
+            save.addEventListener('click', async () => {
+                if (busy) return; if ((!editor.value.trim() && !blank.checked) || reason.value.trim().length < 8) { message.textContent = 'Isi teks atau konfirmasi bagian tanpa teks, beserta alasan minimal 8 karakter.'; return; }
+                busy = true; save.disabled = true; const request = new AbortController(); evidenceControllers.add(request); const wait = setTimeout(() => request.abort(), 20000);
+                try {
+                    const result = await readResponse(await fetch(url, { method: 'POST', credentials: 'same-origin', headers: { Accept: 'application/json', 'Content-Type': 'application/json', 'X-CSRF-TOKEN': root.dataset.csrf || '' }, signal: request.signal, body: JSON.stringify({ text: editor.value, confirm_blank: Boolean(blank.checked), reason: reason.value, version: data.version }) }));
+                    if (serial === coverageSequence) { message.textContent = result.message; editor.disabled = reason.disabled = true; }
+                } catch (error) { if (serial === coverageSequence) message.textContent = error.name === 'AbortError' ? 'Respons terlambat. Muat ulang riwayat untuk memastikan apakah pemeriksaan sudah tersimpan.' : error.message; save.disabled = false; }
+                finally { clearTimeout(wait); evidenceControllers.delete(request); busy = false; }
+            });
+        } catch (error) { if (serial === coverageSequence) message.textContent = error.message; trigger.disabled = false; }
+        finally { clearTimeout(timeout); evidenceControllers.delete(pending); }
+    }
+    let catalogController, catalogSerial = 0, catalogQuery = '', catalogAfter = 0;
+    async function loadCatalog(more = false) {
+        if (!get('catalog-form')) return; const query = more ? catalogQuery : get('catalog-query').value.trim(); if (!query) return;
+        catalogController?.abort(); const pending = new AbortController(); catalogController = pending; const serial = ++catalogSerial, timeout = setTimeout(() => pending.abort(), 20000);
+        get('catalog-more').disabled = true; get('catalog-info').textContent = 'Mencari arsip…';
+        try {
+            const url = new URL(get('catalog-form').dataset.endpoint, window.location.origin); if (url.origin !== window.location.origin) throw Error('Alamat arsip tidak valid.');
+            url.search = new URLSearchParams({ q: query, after: more ? catalogAfter : 0 }); const data = await readResponse(await fetch(url, { credentials: 'same-origin', headers: { Accept: 'application/json' }, signal: pending.signal })); if (serial !== catalogSerial) return;
+            if (!more) get('catalog-rows').replaceChildren();
+            for (const item of (data.rows || []).slice(0, 15)) {
+                const row = element('div', 'pus-related-document'); row.append(element('strong', '', item.label), element('p', 'pus-note', `${item.reference || ''} · ${item.page || 0}/${item.pages || '?'} halaman · ${item.state}`));
+                if (item.url) { const anchor = link(item.url, 'Buka file arsip', 'pus-open'); anchor.target = '_blank'; anchor.rel = 'noopener noreferrer'; row.append(anchor); }
+                for (const pr of item.prs || []) row.append(link(pr.url, pr.number, 'pus-open'));
+                if (!(item.prs || []).length) row.append(element('p', 'pus-note', 'Belum ada relasi PR yang tercatat.'));
+                get('catalog-rows').append(row);
+            }
+            catalogQuery = query; catalogAfter = data.after; get('catalog-more').hidden = !data.has_more;
+            get('catalog-info').textContent = (data.rows || []).length ? 'Kecocokan pada file arsip yang sudah masuk indeks.' : 'Belum ditemukan pada bagian yang sudah diindeks.';
+        } catch (error) { if (serial === catalogSerial) get('catalog-info').textContent = error.message; }
+        finally { clearTimeout(timeout); if (serial === catalogSerial) get('catalog-more').disabled = false; }
+    }
+    get('catalog-form')?.addEventListener('submit', event => { event.preventDefault(); loadCatalog(); });
+    get('catalog-more')?.addEventListener('click', () => loadCatalog(true));
     function element(tag, className, text) {
         const node = document.createElement(tag);
         if (className) node.className = className;
@@ -135,11 +189,12 @@
     function matchElement(match, data) {
         const item = element('div', 'pus-match'), source = element('div', 'pus-source');
         source.append(element('span', 'pus-badge', labels[match.kind] || 'Dokumen'), element('strong', '', match.label));
-        if (match.kind.startsWith('archive_')) source.append(element('span', 'pus-badge', ['pending', 'partial', 'failed'].includes(match.state) ? `Isi diproses · ${match.page || 0}/${match.pages || '?'} halaman` : 'Hasil pembacaan otomatis'));
+        const file = match.kind.startsWith('archive_') || match.kind.startsWith('local_');
+        if (file) source.append(element('span', 'pus-badge', ['pending', 'partial', 'failed', 'enhance'].includes(match.state) ? `Isi diproses · ${match.page || 0}/${match.pages || '?'} halaman` : 'Hasil pembacaan otomatis'));
         if (match.queue?.priority) source.append(element('span', 'pus-badge', 'Giliran prioritas aktif'));
         if (['uncertain', 'empty', 'limited', 'unsupported'].includes(match.state)) source.append(element('span', 'pus-badge', 'Perlu diperiksa'));
         if (match.inferred) source.append(element('span', 'pus-badge', 'Nomor PR terbaca dari scan · periksa kecocokan'));
-        const engines = { 'pdfjs-6-text': 'Teks asli PDF', 'pdfjs-6-tesseract-7': 'Teks PDF + scan', 'tesseract-7-ind-eng': 'Scan / foto', 'office-text': 'Teks dokumen' };
+        const engines = { 'pdfjs-6-text': 'Teks asli PDF', 'pdfjs-6-tesseract-7': 'Teks PDF + scan', 'tesseract-7-ind-eng': 'Scan / foto', 'office-text': 'Teks dokumen', 'office-image-ocr': 'OCR gambar Office', 'human-review': 'Teks hasil pemeriksaan' };
         if (engines[match.reading?.engine]) source.append(element('span', 'pus-badge', engines[match.reading.engine]));
         if (match.reading?.confidence != null && match.reading.confidence < 55) source.append(element('span', 'pus-badge pus-warning', 'Bacaan kurang jelas · periksa file asli'));
         if (match.match_page) source.append(element('span', 'pus-badge pus-page-hit', `Ketemu di halaman ${match.match_page}`));
@@ -147,8 +202,8 @@
         if (data.match === 'reference') source.append(element('span', 'pus-badge', `Nomor persis: ${match.reference || ''}`));
         item.append(source, snippet(match.snippet, data));
         if (match.url) {
-            const anchor = link(match.url, match.kind.startsWith('archive_') ? (match.match_page ? `Buka halaman ${match.match_page} ↗` : 'Buka lampiran ↗') : 'Buka dokumen →', 'pus-open');
-            if (match.kind.startsWith('archive_')) { anchor.target = '_blank'; anchor.rel = 'noopener noreferrer'; }
+            const anchor = link(match.url, file ? (match.match_page ? `Buka halaman ${match.match_page} ↗` : 'Buka lampiran ↗') : 'Buka dokumen →', 'pus-open');
+            if (file) { anchor.target = '_blank'; anchor.rel = 'noopener noreferrer'; }
             item.append(anchor);
         }
         if (match.notice) item.append(element('p', 'pus-read-notice', match.notice));
@@ -173,7 +228,7 @@
     }
     async function readResponse(response) {
         if (!response.ok) {
-            let message = response.status === 429 ? 'Pencarian terlalu sering. Tunggu sebentar, lalu coba lagi.' : response.status === 422 ? 'Periksa kata pencarian dan pilihan sumber.' : 'Pencarian belum dapat dimuat. Coba kembali.';
+            let message = response.status === 429 ? 'Pencarian terlalu sering. Tunggu sebentar, lalu coba lagi.' : response.status === 409 ? 'Bacaan berubah atau pemeriksaan sebelumnya masih diproses. Muat ulang teks dan riwayat.' : response.status === 422 ? 'Periksa kata pencarian dan pilihan sumber.' : 'Pencarian belum dapat dimuat. Coba kembali.';
             if (response.status === 422) {
                 try {
                     const details = await response.json();
@@ -242,6 +297,8 @@
         const backlog = (index?.pending || 0) + (index?.partial || 0), progress = [];
         if (backlog) progress.push(`${backlog} lampiran diproses bertahap; isi yang sudah terbaca langsung bisa dicari.`);
         if (index?.failed) progress.push(`${index.failed} lampiran belum berhasil dibaca seluruhnya.`);
+        if (index?.enhancement_waiting) progress.push(`${index.enhancement_waiting} lampiran menunggu pemulihan pada pekerja OCR terpisah.`);
+        if (index?.missing_files) progress.push(`${index.missing_files} catatan arsip belum mempunyai file sumber yang tersedia; pulihkan file asli dari cadangan.`);
         if (index?.needs_review) progress.push(`${index.needs_review} lampiran perlu diperiksa karena teks/formatnya belum dapat dibaca seluruhnya.`);
         if (index?.unreadable_pages) progress.push(`${index.unreadable_pages} halaman bermasalah ditandai untuk diperiksa; halaman lain tetap diproses.`);
         if (index?.unlinked_files) progress.push(`${index.unlinked_files} arsip menunggu relasi PR yang valid sebelum bisa muncul sebagai hasil PR.`);
@@ -428,6 +485,11 @@
     for (const name of filterNames) get(name)?.addEventListener('input', () => { status.textContent = 'Filter belum diterapkan. Klik Cari untuk menerapkan.'; });
     for (const name of ['match', 'sort', 'lexical']) get(name)?.addEventListener('change', () => { status.textContent = 'Pilihan belum diterapkan. Klik Cari untuk menerapkan.'; });
     get('reset').addEventListener('click', () => {
+        catalogController?.abort(); catalogSerial++; catalogAfter = 0; catalogQuery = '';
+        if (get('catalog-query')) get('catalog-query').value = '';
+        if (get('catalog-rows')) get('catalog-rows').replaceChildren();
+        if (get('catalog-info')) get('catalog-info').textContent = '';
+        if (get('catalog-more')) { get('catalog-more').hidden = true; get('catalog-more').disabled = false; }
         coverageController?.abort(); coverageSequence++;
         if (get('check-coverage')) get('check-coverage').disabled = false;
         if (get('coverage')) get('coverage').hidden = true;

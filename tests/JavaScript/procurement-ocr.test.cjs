@@ -52,6 +52,9 @@ test('private OCR recognizes a photo and resumes every page of a real scanned PD
         const scattered = JSON.parse(cp.execFileSync(process.execPath, [path.join(runtime, 'read.cjs')], { input: JSON.stringify({ file: path.join(root, 'layout.png'), root, extension: 'png', languages }), encoding: 'utf8', timeout: 20000, stdio: ['pipe', 'pipe', 'pipe'] }));
         for (const keyword of ['VENDOR', 'SPEKTROMETER', 'SENSOR', 'PEMBUAT', 'BUYER']) assert.match(scattered.text, new RegExp(keyword, 'i'));
         assert.ok(scattered.metrics.peak_rss_mb <= 448);
+        const deep = JSON.parse(cp.execFileSync(process.execPath, [path.join(runtime, 'read.cjs')], { input: JSON.stringify({ file: path.join(root, 'layout.png'), root, extension: 'png', languages, max_pixels: 8000000, profile: 'deep' }), encoding: 'utf8', timeout: 40000, stdio: ['pipe', 'pipe', 'pipe'] }));
+        for (const keyword of ['SPEKTROMETER', 'SENSOR', 'PEMBUAT']) assert.match(deep.text, new RegExp(keyword, 'i'));
+        assert.ok(deep.metrics.peak_rss_mb <= 1024);
         for (const [file, extension, start] of [['photo.png', 'png', 1], ['scan.pdf', 'pdf', 1], ['scan.pdf', 'pdf', 2], ['scan.pdf', 'pdf', 3], ['mixed.pdf', 'pdf', 1]]) {
             const output = cp.execFileSync(process.execPath, [path.join(runtime, 'read.cjs')], { input: JSON.stringify({ file: path.join(root, file), root, extension, start, count: 1, languages }), encoding: 'utf8', timeout: 20000, stdio: ['pipe', 'pipe', 'pipe'] });
             const result = JSON.parse(output);

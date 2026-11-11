@@ -60,11 +60,16 @@ class ProcurementUnifiedSearch
         $query = DB::table('procurement_search_sources as src')->where('src.active', true);
         if ($scope === 'archive') {
             $query->whereIn('src.kind', ['archive_document', 'archive_attachment']);
+        } elseif ($scope === 'files') {
+            $query->whereIn('src.kind', ProcurementFileSources::KINDS);
+        } elseif (in_array($scope, ['sp', 'spph'], true)) {
+            $query->whereIn('src.kind', [$scope, 'local_'.$scope.'_attachment']);
         } elseif ($scope !== 'all') {
             $query->where('src.kind', $scope);
         }
+        ProcurementFileSources::liveLocal($query, 'src');
         // Removed archive files disappear even if the external system is temporarily unavailable.
-        $query->where(fn ($q) => $q->whereNotIn('src.kind', ['archive_document', 'archive_attachment'])
+        $query->where(fn ($q) => $q->whereNotIn('src.kind', ProcurementFileSources::KINDS)
             ->orWhere('src.verified_at', '>=', now()->subMinutes(config('procurement_search.archive_fresh_minutes'))));
 
         return $query;
@@ -319,7 +324,7 @@ class ProcurementUnifiedSearch
                 'matches' => $sources->take($sourceLimit)->map(function ($source) use ($texts, $pageTexts, $effective, $evidence, $wordEvidence, $plan, $match) {
                     $text = $texts->get($source->id);
                     $passage = $pageTexts->get($source->id);
-                    $archive = str_starts_with($source->kind, 'archive_');
+                    $archive = ProcurementFileSources::file($source->kind);
 
                     return ['id' => (int) $source->id, 'kind' => $source->kind, 'label' => $source->label, 'reference' => $source->reference,
                         'state' => $source->state, 'page' => $source->page, 'pages' => $source->pages, 'inferred' => (bool) $source->inferred,

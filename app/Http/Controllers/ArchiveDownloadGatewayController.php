@@ -24,11 +24,25 @@ class ArchiveDownloadGatewayController extends Controller
         abort_unless($request->user()?->department === 'umum', 403);
         abort_unless(config('procurement_search.enabled'), 404);
         $row = DB::table('procurement_search_sources')->where('id', $source)->where('active', true)
-            ->whereIn('kind', ['archive_document', 'archive_attachment'])
+            ->whereIn('kind', \App\Services\ProcurementFileSources::KINDS)
             ->where('verified_at', '>=', now()->subMinutes(config('procurement_search.archive_fresh_minutes')))
-            ->whereExists(fn ($links) => $links->selectRaw('1')->from('procurement_search_links')->join('ppbj', 'ppbj.id', '=', 'procurement_search_links.ppbj_id')->whereColumn('source_id', 'procurement_search_sources.id'))
-            ->first(['id', 'label', 'fingerprint']);
+            ->where(function ($access) use ($request) {
+                if ($request->user()?->role !== 'superadmin') {
+                    $access->whereExists(fn ($links) => $links->selectRaw('1')->from('procurement_search_links')->join('ppbj', 'ppbj.id', '=', 'procurement_search_links.ppbj_id')->whereColumn('source_id', 'procurement_search_sources.id'));
+                }
+            })
+            ->first(['id', 'kind', 'source_key', 'label', 'fingerprint']);
         abort_unless($row, 404);
+        if (str_starts_with($row->kind, 'local_')) {
+            $attachment = \App\Models\ProcurementDetailAttachment::findOrFail($row->source_key);
+            abort_unless($attachment->kind === ($row->kind === 'local_sp_attachment' ? 'sp' : 'spph'), 404);
+            $document = ($attachment->kind === 'sp' ? \App\Models\Sp::class : \App\Models\Spph::class)::find($attachment->document_id);
+            abort_unless($document, 404);
+            $path = app(\App\Services\ProcurementLocalFiles::class)->path($attachment);
+            abort_unless($path, 404);
+
+            return response()->file($path, ['Cache-Control' => 'private, no-store', 'X-Content-Type-Options' => 'nosniff', 'Content-Security-Policy' => "sandbox; default-src 'none'"]);
+        }
         $target = Cache::get('procurement-search:download:'.$row->id);
         abort_unless(is_array($target) && is_string($target['url'] ?? null) && ($target['fingerprint'] ?? '') === $row->fingerprint, 404, 'Tautan lampiran sedang disinkronkan. Coba kembali sebentar lagi.');
         abort_unless($this->isTrustedArchiveUrl($target['url']), 404);

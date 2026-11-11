@@ -11,13 +11,20 @@ class ProcurementReadingCoverage
     public function pages(int $id)
     {
         return DB::table('procurement_search_passages')->where('source_id', $id)->orderBy('page')
-            ->select('page', 'engine', 'confidence', 'error', 'repair_attempts')->selectRaw("LENGTH(COALESCE(content, '')) AS bytes")->get();
+            ->select('page', 'engine', 'confidence', 'error', 'repair_attempts', 'enhancement_attempts', 'human_review_id')->selectRaw("LENGTH(COALESCE(content, '')) AS bytes")->get();
     }
 
-    public function repairable(object $page): bool
+    public function repairable(object $page, bool $deep = true): bool
     {
+        if ($page->human_review_id ?? null) {
+            return false;
+        }
+        if ($deep && $page->confidence !== null && $page->confidence < 55 && (int) $page->bytes > 0 && ($page->enhancement_attempts ?? 0) < 2 && $page->error !== 'page_text_limit') {
+            return true;
+        }
+
         return ((int) $page->bytes === 0 || in_array($page->error, ['legacy_unverified', 'legacy_truncated'], true))
-            && (int) $page->repair_attempts < 2 && ! in_array($page->error, ['page_text_limit', 'office_images', 'office_limit'], true);
+            && (int) $page->repair_attempts < 2 && ! in_array($page->error, ['page_text_limit', 'office_media_format', 'office_media_limit', 'office_limit'], true);
     }
 
     public function audit(int $id): void
@@ -25,18 +32,18 @@ class ProcurementReadingCoverage
         DB::transaction(function () use ($id) {
             $source = DB::table('procurement_search_sources')->where('id', $id)->select('id', 'active', 'kind', 'pages', 'page', 'passages_version', 'state', 'attempts', 'recovery_round', 'reading_engine', 'reader_revision', 'coverage_state')
                 ->lockForUpdate()->first();
-            if (! $source || ! $source->active || ! str_starts_with($source->kind, 'archive_')) {
+            if (! $source || ! $source->active || ! ProcurementFileSources::file($source->kind)) {
                 return;
             }
             // Legacy summaries may contain a truncated final page. Retain that
             // text for search, but require a bounded reread before completion.
             if ($source->passages_version && $source->reader_revision < 2) {
-                DB::table('procurement_search_passages')->where('source_id', $id)->whereNull('error')->update(['error' => 'legacy_unverified']);
+                DB::table('procurement_search_passages')->where('source_id', $id)->whereNull('error')->whereNull('human_review_id')->update(['error' => 'legacy_unverified']);
             }
             $pages = $this->pages($id);
             $known = $source->pages === null ? null : (int) $source->pages;
             $indexed = $pages->filter(fn ($page) => $known === null || $page->page <= $known);
-            $problems = $indexed->filter(fn ($page) => $page->error !== null || ($page->confidence !== null && $page->confidence < 55) || (int) $page->bytes === 0);
+            $problems = $indexed->filter(fn ($page) => $page->error !== null || ($page->confidence !== null && $page->confidence < 55) || ((int) $page->bytes === 0 && ! $page->human_review_id));
             $missing = $known === null ? [] : array_values(array_diff(range(1, max(1, $known)), $indexed->pluck('page')->all()));
             $retryPages = $indexed->filter(fn ($page) => $this->repairable($page))->pluck('page')->all();
             $values = ['indexed_pages' => $indexed->count(), 'problem_pages' => $problems->count(), 'coverage_checked_at' => now()];
@@ -47,7 +54,7 @@ class ProcurementReadingCoverage
             }
             // Older Office readers did not check embedded images, notes, or
             // text beyond the summary limit. Revalidate each legacy file once.
-            $legacyOffice = $source->reading_engine === 'office-text' && $source->reader_revision < 3;
+            $legacyOffice = $source->reading_engine === 'office-text' && $source->reader_revision < 4;
             if ($legacyOffice
                 && ! in_array($source->state, ['unsupported', 'limited', 'failed'], true)) {
                 DB::table('procurement_search_sources')->where('id', $id)->update($values + ['coverage_state' => 'in_progress', 'state' => 'partial', 'page' => 0, 'failure_code' => 'legacy_text_limit']);
@@ -69,7 +76,7 @@ class ProcurementReadingCoverage
                 if ($gap !== null && $gap <= (int) $source->page) {
                     $values['page'] = max(0, $gap - 1);
                     if ($source->state !== 'failed') {
-                        $values['state'] = 'partial';
+                        $values['state'] = ! $missing && ! $indexed->contains(fn ($page) => $this->repairable($page, false)) ? 'enhance' : 'partial';
                     }
                 } elseif (in_array($source->state, ['ready', 'uncertain'], true) && ! $complete) {
                     $values['state'] = 'partial';
@@ -82,7 +89,7 @@ class ProcurementReadingCoverage
     public function batch(int $limit = 10): int
     {
         $cursor = (int) Cache::get('procurement-search:coverage-cursor', 0);
-        $ids = DB::table('procurement_search_sources')->where('active', true)->whereIn('kind', ['archive_document', 'archive_attachment'])
+        $ids = DB::table('procurement_search_sources')->where('active', true)->whereIn('kind', \App\Services\ProcurementFileSources::KINDS)
             ->where('id', '>', $cursor)->orderBy('id')->limit(min(50, max(1, $limit)))->pluck('id');
         foreach ($ids as $id) {
             $this->audit((int) $id);
