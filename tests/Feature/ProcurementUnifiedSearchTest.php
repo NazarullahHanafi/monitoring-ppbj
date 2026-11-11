@@ -80,6 +80,80 @@ class ProcurementUnifiedSearchTest extends TestCase
         Http::assertNothingSent();
     }
 
+    public function test_relevance_prioritizes_exact_pr_numbers_and_recorded_links_with_newest_still_available(): void
+    {
+        $old = $this->pr('PR-RELEVANCE-1');
+        $inferred = $this->pr('PR-RELEVANCE-2');
+        $new = $this->pr('PR-RELEVANCE-3');
+        $writer = app(ProcurementSearchWriter::class);
+        $writer->source('ppbj', 'rank-old', 'Sensor', $old->ppbj_no, 'sensor', '', [$old->id], hash('sha256','rank-old'));
+        foreach ([$inferred,$new] as $pr) {
+            $id=$writer->source('archive_attachment', 'rank-'.$pr->id, 'Sensor.pdf', 'SCAN-'.$pr->id, 'sensor', '', [$pr->id],hash('sha256','rank-'.$pr->id),true);
+            DB::table('procurement_search_sources')->where('id',$id)->update(['state'=>'ready','reading_confidence'=>94]);
+            if ($pr->id===$inferred->id) DB::table('procurement_search_links')->where('source_id',$id)->update(['inferred'=>true]);
+        }
+        $this->search('sensor')->assertJsonPath('rows.0.id',$old->id)->assertJsonPath('rows.1.id',$new->id)->assertJsonPath('rows.2.id',$inferred->id);
+        $this->search('sensor',['sort'=>'newest'])->assertJsonPath('rows.0.id',$new->id)->assertJsonPath('sort','newest');
+        $inferred->update(['ppbj_no'=>'SENSOR']);
+        $this->search('sensor')->assertJsonPath('rows.0.id',$inferred->id)->assertJsonPath('rows.0.relevance.reason','Nomor PR persis');
+    }
+
+    public function test_pathological_short_letter_queries_are_rejected_before_any_search_table_query(): void
+    {
+        DB::enableQueryLog();
+        foreach ([['q'=>'a b c d e f g h'],['q'=>'sensor x','match'=>'related'],['q'=>'sensor pompa pipa baja plastik meja kursi kantor kertas','match'=>'related']] as $input) {
+            $this->getJson(route('procurement.search',$input))->assertUnprocessable()->assertJsonValidationErrors('q');
+        }
+        $queries=collect(DB::getQueryLog())->pluck('query'); DB::disableQueryLog();
+        $this->assertCount(0,$queries->filter(fn ($sql)=>str_contains($sql,'procurement_search')));
+        $this->search('sensor 2')->assertJsonPath('total',0);
+    }
+
+    public function test_related_mode_combines_evidence_only_within_the_same_live_pr_and_keeps_word_provenance(): void
+    {
+        $first=$this->pr('PR-CROSS-1'); $second=$this->pr('PR-CROSS-2'); $third=$this->pr('PR-CROSS-3');
+        $writer=app(ProcurementSearchWriter::class);
+        $source=$this->archive($first);
+        $writer->append($source,['text'=>'sensor','page'=>1,'pages'=>1,'done'=>true]);
+        $writer->source('sp','cross-cal','Kalibrasi', 'SP-CROSS','kalibrasi','',[$first->id],hash('sha256','cross-cal'));
+        $writer->source('ppbj','cross-other-sensor','Sensor',$second->ppbj_no,'sensor','',[$second->id],hash('sha256','cross-other-sensor'));
+        $writer->source('archive_document','cross-other-cal','Kalibrasi',$third->ppbj_no,'kalibrasi','',[$third->id],hash('sha256','cross-other-cal'),true);
+        $this->search('sensor kalibrasi')->assertJsonPath('total',0)->assertJsonPath('suggestions',[]);
+        DB::enableQueryLog();
+        $response=$this->search('sensor kalibrasi',['match'=>'related'])->assertJsonPath('total',1)->assertJsonPath('rows.0.id',$first->id)->assertJsonPath('match','related');
+        $queries=collect(DB::getQueryLog())->pluck('query'); DB::disableQueryLog();
+        $this->assertCount(0,$queries->filter(fn ($sql)=>preg_match('/^\s*(insert|update|delete)\b/i',$sql)));
+        $this->assertCount(2,$response->json('rows.0.matches'));
+        $evidence=collect($response->json('rows.0.matches'))->keyBy('kind');
+        $this->assertSame(['sensor'],$evidence['archive_attachment']['matched_words']);
+        $this->assertSame(['kalibrasi'],$evidence['sp']['matched_words']);
+        $this->search('sensor kalibrasi',['match'=>'related','scope'=>'archive'])->assertJsonPath('total',0);
+        $this->search('sensor kalibrasi',['match'=>'related','buyer'=>'Other buyer'])->assertJsonPath('total',0);
+        DB::table('procurement_search_sources')->where('id',$source->id)->update(['verified_at'=>now()->subMinutes(20)]);
+        $this->search('sensor kalibrasi',['match'=>'related'])->assertJsonPath('total',0);
+        foreach ([['match'=>'anything'],['sort'=>['bad']],['sort'=>'random']] as $bad) $this->getJson(route('procurement.search',$bad+['q'=>'sensor']))->assertUnprocessable();
+    }
+
+    public function test_typo_suggestions_are_explicit_scoped_and_never_replace_business_references_or_dimensions(): void
+    {
+        $pr=$this->pr(); $source=$this->archive($pr);
+        app(ProcurementSearchWriter::class)->append($source,['text'=>'plastik kursi kantor spektrometer','page'=>1,'pages'=>1,'done'=>true]);
+        foreach (['plastikk','palstik','klastik'] as $typo) {
+            $response=$this->search($typo,['scope'=>'archive'])->assertJsonPath('total',0)->assertJsonPath('query.used.0',$typo);
+            $this->assertContains('plastik',array_column($response->json('suggestions'),'replacement'));
+        }
+        $response=$this->search('kursii kantor',['scope'=>'archive'])->assertJsonPath('total',1)->assertJsonPath('query.missing.0','kursii');
+        $this->assertContains('kursi kantor',array_column($response->json('suggestions'),'query'));
+        foreach (['plastikk 10','PR-plastikk','"plastikk"','plastikk/baru'] as $strict) $this->search($strict)->assertJsonPath('suggestions',[]);
+        $this->search('plastikk',['scope'=>'sp'])->assertJsonPath('suggestions',[]);
+        $this->search('plastikk',['buyer'=>'Someone else'])->assertJsonPath('suggestions',[]);
+        DB::table('procurement_search_sources')->where('id',$source->id)->update(['verified_at'=>now()->subMinutes(20)]);
+        $this->search('plastikk')->assertJsonPath('suggestions',[]);
+        DB::table('procurement_search_sources')->where('id',$source->id)->update(['verified_at'=>now()]);
+        $pr->delete(); $this->search('plastikk')->assertJsonPath('suggestions',[]);
+        Http::assertNothingSent();
+    }
+
     public function test_scan_results_include_live_buyers_vendor_roles_and_real_tor_provenance(): void
     {
         $pr = $this->pr();

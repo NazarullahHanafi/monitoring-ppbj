@@ -14,8 +14,9 @@ class Element {
 }
 function setup() {
     const nodes = {};
-    for (const name of ['form', 'query', 'scope', 'buyer', 'vendor', 'creator', 'status', 'results', 'pagination', 'prev', 'next', 'reset', 'page', 'submit', 'summary', 'progress', 'progressinfo']) nodes[name] = new Element();
+    for (const name of ['form', 'query', 'scope', 'match', 'sort', 'suggestions', 'buyer', 'vendor', 'creator', 'status', 'results', 'pagination', 'prev', 'next', 'reset', 'page', 'submit', 'summary', 'progress', 'progressinfo']) nodes[name] = new Element();
     nodes.scope.value = 'all';
+    nodes.match.value = 'source'; nodes.sort.value = 'relevance';
     nodes.form.querySelector = () => nodes.submit;
     const root = new Element(); root.dataset.endpoint = 'https://app.test/procurement/search';
     root.querySelector = selector => nodes[selector.match(/data-pus-(\w+)/)?.[1]];
@@ -40,6 +41,49 @@ test('unified search is manual; rebinding and typing do not trigger requests', (
     submit(f, 'kursi');
     assert.equal(f.requests.length, 1);
     assert.equal(new URL(f.requests[0].url).searchParams.get('q'), 'kursi');
+});
+
+test('related mode and sorting apply manually and pagination retains applied options', async () => {
+    const f=setup(); f.nodes.match.value='related'; f.nodes.sort.value='newest';
+    f.nodes.match.fire('change'); f.nodes.sort.fire('change'); assert.equal(f.requests.length,0);
+    submit(f,'sensor kalibrasi');
+    let url=new URL(f.requests[0].url); assert.equal(url.searchParams.get('match'),'related'); assert.equal(url.searchParams.get('sort'),'newest');
+    const response={...data(),match:'related',sort:'newest',last_page:2}; response.rows[0].matches[0].matched_words=['sensor'];
+    f.requests[0].resolve({ok:true,json:async()=>response}); await flush();
+    const text=node=>node.textContent+node.children.map(text).join(' ');
+    assert.match(text(f.nodes.results),/Kata cocok: sensor/); assert.match(f.nodes.status.textContent,/dokumen berbeda/);
+    f.nodes.match.value='source'; f.nodes.sort.value='relevance'; f.nodes.next.fire('click');
+    url=new URL(f.requests[1].url); assert.equal(url.searchParams.get('match'),'related'); assert.equal(url.searchParams.get('sort'),'newest');
+    f.nodes.reset.fire('click'); assert.equal(f.nodes.match.value,'source'); assert.equal(f.nodes.sort.value,'relevance');
+});
+
+test('spelling suggestions require a click and retain applied filters while clearing unsent drafts', async () => {
+    const f=setup(); f.nodes.buyer.value='Nazar'; f.nodes.match.value='related'; submit(f,'plastikk');
+    const response={...data(),rows:[],total:0,match:'related',suggestions:[{word:'plastikk',replacement:'plastik',query:'plastik'}]};
+    f.requests[0].resolve({ok:true,json:async()=>response}); await flush();
+    assert.equal(f.requests.length,1); assert.equal(f.nodes.suggestions.hidden,false);
+    assert.equal(f.nodes.suggestions.children[0].textContent,'Coba “plastik”');
+    f.nodes.buyer.value='Draft'; f.nodes.scope.value='sp'; f.nodes.match.value='source';
+    f.nodes.suggestions.children[0].fire('click');
+    const url=new URL(f.requests[1].url); assert.equal(url.searchParams.get('q'),'plastik');
+    assert.equal(url.searchParams.get('buyer'),'Nazar'); assert.equal(url.searchParams.get('scope'),'all'); assert.equal(url.searchParams.get('match'),'related');
+    assert.equal(f.nodes.buyer.value,'Nazar'); assert.equal(f.nodes.match.value,'related'); assert.equal(f.nodes.suggestions.hidden,true);
+    f.nodes.reset.fire('click'); assert.equal(f.nodes.suggestions.children.length,0);
+    f.requests[1].resolve({ok:true,json:async()=>response}); await flush(); assert.equal(f.nodes.suggestions.children.length,0);
+});
+
+test('suggestion labels and relevance explanations cannot execute HTML', async () => {
+    const f=setup(); submit(f,'kursii'); const response=data();
+    response.suggestions=[{word:'kursii',replacement:'<img onerror=1>',query:'kursi'}]; response.rows[0].relevance={reason:'<script>reason</script>'};
+    f.requests[0].resolve({ok:true,json:async()=>response}); await flush();
+    assert.equal(f.nodes.suggestions.children[0].textContent,'Coba “<img onerror=1>”');
+    assert.equal(f.nodes.results.children[0].children[1].textContent,'<script>reason</script>');
+});
+
+test('bounded query validation returns a useful plain-text correction and releases controls', async () => {
+    const f=setup(); submit(f,'a b c d e f g h');
+    f.requests[0].resolve({ok:false,status:422,json:async()=>({errors:{q:['Gunakan nama barang atau kata yang lebih lengkap.']}})}); await flush();
+    assert.match(f.nodes.status.textContent,/lebih lengkap/); assert.equal(f.nodes.submit.disabled,false);
 });
 
 test('context filters apply on submit, persist across pages, and reset together', async () => {

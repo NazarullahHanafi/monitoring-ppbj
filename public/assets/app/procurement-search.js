@@ -7,7 +7,7 @@
     const form = get('form'), input = get('query'), scope = get('scope'), status = get('status'), results = get('results');
     const pagination = get('pagination'), submit = form.querySelector('[type="submit"]');
     const filterNames = ['buyer', 'vendor', 'creator'];
-    let controller, sequence = 0, currentPage = 1, lastPage = 1, appliedQuery = '', appliedScope = 'all', appliedFilters = {}, pendingKey = '';
+    let controller, sequence = 0, currentPage = 1, lastPage = 1, appliedQuery = '', appliedScope = 'all', appliedMatch = 'source', appliedSort = 'relevance', appliedFilters = {}, pendingKey = '';
     const labels = { ppbj: 'PPBJ', sp: 'SP', spph: 'SPPH', archive_document: 'Arsip', archive_attachment: 'Lampiran arsip' };
     function element(tag, className, text) {
         const node = document.createElement(tag);
@@ -92,6 +92,24 @@
     }
     function render(data) {
         results.replaceChildren();
+        const suggestions = get('suggestions');
+        if (suggestions) {
+            suggestions.replaceChildren();
+            for (const suggestion of (data.suggestions || []).slice(0, 4)) {
+                if (typeof suggestion.query !== 'string' || !suggestion.query.trim() || suggestion.query.length > 255) continue;
+                const button = element('button', 'pus-suggestion', `Coba “${suggestion.replacement}”`);
+                button.type = 'button'; button.title = `Perbaiki “${suggestion.word}” menjadi “${suggestion.replacement}”`;
+                button.addEventListener('click', () => {
+                    input.value = suggestion.query; appliedQuery = suggestion.query; scope.value = appliedScope;
+                    if (get('match')) get('match').value = appliedMatch;
+                    if (get('sort')) get('sort').value = appliedSort;
+                    for (const name of filterNames) if (get(name)) get(name).value = appliedFilters[name] || '';
+                    search();
+                });
+                suggestions.append(button);
+            }
+            suggestions.hidden = suggestions.children.length === 0;
+        }
         const summary = get('summary');
         if (summary) {
             summary.hidden = false;
@@ -105,6 +123,7 @@
             heading.append(title, element('span', 'pus-pill', row.portfolio || 'PR terkait'));
             card.append(heading);
             if (row.context) card.append(contextSummary(row.context));
+            if (row.relevance?.reason) card.append(element('p', 'pus-relevance', row.relevance.reason));
             const matches = element('div', 'pus-matches');
             for (const match of row.matches || []) {
                 const item = element('div', 'pus-match'), source = element('div', 'pus-source');
@@ -116,6 +135,7 @@
                 if (engines[match.reading?.engine]) source.append(element('span', 'pus-badge', engines[match.reading.engine]));
                 if (match.reading?.confidence != null && match.reading.confidence < 55) source.append(element('span', 'pus-badge pus-warning', 'Bacaan kurang jelas · periksa file asli'));
                 if (match.match_page) source.append(element('span', 'pus-badge pus-page-hit', `Ketemu di halaman ${match.match_page}`));
+                if (data.match === 'related' && match.matched_words?.length) source.append(element('span', 'pus-badge', `Kata cocok: ${match.matched_words.join(', ')}`));
                 item.append(source, snippet(match.snippet, data));
                 if (match.url) {
                     const anchor = link(match.url, match.kind.startsWith('archive_') ? (match.match_page ? `Buka halaman ${match.match_page} ↗` : 'Buka lampiran ↗') : 'Buka dokumen →', 'pus-open');
@@ -139,10 +159,10 @@
         if (data.query?.missing?.length) {
             const missing = data.query.missing.map(word => `“${word}”`).join(', ');
             status.textContent = `Kata ${missing} belum ketemu di indeks sumber ini, cuy.`;
-            if (data.query.used?.length) status.textContent += data.total ? ` Tapi “${data.query.used.join(' ')}” ketemu! Ini ${data.total} PR yang cocok.` : ` Kata “${data.query.used.join(' ')}” ada, tapi belum ketemu bersamaan dalam satu dokumen. Coba cari salah satunya dulu.`;
+            if (data.query.used?.length) status.textContent += data.total ? ` Tapi “${data.query.used.join(' ')}” ketemu! Ini ${data.total} PR yang cocok.` : ` Kata “${data.query.used.join(' ')}” ada, tapi belum ketemu bersamaan dalam ${data.match === 'related' ? 'PR yang sama' : 'satu dokumen'}. Coba cari salah satunya dulu.`;
             else status.textContent += ' Coba kata yang lebih singkat atau pilih semua sumber, ya.';
         } else if (!data.total && !data.query?.strict && data.query?.used?.length > 1 && !/[0-9=<>"']/.test(appliedQuery)) {
-            status.textContent = 'Kata-katanya ada, cuy, tapi belum ketemu bersamaan dalam satu dokumen. Coba cari salah satu kata atau pilih semua sumber.';
+            status.textContent = `Kata-katanya ada, cuy, tapi belum ketemu bersamaan dalam ${data.match === 'related' ? 'PR yang sama' : 'satu dokumen'}. Coba cari salah satu kata atau pilih semua sumber.`;
         }
         if (backlog) progress.push(`${backlog} lampiran diproses bertahap; isi yang sudah terbaca langsung bisa dicari.`);
         if (data.index?.failed) progress.push(`${data.index.failed} lampiran belum berhasil dibaca seluruhnya.`);
@@ -159,6 +179,7 @@
         if (Object.keys(data.equivalents || {}).length) status.textContent += ' Padanan yang turut dicari: ' + Object.entries(data.equivalents).map(([word, equivalents]) => `${word} (${equivalents.join(', ')})`).join('; ') + '.';
         const refinements = filterNames.filter(name => appliedFilters[name]).map(name => `${({ buyer: 'Buyer', vendor: 'Vendor', creator: 'Pembuat TOR' })[name]}: ${appliedFilters[name]}`);
         if (refinements.length) status.textContent += ' Filter aktif — ' + refinements.join('; ') + '.';
+        if (data.match === 'related') status.textContent += ' Kata dapat berasal dari dokumen berbeda dalam PR yang sama.';
         currentPage = data.page;
         lastPage = data.last_page;
         pagination.hidden = data.last_page <= 1;
@@ -167,7 +188,7 @@
         get('next').disabled = data.page >= data.last_page;
     }
     async function search(page = 1) {
-        const key = JSON.stringify([appliedQuery, appliedScope, appliedFilters, page]);
+        const key = JSON.stringify([appliedQuery, appliedScope, appliedMatch, appliedSort, appliedFilters, page]);
         if (pendingKey === key) return;
         controller?.abort();
         controller = new AbortController();
@@ -175,15 +196,26 @@
         const serial = ++sequence;
         status.dataset.error = 'false';
         status.textContent = 'Mencari barang dan dokumen…';
+        if (get('suggestions')) get('suggestions').hidden = true;
         submit.disabled = true;
         get('prev').disabled = get('next').disabled = true;
         const timeout = setTimeout(() => { if (serial === sequence) controller.abort(); }, 20000);
         try {
             const url = new URL(root.dataset.endpoint, window.location.origin);
-            url.search = new URLSearchParams({ q: appliedQuery, scope: appliedScope, page, ...appliedFilters });
+            url.search = new URLSearchParams({ q: appliedQuery, scope: appliedScope, match: appliedMatch, sort: appliedSort, page, ...appliedFilters });
             const response = await fetch(url, { headers: { Accept: 'application/json' }, signal: controller.signal, credentials: 'same-origin' });
             if (serial !== sequence) return;
-            if (!response.ok) throw new Error(response.status === 429 ? 'Pencarian terlalu sering. Tunggu sebentar, lalu coba lagi.' : response.status === 422 ? 'Periksa kata pencarian dan pilihan sumber.' : 'Pencarian belum dapat dimuat. Coba kembali.');
+            if (!response.ok) {
+                let message = response.status === 429 ? 'Pencarian terlalu sering. Tunggu sebentar, lalu coba lagi.' : response.status === 422 ? 'Periksa kata pencarian dan pilihan sumber.' : 'Pencarian belum dapat dimuat. Coba kembali.';
+                if (response.status === 422) {
+                    try {
+                        const details = await response.json();
+                        const validation = Object.values(details.errors || {}).flat().find(value => typeof value === 'string' && value.length <= 240);
+                        if (validation) message = validation;
+                    } catch (error) { if (error.name === 'AbortError') throw error; }
+                }
+                throw new Error(message);
+            }
             let data;
             try { data = await response.json(); } catch (error) {
                 if (error.name === 'AbortError') throw error;
@@ -204,15 +236,21 @@
         event.preventDefault();
         if (!input.value.trim()) return;
         appliedQuery = input.value.trim(); appliedScope = scope.value;
+        appliedMatch = get('match')?.value || 'source'; appliedSort = get('sort')?.value || 'relevance';
         appliedFilters = Object.fromEntries(filterNames.map(name => [name, get(name)?.value.trim() || '']).filter(([, value]) => value));
         search();
     });
     input.addEventListener('input', () => { status.textContent = 'Pilihan belum diterapkan. Tekan Enter atau klik Cari.'; });
     scope.addEventListener('change', () => { status.textContent = 'Pilihan belum diterapkan. Klik Cari untuk menerapkan.'; });
     for (const name of filterNames) get(name)?.addEventListener('input', () => { status.textContent = 'Filter belum diterapkan. Klik Cari untuk menerapkan.'; });
+    for (const name of ['match', 'sort']) get(name)?.addEventListener('change', () => { status.textContent = 'Pilihan belum diterapkan. Klik Cari untuk menerapkan.'; });
     get('reset').addEventListener('click', () => {
         controller?.abort(); sequence++; pendingKey = ''; submit.disabled = false; input.value = ''; scope.value = 'all';
         appliedFilters = {};
+        appliedMatch = 'source'; appliedSort = 'relevance';
+        if (get('match')) get('match').value = appliedMatch;
+        if (get('sort')) get('sort').value = appliedSort;
+        if (get('suggestions')) { get('suggestions').replaceChildren(); get('suggestions').hidden = true; }
         for (const name of filterNames) if (get(name)) get(name).value = '';
         currentPage = lastPage = 1;
         results.replaceChildren(); pagination.hidden = true;
