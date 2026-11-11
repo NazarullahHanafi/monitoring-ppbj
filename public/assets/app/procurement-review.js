@@ -10,10 +10,17 @@
         return data;
     }
     async function send(url, body) {
-        const response = await fetch(url, {method:'POST', body, headers:{Accept:'application/json', 'X-Requested-With':'XMLHttpRequest', 'X-CSRF-TOKEN':document.querySelector('meta[name="csrf-token"]')?.content || ''}});
-        const data = (response.headers.get('content-type') || '').includes('application/json') ? await response.json() : {};
-        if (!response.ok) throw new Error(Object.values(data.errors || {}).flat()[0] || data.message || 'Simulasi belum dapat dimuat. Silakan coba lagi.');
-        return data;
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 30000);
+        try {
+            const response = await fetch(url, {method:'POST', body, signal:controller.signal, headers:{Accept:'application/json', 'X-Requested-With':'XMLHttpRequest', 'X-CSRF-TOKEN':document.querySelector('meta[name="csrf-token"]')?.content || ''}});
+            const data = (response.headers.get('content-type') || '').includes('application/json') ? await response.json() : {};
+            if (!response.ok) throw new Error(Object.values(data.errors || {}).flat()[0] || data.message || 'Simulasi belum dapat dimuat. Silakan coba lagi.');
+            return data;
+        } catch (error) {
+            if (controller.signal.aborted) throw new Error('Respons terlalu lama. Isian form tetap ada. Periksa status pengajuan sebelum mencoba kembali.');
+            throw error;
+        } finally { clearTimeout(timer); }
     }
     function render(data) {
         let html = `<h2>${escape(data.document)}</h2>`;
@@ -30,9 +37,10 @@
     }
     window.ProcurementReview = {
         async confirm(form, kind, isEdit) {
-            form.inert = true;
+            const previousInert = form.inert;
             try {
                 if (window.ProcurementDateWarning && !await window.ProcurementDateWarning.confirm(form, kind)) return false;
+                form.inert = true;
                 const id = isEdit ? new URL(form.action).pathname.split('/').filter(Boolean).pop() : '';
                 const body = payload(form); body.set('action', 'save');
                 const data = await send(`/procurement-review/${kind}${id ? `/${id}` : ''}`, body);
@@ -53,7 +61,7 @@
                 const result = await Swal.fire({title:data.title, html:render(data) + (data.approved ? `<div class="pr-alert">Persetujuan #${escape(data.approval_id)} tersedia. Akan diperiksa ulang dan digunakan sekali saat penyimpanan berhasil.</div>` : '') + '<p class="pr-muted">Ini pratinjau, belum mengubah data. Server memvalidasi kembali saat disimpan.</p>', showCancelButton:true, confirmButtonText:'Lanjut simpan', cancelButtonText:'Periksa kembali', width:760, ...theme()});
                 return result.isConfirmed;
             } catch (error) { await Swal.fire({title:'Simulasi belum tersedia', text:error.message, icon:'warning', ...theme()}); return false; }
-            finally { form.inert = false; }
+            finally { form.inert = previousInert; }
         },
         async confirmDelete(kind, url) {
             try {

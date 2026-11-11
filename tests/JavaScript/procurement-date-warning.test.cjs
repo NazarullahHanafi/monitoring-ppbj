@@ -12,7 +12,7 @@ function setup(fields = [], confirmed = true) {
     const form = {action: 'https://example.test/sp/4', inert: false, dataset: {},
         querySelectorAll: () => inputs, querySelector: () => button};
     const window = {SP_PAGE_CONFIG: {today: '2026-11-11'}, SPPH_PAGE_CONFIG: {today: '2026-11-11'}, location: {href: '/sp'}};
-    const context = {window, URL, Intl, document: {querySelector: () => ({content: 'csrf'})},
+    const context = {window, URL, Intl, AbortController, setTimeout, clearTimeout, document: {querySelector: () => ({content: 'csrf'})},
         FormData: class {set() {} delete() {}},
         fetch: async (url, options) => {requests.push({url, options}); return {ok: true, headers: {get: () => 'application/json'}, json: async () => ({title: 'Pratinjau', summary: [], prs: []})};},
         Swal: {fire: async options => {dialogs.push(options); return {isConfirmed: confirmed};}}};
@@ -88,6 +88,35 @@ test('native confirmation fallback allows continuing or returning to the unchang
     assert.match(message, /01\/01\/2025/);
     h.window.confirm = () => true;
     assert.equal(await h.window.ProcurementDateWarning.confirm(h.form, 'spph'), true);
+});
+
+test('repeated fulfillment dates are grouped without omitting affected item numbers', async () => {
+    const fields = Array.from({length: 200}, (_, index) => [`items[${index}][tgl_pemenuhan]`, '2025-01-01']);
+    const h = setup(fields);
+    await h.window.ProcurementDateWarning.confirm(h.form, 'spph');
+    const html = h.dialogs[0].html;
+    assert.match(html, /200 kolom tanggal/);
+    assert.equal((html.match(/class="pr-row"/g) || []).length, 1);
+    assert.match(html, /barang 1–200/);
+    assert.deepEqual(h.inputs.map(field => field.value), fields.map(field => field[1]));
+});
+
+test('grouped item ranges never include blank rows between matching dates', async () => {
+    const h = setup(Array.from({length: 5}, (_, index) => [`items[${index}][tgl_pemenuhan]`, index === 2 ? '' : '2025-01-01']));
+    await h.window.ProcurementDateWarning.confirm(h.form, 'spph');
+    assert.match(h.dialogs[0].html, /barang 1–2, 4–5/);
+    assert.match(h.dialogs[0].html, /4 kolom tanggal/);
+});
+
+test('cancel focuses the first suspect date only after restoring form interaction', async () => {
+    const h = setup([['tanggal_sp', '2026-11-11'], ['promised_date', '2025-01-01']], false);
+    let focused = 0, scrolled = 0;
+    h.inputs[1].focus = () => {assert.equal(h.form.inert, false); focused++;};
+    h.inputs[1].scrollIntoView = () => scrolled++;
+    h.context.Swal.fire = async options => {h.dialogs.push(options); assert.equal(h.form.inert, true); return {isConfirmed: false};};
+    assert.equal(await h.window.ProcurementReview.confirm(h.form, 'sp', true), false);
+    assert.equal(focused, 1); assert.equal(scrolled, 1); assert.equal(h.requests.length, 0);
+    assert.equal(h.dialogs[0].returnFocus, false);
 });
 
 for (const kind of ['sp', 'spph']) {

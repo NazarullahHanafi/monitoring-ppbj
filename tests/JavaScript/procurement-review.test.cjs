@@ -11,13 +11,13 @@ class FormDataStub {
 function setup(data, confirmed = false) {
     const requests = [], dialogs = [], window = {};
     const form = {action:'https://example.com/sp/4', fields:{_method:'PUT', nama_vendor:'Vendor'}, inert:false, querySelectorAll:()=>[]};
-    const context = {window, FormData:FormDataStub, URL, Intl, location:{origin:'https://example.com'}, document:{querySelector:()=>({content:'csrf-test'})},
+    const context = {window, FormData:FormDataStub, URL, Intl, AbortController, setTimeout, clearTimeout, location:{origin:'https://example.com'}, document:{querySelector:()=>({content:'csrf-test'})},
         fetch:async(url,options)=>{ requests.push({url,options}); return {ok:true,headers:{get:()=> 'application/json'},json:async()=>data}; },
         Swal:{fire:async options=>{dialogs.push(options); return {isConfirmed:confirmed};}, showValidationMessage(){}}};
     window.Swal = context.Swal;
     vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../../public/assets/app/procurement-date-warning.js'), 'utf8'), context);
     vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../../public/assets/app/procurement-review.js'), 'utf8'), context);
-    return {form,requests,dialogs,review:window.ProcurementReview,window};
+    return {form,requests,dialogs,review:window.ProcurementReview,window,context};
 }
 test('edit preview strips _method, escapes database text and cancellation never saves', async()=>{
     const h=setup({title:'Simulasi', document:'<img onerror=alert(1)>', vendor:'<script>x</script>', prs:[], summary:[]});
@@ -53,4 +53,31 @@ test('an already open page with an older asset list can still use the save previ
     delete h.window.ProcurementDateWarning;
     assert.equal(await h.review.confirm(h.form,'sp',false),true);
     assert.equal(h.requests.length,1);
+});
+
+test('slow preview aborts once, restores form interaction and never retries automatically', async()=>{
+    const h=setup({});
+    let timeout, cleared=0, attempts=0;
+    h.context.setTimeout=(callback, milliseconds)=>{assert.equal(milliseconds,30000);timeout=callback;return 42;};
+    h.context.clearTimeout=id=>{assert.equal(id,42);cleared++;};
+    h.context.fetch=async(url,options)=>{attempts++;return new Promise((resolve,reject)=>options.signal.addEventListener('abort',()=>reject(new Error('aborted'))));};
+    const pending=h.review.confirm(h.form,'sp',false);
+    await new Promise(resolve=>setImmediate(resolve));
+    assert.equal(h.form.inert,true);
+    timeout();
+    assert.equal(await pending,false);
+    assert.equal(attempts,1);assert.equal(cleared,1);assert.equal(h.form.inert,false);
+    assert.match(h.dialogs[0].text,/Isian form tetap ada/);
+});
+
+test('preview clears its timeout after a server rejection and preserves an already inert form', async()=>{
+    const h=setup({});
+    let cleared=0;
+    h.context.setTimeout=()=>17;
+    h.context.clearTimeout=id=>{assert.equal(id,17);cleared++;};
+    h.context.fetch=async()=>({ok:false,headers:{get:()=> 'application/json'},json:async()=>({message:'Akses ditolak'})});
+    h.form.inert=true;
+    assert.equal(await h.review.confirm(h.form,'sp',true),false);
+    assert.equal(h.form.inert,true);assert.equal(cleared,1);
+    assert.equal(h.dialogs[0].text,'Akses ditolak');
 });

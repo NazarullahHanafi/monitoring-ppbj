@@ -37,8 +37,29 @@
             if ((fulfillment || field.name === 'promised_date') && documentDate && date.time < documentDate.time) reasons.push('Tanggal pemenuhan lebih awal dari tanggal dokumen.');
             if (['tgl_sph', 'tanggal_pemenang'].includes(field.name) && documentDate && date.time > documentDate.time) reasons.push('Tanggal ini melewati tanggal SP.');
             if (field.name === 'akhir_kontrak' && contractStart && date.time < contractStart.time) reasons.push('Akhir kontrak lebih awal dari awal kontrak.');
-            return reasons.length ? [{label, date: date.display, reasons}] : [];
+            return reasons.length ? [{field, item, label, date: date.display, reasons}] : [];
         });
+    }
+    function itemNumbers(items) {
+        const ranges = [];
+        let first = items[0], last = first;
+        for (const item of items.slice(1)) {
+            if (item === last + 1) last = item;
+            else { ranges.push(first === last ? String(first) : `${first}–${last}`); first = last = item; }
+        }
+        ranges.push(first === last ? String(first) : `${first}–${last}`);
+        return ranges.join(', ');
+    }
+    function grouped(warnings) {
+        const groups = new Map();
+        for (const warning of warnings) {
+            const key = warning.item === null ? warning.field.name : `${warning.date}|${warning.reasons.join('|')}`;
+            if (!groups.has(key)) groups.set(key, {...warning, items: []});
+            if (warning.item !== null) groups.get(key).items.push(warning.item);
+        }
+        return Array.from(groups.values(), group => ({...group,
+            label: group.items.length ? `Tanggal pemenuhan · barang ${itemNumbers(group.items)}` : group.label
+        }));
     }
     window.ProcurementDateWarning = {
         async confirm(form, kind) {
@@ -50,17 +71,32 @@
             if (!today) return true;
             const warnings = inspect(form, today);
             if (!warnings.length) return true;
+            const groups = grouped(warnings);
             const title = `Yakin menyimpan ${kind === 'sp' ? 'SP' : 'SPPH'} dengan tanggal ini?`;
             const note = 'Ini hanya pengingat. Jika tanggal sudah benar, pilih Lanjut simpan. Tanggal tetap sesuai isian Anda.';
-            if (!window.Swal?.fire) return window.confirm(`${title}\n\n${warnings.map(w => `${w.label}: ${w.date}\n${w.reasons.join(' ')}`).join('\n\n')}\n\n${note}`);
-            const result = await window.Swal.fire({
-                title, icon: 'info',
-                html: `<p>${note}</p>${warnings.map(w => `<div class="pr-row"><strong>${escape(w.label)}: ${escape(w.date)}</strong>${w.reasons.map(reason => `<p class="pr-muted">${escape(reason)}</p>`).join('')}</div>`).join('')}`,
-                showCancelButton: true, confirmButtonText: 'Lanjut simpan', cancelButtonText: 'Periksa tanggal',
-                focusCancel: true, width: 650, customClass: {popup: 'pr-review'},
-                confirmButtonColor: '#3157d9', cancelButtonColor: '#475569'
-            });
-            return result.isConfirmed === true;
+            const previousInert = form.inert;
+            let confirmed = false;
+            form.inert = true;
+            try {
+                if (!window.Swal?.fire) confirmed = window.confirm(`${title}\n\n${groups.map(w => `${w.label}: ${w.date}\n${w.reasons.join(' ')}`).join('\n\n')}\n\n${note}`);
+                else {
+                    const result = await window.Swal.fire({
+                        title, icon: 'info',
+                        html: `<p>${note}</p><p class="pr-muted">${warnings.length} kolom tanggal perlu diperiksa.</p>${groups.map(w => `<div class="pr-row"><strong>${escape(w.label)}: ${escape(w.date)}</strong>${w.reasons.map(reason => `<p class="pr-muted">${escape(reason)}</p>`).join('')}</div>`).join('')}`,
+                        showCancelButton: true, confirmButtonText: 'Lanjut simpan', cancelButtonText: 'Periksa tanggal',
+                        focusCancel: true, returnFocus: false, width: 650, customClass: {popup: 'pr-review'},
+                        confirmButtonColor: '#3157d9', cancelButtonColor: '#475569'
+                    });
+                    confirmed = result.isConfirmed === true;
+                }
+                return confirmed;
+            } finally {
+                form.inert = previousInert;
+                if (!confirmed && !previousInert) {
+                    warnings[0].field.focus?.({preventScroll: true});
+                    warnings[0].field.scrollIntoView?.({block: 'center', behavior: 'auto'});
+                }
+            }
         }
     };
 }());
