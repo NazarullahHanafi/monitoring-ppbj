@@ -2629,6 +2629,8 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
                 form.dataset.procurementSaving = 'true';
                 const submitBtn = form.querySelector('button[type="submit"]');
                 const originalHtml = submitBtn ? submitBtn.innerHTML : '';
+                const previousInert = form.inert;
+                let saved = false, writeStarted = false, saveTimer;
                 if (submitBtn) {
                     submitBtn.disabled = true;
                     submitBtn.innerHTML = 'Menyiapkan simulasi...';
@@ -2638,9 +2640,15 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
                     if (window.ProcurementDetails && !await window.ProcurementDetails.beforeSave(form)) return;
                     if (!await window.ProcurementReview.confirm(form, 'sp', isEdit)) return;
                     if (submitBtn) submitBtn.innerHTML = 'Menyimpan...';
+                    form.inert = true;
+                    const body = new FormData(form);
+                    const controller = new AbortController();
+                    saveTimer = setTimeout(() => controller.abort(), 90000);
+                    writeStarted = true;
                     const response = await fetch(form.action, {
                         method: 'POST',
-                        body: new FormData(form),
+                        body,
+                        signal: controller.signal,
                         headers: {
                             'Accept': 'application/json',
                             'X-Requested-With': 'XMLHttpRequest'
@@ -2648,10 +2656,16 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
                     });
 
                     const contentType = response.headers.get('content-type') || '';
-                    const data = contentType.includes('application/json') ? await response.json() : {};
+                    if (!contentType.includes('application/json') || response.redirected) throw new Error('Unconfirmed save response');
+                    const data = await response.json();
+                    clearTimeout(saveTimer);
+                    saveTimer = undefined;
 
                     if (response.ok) {
-                        Swal.fire({
+                        if (typeof data?.message !== 'string' || typeof data?.redirect !== 'string') throw new Error('Incomplete save response');
+                        saved = true;
+                        if (submitBtn) submitBtn.innerHTML = 'Tersimpan';
+                        await Swal.fire({
                             title: 'Berhasil disimpan',
                             text: data?.message || 'Data SP berhasil disimpan.',
                             icon: 'success',
@@ -2668,7 +2682,7 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
                     if (data?.conflict || response.status === 409) {
                         const result = await Swal.fire({
                             title: 'Nomor bentrok / data berubah',
-                            html: `<div class="text-left leading-relaxed">${message}<br><br><strong>Solusi cepat:</strong> ambil nomor terbaru tanpa menutup form.</div>`,
+                            html: `<div class="text-left leading-relaxed">${escapedHtml(message)}<br><br><strong>Solusi cepat:</strong> ambil nomor terbaru tanpa menutup form.</div>`,
                             icon: 'warning',
                             showCancelButton: true,
                             confirmButtonText: 'Ambil Nomor Terbaru',
@@ -2695,17 +2709,22 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
                         ...swalThemeSp()
                     });
                 } catch (error) {
-                    Swal.fire({
-                        title: 'Koneksi simpan bermasalah',
-                        text: 'Form tetap terbuka. Silakan coba lagi, data yang sudah diketik tidak hilang.',
+                    await Swal.fire({
+                        title: saved ? 'Data sudah disimpan' : writeStarted ? 'Periksa status penyimpanan' : 'Persiapan simpan belum selesai',
+                        text: saved ? 'Data sudah tersimpan. Buka daftar SP untuk melihat hasilnya.' : writeStarted ? 'Status penyimpanan belum dapat dipastikan. Isian tetap ada. Periksa daftar SP di tab lain sebelum menyimpan ulang agar tidak membuat data ganda.' : 'Isian form tetap ada. Periksa kembali sebelum mencoba menyimpan.',
+                        footer: `<a href="${window.SP_PAGE_CONFIG?.oracleMode ? '/sp?oracle=1' : '/sp'}" target="_blank" rel="noopener">Periksa daftar SP di tab baru ↗</a>`,
                         icon: 'error',
                         ...swalThemeSp()
                     });
                 } finally {
-                    delete form.dataset.procurementSaving;
-                    if (submitBtn) {
-                        submitBtn.disabled = false;
-                        submitBtn.innerHTML = originalHtml;
+                    if (saveTimer !== undefined) clearTimeout(saveTimer);
+                    if (!saved) {
+                        form.inert = previousInert;
+                        delete form.dataset.procurementSaving;
+                        if (submitBtn) {
+                            submitBtn.disabled = false;
+                            submitBtn.innerHTML = originalHtml;
+                        }
                     }
                 }
             }
