@@ -1,5 +1,5 @@
 @if(config('procurement_search.enabled'))
-<section id="procurementUnifiedSearch" class="pus" data-endpoint="{{ route('procurement.search') }}" aria-label="Pencarian terpadu PR dan lampiran">
+<section id="procurementUnifiedSearch" class="pus" data-endpoint="{{ route('procurement.search') }}" data-status-endpoint="{{ route('procurement.search.status') }}" data-priority-base="{{ url('/procurement/search/prs') }}" data-csrf="{{ csrf_token() }}" data-can-prioritize="{{ ! auth()->user()?->isReadOnly() && ! \Illuminate\Support\Facades\Cache::get('simonpr:read_only_mode', false) ? '1' : '0' }}" aria-label="Pencarian terpadu PR dan lampiran">
     <header><div><span class="pus-eyebrow">RUANG TELUSUR PENGADAAN</span><h2>Setiap barang, terhubung ke PR-nya.</h2><p>Satu tempat untuk menelusuri PPBJ, rincian SP/SPPH, dan lampiran arsip.</p></div><span class="pus-pill">PPBJ · SP · SPPH · Arsip</span></header>
     <form data-pus-form>
         <label class="pus-field"><span>Nama barang, nomor, atau isi dokumen</span><input data-pus-query type="search" maxlength="255" autocomplete="off" value="" placeholder="Contoh: kursi ergonomis, printer, alat ukur…" required></label>
@@ -19,6 +19,7 @@
     <div class="pus-summary" data-pus-summary hidden aria-label="Ringkasan hasil"></div>
     <p data-pus-status role="status" aria-live="polite" class="pus-status">Isi kolom di atas lalu tekan Enter atau klik Cari di semua PR. Scan/foto lama diproses bertahap di latar belakang.</p>
     <div data-pus-suggestions class="pus-suggestions" hidden aria-label="Saran perbaikan pencarian"></div>
+    <button type="button" data-pus-check-status class="pus-secondary pus-check-status">Cek status antrean arsip</button>
     <details data-pus-progress class="pus-progress" hidden><summary>Progres pembacaan arsip</summary><p data-pus-progressinfo></p></details>
     <div data-pus-results class="pus-results"></div>
     <nav data-pus-pagination class="pus-pagination" hidden aria-label="Halaman hasil pencarian"><button type="button" data-pus-prev class="pus-secondary">← Sebelumnya</button><span data-pus-page></span><button type="button" data-pus-next class="pus-secondary">Berikutnya →</button></nav>

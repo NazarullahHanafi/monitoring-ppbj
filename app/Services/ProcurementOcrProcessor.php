@@ -15,12 +15,7 @@ class ProcurementOcrProcessor
 
     public function next(?int $sourceId = null): bool
     {
-        $source = DB::table('procurement_search_sources')->where('active', true)
-            ->when($sourceId !== null, fn ($q) => $q->where('id', $sourceId))
-            ->whereIn('kind', ['archive_document', 'archive_attachment'])->whereIn('state', ['pending', 'partial', 'failed'])
-            ->where(fn ($q) => $q->where('attempts', '<', 3)->orWhere('reader_revision', '<', 2))
-            ->where(fn ($q) => $q->whereNull('retry_at')->orWhere('retry_at', '<=', now()))
-            ->orderBy('updated_at')->orderBy('id')->first();
+        $source = app(ProcurementOcrQueue::class)->next($sourceId);
         if (! $source) {
             return false;
         }
@@ -76,6 +71,9 @@ class ProcurementOcrProcessor
             if (in_array($extension, ['pdf', 'jpg', 'jpeg', 'png'], true)) {
                 // Difficult files retry one page at a time and reduce raster memory progressively.
                 $count = $source->state === 'failed' || $source->attempts > 0 ? 1 : (int) config('procurement_search.pages_per_pass');
+                if ($source->priority_until && now()->lt($source->priority_until) && (int) $source->page < (int) $source->priority_pages) {
+                    $count = min($count, (int) $source->priority_pages - (int) $source->page);
+                }
                 $pixels = $source->attempts > 1 ? 2000000 : ($source->state === 'failed' ? 3000000 : (int) config('procurement_search.max_pixels'));
                 $result = $this->read($path, $extension, (int) $source->page + 1, $count, $pixels);
             } elseif (in_array($extension, ['txt', 'csv', 'docx', 'xlsx', 'pptx'], true)) {

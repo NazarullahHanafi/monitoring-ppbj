@@ -72,7 +72,7 @@ class ProcurementSearchSync
                 continue;
             }
             $key = 'procurement-search:cursor:'.$kind;
-            $page = $this->archive->call(['action' => 'manifest', 'kind' => $kind, 'after' => (int) Cache::get($key, 0), 'limit' => $batch]);
+            $page = $this->archive->call(['action' => 'manifest', 'kind' => $kind, 'after' => (int) Cache::get($key, 0), 'limit' => $batch, 'recent_limit' => 20]);
             $numbers = collect($page['rows'])->flatMap(fn ($row) => $row['pr_numbers'])->unique()->all();
             $prMap = Ppbj::whereIn('ppbj_no', $numbers)->pluck('id', 'ppbj_no');
             $groups = [];
@@ -101,7 +101,7 @@ class ProcurementSearchSync
                 }
                 $count++;
             }
-            Cache::forever($key, count($page['rows']) < $batch ? 0 : (int) $page['last']);
+            Cache::forever($key, ($page['has_more'] ?? count($page['rows']) >= $batch) ? (int) $page['last'] : 0);
         }
 
         return $count;
@@ -123,6 +123,9 @@ class ProcurementSearchSync
             ->where('source.active', true)->where(fn ($q) => $q->whereNotNull('page.error')->orWhere('page.confidence', '<', 55))->count();
         $progress['unlinked_files'] = DB::table('procurement_search_sources as source')->where('source.active', true)->whereIn('source.kind', ['archive_document', 'archive_attachment'])
             ->whereNotExists(fn ($q) => $q->selectRaw('1')->from('procurement_search_links as link')->join('ppbj as pr', 'pr.id', '=', 'link.ppbj_id')->whereColumn('link.source_id', 'source.id'))->count();
+        $queue = app(ProcurementOcrQueue::class);
+        $progress['waiting'] = $queue->eligible()->count();
+        $progress['priority_waiting'] = $queue->priority($queue->eligible())->count();
         Cache::forever('procurement-search:progress', $progress);
 
         return $progress;

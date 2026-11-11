@@ -58,8 +58,15 @@ try {
             'version' => hash('sha256', json_encode($version, JSON_INVALID_UTF8_SUBSTITUTE))];
     };
     if (($input['action'] ?? '') === 'manifest') {
-        $rows = $query->where('id', '>', max(0, (int) ($input['after'] ?? 0)))->orderBy('id')->limit(min(200, max(1, (int) ($input['limit'] ?? 80))))->get();
-        echo json_encode(['rows' => $rows->map($describe)->all(), 'last' => $rows->last()?->id ?? 0], JSON_THROW_ON_ERROR | JSON_INVALID_UTF8_SUBSTITUTE);
+        $recent = min(20, max(0, (int) ($input['recent_limit'] ?? 0)));
+        $limit = min(200 - $recent, max(1, (int) ($input['limit'] ?? 80)));
+        $rows = (clone $query)->where('id', '>', max(0, (int) ($input['after'] ?? 0)))->orderBy('id')->limit($limit)->get();
+        $last = $rows->last()?->id ?? 0;
+        $hasMore = $rows->count() === $limit;
+        if ($recent) {
+            $rows = $rows->concat((clone $query)->orderByDesc('id')->limit($recent)->get())->unique('id')->sortBy('id')->values();
+        }
+        echo json_encode(['rows' => $rows->map($describe)->all(), 'last' => $last, 'has_more' => $hasMore], JSON_THROW_ON_ERROR | JSON_INVALID_UTF8_SUBSTITUTE);
         exit(0);
     }
     if (($input['action'] ?? '') !== 'file') {

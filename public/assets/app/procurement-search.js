@@ -95,6 +95,7 @@
         const item = element('div', 'pus-match'), source = element('div', 'pus-source');
         source.append(element('span', 'pus-badge', labels[match.kind] || 'Dokumen'), element('strong', '', match.label));
         if (match.kind.startsWith('archive_')) source.append(element('span', 'pus-badge', ['pending', 'partial', 'failed'].includes(match.state) ? `Isi diproses · ${match.page || 0}/${match.pages || '?'} halaman` : 'Hasil pembacaan otomatis'));
+        if (match.queue?.priority) source.append(element('span', 'pus-badge', 'Giliran prioritas aktif'));
         if (['uncertain', 'empty', 'limited', 'unsupported'].includes(match.state)) source.append(element('span', 'pus-badge', 'Perlu diperiksa'));
         if (match.inferred) source.append(element('span', 'pus-badge', 'Nomor PR terbaca dari scan · periksa kecocokan'));
         const engines = { 'pdfjs-6-text': 'Teks asli PDF', 'pdfjs-6-tesseract-7': 'Teks PDF + scan', 'tesseract-7-ind-eng': 'Scan / foto', 'office-text': 'Teks dokumen' };
@@ -196,6 +197,81 @@
         });
         return panel;
     }
+    function showProgress(index) {
+        const backlog = (index?.pending || 0) + (index?.partial || 0), progress = [];
+        if (backlog) progress.push(`${backlog} lampiran diproses bertahap; isi yang sudah terbaca langsung bisa dicari.`);
+        if (index?.failed) progress.push(`${index.failed} lampiran belum berhasil dibaca seluruhnya.`);
+        if (index?.needs_review) progress.push(`${index.needs_review} lampiran perlu diperiksa karena teks/formatnya belum dapat dibaca seluruhnya.`);
+        if (index?.unreadable_pages) progress.push(`${index.unreadable_pages} halaman bermasalah ditandai untuk diperiksa; halaman lain tetap diproses.`);
+        if (index?.unlinked_files) progress.push(`${index.unlinked_files} arsip menunggu relasi PR yang valid sebelum bisa muncul sebagai hasil PR.`);
+        if (index?.files_unmapped) progress.push(`${index.files_unmapped} berkas masih didata jumlah halamannya.`);
+        if (index?.archive_state === 'deferred') progress.push('Sinkronisasi arsip sedang tertunda; hasil kedaluwarsa disembunyikan sementara.');
+        if (index?.state === 'starting') progress.push('Indeks awal sedang disiapkan.');
+        if (Number.isFinite(index?.waiting)) progress.push(`${index.waiting} lampiran siap menunggu giliran; ${index.priority_waiting || 0} di antaranya prioritas.`);
+        if (index?.checked_at) {
+            const checked = new Date(index.checked_at);
+            if (Number.isFinite(checked.getTime())) {
+                progress.push('Pembaruan terakhir: ' + checked.toLocaleString('id-ID') + '.');
+                if (Date.now() - checked.getTime() > 180000) progress.push('Status belum diperbarui lebih dari 3 menit; jadwal pemrosesan mungkin tertunda.');
+            }
+        }
+        if (!progress.length) progress.push('Status pembacaan belum tersedia.');
+        if (get('progress') && get('progressinfo')) {
+            get('progress').hidden = progress.length === 0;
+            get('progressinfo').textContent = progress.join(' ');
+        } else if (progress.length) status.textContent += ' ' + progress.join(' ');
+    }
+    function queuePanel(row) {
+        const panel = element('details', 'pus-details pus-queue');
+        panel.append(element('summary', '', 'Kesiapan lampiran PR ini'));
+        const message = element('p', 'pus-note', 'Minta giliran untuk maksimal 3 lampiran, hingga 4 halaman berikutnya per lampiran. Arsip lama tetap mendapat giliran.');
+        const button = element('button', 'pus-secondary pus-priority', 'Dahulukan lampiran PR ini'); button.type = 'button';
+        message.setAttribute?.('role', 'status'); panel.append(message, button);
+        let busy = false;
+        button.addEventListener('click', async () => {
+            if (busy || button.disabled) return;
+            busy = true; button.disabled = true;
+            const pending = new AbortController(), serial = sequence; evidenceControllers.add(pending);
+            const timeout = setTimeout(() => pending.abort(), 20000);
+            let accepted = false;
+            try {
+                const url = new URL(root.dataset.priorityBase + '/' + row.id + '/priority', window.location.origin);
+                if (url.origin !== window.location.origin || !root.dataset.csrf) throw new Error('Muat ulang halaman sebelum meminta prioritas.');
+                const response = await fetch(url, { method: 'POST', headers: { Accept: 'application/json', 'X-CSRF-TOKEN': root.dataset.csrf }, signal: pending.signal, credentials: 'same-origin' });
+                if (response.status === 403) throw new Error('Akun atau mode saat ini tidak mengizinkan permintaan prioritas.');
+                if (response.status === 419) throw new Error('Sesi berakhir. Muat ulang halaman lalu coba lagi.');
+                const result = await readResponse(response);
+                if (serial !== sequence) return;
+                message.textContent = result.message || 'Permintaan selesai. Cari ulang nanti untuk melihat teks yang baru terbaca.';
+                accepted = Boolean(result.queued || result.cooldown);
+                if (accepted) button.textContent = 'Prioritas sudah diminta';
+            } catch (error) {
+                if (serial === sequence) message.textContent = error.name === 'AbortError' ? 'Respons belum diterima. Periksa status sebelum mencoba lagi; permintaan mungkin sudah diproses.' : error.message;
+            } finally {
+                clearTimeout(timeout); evidenceControllers.delete(pending); busy = false; button.disabled = accepted;
+            }
+        });
+        return panel;
+    }
+    get('check-status')?.addEventListener('click', async () => {
+        const button = get('check-status'); if (button.disabled) return;
+        button.disabled = true;
+        const pending = new AbortController(), serial = sequence; evidenceControllers.add(pending);
+        const timeout = setTimeout(() => pending.abort(), 20000);
+        try {
+            const url = new URL(root.dataset.statusEndpoint, window.location.origin);
+            if (url.origin !== window.location.origin) throw new Error('Alamat status tidak valid.');
+            const response = await fetch(url, { headers: { Accept: 'application/json' }, signal: pending.signal, credentials: 'same-origin' });
+            const result = await readResponse(response);
+            if (serial !== sequence) return;
+            showProgress(result.index); if (get('progress')) get('progress').open = true;
+        } catch (error) {
+            if (serial === sequence && get('progress') && get('progressinfo')) {
+                get('progress').hidden = false; get('progress').open = true;
+                get('progressinfo').textContent = error.name === 'AbortError' ? 'Status belum dapat dimuat. Klik untuk mencoba lagi.' : error.message;
+            }
+        } finally { clearTimeout(timeout); evidenceControllers.delete(pending); button.disabled = false; }
+    });
     function render(data) {
         results.replaceChildren();
         const suggestions = get('suggestions');
@@ -239,10 +315,9 @@
             card.append(links);
             if (row.context) card.append(contextDetails(row.context));
             if (row.more_sources && Number.isSafeInteger(row.id) && row.id > 0) card.append(evidencePanel(row));
+            if (root.dataset.canPrioritize === '1' && Number.isSafeInteger(row.id) && row.id > 0) card.append(queuePanel(row));
             results.append(card);
         }
-        const backlog = (data.index?.pending || 0) + (data.index?.partial || 0);
-        const progress = [];
         status.textContent = data.total ? `${data.total} PR cocok untuk “${appliedQuery}”. Ditampilkan per PR agar hubungan dokumennya jelas.` : 'Belum ada PR yang cocok. Coba kata yang lebih singkat atau pilih semua sumber.';
         if (data.query?.missing?.length) {
             const missing = data.query.missing.map(word => `“${word}”`).join(', ');
@@ -252,18 +327,7 @@
         } else if (!data.total && !data.query?.strict && data.query?.used?.length > 1 && !/[0-9=<>"']/.test(appliedQuery)) {
             status.textContent = `Kata-katanya ada, cuy, tapi belum ketemu bersamaan dalam ${data.match === 'related' ? 'PR yang sama' : 'satu dokumen'}. Coba cari salah satu kata atau pilih semua sumber.`;
         }
-        if (backlog) progress.push(`${backlog} lampiran diproses bertahap; isi yang sudah terbaca langsung bisa dicari.`);
-        if (data.index?.failed) progress.push(`${data.index.failed} lampiran belum berhasil dibaca seluruhnya.`);
-        if (data.index?.needs_review) progress.push(`${data.index.needs_review} lampiran perlu diperiksa karena teks/formatnya belum dapat dibaca seluruhnya.`);
-        if (data.index?.unreadable_pages) progress.push(`${data.index.unreadable_pages} halaman bermasalah ditandai untuk diperiksa; halaman lain tetap diproses.`);
-        if (data.index?.unlinked_files) progress.push(`${data.index.unlinked_files} arsip menunggu relasi PR yang valid sebelum bisa muncul sebagai hasil PR.`);
-        if (data.index?.files_unmapped) progress.push(`${data.index.files_unmapped} berkas masih didata jumlah halamannya.`);
-        if (data.index?.archive_state === 'deferred') progress.push('Sinkronisasi arsip sedang tertunda; hasil kedaluwarsa disembunyikan sementara.');
-        if (data.index?.state === 'starting') progress.push('Indeks awal sedang disiapkan.');
-        if (get('progress') && get('progressinfo')) {
-            get('progress').hidden = progress.length === 0;
-            get('progressinfo').textContent = progress.join(' ');
-        } else if (progress.length) status.textContent += ' ' + progress.join(' ');
+        showProgress(data.index);
         if (Object.keys(data.equivalents || {}).length) status.textContent += ' Padanan yang turut dicari: ' + Object.entries(data.equivalents).map(([word, equivalents]) => `${word} (${equivalents.join(', ')})`).join('; ') + '.';
         const refinements = filterNames.filter(name => appliedFilters[name]).map(name => `${({ buyer: 'Buyer', vendor: 'Vendor', creator: 'Pembuat TOR', exclude: 'Hindari kata utuh' })[name]}: ${appliedFilters[name]}`);
         if (refinements.length) status.textContent += ' Filter aktif — ' + refinements.join('; ') + '.';

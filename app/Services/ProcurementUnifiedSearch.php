@@ -262,7 +262,8 @@ class ProcurementUnifiedSearch
         // every token subquery in ten UNION branches. The per-PR bound is preserved.
         $ranked = $this->matchingSources($plan['used'], $scope, $match, $lexical, $term)
             ->join('procurement_search_links as link', 'link.source_id', '=', 'src.id')->whereIn('link.ppbj_id', $prs->modelKeys())
-            ->select('src.id', 'src.kind', 'src.label', 'src.reference', 'src.state', 'src.error', 'src.page', 'src.pages', 'src.reading_engine', 'src.reading_confidence', 'link.ppbj_id', 'link.inferred');
+            ->select('src.id', 'src.kind', 'src.label', 'src.reference', 'src.state', 'src.error', 'src.page', 'src.pages', 'src.reading_engine', 'src.reading_confidence',
+                'src.queued_at', 'src.priority_until', 'src.priority_pages', 'src.attempts', 'src.reader_revision', 'src.retry_at', 'link.ppbj_id', 'link.inferred');
         if ($evidencePr) {
             $matches = $prs->isEmpty() ? collect() : $ranked->where('src.id', '>', $after)->orderBy('src.id')->limit(9)->get()->groupBy('ppbj_id');
         } else {
@@ -322,6 +323,10 @@ class ProcurementUnifiedSearch
 
                     return ['id' => (int) $source->id, 'kind' => $source->kind, 'label' => $source->label, 'reference' => $source->reference,
                         'state' => $source->state, 'page' => $source->page, 'pages' => $source->pages, 'inferred' => (bool) $source->inferred,
+                        'queue' => $archive ? ['queued_at' => $source->queued_at,
+                            'priority' => $source->priority_until && now()->lt($source->priority_until) && (int) $source->page < (int) $source->priority_pages,
+                            'can_request' => in_array($source->state, ['pending', 'partial', 'failed'], true) && ($source->attempts < 3 || $source->reader_revision < 2)
+                                && (! $source->retry_at || now()->gte($source->retry_at))] : null,
                         'reading' => ['engine' => $passage ? $passage->engine : $source->reading_engine,
                             'confidence' => ($passage ? $passage->confidence : $source->reading_confidence) === null ? null : (int) ($passage ? $passage->confidence : $source->reading_confidence)],
                         'match_page' => $passage?->page,

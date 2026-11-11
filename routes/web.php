@@ -88,6 +88,10 @@ Route::post('/procurement-workspace/{page}', [\App\Http\Controllers\ProcurementW
 
 Route::get('/procurement/search', \App\Http\Controllers\ProcurementUnifiedSearchController::class)
     ->middleware(['auth', 'dept:umum', 'throttle:60,1'])->name('procurement.search');
+Route::get('/procurement/search/status', [\App\Http\Controllers\ProcurementSearchQueueController::class, 'status'])
+    ->middleware(['auth', 'dept:umum', 'throttle:30,1'])->name('procurement.search.status');
+Route::post('/procurement/search/prs/{ppbj}/priority', [\App\Http\Controllers\ProcurementSearchQueueController::class, 'priority'])
+    ->whereNumber('ppbj')->middleware(['auth', 'dept:umum', 'readonly.block', 'throttle:6,1'])->name('procurement.search.priority');
 Route::get('/procurement/search/files/{source}', [ArchiveDownloadGatewayController::class, 'indexed'])
     ->whereNumber('source')->middleware(['auth', 'dept:umum', 'throttle:20,1'])->name('procurement.search.file');
 

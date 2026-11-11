@@ -14,13 +14,14 @@ class Element {
 }
 function setup(initialQuery = '') {
     const nodes = {};
-    for (const name of ['form', 'query', 'scope', 'match', 'sort', 'lexical', 'suggestions', 'buyer', 'vendor', 'creator', 'exclude', 'status', 'results', 'pagination', 'prev', 'next', 'reset', 'page', 'submit', 'summary', 'progress', 'progressinfo']) nodes[name] = new Element();
+    for (const name of ['form', 'query', 'scope', 'match', 'sort', 'lexical', 'suggestions', 'buyer', 'vendor', 'creator', 'exclude', 'status', 'results', 'pagination', 'prev', 'next', 'reset', 'page', 'submit', 'summary', 'progress', 'progressinfo', 'check-status']) nodes[name] = new Element();
     nodes.scope.value = 'all';
     nodes.query.value = initialQuery;
     nodes.match.value = 'source'; nodes.sort.value = 'relevance'; nodes.lexical.value = 'expanded';
     nodes.form.querySelector = () => nodes.submit;
     const root = new Element(); root.dataset.endpoint = 'https://app.test/procurement/search';
-    root.querySelector = selector => nodes[selector.match(/data-pus-(\w+)/)?.[1]];
+    root.dataset.statusEndpoint = '/procurement/search/status'; root.dataset.priorityBase = '/procurement/search/prs'; root.dataset.csrf = 'session-csrf';
+    root.querySelector = selector => nodes[selector.match(/data-pus-([\w-]+)/)?.[1]];
     const requests = [];
     const context = { window: { location: { origin: 'https://app.test' } }, document: { getElementById: () => root, createElement: tag => { const node = new Element(); node.tag = tag; return node; } }, URL, URLSearchParams, AbortController, setTimeout: fn => { context.timeout = fn; return 1; }, clearTimeout() {},
         fetch: (url, options) => new Promise(resolve => requests.push({ url: String(url), options, resolve })) };
@@ -51,6 +52,52 @@ test('a restored search field stays idle until its own form is submitted', () =>
     submit(f, '0454');
     assert.equal(f.requests.length, 1);
     assert.equal(new URL(f.requests[0].url).searchParams.get('q'), '0454');
+});
+
+test('queue status loads only on request without searching or replacing existing results', async () => {
+    const f = setup(); submit(f, 'sensor'); f.requests[0].resolve({ ok: true, json: async () => data() }); await flush();
+    const card = f.nodes.results.children[0];
+    f.nodes['check-status'].fire('click'); f.nodes['check-status'].fire('click'); assert.equal(f.requests.length, 2);
+    assert.equal(new URL(f.requests[1].url).pathname, '/procurement/search/status');
+    f.requests[1].resolve({ ok: true, json: async () => ({ index: { waiting: 719, priority_waiting: 2, checked_at: '2000-01-01T00:00:00Z' } }) }); await flush();
+    assert.equal(f.nodes.results.children[0], card); assert.equal(f.nodes.progress.open, true);
+    assert.match(f.nodes.progressinfo.textContent, /719 lampiran siap/); assert.match(f.nodes.progressinfo.textContent, /2 di antaranya prioritas/);
+    assert.match(f.nodes.progressinfo.textContent, /lebih dari 3 menit/); assert.equal(f.nodes['check-status'].disabled, false);
+});
+
+test('priority is an explicit CSRF protected POST and duplicate clicks coalesce', async () => {
+    const f = setup(); f.root.dataset.canPrioritize = '1'; submit(f, 'sensor');
+    const response = sourceBatch(1, 1); response.rows[0].matches[0].queue = { priority: true };
+    f.requests[0].resolve({ ok: true, json: async () => response }); await flush();
+    const panel = walk(f.nodes.results, node => node.className === 'pus-details pus-queue')[0];
+    assert.notEqual(panel.open, true); panel.fire('toggle'); assert.equal(f.requests.length, 1);
+    assert.equal(walk(f.nodes.results, node => node.textContent === 'Giliran prioritas aktif').length, 1);
+    const button = panel.children[2]; button.fire('click'); button.fire('click'); assert.equal(f.requests.length, 2);
+    assert.equal(new URL(f.requests[1].url).pathname, '/procurement/search/prs/17/priority');
+    assert.equal(f.requests[1].options.method, 'POST'); assert.equal(f.requests[1].options.headers['X-CSRF-TOKEN'], 'session-csrf');
+    f.requests[1].resolve({ ok: true, json: async () => ({ queued: 3, message: '<script>3 lampiran prioritas</script>' }) }); await flush();
+    assert.equal(panel.children[1].textContent, '<script>3 lampiran prioritas</script>'); assert.equal(button.disabled, true);
+    button.fire('click'); assert.equal(f.requests.length, 2);
+});
+
+test('priority failures release controls and read-only users do not see a request button', async () => {
+    const f = setup(); submit(f, 'sensor'); f.requests[0].resolve({ ok: true, json: async () => sourceBatch(1, 1) }); await flush();
+    assert.equal(walk(f.nodes.results, node => node.className === 'pus-secondary pus-priority').length, 0);
+    f.root.dataset.canPrioritize = '1'; submit(f, 'plastik'); f.requests[1].resolve({ ok: true, json: async () => sourceBatch(1, 1) }); await flush();
+    const panel = walk(f.nodes.results, node => node.className === 'pus-details pus-queue')[0], button = panel.children[2];
+    button.fire('click'); f.requests[2].resolve({ ok: false, status: 419 }); await flush();
+    assert.match(panel.children[1].textContent, /Sesi berakhir/); assert.equal(button.disabled, false);
+    button.fire('click'); f.nodes.reset.fire('click'); assert.equal(f.requests[3].options.signal.aborted, true);
+    f.requests[3].resolve({ ok: true, json: async () => ({ queued: 3, message: 'Late' }) }); await flush();
+    assert.equal(f.nodes.results.children.length, 0); assert.notEqual(panel.children[1].textContent, 'Late');
+});
+
+test('reset discards late queue status and a status error remains retryable', async () => {
+    const f = setup(); f.nodes['check-status'].fire('click'); f.nodes.reset.fire('click');
+    f.requests[0].resolve({ ok: true, json: async () => ({ index: { waiting: 99 } }) }); await flush();
+    assert.equal(f.nodes.progress.hidden, true);
+    f.nodes['check-status'].fire('click'); f.requests[1].resolve({ ok: false, status: 429 }); await flush();
+    assert.match(f.nodes.progressinfo.textContent, /Tunggu sebentar/); assert.equal(f.nodes['check-status'].disabled, false);
 });
 
 test('word evidence stays collapsed and distinguishes page links from metadata and unknown positions', async () => {

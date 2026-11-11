@@ -21,6 +21,9 @@ class ProcurementSearchWriter
                     'page' => 0, 'pages' => null, 'attempts' => 0, 'error' => null, 'retry_at' => null, 'checksum' => null,
                     'reading_engine' => null, 'reading_confidence' => null,
                     'passages_version' => true, 'reader_revision' => 2,
+                    'queued_at' => $file && $active ? now() : null,
+                    'priority_until' => $file && $active ? now()->addMinutes(15) : null,
+                    'priority_pages' => $file && $active ? 4 : 0,
                     'verified_at' => now(), 'updated_at' => now()];
                 if ($old) {
                     $id = $old->id;
