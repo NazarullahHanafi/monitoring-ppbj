@@ -22,6 +22,12 @@ class ProcurementOcrProcessor
         if ((int) $source->reader_revision < 2) {
             $source->attempts = 0;
         }
+        if ($source->attempts >= 3) {
+            DB::table('procurement_search_sources')->where('id', $source->id)->where('fingerprint', $source->fingerprint)
+                ->update(['attempts' => 0, 'recovery_round' => $source->recovery_round + 1]);
+            $source->attempts = 0;
+            $source->recovery_round++;
+        }
         $work = storage_path('app/private/procurement-search/work');
         if (! is_dir($work)) {
             mkdir($work, 0700, true);
@@ -55,13 +61,39 @@ class ProcurementOcrProcessor
             // Identical bytes are OCR'd once, even if referenced by several archive packages.
             $checksum = hash_file('sha256', $path);
             $duplicate = (int) $source->page === 0 ? DB::table('procurement_search_sources')->where('checksum', $checksum)->where('active', true)
-                ->where('state', 'ready')->where('passages_version', true)->where('id', '!=', $source->id)->first(['id', 'content', 'pages', 'reading_engine', 'reading_confidence']) : null;
+                ->where('state', 'ready')->where('passages_version', true)->where('id', '!=', $source->id)
+                ->where(fn ($query) => $query->whereNull('reading_engine')->orWhere('reading_engine', '!=', 'office-text')->orWhere('reader_revision', '>=', 3))
+                ->first(['id', 'content', 'pages', 'reading_engine', 'reading_confidence', 'reader_revision']) : null;
             if ($duplicate && $this->writer->copy($source, $duplicate)) {
                 @unlink($path);
 
                 return true;
             }
             $extension = $entry['extension'];
+            // Skip already retained pages while repairing a gap. Empty failed
+            // pages get at most two additional attempts; existing text is kept.
+            $coverage = app(ProcurementReadingCoverage::class);
+            $stored = $source->passages_version && $source->failure_code !== 'legacy_text_limit' ? $coverage->pages($source->id) : collect();
+            $cursor = (int) $source->page;
+            foreach ($stored->where('page', '>', $cursor) as $page) {
+                if ((int) $page->page !== $cursor + 1 || $coverage->repairable($page)) {
+                    break;
+                }
+                $cursor++;
+            }
+            if ($cursor !== (int) $source->page) {
+                DB::table('procurement_search_sources')->where('id', $source->id)->where('fingerprint', $source->fingerprint)->update(['page' => $cursor]);
+                $source->page = $cursor;
+            }
+            if ($source->failure_code !== 'legacy_text_limit' && $source->pages !== null && $cursor >= (int) $source->pages) {
+                $coverage->audit($source->id);
+
+                return true;
+            }
+            $repair = $stored->firstWhere('page', $cursor + 1);
+            if ($repair && $coverage->repairable($repair)) {
+                DB::table('procurement_search_passages')->where('source_id', $source->id)->where('page', $repair->page)->increment('repair_attempts');
+            }
             if (in_array($extension, ['jpg', 'jpeg', 'png'], true)) {
                 $size = @getimagesize($path);
                 if (! $size || $size[0] * $size[1] > 25000000) {
@@ -71,13 +103,28 @@ class ProcurementOcrProcessor
             if (in_array($extension, ['pdf', 'jpg', 'jpeg', 'png'], true)) {
                 // Difficult files retry one page at a time and reduce raster memory progressively.
                 $count = $source->state === 'failed' || $source->attempts > 0 ? 1 : (int) config('procurement_search.pages_per_pass');
+                $nextStored = $stored->first(fn ($page) => $page->page > $cursor + 1 && ! $coverage->repairable($page));
+                if ($repair) {
+                    $count = 1;
+                }
+                if ($nextStored) {
+                    $count = min($count, (int) $nextStored->page - $cursor - 1);
+                }
                 if ($source->priority_until && now()->lt($source->priority_until) && (int) $source->page < (int) $source->priority_pages) {
                     $count = min($count, (int) $source->priority_pages - (int) $source->page);
                 }
                 $pixels = $source->attempts > 1 ? 2000000 : ($source->state === 'failed' ? 3000000 : (int) config('procurement_search.max_pixels'));
                 $result = $this->read($path, $extension, (int) $source->page + 1, $count, $pixels);
             } elseif (in_array($extension, ['txt', 'csv', 'docx', 'xlsx', 'pptx'], true)) {
-                $result = ['text' => $this->officeText($path, $extension), 'page' => 1, 'pages' => 1, 'done' => true, 'engine' => 'office-text'];
+                $office = $this->officeText($path, $extension);
+                $parts = $this->officeParts($office['text']);
+                if (! $parts) {
+                    $parts = [''];
+                }
+                $start = (int) $source->page + 1;
+                $part = $parts[$start - 1] ?? '';
+                $result = ['text' => $part, 'page' => $start, 'pages' => count($parts), 'done' => $start >= count($parts), 'engine' => 'office-text', 'unreadable' => $office['embedded_images'] ? 1 : 0,
+                    'passages' => [['page' => $start, 'text' => $part, 'engine' => 'office-text', 'error' => $office['embedded_images'] ? 'office_images' : null]]];
             } else {
                 DB::table('procurement_search_sources')->where('id', $source->id)->update(['state' => 'unsupported', 'error' => 'Format perlu dikonversi ke PDF/foto agar isinya bisa dibaca.', 'updated_at' => now()]);
 
@@ -106,18 +153,24 @@ class ProcurementOcrProcessor
 
                 return true;
             }
-            $permanent = in_array($reason, ['protected_pdf', 'invalid_pdf', 'page_text_limit', 'page_limit', 'file_size_limit', 'image_dimensions', 'unsupported_format'], true);
+            $permanent = in_array($reason, ['protected_pdf', 'invalid_pdf', 'page_text_limit', 'page_limit', 'file_size_limit', 'image_dimensions', 'unsupported_format', 'office_limit'], true);
             $message = match ($reason) {
                 'protected_pdf' => 'PDF terkunci; unggah salinan yang dapat dibaca.',
                 'invalid_pdf' => 'Struktur PDF rusak; periksa atau unggah ulang file asli.',
                 'page_text_limit', 'page_limit', 'file_size_limit', 'image_dimensions' => 'Ukuran halaman/file melampaui batas aman; pecah atau optimalkan file agar seluruh isi dapat dibaca.',
                 'memory', 'timeout', 'resource_limit' => 'Pembacaan berat; sistem mencoba ulang satu halaman dengan raster lebih ringan.',
+                'office_limit' => 'Dokumen teks/Office melampaui batas ekstraksi aman. Isi belum dinyatakan lengkap; pecah atau konversi file untuk pemeriksaan.',
                 default => 'Pembacaan belum selesai; sistem mencoba ulang terbatas.',
             };
             DB::table('procurement_search_sources')->where('id', $source->id)->where('fingerprint', $source->fingerprint)->update([
                 'state' => $permanent ? 'unsupported' : 'failed', 'attempts' => $source->attempts + 1, 'reader_revision' => 2, 'pages' => $source->pages, 'error' => $message,
                 'retry_at' => now()->addMinutes(5 * ($source->attempts + 1)), 'updated_at' => now(),
+                'failure_code' => $reason, 'coverage_state' => 'review', 'coverage_checked_at' => null,
             ]);
+            if (! $permanent && $source->attempts >= 2) {
+                DB::table('procurement_search_sources')->where('id', $source->id)->where('fingerprint', $source->fingerprint)
+                    ->update(['retry_at' => now()->addDay()]);
+            }
         } finally {
             // Bounded private cache: older partial PDFs can be downloaded again safely.
             $files = glob($work.'/*.bin') ?: [];
@@ -236,7 +289,7 @@ class ProcurementOcrProcessor
         if ($error->getMessage() === 'ocr_memory_budget') {
             return 'memory';
         }
-        if (in_array($error->getMessage(), ['image_dimensions', 'page_text_limit', 'file_size_limit'], true)) {
+        if (in_array($error->getMessage(), ['image_dimensions', 'page_text_limit', 'file_size_limit', 'office_limit', 'source_changed', 'checksum'], true)) {
             return $error->getMessage();
         }
         if ($error instanceof \Symfony\Component\Process\Exception\ProcessFailedException
@@ -247,10 +300,38 @@ class ProcurementOcrProcessor
         return 'reader_failed';
     }
 
-    private function officeText(string $path, string $extension): string
+    private function officeParts(string $text): array
+    {
+        $limit = (int) config('procurement_search.max_page_text');
+        $parts = [];
+        $offset = 0;
+        $length = mb_strlen($text);
+        while ($offset < $length) {
+            $part = mb_substr($text, $offset, $limit);
+            if ($offset + mb_strlen($part) < $length) {
+                $tail = mb_substr($part, -min(256, mb_strlen($part)));
+                if (preg_match('/[\s,;\/]+(?=[^\s,;\/]*$)/u', $tail, $match, PREG_OFFSET_CAPTURE)) {
+                    $cut = mb_strlen($part) - mb_strlen($tail) + mb_strlen(substr($tail, 0, $match[0][1] + strlen($match[0][0])));
+                    if ($cut > 0) {
+                        $part = mb_substr($part, 0, $cut);
+                    }
+                }
+            }
+            $parts[] = $part;
+            $offset += mb_strlen($part);
+        }
+
+        return $parts;
+    }
+
+    private function officeText(string $path, string $extension): array
     {
         if (in_array($extension, ['txt', 'csv'], true)) {
-            return mb_convert_encoding(file_get_contents($path, false, null, 0, 400000), 'UTF-8', 'UTF-8,ISO-8859-1');
+            if (filesize($path) > 8 * 1024 * 1024) {
+                throw new \RuntimeException('office_limit');
+            }
+
+            return ['text' => mb_convert_encoding(file_get_contents($path), 'UTF-8', 'UTF-8,ISO-8859-1'), 'embedded_images' => false];
         }
         $zip = new ZipArchive;
         if ($zip->open($path) !== true) {
@@ -258,10 +339,17 @@ class ProcurementOcrProcessor
         }
         $text = '';
         $bytes = 0;
+        $embedded = false;
         try {
+            if ($zip->numFiles > 1000) {
+                throw new \RuntimeException('office_limit');
+            }
             for ($i = 0; $i < min($zip->numFiles, 1000); $i++) {
                 $info = $zip->statIndex($i);
-                if (! preg_match('#^(word/(document|header\d+|footer\d+)\.xml|xl/(sharedStrings|worksheets/sheet\d+)\.xml|ppt/slides/slide\d+\.xml)$#', $info['name'])) {
+                if (preg_match('#^(word|xl|ppt)/media/#', $info['name'])) {
+                    $embedded = true;
+                }
+                if (! preg_match('#^(word/(document|header\d+|footer\d+|footnotes|endnotes|comments)\.xml|xl/(sharedStrings|worksheets/sheet\d+)\.xml|ppt/(slides/slide\d+|notesSlides/notesSlide\d+)\.xml)$#', $info['name'])) {
                     continue;
                 }
                 $bytes += $info['size'];
@@ -270,14 +358,11 @@ class ProcurementOcrProcessor
                 }
                 $xml = $zip->getFromIndex($i);
                 $text .= ' '.html_entity_decode(strip_tags(str_replace('><', '> <', $xml)), ENT_QUOTES | ENT_XML1, 'UTF-8');
-                if (mb_strlen($text) > config('procurement_search.max_text')) {
-                    break;
-                }
             }
         } finally {
             $zip->close();
         }
 
-        return mb_substr($text, 0, config('procurement_search.max_text'));
+        return ['text' => trim($text), 'embedded_images' => $embedded];
     }
 }

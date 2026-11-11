@@ -20,6 +20,8 @@
     <p data-pus-status role="status" aria-live="polite" class="pus-status">Isi kolom di atas lalu tekan Enter atau klik Cari di semua PR. Scan/foto lama diproses bertahap di latar belakang.</p>
     <div data-pus-suggestions class="pus-suggestions" hidden aria-label="Saran perbaikan pencarian"></div>
     <button type="button" data-pus-check-status class="pus-secondary pus-check-status">Cek status antrean arsip</button>
+    <button type="button" data-pus-check-coverage data-coverage-endpoint="{{ route('procurement.search.coverage') }}" class="pus-secondary pus-check-status">Audit kelengkapan lampiran</button>
+    <details data-pus-coverage class="pus-progress" hidden><summary>Kelengkapan arsip & rincian halaman</summary><p data-pus-coverage-info class="pus-note"></p><div data-pus-coverage-rows class="pus-related"></div><div class="pus-pagination"><button type="button" data-pus-coverage-prev class="pus-secondary">Sebelumnya</button><button type="button" data-pus-coverage-back class="pus-secondary" hidden>Daftar lampiran</button><span data-pus-coverage-page></span><button type="button" data-pus-coverage-next class="pus-secondary">Berikutnya</button></div></details>
     <details data-pus-progress class="pus-progress" hidden><summary>Progres pembacaan arsip</summary><p data-pus-progressinfo></p></details>
     <div data-pus-results class="pus-results"></div>
     <nav data-pus-pagination class="pus-pagination" hidden aria-label="Halaman hasil pencarian"><button type="button" data-pus-prev class="pus-secondary">← Sebelumnya</button><span data-pus-page></span><button type="button" data-pus-next class="pus-secondary">Berikutnya →</button></nav>

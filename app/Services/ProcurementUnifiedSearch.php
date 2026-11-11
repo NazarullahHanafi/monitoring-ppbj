@@ -329,19 +329,20 @@ class ProcurementUnifiedSearch
                                 && (! $source->retry_at || now()->gte($source->retry_at))] : null,
                         'reading' => ['engine' => $passage ? $passage->engine : $source->reading_engine,
                             'confidence' => ($passage ? $passage->confidence : $source->reading_confidence) === null ? null : (int) ($passage ? $passage->confidence : $source->reading_confidence)],
-                        'match_page' => $passage?->page,
+                        'match_page' => $source->reading_engine === 'office-text' ? null : $passage?->page,
                         'matched_words' => $evidence->get($source->id, $match === 'related' && count($plan['used']) > 1 ? [] : $plan['used']),
                         'word_evidence' => $wordEvidence->get($source->id, collect())->map(function ($hit) use ($source, $archive) {
                             $page = $hit->first_page === null ? null : (int) $hit->first_page;
 
                             return ['word' => $hit->query_word, 'matched' => $hit->term,
                                 'type' => $hit->term === $hit->query_word ? 'exact' : (str_starts_with($hit->term, $hit->query_word) ? 'prefix' : 'equivalent'),
-                                'location' => $page === null ? 'unknown' : ($page > 0 ? 'page' : 'document'), 'page' => $page > 0 ? $page : null,
-                                'url' => $archive && $page > 0 ? route('procurement.search.file', ['source' => $source->id]).'#page='.$page : null];
+                                'location' => $source->reading_engine === 'office-text' ? 'document' : ($page === null ? 'unknown' : ($page > 0 ? 'page' : 'document')),
+                                'page' => $page > 0 && $source->reading_engine !== 'office-text' ? $page : null,
+                                'url' => $archive && $page > 0 && $source->reading_engine !== 'office-text' ? route('procurement.search.file', ['source' => $source->id]).'#page='.$page : null];
                         })->values(),
                         'notice' => $archive ? $source->error : null,
                         'snippet' => ProcurementSearchText::snippet($passage->content ?? (($text->content ?? '') !== '' ? $text->content : ($text->metadata_text ?? '')), $effective, $archive),
-                        'url' => $archive ? route('procurement.search.file', ['source' => $source->id]).($passage ? '#page='.$passage->page : '') : route($source->kind.'.index', ['search' => $source->reference] + ($source->kind === 'sp' && str_starts_with($source->label, 'SP Oracle ') ? ['mode' => 'oracle'] : []))];
+                        'url' => $archive ? route('procurement.search.file', ['source' => $source->id]).($passage && $source->reading_engine !== 'office-text' ? '#page='.$passage->page : '') : route($source->kind.'.index', ['search' => $source->reference] + ($source->kind === 'sp' && str_starts_with($source->label, 'SP Oracle ') ? ['mode' => 'oracle'] : []))];
                 })->values(), 'more_sources' => max(0, $sources->count() - $sourceLimit),
                 'evidence' => ['after' => $evidencePr ? (int) ($sources->take($sourceLimit)->last()?->id ?? $after) : 0, 'has_more' => $sources->count() > $sourceLimit]];
         })->values(), 'total' => $prs->total(), 'page' => $prs->currentPage(), 'last_page' => $prs->lastPage(),

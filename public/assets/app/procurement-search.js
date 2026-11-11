@@ -10,6 +10,47 @@
     let controller, sequence = 0, currentPage = 1, lastPage = 1, appliedQuery = '', appliedScope = 'all', appliedMatch = 'source', appliedSort = 'relevance', appliedLexical = 'expanded', appliedFilters = {}, pendingKey = '';
     const evidenceControllers = new Set();
     const labels = { ppbj: 'PPBJ', sp: 'SP', spph: 'SPPH', archive_document: 'Arsip', archive_attachment: 'Lampiran arsip' };
+    let coverageController, coverageSequence = 0, coveragePage = 1, coverageLast = 1, coverageSource = null;
+    async function loadCoverage(page = 1, source = null) {
+        const trigger = get('check-coverage'); if (!trigger) return;
+        coverageController?.abort(); const pending = new AbortController(); coverageController = pending;
+        const serial = ++coverageSequence, timeout = setTimeout(() => pending.abort(), 20000);
+        trigger.disabled = true; get('coverage').hidden = false; get('coverage').open = true;
+        get('coverage-info').textContent = 'Memuat catatan kelengkapan…';
+        try {
+            const url = new URL(trigger.dataset.coverageEndpoint, window.location.origin);
+            if (url.origin !== window.location.origin) throw new Error('Alamat audit tidak valid.');
+            url.search = new URLSearchParams({ page, ...(source ? { source } : {}) });
+            const response = await fetch(url, { headers: { Accept: 'application/json' }, credentials: 'same-origin', signal: pending.signal });
+            const data = await readResponse(response); if (serial !== coverageSequence) return;
+            const rows = get('coverage-rows'); rows.replaceChildren();
+            get('coverage-info').textContent = data.source ? `${data.label} · ${data.total || 'Jumlah belum diketahui'} ${data.unit || 'halaman'}. Diproses otomatis belum berarti setiap karakter sudah diverifikasi.` : `${data.total || 0} lampiran dengan relasi PR yang masih berlaku. Masalah ditampilkan dahulu. Halaman yang belum diproses tetap menunggu antrean.`;
+            for (const item of (data.rows || []).slice(0, 25)) {
+                const row = element('div', 'pus-related-document');
+                if (data.source) {
+                    row.append(element('strong', '', `${data.unit || 'Halaman'} ${item.page}: ${item.state}`));
+                    if (item.reason) row.append(element('p', 'pus-note', `Catatan: ${item.reason}`));
+                    if (item.url) { const anchor = link(item.url, 'Buka halaman asli', 'pus-open'); anchor.target = '_blank'; anchor.rel = 'noopener noreferrer'; row.append(anchor); }
+                } else {
+                    const states = { unchecked: 'Belum diaudit', in_progress: 'Belum selesai', review: 'Perlu diperiksa', processed: 'Seluruh halaman diproses otomatis' };
+                    row.append(element('strong', '', `${item.label} · ${item.reference || ''}`));
+                    row.append(element('p', 'pus-note', `${states[item.coverage_state] || 'Belum diaudit'} · ${item.coverage_checked_at ? item.indexed_pages ?? '?' : '?'}/${item.pages ?? '?'} halaman tersimpan · ${item.problem_pages ?? '?'} halaman perlu diperiksa`));
+                    row.append(element('p', 'pus-note', `Audit terakhir: ${item.coverage_checked_at || 'menunggu pemeriksaan berikutnya'}`));
+                    if (item.error) row.append(element('p', 'pus-note', item.error));
+                    if (Number.isSafeInteger(item.id) && item.id > 0) { const button = element('button', 'pus-secondary pus-page-audit', 'Rincian seluruh halaman'); button.type = 'button'; button.addEventListener('click', () => loadCoverage(1, item.id)); row.append(button); }
+                }
+                rows.append(row);
+            }
+            coveragePage = data.page; coverageLast = data.last_page; coverageSource = data.source || null;
+            get('coverage-page').textContent = `${coveragePage} / ${coverageLast}`;
+            get('coverage-prev').disabled = coveragePage <= 1; get('coverage-next').disabled = coveragePage >= coverageLast; get('coverage-back').hidden = !coverageSource;
+        } catch (error) { if (serial === coverageSequence) get('coverage-info').textContent = error.name === 'AbortError' ? 'Audit belum dapat dimuat. Klik untuk mencoba lagi.' : error.message; }
+        finally { clearTimeout(timeout); if (serial === coverageSequence) trigger.disabled = false; }
+    }
+    get('check-coverage')?.addEventListener('click', () => loadCoverage());
+    get('coverage-prev')?.addEventListener('click', () => loadCoverage(Math.max(1, coveragePage - 1), coverageSource));
+    get('coverage-next')?.addEventListener('click', () => loadCoverage(coveragePage + 1, coverageSource));
+    get('coverage-back')?.addEventListener('click', () => loadCoverage());
     function element(tag, className, text) {
         const node = document.createElement(tag);
         if (className) node.className = className;
@@ -207,6 +248,7 @@
         if (index?.files_unmapped) progress.push(`${index.files_unmapped} berkas masih didata jumlah halamannya.`);
         if (index?.archive_state === 'deferred') progress.push('Sinkronisasi arsip sedang tertunda; hasil kedaluwarsa disembunyikan sementara.');
         if (index?.state === 'starting') progress.push('Indeks awal sedang disiapkan.');
+        if (index?.coverage) progress.push(`Audit: ${index.coverage.processed_files || 0} file seluruh halamannya diproses otomatis, ${index.coverage.review_files || 0} perlu pemeriksaan, ${index.coverage.unchecked_files || 0} belum diaudit. ${index.coverage.problem_pages || 0} halaman bermasalah. Ini belum membuktikan ketepatan setiap karakter.`);
         if (Number.isFinite(index?.waiting)) progress.push(`${index.waiting} lampiran siap menunggu giliran; ${index.priority_waiting || 0} di antaranya prioritas.`);
         if (index?.checked_at) {
             const checked = new Date(index.checked_at);
@@ -386,6 +428,9 @@
     for (const name of filterNames) get(name)?.addEventListener('input', () => { status.textContent = 'Filter belum diterapkan. Klik Cari untuk menerapkan.'; });
     for (const name of ['match', 'sort', 'lexical']) get(name)?.addEventListener('change', () => { status.textContent = 'Pilihan belum diterapkan. Klik Cari untuk menerapkan.'; });
     get('reset').addEventListener('click', () => {
+        coverageController?.abort(); coverageSequence++;
+        if (get('check-coverage')) get('check-coverage').disabled = false;
+        if (get('coverage')) get('coverage').hidden = true;
         controller?.abort(); cancelEvidence(); sequence++; pendingKey = ''; submit.disabled = false; input.value = ''; scope.value = 'all';
         appliedFilters = {};
         appliedMatch = 'source'; appliedSort = 'relevance'; appliedLexical = 'expanded';

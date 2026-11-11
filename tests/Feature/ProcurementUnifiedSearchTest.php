@@ -564,6 +564,7 @@ class ProcurementUnifiedSearchTest extends TestCase
         $pr = $this->pr();
         $source = $this->archive($pr);
         $writer = app(ProcurementSearchWriter::class);
+        $writer->passages($source->id, [['page' => 1, 'text' => 'Pengadaan awal']]);
         $writer->append($source, ['text' => 'Peralatan kalibrasi', 'page' => 2, 'pages' => 2, 'done' => true]);
         DB::table('procurement_search_sources')->where('id', $source->id)->update(['verified_at' => now()->subMinutes(20)]);
         $this->search('kalibrasi')->assertJsonPath('total', 0);
@@ -989,7 +990,7 @@ class ProcurementUnifiedSearchTest extends TestCase
             $this->assertDatabaseHas('procurement_search_passages', ['source_id' => $source->id, 'page' => 1, 'error' => 'memory']);
             $this->assertTrue($processor->next());
             $this->app->useStoragePath($originalStorage);
-            $this->search('plastik')->assertJsonPath('total', 1)->assertJsonPath('rows.0.matches.0.match_page', 3)->assertJsonPath('rows.0.matches.0.state', 'uncertain');
+            $this->search('plastik')->assertJsonPath('total', 1)->assertJsonPath('rows.0.matches.0.match_page', 3)->assertJsonPath('rows.0.matches.0.state', 'partial');
         } finally {
             $this->app->useStoragePath($originalStorage);
             $resolved = realpath($temporary);

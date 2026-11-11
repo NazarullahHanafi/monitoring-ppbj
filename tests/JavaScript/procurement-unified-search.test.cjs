@@ -14,7 +14,8 @@ class Element {
 }
 function setup(initialQuery = '') {
     const nodes = {};
-    for (const name of ['form', 'query', 'scope', 'match', 'sort', 'lexical', 'suggestions', 'buyer', 'vendor', 'creator', 'exclude', 'status', 'results', 'pagination', 'prev', 'next', 'reset', 'page', 'submit', 'summary', 'progress', 'progressinfo', 'check-status']) nodes[name] = new Element();
+    for (const name of ['form', 'query', 'scope', 'match', 'sort', 'lexical', 'suggestions', 'buyer', 'vendor', 'creator', 'exclude', 'status', 'results', 'pagination', 'prev', 'next', 'reset', 'page', 'submit', 'summary', 'progress', 'progressinfo', 'check-status', 'check-coverage', 'coverage', 'coverage-info', 'coverage-rows', 'coverage-page', 'coverage-prev', 'coverage-next', 'coverage-back']) nodes[name] = new Element();
+    nodes['check-coverage'].dataset.coverageEndpoint = '/procurement/search/coverage';
     nodes.scope.value = 'all';
     nodes.query.value = initialQuery;
     nodes.match.value = 'source'; nodes.sort.value = 'relevance'; nodes.lexical.value = 'expanded';
@@ -34,6 +35,42 @@ function data(number = 'PR-001') {
 }
 const flush = () => new Promise(resolve => setImmediate(resolve));
 function submit(f, query) { f.nodes.query.value = query; f.nodes.form.fire('submit', { preventDefault() {} }); }
+
+test('coverage is requested manually and browsing every page leaves search results intact', async () => {
+    const f = setup(); assert.equal(f.requests.length, 0); submit(f, 'sensor');
+    f.requests[0].resolve({ ok: true, json: async () => data() }); await flush(); const card = f.nodes.results.children[0];
+    f.nodes['check-coverage'].fire('click');
+    assert.equal(new URL(f.requests[1].url).pathname, '/procurement/search/coverage');
+    f.requests[1].resolve({ ok: true, json: async () => ({ total: 1, page: 1, last_page: 1, rows: [{ id: 55, label: '<img onerror=1>', reference: 'REF-55', pages: 26, indexed_pages: 25, coverage_state: 'in_progress', coverage_checked_at: '2026-11-11' }] }) }); await flush();
+    assert.equal(f.nodes.results.children[0], card); assert.equal(f.nodes.query.value, 'sensor');
+    assert.equal(walk(f.nodes['coverage-rows'], node => node.textContent.includes('<img onerror=1>')).length, 1);
+    walk(f.nodes['coverage-rows'], node => node.className === 'pus-secondary pus-page-audit')[0].fire('click');
+    assert.equal(new URL(f.requests[2].url).searchParams.get('source'), '55');
+    f.requests[2].resolve({ ok: true, json: async () => ({ source: 55, label: 'Scan', unit: 'Halaman', total: 26, page: 1, last_page: 2, rows: [{ page: 1, state: 'Diproses otomatis', url: '/procurement/search/files/55#page=1' }] }) }); await flush();
+    assert.equal(walk(f.nodes['coverage-rows'], node => node.href === '/procurement/search/files/55#page=1').length, 1);
+    f.nodes['coverage-next'].fire('click'); assert.equal(new URL(f.requests[3].url).searchParams.get('page'), '2');
+    f.requests[3].resolve({ ok: true, json: async () => ({ source: 55, label: 'Scan', total: 26, page: 2, last_page: 2, rows: [{ page: 26, state: 'Belum diproses', url: 'https://evil.test/scan' }] }) }); await flush();
+    assert.equal(walk(f.nodes['coverage-rows'], node => Boolean(node.href)).length, 0);
+    assert.match(f.nodes['coverage-rows'].children[0].children[0].textContent, /26: Belum diproses/);
+    assert.equal(f.nodes['coverage-next'].disabled, true); assert.equal(f.nodes['coverage-back'].hidden, false);
+    f.nodes['coverage-back'].fire('click'); assert.equal(new URL(f.requests[4].url).searchParams.has('source'), false);
+});
+
+test('reset cancels a coverage request and ignores its late result', async () => {
+    const f = setup(); f.nodes['check-coverage'].fire('click'); f.nodes.reset.fire('click');
+    assert.equal(f.requests[0].options.signal.aborted, true);
+    f.requests[0].resolve({ ok: true, json: async () => ({ total: 99, page: 1, last_page: 4, rows: [] }) }); await flush();
+    assert.equal(f.nodes.coverage.hidden, true); assert.equal(f.nodes['check-coverage'].disabled, false);
+    assert.doesNotMatch(f.nodes['coverage-info'].textContent, /99 lampiran/);
+});
+
+test('coverage errors and invalid endpoints release the button for a manual retry', async () => {
+    const f = setup(); f.nodes['check-coverage'].fire('click');
+    f.requests[0].resolve({ ok: false, status: 429 }); await flush();
+    assert.match(f.nodes['coverage-info'].textContent, /Tunggu sebentar/); assert.equal(f.nodes['check-coverage'].disabled, false);
+    f.nodes['check-coverage'].dataset.coverageEndpoint = 'https://evil.test/audit'; f.nodes['check-coverage'].fire('click'); await flush();
+    assert.equal(f.requests.length, 1); assert.match(f.nodes['coverage-info'].textContent, /Alamat audit tidak valid/); assert.equal(f.nodes['check-coverage'].disabled, false);
+});
 
 test('unified search is manual; rebinding and typing do not trigger requests', () => {
     const f = setup();

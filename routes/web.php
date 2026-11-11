@@ -90,6 +90,8 @@ Route::get('/procurement/search', \App\Http\Controllers\ProcurementUnifiedSearch
     ->middleware(['auth', 'dept:umum', 'throttle:60,1'])->name('procurement.search');
 Route::get('/procurement/search/status', [\App\Http\Controllers\ProcurementSearchQueueController::class, 'status'])
     ->middleware(['auth', 'dept:umum', 'throttle:30,1'])->name('procurement.search.status');
+Route::get('/procurement/search/coverage', [\App\Http\Controllers\ProcurementSearchQueueController::class, 'coverage'])
+    ->middleware(['auth', 'dept:umum', 'throttle:30,1'])->name('procurement.search.coverage');
 Route::post('/procurement/search/prs/{ppbj}/priority', [\App\Http\Controllers\ProcurementSearchQueueController::class, 'priority'])
     ->whereNumber('ppbj')->middleware(['auth', 'dept:umum', 'readonly.block', 'throttle:6,1'])->name('procurement.search.priority');
 Route::get('/procurement/search/files/{source}', [ArchiveDownloadGatewayController::class, 'indexed'])

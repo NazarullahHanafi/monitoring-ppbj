@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\Cache;
 
 class IndexProcurementSearch extends Command
 {
-    protected $signature = 'procurement:search-index {--sync-only} {--ocr-only} {--budget=45} {--limit=80}';
+    protected $signature = 'procurement:search-index {--sync-only} {--ocr-only} {--audit-only} {--budget=45} {--limit=80}';
 
     protected $description = 'Incrementally index procurement documents and private archived scans';
 
@@ -29,6 +29,13 @@ class IndexProcurementSearch extends Command
         $pages = 0;
         $sources = 0;
         try {
+            if ($this->option('audit-only')) {
+                $count = app(\App\Services\ProcurementReadingCoverage::class)->batch(min(50, max(1, (int) $this->option('limit'))));
+                $sync->progress();
+                $this->info('Coverage audited: '.$count);
+
+                return self::SUCCESS;
+            }
             if (! $this->option('ocr-only')) {
                 $limit = min(200, max(1, (int) $this->option('limit')));
                 $sources = $sync->local($limit);
@@ -41,6 +48,7 @@ class IndexProcurementSearch extends Command
                     $this->warn('Archive sync deferred; local search remains available.');
                 }
             }
+            app(\App\Services\ProcurementReadingCoverage::class)->batch(10);
             // Bounded legacy migration; retain OCR time instead of rebuilding an entire index in one request.
             $legacyStarted = microtime(true);
             for ($round = 0; $round < 4 && microtime(true) - $started < $budget && microtime(true) - $legacyStarted < min(3, $budget / 3); $round++) {

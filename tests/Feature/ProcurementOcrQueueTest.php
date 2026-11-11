@@ -64,6 +64,8 @@ class ProcurementOcrQueueTest extends TestCase
         $this->assertNull($queue->next());
         $this->assertNull($queue->next($new));
         DB::table('procurement_search_sources')->where('id', $new)->update(['retry_at' => null, 'attempts' => 3]);
+        $this->assertSame($new, $queue->next()->id);
+        DB::table('procurement_search_sources')->where('id', $new)->update(['recovery_round' => 3]);
         $this->assertNull($queue->next());
         DB::table('procurement_search_sources')->where('id', $new)->update(['reader_revision' => 1]);
         $this->assertSame($new, $queue->next($new)->id);

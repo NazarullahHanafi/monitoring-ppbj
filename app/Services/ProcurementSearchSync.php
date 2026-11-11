@@ -126,6 +126,10 @@ class ProcurementSearchSync
         $queue = app(ProcurementOcrQueue::class);
         $progress['waiting'] = $queue->eligible()->count();
         $progress['priority_waiting'] = $queue->priority($queue->eligible())->count();
+        $coverage = DB::table('procurement_search_sources')->where('active', true)->whereIn('kind', ['archive_document', 'archive_attachment'])
+            ->selectRaw("SUM(CASE WHEN coverage_state = 'processed' THEN 1 ELSE 0 END) AS processed, SUM(CASE WHEN coverage_state = 'review' THEN 1 ELSE 0 END) AS review, SUM(CASE WHEN coverage_state = 'unchecked' THEN 1 ELSE 0 END) AS unchecked, SUM(indexed_pages) AS stored, SUM(problem_pages) AS problems")->first();
+        $progress['coverage'] = ['processed_files' => (int) $coverage->processed, 'review_files' => (int) $coverage->review,
+            'unchecked_files' => (int) $coverage->unchecked, 'stored_pages' => (int) $coverage->stored, 'problem_pages' => (int) $coverage->problems];
         Cache::forever('procurement-search:progress', $progress);
 
         return $progress;

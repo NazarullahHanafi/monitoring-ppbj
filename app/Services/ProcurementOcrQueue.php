@@ -13,7 +13,8 @@ class ProcurementOcrQueue
     {
         return DB::table('procurement_search_sources')->where('active', true)
             ->whereIn('kind', ['archive_document', 'archive_attachment'])->whereIn('state', ['pending', 'partial', 'failed'])
-            ->where(fn ($q) => $q->where('attempts', '<', 3)->orWhere('reader_revision', '<', 2))
+            ->where(fn ($q) => $q->where('attempts', '<', 3)->orWhere('reader_revision', '<', 2)
+                ->orWhere(fn ($recovery) => $recovery->where('recovery_round', '<', 3)->where(fn ($reason) => $reason->whereNull('failure_code')->orWhereIn('failure_code', ['memory', 'timeout', 'resource_limit', 'reader_failed', 'source_changed', 'checksum']))))
             ->where(fn ($q) => $q->whereNull('retry_at')->orWhere('retry_at', '<=', now()));
     }
 

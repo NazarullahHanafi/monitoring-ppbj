@@ -24,6 +24,8 @@ class ProcurementSearchWriter
                     'queued_at' => $file && $active ? now() : null,
                     'priority_until' => $file && $active ? now()->addMinutes(15) : null,
                     'priority_pages' => $file && $active ? 4 : 0,
+                    'failure_code' => null, 'recovery_round' => 0, 'coverage_state' => 'unchecked',
+                    'indexed_pages' => null, 'problem_pages' => null, 'coverage_checked_at' => null,
                     'verified_at' => now(), 'updated_at' => now()];
                 if ($old) {
                     $id = $old->id;
@@ -76,6 +78,7 @@ class ProcurementSearchWriter
             ], ['source_id', 'page'], ['content', 'engine', 'confidence', 'error']);
             $this->terms($sourceId, $passage['text'], $page);
         }
+        DB::table('procurement_search_sources')->where('id', $sourceId)->update(['coverage_checked_at' => null]);
     }
 
     public function append(object $source, array $result): void
@@ -112,12 +115,16 @@ class ProcurementSearchWriter
                 'state' => $capped && ! $archive ? 'limited' : ($done ? ($text !== '' ? ($unreadable ? 'uncertain' : 'ready') : 'empty') : 'partial'),
                 'attempts' => 0, 'error' => $capped && ! $archive ? 'Batas teks tercapai; sebagian isi tersedia.' : ($unreadable ? 'Sebagian halaman belum terbaca; periksa dokumen asli.' : null), 'retry_at' => null, 'updated_at' => now(),
                 'reading_engine' => $engine, 'reading_confidence' => $confidence,
-                'reader_revision' => 2,
+                'reader_revision' => $engine === 'office-text' ? 3 : 2,
+                'failure_code' => null,
             ]);
             // Only retained text may enter the index, including the final capped pass.
             if (! $archive) {
                 $remaining = max(0, $limit - mb_strlen(trim($row->content ?? '')) - (($row->content ?? '') !== '' ? 1 : 0));
                 $this->terms($row->id, mb_substr($result['text'] ?? '', 0, $remaining));
+            }
+            if ($archive && $done) {
+                app(ProcurementReadingCoverage::class)->audit($row->id);
             }
         });
     }
@@ -139,13 +146,14 @@ class ProcurementSearchWriter
             DB::table('procurement_search_sources')->where('id', $source->id)->update([
                 'content' => $duplicate->content, 'page' => $duplicate->pages, 'pages' => $duplicate->pages,
                 'reading_engine' => $duplicate->reading_engine, 'reading_confidence' => $duplicate->reading_confidence,
-                'state' => 'ready', 'passages_version' => true, 'reader_revision' => 2, 'attempts' => 0, 'retry_at' => null, 'error' => null, 'updated_at' => now(),
+                'state' => 'ready', 'passages_version' => true, 'reader_revision' => $duplicate->reader_revision ?? 2, 'attempts' => 0, 'retry_at' => null, 'error' => null, 'failure_code' => null, 'updated_at' => now(),
             ]);
             $links = DB::table('procurement_search_links')->where('source_id', $duplicate->id)->where('inferred', true)
                 ->whereIn('ppbj_id', \App\Models\Ppbj::select('id'))->pluck('ppbj_id');
             if ($links->isNotEmpty()) {
                 DB::table('procurement_search_links')->insertOrIgnore($links->map(fn ($id) => ['source_id' => $source->id, 'ppbj_id' => $id, 'inferred' => true])->all());
             }
+            app(ProcurementReadingCoverage::class)->audit($source->id);
 
             return true;
         });
