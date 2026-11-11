@@ -1477,11 +1477,13 @@
             'firstPage' => $sps->onFirstPage(),
             'hasFilter' => (bool) ((($search ?? '') !== '') || ($pic ?? '') || ($dari ?? '') || ($sampai ?? '') || $oracleMode),
             'csrfToken' => csrf_token(),
+            'today' => now()->toDateString(),
         ];
     @endphp
     <script>
         window.SP_PAGE_CONFIG = @json($spPageConfig);
     </script>
+    <script src="{{ asset('assets/app/procurement-date-warning.js') }}?v={{ filemtime(public_path('assets/app/procurement-date-warning.js')) }}" defer></script>
     <script src="{{ asset('assets/app/procurement-review.js') }}?v={{ filemtime(public_path('assets/app/procurement-review.js')) }}" defer></script>
     <script src="{{ asset('assets/app/procurement-filters.js') }}?v={{ filemtime(public_path('assets/app/procurement-filters.js')) }}" defer></script>
     <script src="{{ asset('assets/spph/spph-print-master.js') }}?v={{ filemtime(public_path('assets/spph/spph-print-master.js')) }}" defer></script>

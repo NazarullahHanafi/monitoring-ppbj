@@ -32,6 +32,7 @@
         async confirm(form, kind, isEdit) {
             form.inert = true;
             try {
+                if (window.ProcurementDateWarning && !await window.ProcurementDateWarning.confirm(form, kind)) return false;
                 const id = isEdit ? new URL(form.action).pathname.split('/').filter(Boolean).pop() : '';
                 const body = payload(form); body.set('action', 'save');
                 const data = await send(`/procurement-review/${kind}${id ? `/${id}` : ''}`, body);

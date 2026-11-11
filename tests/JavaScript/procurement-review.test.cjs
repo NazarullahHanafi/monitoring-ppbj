@@ -10,12 +10,14 @@ class FormDataStub {
 }
 function setup(data, confirmed = false) {
     const requests = [], dialogs = [], window = {};
-    const form = {action:'https://example.com/sp/4', fields:{_method:'PUT', nama_vendor:'Vendor'}, inert:false};
+    const form = {action:'https://example.com/sp/4', fields:{_method:'PUT', nama_vendor:'Vendor'}, inert:false, querySelectorAll:()=>[]};
     const context = {window, FormData:FormDataStub, URL, Intl, location:{origin:'https://example.com'}, document:{querySelector:()=>({content:'csrf-test'})},
         fetch:async(url,options)=>{ requests.push({url,options}); return {ok:true,headers:{get:()=> 'application/json'},json:async()=>data}; },
         Swal:{fire:async options=>{dialogs.push(options); return {isConfirmed:confirmed};}, showValidationMessage(){}}};
+    window.Swal = context.Swal;
+    vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../../public/assets/app/procurement-date-warning.js'), 'utf8'), context);
     vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../../public/assets/app/procurement-review.js'), 'utf8'), context);
-    return {form,requests,dialogs,review:window.ProcurementReview};
+    return {form,requests,dialogs,review:window.ProcurementReview,window};
 }
 test('edit preview strips _method, escapes database text and cancellation never saves', async()=>{
     const h=setup({title:'Simulasi', document:'<img onerror=alert(1)>', vendor:'<script>x</script>', prs:[], summary:[]});
@@ -44,4 +46,11 @@ test('delete preview is read only and cancellation never issues DELETE',async()=
     assert.equal(h.requests[0].url,'/procurement-review/sp/4');
     assert.equal(h.requests[0].options.method,'POST');
     assert.equal(h.requests[0].options.body.values.get('action'),'delete');
+});
+
+test('an already open page with an older asset list can still use the save preview', async()=>{
+    const h=setup({title:'Simulasi',prs:[],summary:[]},true);
+    delete h.window.ProcurementDateWarning;
+    assert.equal(await h.review.confirm(h.form,'sp',false),true);
+    assert.equal(h.requests.length,1);
 });

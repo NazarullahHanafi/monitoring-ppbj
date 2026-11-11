@@ -1520,6 +1520,8 @@
             }
 
             async function submitFormAjaxSpph(form, isEdit = false) {
+                if (form.dataset.procurementSaving === 'true') return;
+                form.dataset.procurementSaving = 'true';
                 const submitBtn = form.querySelector('button[type="submit"]');
                 const originalHtml = submitBtn ? submitBtn.innerHTML : '';
                 if (submitBtn) {
@@ -1595,6 +1597,7 @@
                         ...swalThemeSpph()
                     });
                 } finally {
+                    delete form.dataset.procurementSaving;
                     if (submitBtn) {
                         submitBtn.disabled = false;
                         submitBtn.innerHTML = originalHtml;

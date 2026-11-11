@@ -994,11 +994,13 @@
             'firstPage' => $spphs->onFirstPage(),
             'hasFilter' => (bool) ((($search ?? '') !== '') || ($pic ?? '') || ($vendorFilter ?? '') || ($dari ?? '') || ($sampai ?? '')),
             'csrfToken' => csrf_token(),
+            'today' => now()->toDateString(),
         ];
     @endphp
     <script>
         window.SPPH_PAGE_CONFIG = @json($spphPageConfig);
     </script>
+    <script src="{{ asset('assets/app/procurement-date-warning.js') }}?v={{ filemtime(public_path('assets/app/procurement-date-warning.js')) }}" defer></script>
     <script src="{{ asset('assets/app/procurement-review.js') }}?v={{ filemtime(public_path('assets/app/procurement-review.js')) }}" defer></script>
     <script src="{{ asset('assets/app/procurement-filters.js') }}?v={{ filemtime(public_path('assets/app/procurement-filters.js')) }}" defer></script>
     <script src="{{ asset('assets/spph/spph.js') }}?v={{ filemtime(public_path('assets/spph/spph.js')) }}" defer></script>
