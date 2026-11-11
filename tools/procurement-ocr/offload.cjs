@@ -68,7 +68,10 @@ async function main() {
             try { process.kill(pid, 0); } catch (error) { if (error.code === 'ESRCH') fs.unlinkSync(lock); }
         }
     }
-    try { fs.writeFileSync(lock, String(process.pid), { flag: 'wx', mode: 0o600 }); } catch (_) { throw Error('worker_already_running'); }
+    try { fs.writeFileSync(lock, String(process.pid), { flag: 'wx', mode: 0o600 }); } catch (error) {
+        if (error.code === 'EEXIST') { process.stdout.write('{"type":"already_running"}\n'); return; }
+        throw Error('worker_lock');
+    }
     const minutes = Math.max(1, Math.min(1440, Number(process.argv[3]) || 60)), deadline = Date.now() + minutes * 60000;
     let errors = 0;
     try {

@@ -68,6 +68,7 @@
             const close = element('button', 'pus-secondary', 'Tutup'); close.type = 'button'; close.addEventListener('click', () => { panel.replaceChildren(); panel.hidden = true; trigger.disabled = false; });
             message.textContent = data.pending ? 'Pemeriksaan sebelumnya masih menunggu pembaruan indeks. Muat lagi untuk melihat hasilnya.' : 'Cocokkan dengan file asli. Koreksi dicatat beserta pemeriksanya dan diterapkan di latar belakang.';
             panel.append(textLabel, reasonLabel, blankLabel, save, close);
+            if (data.url) { const original = link(data.url, 'Buka file asli untuk pencocokan', 'pus-open'); original.target = '_blank'; original.rel = 'noopener noreferrer'; panel.append(original); }
             for (const history of data.history || []) panel.append(element('p', 'pus-note', `${history.created_at} · ${history.name || 'Pemeriksa'} · ${history.state} · ${history.reason}`));
             let busy = false;
             save.addEventListener('click', async () => {

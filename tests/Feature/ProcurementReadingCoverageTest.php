@@ -266,6 +266,36 @@ class ProcurementReadingCoverageTest extends TestCase
         });
     }
 
+    public function test_exhausted_empty_pages_still_get_a_bounded_deep_recovery_attempt(): void
+    {
+        $this->withReader('synthetic', 'pdf', function ($unused, $id, $bridge) {
+            $writer = app(ProcurementSearchWriter::class);
+            $writer->passages($id, [['page' => 1, 'text' => '', 'confidence' => 0, 'error' => 'page_unreadable']]);
+            DB::table('procurement_search_passages')->where('source_id', $id)->update(['repair_attempts' => 2]);
+            DB::table('procurement_search_sources')->where('id', $id)->update(['pages' => 1, 'page' => 1, 'state' => 'uncertain']);
+            app(ProcurementReadingCoverage::class)->audit($id);
+            $this->assertDatabaseHas('procurement_search_sources', ['id' => $id, 'state' => 'enhance']);
+            $queue = app(ProcurementOcrQueue::class);
+            $queue->deep = true;
+            $this->app->instance(ProcurementOcrQueue::class, $queue);
+            $processor = new class($bridge, $writer) extends ProcurementOcrProcessor
+            {
+                protected function deepReader(): bool
+                {
+                    return true;
+                }
+
+                public function read(string $file, string $extension, int $start = 1, ?int $count = null, ?int $pixels = null): array
+                {
+                    return ['page' => 1, 'pages' => 1, 'done' => true, 'text' => 'pulihdarikosong', 'confidence' => 93, 'passages' => [['page' => 1, 'text' => 'pulihdarikosong', 'confidence' => 93]]];
+                }
+            };
+            $this->assertTrue($processor->next($id));
+            $this->assertDatabaseHas('procurement_search_passages', ['source_id' => $id, 'content' => 'pulihdarikosong', 'enhancement_attempts' => 1, 'repair_attempts' => 2]);
+            $this->assertDatabaseHas('procurement_search_sources', ['id' => $id, 'state' => 'ready', 'problem_pages' => 0]);
+        });
+    }
+
     public function test_repairing_a_missing_middle_part_preserves_later_parts_and_reaches_completion(): void
     {
         config(['procurement_search.max_page_text' => 15]);

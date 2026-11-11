@@ -19,7 +19,10 @@ class ProcurementReadingCoverage
         if ($page->human_review_id ?? null) {
             return false;
         }
-        if ($deep && $page->confidence !== null && $page->confidence < 55 && (int) $page->bytes > 0 && ($page->enhancement_attempts ?? 0) < 2 && $page->error !== 'page_text_limit') {
+        if (in_array($page->error, ['page_text_limit', 'office_media_format', 'office_media_limit', 'office_limit'], true)) {
+            return false;
+        }
+        if ($deep && ((int) $page->bytes === 0 || ($page->confidence !== null && $page->confidence < 55)) && ($page->enhancement_attempts ?? 0) < 2) {
             return true;
         }
 

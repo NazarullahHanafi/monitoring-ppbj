@@ -99,7 +99,7 @@ class ProcurementOcrProcessor
             }
             $repair = $stored->firstWhere('page', $cursor + 1);
             if ($repair && $coverage->repairable($repair, $this->deepReader())) {
-                $enhanced = $this->deepReader() && (int) $repair->bytes > 0 && $repair->confidence !== null && $repair->confidence < 55;
+                $enhanced = $this->deepReader() && (! $coverage->repairable($repair, false) || ((int) $repair->bytes > 0 && $repair->confidence !== null && $repair->confidence < 55));
                 DB::table('procurement_search_passages')->where('source_id', $source->id)->where('page', $repair->page)->increment($enhanced ? 'enhancement_attempts' : 'repair_attempts');
             }
             if (in_array($extension, ['jpg', 'jpeg', 'png', 'webp', 'bmp', 'gif'], true)) {
