@@ -181,6 +181,11 @@ class ProcurementUnifiedSearchTest extends TestCase
             $response = $this->get(route($kind.'.index', ['search' => 'ergonomis']))->assertOk();
             $this->assertSame([$id], $response->viewData($viewKey)->pluck('id')->all());
             $response->assertSee('procurementUnifiedSearch');
+            $html = new \DOMDocument;
+            @$html->loadHTML($response->getContent());
+            $query = (new \DOMXPath($html))->query('//input[@data-pus-query]');
+            $this->assertSame(1, $query->length);
+            $this->assertSame('', $query->item(0)->getAttribute('value'), 'Filter tabel tidak boleh mengisi pencarian terpadu.');
         }
         foreach (['sp', 'spph'] as $kind) {
             $csv = $this->get(route($kind.'.export', ['search' => 'ergonomis']))->assertOk()->streamedContent();

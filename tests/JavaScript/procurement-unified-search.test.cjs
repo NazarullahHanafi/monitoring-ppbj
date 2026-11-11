@@ -12,10 +12,11 @@ class Element {
     replaceChildren(...nodes) { this.children = nodes; }
     set innerHTML(_) { assert.fail('Search results must never interpolate untrusted HTML'); }
 }
-function setup() {
+function setup(initialQuery = '') {
     const nodes = {};
     for (const name of ['form', 'query', 'scope', 'match', 'sort', 'lexical', 'suggestions', 'buyer', 'vendor', 'creator', 'status', 'results', 'pagination', 'prev', 'next', 'reset', 'page', 'submit', 'summary', 'progress', 'progressinfo']) nodes[name] = new Element();
     nodes.scope.value = 'all';
+    nodes.query.value = initialQuery;
     nodes.match.value = 'source'; nodes.sort.value = 'relevance'; nodes.lexical.value = 'expanded';
     nodes.form.querySelector = () => nodes.submit;
     const root = new Element(); root.dataset.endpoint = 'https://app.test/procurement/search';
@@ -41,6 +42,15 @@ test('unified search is manual; rebinding and typing do not trigger requests', (
     submit(f, 'kursi');
     assert.equal(f.requests.length, 1);
     assert.equal(new URL(f.requests[0].url).searchParams.get('q'), 'kursi');
+});
+
+test('a restored search field stays idle until its own form is submitted', () => {
+    const f = setup('0454');
+    assert.equal(f.requests.length, 0);
+    assert.equal(f.nodes.query.value, '0454');
+    submit(f, '0454');
+    assert.equal(f.requests.length, 1);
+    assert.equal(new URL(f.requests[0].url).searchParams.get('q'), '0454');
 });
 
 test('related mode and sorting apply manually and pagination retains applied options', async () => {

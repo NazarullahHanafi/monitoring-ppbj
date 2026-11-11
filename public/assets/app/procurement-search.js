@@ -322,6 +322,4 @@
     });
     get('prev').addEventListener('click', () => search(Math.max(1, currentPage-1)));
     get('next').addEventListener('click', () => search(currentPage+1));
-    // Existing SP/SPPH/PPBJ filters feed the same search once after navigation, never on typing.
-    if (input.value.trim()) { appliedQuery = input.value.trim(); appliedScope = scope.value; search(); }
 })();
