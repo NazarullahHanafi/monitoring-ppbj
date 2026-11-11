@@ -47,6 +47,7 @@ try {
         $version = [$row->file_path, $attachment ? $row->remote_item_id : null, $attachment ? $row->content_checksum : $row->file_checksum, $attachment ? ($row->remote_size ?: $row->size) : null];
 
         return ['kind' => $kind, 'key' => (string) $row->id, 'active' => (bool) $active, 'extension' => $extension,
+            'size' => $hasLocalFile ? filesize($localPath) : ($attachment ? (int) ($row->remote_size ?: $row->size) : null),
             'label' => (string) ($attachment ? ($row->original_name ?: $row->document_type) : $row->judul),
             'reference' => (string) ($attachment ? $row->document_number : $row->nomor_surat),
             'pr' => (string) ($parent?->nomor_surat ?? ''),

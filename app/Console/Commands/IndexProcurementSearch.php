@@ -25,6 +25,7 @@ class IndexProcurementSearch extends Command
             return self::SUCCESS;
         }
         $started = microtime(true);
+        $budget = min(90, max(1, (int) $this->option('budget')));
         $pages = 0;
         $sources = 0;
         try {
@@ -40,8 +41,14 @@ class IndexProcurementSearch extends Command
                     $this->warn('Archive sync deferred; local search remains available.');
                 }
             }
+            // Bounded legacy migration; retain OCR time instead of rebuilding an entire index in one request.
+            $legacyStarted = microtime(true);
+            for ($round = 0; $round < 4 && microtime(true) - $started < $budget && microtime(true) - $legacyStarted < min(3, $budget / 3); $round++) {
+                if ($sync->passages() === 0) {
+                    break;
+                }
+            }
             if (! $this->option('sync-only')) {
-                $budget = min(90, max(1, (int) $this->option('budget')));
                 while (microtime(true) - $started < $budget && $ocr->next()) {
                     $pages++;
                 }

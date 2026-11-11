@@ -13,14 +13,19 @@ class ProcurementOcrProcessor
 {
     public function __construct(private ProcurementArchiveBridge $archive, private ProcurementSearchWriter $writer) {}
 
-    public function next(): bool
+    public function next(?int $sourceId = null): bool
     {
         $source = DB::table('procurement_search_sources')->where('active', true)
+            ->when($sourceId !== null, fn ($q) => $q->where('id', $sourceId))
             ->whereIn('kind', ['archive_document', 'archive_attachment'])->whereIn('state', ['pending', 'partial', 'failed'])
-            ->where('attempts', '<', 3)->where(fn ($q) => $q->whereNull('retry_at')->orWhere('retry_at', '<=', now()))
+            ->where(fn ($q) => $q->where('attempts', '<', 3)->orWhere('reader_revision', '<', 2))
+            ->where(fn ($q) => $q->whereNull('retry_at')->orWhere('retry_at', '<=', now()))
             ->orderBy('updated_at')->orderBy('id')->first();
         if (! $source) {
             return false;
+        }
+        if ((int) $source->reader_revision < 2) {
+            $source->attempts = 0;
         }
         $work = storage_path('app/private/procurement-search/work');
         if (! is_dir($work)) {
@@ -42,6 +47,9 @@ class ProcurementOcrProcessor
             if (! hash_equals($source->fingerprint, hash('sha256', $metadata.'|'.$entry['version']))) {
                 throw new \RuntimeException('source_changed');
             }
+            if (($entry['size'] ?? 0) > (int) config('procurement_search.max_bytes')) {
+                throw new \RuntimeException('file_size_limit');
+            }
             if (! is_file($path)) {
                 $file = $this->archive->call($input);
                 DB::table('procurement_search_sources')->where('id', $source->id)->update(['checksum' => $file['checksum']]);
@@ -52,12 +60,8 @@ class ProcurementOcrProcessor
             // Identical bytes are OCR'd once, even if referenced by several archive packages.
             $checksum = hash_file('sha256', $path);
             $duplicate = (int) $source->page === 0 ? DB::table('procurement_search_sources')->where('checksum', $checksum)->where('active', true)
-                ->where('state', 'ready')->where('id', '!=', $source->id)->first(['content', 'pages', 'reading_engine', 'reading_confidence']) : null;
-            if ($duplicate) {
-                $result = ['text' => $duplicate->content ?? '', 'page' => $duplicate->pages ?: 1, 'pages' => $duplicate->pages ?: 1, 'done' => true,
-                    'engine' => $duplicate->reading_engine, 'confidence' => $duplicate->reading_confidence];
-                $this->writer->append($source, $result);
-                $this->linkReferences($source, $result['text']);
+                ->where('state', 'ready')->where('passages_version', true)->where('id', '!=', $source->id)->first(['id', 'content', 'pages', 'reading_engine', 'reading_confidence']) : null;
+            if ($duplicate && $this->writer->copy($source, $duplicate)) {
                 @unlink($path);
 
                 return true;
@@ -70,7 +74,10 @@ class ProcurementOcrProcessor
                 }
             }
             if (in_array($extension, ['pdf', 'jpg', 'jpeg', 'png'], true)) {
-                $result = $this->read($path, $extension, (int) $source->page + 1);
+                // Difficult files retry one page at a time and reduce raster memory progressively.
+                $count = $source->state === 'failed' || $source->attempts > 0 ? 1 : (int) config('procurement_search.pages_per_pass');
+                $pixels = $source->attempts > 1 ? 2000000 : ($source->state === 'failed' ? 3000000 : (int) config('procurement_search.max_pixels'));
+                $result = $this->read($path, $extension, (int) $source->page + 1, $count, $pixels);
             } elseif (in_array($extension, ['txt', 'csv', 'docx', 'xlsx', 'pptx'], true)) {
                 $result = ['text' => $this->officeText($path, $extension), 'page' => 1, 'pages' => 1, 'done' => true, 'engine' => 'office-text'];
             } else {
@@ -86,10 +93,31 @@ class ProcurementOcrProcessor
                 @unlink($path);
             }
         } catch (\Throwable $error) {
-            Log::warning('Private procurement OCR pass deferred.', ['source_id' => $source->id, 'error_type' => get_class($error)]);
+            if ($error instanceof \App\Exceptions\ProcurementReadFailure && $error->pages !== null) {
+                $source->pages = $error->pages;
+            }
+            $reason = $this->failureReason($error);
+            Log::warning('Private procurement OCR pass deferred.', ['source_id' => $source->id, 'error_type' => get_class($error), 'reason' => $reason]);
             @unlink($path);
+            if ($source->attempts >= 2 && $source->pages && (int) $source->page < (int) $source->pages
+                && in_array($reason, ['memory', 'timeout', 'resource_limit'], true)) {
+                $page = (int) $source->page + 1;
+                $this->writer->append($source, ['text' => '', 'page' => $page, 'pages' => (int) $source->pages,
+                    'done' => $page >= (int) $source->pages, 'unreadable' => 1, 'confidence' => 0,
+                    'passages' => [['page' => $page, 'text' => '', 'confidence' => 0, 'engine' => 'pdfjs-6-tesseract-7', 'error' => $reason]]]);
+
+                return true;
+            }
+            $permanent = in_array($reason, ['protected_pdf', 'invalid_pdf', 'page_text_limit', 'page_limit', 'file_size_limit', 'image_dimensions', 'unsupported_format'], true);
+            $message = match ($reason) {
+                'protected_pdf' => 'PDF terkunci; unggah salinan yang dapat dibaca.',
+                'invalid_pdf' => 'Struktur PDF rusak; periksa atau unggah ulang file asli.',
+                'page_text_limit', 'page_limit', 'file_size_limit', 'image_dimensions' => 'Ukuran halaman/file melampaui batas aman; pecah atau optimalkan file agar seluruh isi dapat dibaca.',
+                'memory', 'timeout', 'resource_limit' => 'Pembacaan berat; sistem mencoba ulang satu halaman dengan raster lebih ringan.',
+                default => 'Pembacaan belum selesai; sistem mencoba ulang terbatas.',
+            };
             DB::table('procurement_search_sources')->where('id', $source->id)->where('fingerprint', $source->fingerprint)->update([
-                'state' => 'failed', 'attempts' => $source->attempts + 1, 'error' => 'Pembacaan belum selesai; sistem mencoba ulang terbatas.',
+                'state' => $permanent ? 'unsupported' : 'failed', 'attempts' => $source->attempts + 1, 'reader_revision' => 2, 'pages' => $source->pages, 'error' => $message,
                 'retry_at' => now()->addMinutes(5 * ($source->attempts + 1)), 'updated_at' => now(),
             ]);
         } finally {
@@ -138,14 +166,15 @@ class ProcurementOcrProcessor
         });
     }
 
-    public function read(string $file, string $extension, int $start = 1): array
+    public function read(string $file, string $extension, int $start = 1, ?int $count = null, ?int $pixels = null): array
     {
         $environment = array_replace(\App\Support\IsolatedProcessEnvironment::make(), ['OMP_THREAD_LIMIT' => '1', 'RAYON_NUM_THREADS' => '1']);
         $process = new Process([config('procurement_search.node'), '--max-old-space-size=384', base_path('tools/procurement-ocr/read.cjs')], base_path(), $environment);
         $process->setInput(json_encode(['file' => $file, 'root' => dirname($file), 'extension' => $extension,
-            'start' => $start, 'count' => config('procurement_search.pages_per_pass'), 'languages' => config('procurement_search.languages')], JSON_THROW_ON_ERROR));
+            'start' => $start, 'count' => $count ?? config('procurement_search.pages_per_pass'), 'max_pixels' => $pixels ?? config('procurement_search.max_pixels'), 'progress' => true, 'languages' => config('procurement_search.languages')], JSON_THROW_ON_ERROR));
         $process->setTimeout(config('procurement_search.process_timeout'));
         $process->start();
+        $failure = null;
         try {
             while ($process->isRunning()) {
                 $process->checkTimeout();
@@ -157,21 +186,67 @@ class ProcurementOcrProcessor
                 }
                 usleep(200000);
             }
+        } catch (\Throwable $error) {
+            $failure = $error;
         } finally {
             // Timeouts and memory failures must never leave a CPU-consuming child alive.
             if ($process->isRunning()) {
                 $process->stop(1);
             }
         }
-        if (! $process->isSuccessful()) {
-            throw new \Symfony\Component\Process\Exception\ProcessFailedException($process);
+        if (! $failure && ! $process->isSuccessful()) {
+            $failure = new \Symfony\Component\Process\Exception\ProcessFailedException($process);
+        }
+        if ($failure) {
+            $pages = preg_match('/^OCR_PAGES=(\d{1,4})$/m', $process->getErrorOutput(), $match) && (int) $match[1] >= 1 && (int) $match[1] <= 2000 ? (int) $match[1] : null;
+            throw new \App\Exceptions\ProcurementReadFailure($failure, $pages);
         }
         $result = json_decode($process->getOutput(), true, flags: JSON_THROW_ON_ERROR);
         if (! is_array($result) || ! is_string($result['text'] ?? null) || ! isset($result['page'], $result['pages'], $result['done'])) {
             throw new \RuntimeException('invalid_ocr_result');
         }
+        if (! is_int($result['page']) || ! is_int($result['pages']) || ! is_bool($result['done'])
+            || $result['page'] < $start || $result['page'] > $result['pages'] || $result['pages'] > 2000
+            || $result['done'] !== ($result['page'] >= $result['pages']) || ! is_array($result['passages'] ?? null)
+            || count($result['passages']) !== $result['page'] - $start + 1) {
+            throw new \RuntimeException('invalid_ocr_pages');
+        }
+        foreach ($result['passages'] as $index => $passage) {
+            if (($passage['page'] ?? null) !== $start + $index || ! is_string($passage['text'] ?? null)
+                || mb_strlen($passage['text']) > (int) config('procurement_search.max_page_text')) {
+                throw new \RuntimeException('invalid_ocr_passage');
+            }
+        }
 
         return $result;
+    }
+
+    private function failureReason(\Throwable $error): string
+    {
+        if ($error instanceof \App\Exceptions\ProcurementReadFailure) {
+            $error = $error->getPrevious();
+        }
+        if ($error instanceof \Symfony\Component\Process\Exception\ProcessTimedOutException) {
+            return 'timeout';
+        }
+        if ($error instanceof \Symfony\Component\Process\Exception\ProcessSignaledException) {
+            return 'resource_limit';
+        }
+        if ($error instanceof \Symfony\Component\Process\Exception\ProcessFailedException && $error->getProcess()->hasBeenSignaled()) {
+            return 'resource_limit';
+        }
+        if ($error->getMessage() === 'ocr_memory_budget') {
+            return 'memory';
+        }
+        if (in_array($error->getMessage(), ['image_dimensions', 'page_text_limit', 'file_size_limit'], true)) {
+            return $error->getMessage();
+        }
+        if ($error instanceof \Symfony\Component\Process\Exception\ProcessFailedException
+            && preg_match('/OCR_PROCESS_FAILED:(protected_pdf|invalid_pdf|page_text_limit|page_limit|image_dimensions|unsupported_format)/', $error->getProcess()->getErrorOutput(), $match)) {
+            return $match[1];
+        }
+
+        return 'reader_failed';
     }
 
     private function officeText(string $path, string $extension): string

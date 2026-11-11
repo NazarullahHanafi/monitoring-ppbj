@@ -23,7 +23,24 @@
             const frame = new URLSearchParams(window.location.search).get('office_frame') || '';
             if (/^\d{1,12}$/.test(frame)) url.searchParams.set('office_frame', frame);
         }
-        node.href = url.pathname + url.search;
+        node.href = url.pathname + url.search + (/^#page=[1-9]\d{0,5}$/.test(url.hash) ? url.hash : '');
+        return node;
+    }
+    function snippet(text, data) {
+        const node = element('p', 'pus-snippet');
+        text = String(text || '');
+        const words = (data.query?.used || appliedQuery.toLowerCase().split(/[^a-z0-9]+/)).flatMap(word => [word, ...(data.equivalents?.[word] || [])]);
+        const needles = [...new Set(words)].filter(word => /^[a-z0-9]{1,96}$/i.test(word)).slice(0, 64).sort((a, b) => b.length-a.length);
+        const pattern = needles.length ? new RegExp('\\b(?:' + needles.join('|') + ')', 'ig') : null;
+        const hits = pattern ? [...text.matchAll(pattern)] : [];
+        if (!hits.length) { node.textContent = text; return node; }
+        let position = 0;
+        for (const hit of hits) {
+            if (hit.index > position) node.append(element('span', '', text.slice(position, hit.index)));
+            node.append(element('mark', '', hit[0]));
+            position = hit.index + hit[0].length;
+        }
+        if (position < text.length) node.append(element('span', '', text.slice(position)));
         return node;
     }
     function render(data) {
@@ -32,6 +49,7 @@
         if (summary) {
             summary.hidden = false;
             summary.replaceChildren(element('strong', '', `${data.total || 0} PR ditemukan`), element('span', '', data.elapsed_ms ? `Selesai dalam ${(data.elapsed_ms / 1000).toLocaleString('id-ID', { maximumFractionDigits: 3 })} detik` : 'Hasil dikelompokkan per PR'));
+            if (data.index?.pages_known) summary.append(element('span', '', `${data.index.pages_processed || 0}/${data.index.pages_known} halaman terpetakan sudah diproses`));
         }
         for (const row of data.rows || []) {
             const card = element('article', 'pus-card');
@@ -49,12 +67,14 @@
                 const engines = { 'pdfjs-6-text': 'Teks asli PDF', 'pdfjs-6-tesseract-7': 'Teks PDF + scan', 'tesseract-7-ind-eng': 'Scan / foto', 'office-text': 'Teks dokumen' };
                 if (engines[match.reading?.engine]) source.append(element('span', 'pus-badge', engines[match.reading.engine]));
                 if (match.reading?.confidence != null && match.reading.confidence < 55) source.append(element('span', 'pus-badge pus-warning', 'Bacaan kurang jelas · periksa file asli'));
-                item.append(source, element('p', 'pus-snippet', match.snippet));
+                if (match.match_page) source.append(element('span', 'pus-badge pus-page-hit', `Ketemu di halaman ${match.match_page}`));
+                item.append(source, snippet(match.snippet, data));
                 if (match.url) {
-                    const anchor = link(match.url, match.kind.startsWith('archive_') ? 'Buka lampiran ↗' : 'Buka dokumen →', 'pus-open');
+                    const anchor = link(match.url, match.kind.startsWith('archive_') ? (match.match_page ? `Buka halaman ${match.match_page} ↗` : 'Buka lampiran ↗') : 'Buka dokumen →', 'pus-open');
                     if (match.kind.startsWith('archive_')) { anchor.target = '_blank'; anchor.rel = 'noopener noreferrer'; }
                     item.append(anchor);
                 }
+                if (match.notice) item.append(element('p', 'pus-read-notice', match.notice));
                 matches.append(item);
             }
             card.append(matches);
@@ -65,12 +85,28 @@
             results.append(card);
         }
         const backlog = (data.index?.pending || 0) + (data.index?.partial || 0);
+        const progress = [];
         status.textContent = data.total ? `${data.total} PR cocok untuk “${appliedQuery}”. Ditampilkan per PR agar hubungan dokumennya jelas.` : 'Belum ada PR yang cocok. Coba kata yang lebih singkat atau pilih semua sumber.';
-        if (backlog) status.textContent += ` ${backlog} lampiran masih diproses bertahap; isi yang sudah terbaca langsung bisa dicari.`;
-        if (data.index?.failed) status.textContent += ` ${data.index.failed} lampiran belum berhasil dibaca seluruhnya.`;
-        if (data.index?.needs_review) status.textContent += ` ${data.index.needs_review} lampiran perlu diperiksa karena teks/formatnya belum dapat dibaca seluruhnya.`;
-        if (data.index?.archive_state === 'deferred') status.textContent += ' Sinkronisasi arsip sedang tertunda; hasil lama yang kedaluwarsa disembunyikan sementara.';
-        if (data.index?.state === 'starting') status.textContent += ' Indeks awal sedang disiapkan.';
+        if (data.query?.missing?.length) {
+            const missing = data.query.missing.map(word => `“${word}”`).join(', ');
+            status.textContent = `Kata ${missing} belum ketemu di indeks sumber ini, cuy.`;
+            if (data.query.used?.length) status.textContent += data.total ? ` Tapi “${data.query.used.join(' ')}” ketemu! Ini ${data.total} PR yang cocok.` : ` Kata “${data.query.used.join(' ')}” ada, tapi belum ketemu bersamaan dalam satu dokumen. Coba cari salah satunya dulu.`;
+            else status.textContent += ' Coba kata yang lebih singkat atau pilih semua sumber, ya.';
+        } else if (!data.total && !data.query?.strict && data.query?.used?.length > 1 && !/[0-9=<>"']/.test(appliedQuery)) {
+            status.textContent = 'Kata-katanya ada, cuy, tapi belum ketemu bersamaan dalam satu dokumen. Coba cari salah satu kata atau pilih semua sumber.';
+        }
+        if (backlog) progress.push(`${backlog} lampiran diproses bertahap; isi yang sudah terbaca langsung bisa dicari.`);
+        if (data.index?.failed) progress.push(`${data.index.failed} lampiran belum berhasil dibaca seluruhnya.`);
+        if (data.index?.needs_review) progress.push(`${data.index.needs_review} lampiran perlu diperiksa karena teks/formatnya belum dapat dibaca seluruhnya.`);
+        if (data.index?.unreadable_pages) progress.push(`${data.index.unreadable_pages} halaman bermasalah ditandai untuk diperiksa; halaman lain tetap diproses.`);
+        if (data.index?.unlinked_files) progress.push(`${data.index.unlinked_files} arsip menunggu relasi PR yang valid sebelum bisa muncul sebagai hasil PR.`);
+        if (data.index?.files_unmapped) progress.push(`${data.index.files_unmapped} berkas masih didata jumlah halamannya.`);
+        if (data.index?.archive_state === 'deferred') progress.push('Sinkronisasi arsip sedang tertunda; hasil kedaluwarsa disembunyikan sementara.');
+        if (data.index?.state === 'starting') progress.push('Indeks awal sedang disiapkan.');
+        if (get('progress') && get('progressinfo')) {
+            get('progress').hidden = progress.length === 0;
+            get('progressinfo').textContent = progress.join(' ');
+        } else if (progress.length) status.textContent += ' ' + progress.join(' ');
         if (Object.keys(data.equivalents || {}).length) status.textContent += ' Padanan yang turut dicari: ' + Object.entries(data.equivalents).map(([word, equivalents]) => `${word} (${equivalents.join(', ')})`).join('; ') + '.';
         currentPage = data.page;
         lastPage = data.last_page;
@@ -126,6 +162,7 @@
         currentPage = lastPage = 1;
         results.replaceChildren(); pagination.hidden = true;
         if (get('summary')) get('summary').hidden = true;
+        if (get('progress')) get('progress').hidden = true;
         status.dataset.error = 'false';
         status.textContent = 'Ketik nama barang untuk mencari PR dan lampiran terkait.';
     });

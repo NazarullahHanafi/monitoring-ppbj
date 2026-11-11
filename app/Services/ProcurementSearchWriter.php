@@ -20,11 +20,13 @@ class ProcurementSearchWriter
                     'fingerprint' => $fingerprint, 'active' => $active, 'state' => $file ? 'pending' : 'ready',
                     'page' => 0, 'pages' => null, 'attempts' => 0, 'error' => null, 'retry_at' => null, 'checksum' => null,
                     'reading_engine' => null, 'reading_confidence' => null,
+                    'passages_version' => true, 'reader_revision' => 2,
                     'verified_at' => now(), 'updated_at' => now()];
                 if ($old) {
                     $id = $old->id;
                     DB::table('procurement_search_sources')->where('id', $id)->update($values);
                     DB::table('procurement_search_terms')->where('source_id', $id)->delete();
+                    DB::table('procurement_search_passages')->where('source_id', $id)->delete();
                     DB::table('procurement_search_links')->where('source_id', $id)->delete();
                 } else {
                     $id = DB::table('procurement_search_sources')->insertGetId($values + ['created_at' => now()]);
@@ -48,10 +50,28 @@ class ProcurementSearchWriter
         });
     }
 
-    public function terms(int $sourceId, string $text): void
+    public function terms(int $sourceId, string $text, int $page = 0): void
     {
-        foreach (array_chunk(array_slice(ProcurementSearchText::words($text), 0, 12000), 250) as $words) {
-            DB::table('procurement_search_terms')->insertOrIgnore(array_map(fn ($word) => ['term' => $word, 'source_id' => $sourceId], $words));
+        foreach (array_chunk(ProcurementSearchText::words($text, $page > 0), 250) as $words) {
+            DB::table('procurement_search_terms')->insertOrIgnore(array_map(fn ($word) => ['term' => $word, 'source_id' => $sourceId, 'first_page' => $page], $words));
+            // Backfill unknown legacy positions; metadata (page zero) stays preferred.
+            DB::table('procurement_search_terms')->where('source_id', $sourceId)->whereIn('term', $words)
+                ->where(fn ($q) => $q->whereNull('first_page')->orWhere('first_page', '>', $page))->update(['first_page' => $page]);
+        }
+    }
+
+    public function passages(int $sourceId, array $passages): void
+    {
+        foreach ($passages as $passage) {
+            $page = (int) $passage['page'];
+            if ($page < 1 || mb_strlen($passage['text']) > (int) config('procurement_search.max_page_text')) {
+                throw new \RuntimeException('page_text_limit');
+            }
+            DB::table('procurement_search_passages')->upsert([
+                ['source_id' => $sourceId, 'page' => $page, 'content' => $passage['text'],
+                    'engine' => $passage['engine'] ?? null, 'confidence' => $passage['confidence'] ?? null, 'error' => $passage['error'] ?? null],
+            ], ['source_id', 'page'], ['content', 'engine', 'confidence', 'error']);
+            $this->terms($sourceId, $passage['text'], $page);
         }
     }
 
@@ -79,15 +99,52 @@ class ProcurementSearchWriter
             if ($row->reading_engine === 'pdfjs-6-tesseract-7') {
                 $engine = $row->reading_engine;
             }
+            $archive = str_starts_with($row->kind, 'archive_');
+            if ($archive) {
+                $passages = $result['passages'] ?? [['page' => (int) ($result['page'] ?? 1), 'text' => $result['text'] ?? '', 'engine' => $engine, 'confidence' => $confidence]];
+                $this->passages($row->id, $passages);
+            }
             DB::table('procurement_search_sources')->where('id', $row->id)->update([
                 'content' => $text, 'page' => $result['page'] ?? 1, 'pages' => $result['pages'] ?? 1,
-                'state' => $capped ? 'limited' : ($done ? ($text !== '' ? ($unreadable ? 'uncertain' : 'ready') : 'empty') : 'partial'),
-                'attempts' => 0, 'error' => $capped ? 'Batas teks tercapai; sebagian isi tersedia.' : ($unreadable ? 'Sebagian halaman belum terbaca; periksa dokumen asli.' : null), 'retry_at' => null, 'updated_at' => now(),
+                'state' => $capped && ! $archive ? 'limited' : ($done ? ($text !== '' ? ($unreadable ? 'uncertain' : 'ready') : 'empty') : 'partial'),
+                'attempts' => 0, 'error' => $capped && ! $archive ? 'Batas teks tercapai; sebagian isi tersedia.' : ($unreadable ? 'Sebagian halaman belum terbaca; periksa dokumen asli.' : null), 'retry_at' => null, 'updated_at' => now(),
                 'reading_engine' => $engine, 'reading_confidence' => $confidence,
+                'reader_revision' => 2,
             ]);
             // Only retained text may enter the index, including the final capped pass.
-            $remaining = max(0, $limit - mb_strlen(trim($row->content ?? '')) - (($row->content ?? '') !== '' ? 1 : 0));
-            $this->terms($row->id, mb_substr($result['text'] ?? '', 0, $remaining));
+            if (! $archive) {
+                $remaining = max(0, $limit - mb_strlen(trim($row->content ?? '')) - (($row->content ?? '') !== '' ? 1 : 0));
+                $this->terms($row->id, mb_substr($result['text'] ?? '', 0, $remaining));
+            }
+        });
+    }
+
+    public function copy(object $source, object $duplicate): bool
+    {
+        return DB::transaction(function () use ($source, $duplicate) {
+            $current = DB::table('procurement_search_sources')->where('id', $source->id)->lockForUpdate()->first();
+            if (! $current || ! $current->active || $current->fingerprint !== $source->fingerprint || (int) $current->page !== 0) {
+                return false;
+            }
+            $count = DB::table('procurement_search_passages')->where('source_id', $duplicate->id)->count();
+            if ($count !== (int) $duplicate->pages) {
+                return false;
+            }
+            DB::table('procurement_search_passages')->where('source_id', $duplicate->id)->orderBy('page')->chunk(4, function ($pages) use ($source) {
+                $this->passages($source->id, $pages->map(fn ($page) => ['page' => $page->page, 'text' => $page->content, 'engine' => $page->engine, 'confidence' => $page->confidence, 'error' => $page->error])->all());
+            });
+            DB::table('procurement_search_sources')->where('id', $source->id)->update([
+                'content' => $duplicate->content, 'page' => $duplicate->pages, 'pages' => $duplicate->pages,
+                'reading_engine' => $duplicate->reading_engine, 'reading_confidence' => $duplicate->reading_confidence,
+                'state' => 'ready', 'passages_version' => true, 'reader_revision' => 2, 'attempts' => 0, 'retry_at' => null, 'error' => null, 'updated_at' => now(),
+            ]);
+            $links = DB::table('procurement_search_links')->where('source_id', $duplicate->id)->where('inferred', true)
+                ->whereIn('ppbj_id', \App\Models\Ppbj::select('id'))->pluck('ppbj_id');
+            if ($links->isNotEmpty()) {
+                DB::table('procurement_search_links')->insertOrIgnore($links->map(fn ($id) => ['source_id' => $source->id, 'ppbj_id' => $id, 'inferred' => true])->all());
+            }
+
+            return true;
         });
     }
 }

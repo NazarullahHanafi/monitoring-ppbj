@@ -11,7 +11,7 @@ const languages = path.join(base, 'public/assets/document-reader/v1/lang');
 const available = fs.existsSync(path.join(runtime, 'node_modules/@napi-rs/canvas')) && fs.existsSync(path.join(languages, 'eng.traineddata.gz'));
 
 // A real image-only PDF assembled from a synthetic JPEG, with no embedded text.
-function scanPdf(jpeg, width, height, mixed = false) {
+function scanPdf(jpeg, width, height, mixed = false, damaged = false) {
     const native = mixed ? 'BT /F1 10 Tf 3 Tr 36 750 Td (NATIVE-REFERENCE-777 '+ 'Digital document header retained for verification. '.repeat(8) + ') Tj ET\n' : '';
     const draw = Buffer.from(native + 'q 540 0 0 255 36 360 cm /Im Do Q\n');
     const objects = [
@@ -22,9 +22,14 @@ function scanPdf(jpeg, width, height, mixed = false) {
         Buffer.concat([Buffer.from(`<< /Type /XObject /Subtype /Image /Width ${width} /Height ${height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpeg.length} >>\nstream\n`), jpeg, Buffer.from('\nendstream')]),
         Buffer.from('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>'),
     ];
+    if (damaged) {
+        objects[3] = Buffer.from('<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /XObject << /Im 9 0 R >> >> /Contents 6 0 R >>');
+        objects.push(Buffer.from('<< /Type /XObject /Subtype /Image /Width 10 /Height 10 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length 8 >>\nstream\nNOTAJPEG\nendstream'));
+    }
+    const size = objects.length + 1;
     const parts = [Buffer.from('%PDF-1.4\n')], offsets = [0]; let length = parts[0].length;
     objects.forEach((obj, i) => { offsets.push(length); const item = Buffer.concat([Buffer.from(`${i+1} 0 obj\n`), obj, Buffer.from('\nendobj\n')]); parts.push(item); length += item.length; });
-    parts.push(Buffer.from(`xref\n0 9\n0000000000 65535 f \n${offsets.slice(1).map(x => String(x).padStart(10, '0')+' 00000 n ').join('\n')}\ntrailer\n<< /Size 9 /Root 1 0 R >>\nstartxref\n${length}\n%%EOF`));
+    parts.push(Buffer.from(`xref\n0 ${size}\n0000000000 65535 f \n${offsets.slice(1).map(x => String(x).padStart(10, '0')+' 00000 n ').join('\n')}\ntrailer\n<< /Size ${size} /Root 1 0 R >>\nstartxref\n${length}\n%%EOF`));
     return Buffer.concat(parts);
 }
 
@@ -45,13 +50,24 @@ test('private OCR recognizes a photo and resumes every page of a real scanned PD
             assert.ok(result.confidence >= 55 && result.confidence <= 100);
             if (file === 'mixed.pdf') { assert.match(result.text, /NATIVE-REFERENCE-777/); assert.equal(result.engine, 'pdfjs-6-tesseract-7'); }
             assert.equal(result.page, start);
+            assert.equal(result.passages.length, 1);
+            assert.equal(result.passages[0].page, start);
+            assert.match(result.passages[0].text, /KURSI/i);
             if (extension === 'pdf') { assert.equal(result.pages, 3); assert.equal(result.done, start === 3); }
         }
+        fs.writeFileSync(path.join(root, 'damaged.pdf'), scanPdf(canvas.toBuffer('image/jpeg'), canvas.width, canvas.height, false, true));
+        const damaged = cp.spawnSync(process.execPath, [path.join(runtime, 'read.cjs')], { input: JSON.stringify({ file: path.join(root, 'damaged.pdf'), root, extension: 'pdf', start: 1, count: 3, languages, progress: true }), encoding: 'utf8', timeout: 30000 });
+        assert.equal(damaged.status, 0, damaged.stderr);
+        const recovered = JSON.parse(damaged.stdout);
+        assert.equal(recovered.passages.length, 3); assert.equal(recovered.done, true);
+        assert.match(recovered.passages[2].text, /KURSI/i);
+        assert.ok(recovered.unreadable > 0);
+        assert.match(damaged.stderr, /OCR_PAGES=3/);
         const bad = cp.spawnSync(process.execPath, [path.join(runtime, 'read.cjs')], { input: JSON.stringify({ file: __filename, root, extension: 'txt', languages }), encoding: 'utf8' });
         assert.notEqual(bad.status, 0); assert.equal(bad.stdout, '');
     } finally {
         // Only known synthetic fixtures in this newly created test directory are removed.
-        for (const file of ['photo.png', 'scan.pdf', 'mixed.pdf']) if (fs.existsSync(path.join(root, file))) fs.unlinkSync(path.join(root, file));
+        for (const file of ['photo.png', 'scan.pdf', 'mixed.pdf', 'damaged.pdf']) if (fs.existsSync(path.join(root, file))) fs.unlinkSync(path.join(root, file));
         fs.rmdirSync(root);
     }
 });

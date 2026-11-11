@@ -280,7 +280,7 @@ class ProcurementUnifiedSearchTest extends TestCase
         $this->search('sensor')->assertJsonPath('total', 0);
     }
 
-    public function test_text_outside_retention_limit_never_enters_the_search_index(): void
+    public function test_business_text_limit_stays_bounded_but_scan_pages_remain_fully_searchable(): void
     {
         config(['procurement_search.max_text' => 14]);
         $pr = $this->pr();
@@ -289,8 +289,8 @@ class ProcurementUnifiedSearchTest extends TestCase
         $this->search('TERSEMBUNYI')->assertJsonPath('total', 0);
         $source = $this->archive($pr);
         $writer->append($source, ['text' => 'sensor suhu   RAHASIABATAS', 'page' => 1, 'pages' => 1, 'done' => true]);
-        $this->search('sensor')->assertJsonPath('total', 1)->assertJsonPath('rows.0.matches.0.state', 'limited');
-        $this->search('RAHASIABATAS')->assertJsonPath('total', 0);
+        $this->search('sensor')->assertJsonPath('total', 1)->assertJsonPath('rows.0.matches.0.state', 'ready');
+        $this->search('RAHASIABATAS')->assertJsonPath('total', 1)->assertJsonPath('rows.0.matches.0.match_page', 1);
     }
 
     public function test_unchanged_sync_does_not_rewrite_terms_or_business_links_and_pr_lookups_are_batched(): void
@@ -360,5 +360,198 @@ class ProcurementUnifiedSearchTest extends TestCase
         }
         $this->assertSame(['0012'], \App\Support\ProcurementSearchText::equivalents('0012'));
         $this->search('PKB/PR-26/CON/1202')->assertJsonPath('total', 0);
+    }
+
+    public function test_unmatched_words_are_explained_and_remaining_words_work_across_lists_and_exports(): void
+    {
+        $pr = $this->pr();
+        [$sp, $spph] = $this->documents($pr);
+        $sp->items()->update(['nama_barang' => 'Wadah plastik tebal']);
+        app(ProcurementSearchSync::class)->local();
+        $term = 'wefwefwefwe plastik';
+        $this->search($term)->assertJsonPath('total', 1)->assertJsonPath('query.mode', 'partial')
+            ->assertJsonPath('query.used', ['plastik'])->assertJsonPath('query.missing', ['wefwefwefwe']);
+        foreach (['ppbj' => ['ppbj', $pr->id], 'sp' => ['sps', $sp->id], 'spph' => ['spphs', $spph->id]] as $kind => [$view, $id]) {
+            $response = $this->get(route($kind.'.index', ['search' => $term]))->assertOk();
+            $this->assertSame([$id], $response->viewData($view)->pluck('id')->all());
+        }
+        foreach (['sp' => $sp->nomor_sp, 'spph' => $spph->nomor_spph] as $kind => $number) {
+            $this->assertStringContainsString($number, $this->get(route($kind.'.export', ['search' => $term]))->assertOk()->streamedContent());
+        }
+        $this->search($term, ['scope' => 'archive'])->assertJsonPath('total', 0)->assertJsonPath('query.used', [])
+            ->assertJsonPath('query.missing', ['wefwefwefwe', 'plastik']);
+        $this->search('wefwefwefwe plastik 99mm')->assertJsonPath('total', 0)->assertJsonPath('query.mode', 'all');
+        $this->search('wefwefwefwe 1202')->assertJsonPath('total', 0)->assertJsonPath('query.missing', []);
+        $sp->items()->update(['nama_barang' => 'Industrial plastic container']);
+        app(ProcurementSearchSync::class)->local();
+        $this->search($term)->assertJsonPath('total', 1)->assertJsonPath('query.used', ['plastik'])->assertJsonPath('equivalents.plastik.0', 'plastic');
+    }
+
+    public function test_missing_word_diagnostics_ignore_deleted_expired_and_unlinked_sources(): void
+    {
+        $pr = $this->pr();
+        $writer = app(ProcurementSearchWriter::class);
+        $writer->source('ppbj', 'plastic', 'Wadah', 'WADAH', 'plastik', '', [$pr->id], hash('sha256', 'plastic'));
+        $writer->source('archive_document', 'unlinked', 'Rahasia', 'R', 'orphanword', '', [], hash('sha256', 'orphan'), true);
+        $expired = $writer->source('archive_document', 'expired', 'Lama', 'L', 'expiredword', '', [$pr->id], hash('sha256', 'expired'), true);
+        DB::table('procurement_search_sources')->where('id', $expired)->update(['verified_at' => now()->subHour()]);
+        $writer->source('archive_document', 'deleted', 'Hapus', 'D', 'deletedword', '', [$pr->id], hash('sha256', 'deleted'), true, false);
+        foreach (['orphanword', 'expiredword', 'deletedword'] as $word) {
+            $this->search($word.' plastik')->assertJsonPath('total', 1)->assertJsonPath('query.missing', [$word]);
+        }
+        // Words that exist separately are not silently presented as a joint match.
+        $writer->source('ppbj', 'separate', 'Terpisah', 'S', 'kaca', '', [$pr->id], hash('sha256', 'separate'));
+        $this->search('plastik kaca')->assertJsonPath('total', 0)->assertJsonPath('query.missing', []);
+    }
+
+    public function test_every_retained_scan_page_and_tokens_beyond_the_previous_word_cap_are_searchable(): void
+    {
+        config(['procurement_search.max_text' => 40]);
+        $pr = $this->pr();
+        $source = $this->archive($pr);
+        $writer = app(ProcurementSearchWriter::class);
+        $writer->append($source, ['text' => 'Halaman awal pengadaan', 'page' => 1, 'pages' => 2, 'done' => false,
+            'passages' => [['page' => 1, 'text' => 'Halaman awal pengadaan']]]);
+        $source = DB::table('procurement_search_sources')->find($source->id);
+        $long = implode(' ', array_map(fn ($i) => 'barang'.str_pad((string) $i, 5, '0', STR_PAD_LEFT), range(1, 13000))).' plastikpelengkap <SPESIALTEKNIS> 0.25mm';
+        $writer->append($source, ['text' => $long, 'page' => 2, 'pages' => 2, 'done' => true,
+            'passages' => [['page' => 2, 'text' => $long, 'engine' => 'pdfjs-6-tesseract-7', 'confidence' => 92]]]);
+        $this->assertLessThanOrEqual(40, mb_strlen(DB::table('procurement_search_sources')->find($source->id)->content));
+        $this->assertGreaterThan(13000, DB::table('procurement_search_terms')->where('source_id', $source->id)->count());
+        foreach (['barang13000', 'plastikpelengkap', 'SPESIALTEKNIS'] as $term) {
+            $response = $this->search($term)->assertJsonPath('total', 1)->assertJsonPath('rows.0.matches.0.state', 'ready')->assertJsonPath('rows.0.matches.0.match_page', 2);
+            $this->assertStringContainsString(strtolower($term), strtolower($response->json('rows.0.matches.0.snippet')));
+            $this->assertStringEndsWith('#page=2', $response->json('rows.0.matches.0.url'));
+        }
+        $this->assertSame($long, DB::table('procurement_search_passages')->where('source_id', $source->id)->where('page', 2)->value('content'));
+        $writer->source('archive_attachment', '44', 'Revisi', 'REV', '', '', [$pr->id], hash('sha256', 'new-long-file'), true);
+        $this->assertDatabaseCount('procurement_search_passages', 0);
+        $this->search('plastikpelengkap')->assertJsonPath('total', 0);
+    }
+
+    public function test_legacy_page_text_is_backfilled_in_small_steps_without_ocr_and_capped_files_resume(): void
+    {
+        $pr = $this->pr();
+        $source = $this->archive($pr);
+        DB::table('procurement_search_sources')->where('id', $source->id)->update([
+            'content' => "[Halaman 1]\nWadah plastik\n\n[Halaman 2]\nSensor akhir", 'page' => 2, 'pages' => 5,
+            'state' => 'limited', 'passages_version' => false,
+        ]);
+        $this->mock(ProcurementArchiveBridge::class, fn ($mock) => $mock->shouldNotReceive('call'));
+        $sync = app(ProcurementSearchSync::class);
+        $this->assertSame(1, $sync->passages(1));
+        $this->assertFalse((bool) DB::table('procurement_search_sources')->find($source->id)->passages_version);
+        $this->assertSame(1, $sync->passages(1));
+        $row = DB::table('procurement_search_sources')->find($source->id);
+        $this->assertTrue((bool) $row->passages_version);
+        $this->assertSame('partial', $row->state);
+        $this->assertSame(0, $row->page);
+        $this->search('sensor')->assertJsonPath('rows.0.matches.0.match_page', 2);
+    }
+
+    public function test_duplicate_reuse_copies_all_pages_rather_than_only_the_short_summary(): void
+    {
+        config(['procurement_search.max_text' => 12]);
+        $pr = $this->pr();
+        $source = $this->archive($pr);
+        $writer = app(ProcurementSearchWriter::class);
+        $writer->append($source, ['text' => 'Ringkasan awal dan komponen terakhirlengkap', 'page' => 2, 'pages' => 2, 'done' => true,
+            'passages' => [['page' => 1, 'text' => 'Ringkasan awal'], ['page' => 2, 'text' => 'Komponen terakhirlengkap']]]);
+        $duplicate = DB::table('procurement_search_sources')->find($source->id);
+        $id = $writer->source('archive_attachment', '45', 'Salinan', 'COPY', '', '', [$pr->id], hash('sha256', 'copy'), true);
+        $target = DB::table('procurement_search_sources')->find($id);
+        $this->assertTrue($writer->copy($target, $duplicate));
+        $this->assertSame(2, DB::table('procurement_search_passages')->where('source_id', $id)->count());
+        $response = $this->search('terakhirlengkap')->assertJsonPath('total', 1);
+        $this->assertCount(2, $response->json('rows.0.matches'));
+        $this->assertSame('Komponen terakhirlengkap', DB::table('procurement_search_passages')->where('source_id', $id)->where('page', 2)->value('content'));
+        // A stale copy operation cannot write over a source already advanced by a worker.
+        $this->assertFalse($writer->copy($target, $duplicate));
+    }
+
+    public function test_new_reader_resumes_a_previously_exhausted_scan_one_page_at_a_time(): void
+    {
+        $pr = $this->pr();
+        $source = $this->archive($pr);
+        $entry = ['key' => '44', 'active' => true, 'label' => 'Scan', 'reference' => 'SCAN', 'pr' => $pr->ppbj_no, 'metadata' => 'Rincian', 'version' => 'fixture-version', 'extension' => 'pdf'];
+        $metadata = implode(' ', [$entry['label'], $entry['reference'], $entry['pr'], $entry['metadata']]);
+        DB::table('procurement_search_sources')->where('id', $source->id)->update([
+            'fingerprint' => hash('sha256', $metadata.'|'.$entry['version']), 'state' => 'failed', 'attempts' => 3, 'reader_revision' => 0,
+            'page' => 2, 'pages' => 4, 'retry_at' => now()->subMinute(),
+        ]);
+        $originalStorage = $this->app->storagePath();
+        $temporary = $originalStorage.'/framework/testing/search-resume-'.Str::uuid();
+        $this->app->useStoragePath($temporary);
+        try {
+            $bridge = \Mockery::mock(ProcurementArchiveBridge::class);
+            $bridge->shouldReceive('call')->withArgs(fn ($input) => $input['action'] === 'manifest')->once()->andReturn(['rows' => [$entry]]);
+            $bridge->shouldReceive('call')->withArgs(fn ($input) => $input['action'] === 'file')->once()->andReturnUsing(function ($input) {
+                file_put_contents($input['destination'], 'synthetic-scan-bytes');
+
+                return ['checksum' => hash_file('sha256', $input['destination'])];
+            });
+            $processor = \Mockery::mock(ProcurementOcrProcessor::class, [$bridge, app(ProcurementSearchWriter::class)])->makePartial();
+            $processor->shouldReceive('read')->once()->withArgs(fn ($file, $extension, $start, $count, $pixels) => is_file($file) && $extension === 'pdf' && $start === 3 && $count === 1 && $pixels === 3000000)
+                ->andReturn(['text' => 'Plastik lanjutan', 'page' => 3, 'pages' => 4, 'done' => false, 'confidence' => 90,
+                    'passages' => [['page' => 3, 'text' => 'Plastik lanjutan', 'confidence' => 90, 'engine' => 'pdfjs-6-tesseract-7']]]);
+            $this->assertFalse($processor->next(0));
+            $this->assertTrue($processor->next($source->id));
+            $current = DB::table('procurement_search_sources')->find($source->id);
+            $this->assertSame(3, $current->page);
+            $this->assertSame('partial', $current->state);
+            $this->assertSame(0, $current->attempts);
+            $this->assertSame(2, $current->reader_revision);
+        } finally {
+            $this->app->useStoragePath($originalStorage);
+            $resolved = realpath($temporary);
+            $allowed = realpath($originalStorage.'/framework/testing');
+            if ($resolved && $allowed && str_starts_with($resolved, $allowed.DIRECTORY_SEPARATOR)) {
+                (new \Illuminate\Filesystem\Filesystem)->deleteDirectory($resolved);
+            }
+        }
+    }
+
+    public function test_an_exhausted_heavy_page_is_marked_and_later_pages_are_still_searchable(): void
+    {
+        $pr = $this->pr();
+        $source = $this->archive($pr);
+        $entry = ['key' => '44', 'active' => true, 'label' => 'Scan', 'reference' => 'SCAN', 'pr' => $pr->ppbj_no, 'metadata' => 'Rincian', 'version' => 'heavy-fixture', 'extension' => 'pdf'];
+        $metadata = implode(' ', [$entry['label'], $entry['reference'], $entry['pr'], $entry['metadata']]);
+        DB::table('procurement_search_sources')->where('id', $source->id)->update([
+            'fingerprint' => hash('sha256', $metadata.'|'.$entry['version']), 'state' => 'failed', 'attempts' => 2, 'reader_revision' => 2, 'pages' => null,
+        ]);
+        $originalStorage = $this->app->storagePath();
+        $temporary = $originalStorage.'/framework/testing/search-heavy-'.Str::uuid();
+        $this->app->useStoragePath($temporary);
+        try {
+            $bridge = \Mockery::mock(ProcurementArchiveBridge::class);
+            $bridge->shouldReceive('call')->withArgs(fn ($input) => $input['action'] === 'manifest')->twice()->andReturn(['rows' => [$entry]]);
+            $bridge->shouldReceive('call')->withArgs(fn ($input) => $input['action'] === 'file')->twice()->andReturnUsing(function ($input) {
+                file_put_contents($input['destination'], 'synthetic-heavy-scan');
+
+                return ['checksum' => hash_file('sha256', $input['destination'])];
+            });
+            $processor = \Mockery::mock(ProcurementOcrProcessor::class, [$bridge, app(ProcurementSearchWriter::class)])->makePartial();
+            $processor->shouldReceive('read')->once()->withArgs(fn ($file, $extension, $start, $count, $pixels) => $start === 1 && $count === 1 && $pixels === 2000000)
+                ->andThrow(new \App\Exceptions\ProcurementReadFailure(new \RuntimeException('ocr_memory_budget'), 3));
+            $processor->shouldReceive('read')->once()->withArgs(fn ($file, $extension, $start, $count) => $start === 2 && $count === 2)
+                ->andReturn(['text' => 'Komponen plastik lanjutan', 'page' => 3, 'pages' => 3, 'done' => true, 'confidence' => 92,
+                    'passages' => [['page' => 2, 'text' => 'Komponen'], ['page' => 3, 'text' => 'Plastik lanjutan', 'confidence' => 92]]]);
+            $this->assertTrue($processor->next());
+            $current = DB::table('procurement_search_sources')->find($source->id);
+            $this->assertSame(1, $current->page);
+            $this->assertSame(3, $current->pages);
+            $this->assertDatabaseHas('procurement_search_passages', ['source_id' => $source->id, 'page' => 1, 'error' => 'memory']);
+            $this->assertTrue($processor->next());
+            $this->app->useStoragePath($originalStorage);
+            $this->search('plastik')->assertJsonPath('total', 1)->assertJsonPath('rows.0.matches.0.match_page', 3)->assertJsonPath('rows.0.matches.0.state', 'uncertain');
+        } finally {
+            $this->app->useStoragePath($originalStorage);
+            $resolved = realpath($temporary);
+            $allowed = realpath($originalStorage.'/framework/testing');
+            if ($resolved && $allowed && str_starts_with($resolved, $allowed.DIRECTORY_SEPARATOR)) {
+                (new \Illuminate\Filesystem\Filesystem)->deleteDirectory($resolved);
+            }
+        }
     }
 }

@@ -107,12 +107,58 @@ class ProcurementSearchSync
     public function progress(): array
     {
         $counts = DB::table('procurement_search_sources')->where('active', true)->select('state')->selectRaw('COUNT(*) as total')->groupBy('state')->pluck('total', 'state');
+        $pages = DB::table('procurement_search_sources')->where('active', true)->whereIn('kind', ['archive_document', 'archive_attachment'])
+            ->selectRaw('SUM(page) as processed, SUM(pages) as known, SUM(CASE WHEN pages IS NULL THEN 1 ELSE 0 END) as unknown')->first();
         $progress = ['state' => 'running', 'ready' => (int) ($counts['ready'] ?? 0), 'pending' => (int) ($counts['pending'] ?? 0),
             'partial' => (int) ($counts['partial'] ?? 0), 'failed' => (int) ($counts['failed'] ?? 0),
             'needs_review' => (int) ($counts['empty'] ?? 0) + (int) ($counts['unsupported'] ?? 0) + (int) ($counts['limited'] ?? 0) + (int) ($counts['uncertain'] ?? 0),
             'archive_state' => Cache::get('procurement-search:archive-state', 'starting'), 'checked_at' => now()->toIso8601String()];
+        $progress['pages_processed'] = (int) ($pages->processed ?? 0);
+        $progress['pages_known'] = (int) ($pages->known ?? 0);
+        $progress['files_unmapped'] = (int) ($pages->unknown ?? 0);
+        $progress['unreadable_pages'] = DB::table('procurement_search_passages as page')->join('procurement_search_sources as source', 'source.id', '=', 'page.source_id')
+            ->where('source.active', true)->where(fn ($q) => $q->whereNotNull('page.error')->orWhere('page.confidence', '<', 55))->count();
+        $progress['unlinked_files'] = DB::table('procurement_search_sources as source')->where('source.active', true)->whereIn('source.kind', ['archive_document', 'archive_attachment'])
+            ->whereNotExists(fn ($q) => $q->selectRaw('1')->from('procurement_search_links as link')->join('ppbj as pr', 'pr.id', '=', 'link.ppbj_id')->whereColumn('link.source_id', 'source.id'))->count();
         Cache::forever('procurement-search:progress', $progress);
 
         return $progress;
+    }
+
+    public function passages(int $limit = 8): int
+    {
+        // Migrate retained legacy text without opening/downloading/OCR'ing the file again.
+        return DB::transaction(function () use ($limit) {
+            $source = DB::table('procurement_search_sources')->where('active', true)->where('passages_version', false)
+                ->whereIn('kind', ['archive_document', 'archive_attachment'])->whereNotNull('content')->where('content', '!=', '')
+                ->orderBy('id')->lockForUpdate()->first();
+            if (! $source) {
+                return 0;
+            }
+            $parts = preg_split('/(?:^|\n)\[Halaman (\d+)\]\s*\n/u', $source->content, -1, PREG_SPLIT_DELIM_CAPTURE);
+            $passages = [];
+            if (count($parts) > 1) {
+                for ($i = 1; $i + 1 < count($parts); $i += 2) {
+                    $passages[(int) $parts[$i]] = ['page' => (int) $parts[$i], 'text' => trim($parts[$i + 1]), 'engine' => $source->reading_engine, 'confidence' => $source->reading_confidence];
+                }
+            } else {
+                $passages[1] = ['page' => 1, 'text' => $source->content, 'engine' => $source->reading_engine, 'confidence' => $source->reading_confidence];
+            }
+            $existing = DB::table('procurement_search_passages')->where('source_id', $source->id)->pluck('page')->all();
+            $missing = array_diff_key($passages, array_flip($existing));
+            $this->writer->terms($source->id, $source->metadata_text ?? '');
+            $this->writer->passages($source->id, array_slice($missing, 0, $limit, true));
+            if (count($missing) <= $limit) {
+                $values = ['passages_version' => true];
+                if ($source->state === 'limited') {
+                    // Re-read the final capped pass; its original text may extend beyond the old summary.
+                    $rewind = max(0, (int) $source->page - 2);
+                    $values += ['page' => $rewind, 'state' => 'partial', 'attempts' => 0, 'retry_at' => null, 'error' => null];
+                }
+                DB::table('procurement_search_sources')->where('id', $source->id)->update($values);
+            }
+
+            return min(count($missing), $limit);
+        });
     }
 }

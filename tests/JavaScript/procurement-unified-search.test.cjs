@@ -14,13 +14,13 @@ class Element {
 }
 function setup() {
     const nodes = {};
-    for (const name of ['form', 'query', 'scope', 'status', 'results', 'pagination', 'prev', 'next', 'reset', 'page', 'submit', 'summary']) nodes[name] = new Element();
+    for (const name of ['form', 'query', 'scope', 'status', 'results', 'pagination', 'prev', 'next', 'reset', 'page', 'submit', 'summary', 'progress', 'progressinfo']) nodes[name] = new Element();
     nodes.scope.value = 'all';
     nodes.form.querySelector = () => nodes.submit;
     const root = new Element(); root.dataset.endpoint = 'https://app.test/procurement/search';
     root.querySelector = selector => nodes[selector.match(/data-pus-(\w+)/)?.[1]];
     const requests = [];
-    const context = { window: { location: { origin: 'https://app.test' } }, document: { getElementById: () => root, createElement: () => new Element() }, URL, URLSearchParams, AbortController, setTimeout: fn => { context.timeout = fn; return 1; }, clearTimeout() {},
+    const context = { window: { location: { origin: 'https://app.test' } }, document: { getElementById: () => root, createElement: tag => { const node = new Element(); node.tag = tag; return node; } }, URL, URLSearchParams, AbortController, setTimeout: fn => { context.timeout = fn; return 1; }, clearTimeout() {},
         fetch: (url, options) => new Promise(resolve => requests.push({ url: String(url), options, resolve })) };
     const source = fs.readFileSync(path.join(__dirname, '../../public/assets/app/procurement-search.js'), 'utf8');
     vm.runInNewContext(source, context);
@@ -120,4 +120,45 @@ test('poor scan quality is visible without disclosing raw scores as accuracy gua
     f.requests[0].resolve({ ok: true, json: async () => result }); await flush();
     const badges = f.nodes.results.children[0].children[1].children[0].children[0].children.map(n => n.textContent).join(' ');
     assert.match(badges, /Teks PDF \+ scan/); assert.match(badges, /kurang jelas/); assert.doesNotMatch(badges, /30%/);
+});
+
+test('unknown words are explained casually without hiding useful results or executing text', async () => {
+    const f = setup(); submit(f, 'wefwefwefwe plastik');
+    const result = data(); result.query = { mode: 'partial', used: ['plastik'], missing: ['wefwefwefwe', '<img onerror=alert(1)>'] };
+    f.requests[0].resolve({ ok: true, json: async () => result }); await flush();
+    assert.equal(f.nodes.results.children.length, 1);
+    assert.match(f.nodes.status.textContent, /wefwefwefwe.*belum ketemu.*cuy/);
+    assert.match(f.nodes.status.textContent, /plastik.*ketemu/);
+    assert.match(f.nodes.status.textContent, /<img onerror=alert\(1\)>/);
+});
+
+test('scan matches name and open their actual PDF page while discarding arbitrary fragments', async () => {
+    const f = setup(); submit(f, 'plastik');
+    const result = data(); result.rows[0].matches[0].match_page = 17; result.rows[0].matches[0].url = '/procurement/search/files/44#page=17';
+    f.requests[0].resolve({ ok: true, json: async () => result }); await flush();
+    const match = f.nodes.results.children[0].children[1].children[0];
+    assert.match(match.children[0].children.at(-1).textContent, /halaman 17/);
+    assert.equal(match.children[2].href, '/procurement/search/files/44#page=17');
+    assert.match(match.children[2].textContent, /halaman 17/);
+});
+
+test('keyword highlights keep surrounding OCR text as inert text nodes', async () => {
+    const f = setup(); submit(f, 'plastik');
+    const result = data(); result.query = { used: ['plastik'], missing: [] }; result.rows[0].matches[0].snippet = '<script>plastik</script> transparan';
+    f.requests[0].resolve({ ok: true, json: async () => result }); await flush();
+    const snippet = f.nodes.results.children[0].children[1].children[0].children[1];
+    assert.equal(snippet.children[1].tag, 'mark');
+    assert.equal(snippet.children[1].textContent, 'plastik');
+    assert.equal(snippet.children.map(node => node.textContent).join(''), '<script>plastik</script> transparan');
+});
+
+test('scan diagnostics use a separate collapsible panel and reset hides it', async () => {
+    const f = setup(); submit(f, 'plastik');
+    const result = data(); result.index = { state: 'running', pending: 20, failed: 2, unreadable_pages: 3, unlinked_files: 4, pages_processed: 80, pages_known: 150 };
+    f.requests[0].resolve({ ok: true, json: async () => result }); await flush();
+    assert.equal(f.nodes.progress.hidden, false);
+    assert.match(f.nodes.progressinfo.textContent, /20 lampiran/);
+    assert.match(f.nodes.progressinfo.textContent, /3 halaman bermasalah/);
+    assert.doesNotMatch(f.nodes.status.textContent, /20 lampiran/);
+    f.nodes.reset.fire('click'); assert.equal(f.nodes.progress.hidden, true);
 });

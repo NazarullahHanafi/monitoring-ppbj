@@ -11,6 +11,7 @@ async function read(input) {
     const root = fs.realpathSync(input.root);
     if (!filename.startsWith(root + path.sep) || fs.statSync(filename).size > 30 * 1024 * 1024) throw Error('invalid_source');
     const extension = String(input.extension || '').toLowerCase();
+    const maxPixels = Math.max(1000000, Math.min(4000000, Number(input.max_pixels) || 4000000));
     const canvasLib = require('@napi-rs/canvas');
     let worker, retries = 0;
     const started = performance.now();
@@ -34,16 +35,18 @@ async function read(input) {
     let task;
     try {
         if (['jpg', 'jpeg', 'png'].includes(extension)) {
+            if (input.progress === true && require.main === module) process.stderr.write('OCR_PAGES=1\n');
             const image = await canvasLib.loadImage(filename);
             if (image.width * image.height > 25000000) throw Error('image_dimensions');
-            const scale = Math.min(1, Math.sqrt(4000000 / (image.width * image.height)));
+            const scale = Math.min(1, Math.sqrt(maxPixels / (image.width * image.height)));
             const canvas = canvasLib.createCanvas(Math.max(1, Math.round(image.width * scale)), Math.max(1, Math.round(image.height * scale)));
             const ctx = canvas.getContext('2d');
             ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
             ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
             const result = await recognize(canvas);
             canvas.width = canvas.height = 0;
-            return { ...result, page: 1, pages: 1, done: true, unreadable: !result.text || result.confidence < 55 ? 1 : 0, engine: 'tesseract-7-ind-eng' };
+            return { ...result, page: 1, pages: 1, done: true, unreadable: !result.text || result.confidence < 55 ? 1 : 0, engine: 'tesseract-7-ind-eng',
+                passages: [{ ...result, page: 1, engine: 'tesseract-7-ind-eng' }] };
         }
         if (extension !== 'pdf') throw Error('unsupported_format');
         const requireFromHere = createRequire(__filename);
@@ -62,35 +65,52 @@ async function read(input) {
             wasmUrl: assetPath('wasm') });
         const pdf = await task.promise;
         if (pdf.numPages > 2000) throw Error('page_limit');
+        if (input.progress === true && require.main === module) process.stderr.write(`OCR_PAGES=${pdf.numPages}\n`);
         const start = Math.max(1, Number(input.start) || 1);
         const end = Math.min(pdf.numPages, start + Math.min(3, Math.max(1, Number(input.count) || 2)) - 1);
         if (start > pdf.numPages) return { text: '', page: pdf.numPages, pages: pdf.numPages, done: true };
-        const parts = [];
+        const parts = [], passages = [];
         let ocr = false, unreadable = 0, confidence = null;
         for (let pageNumber = start; pageNumber <= end; pageNumber++) {
-            const page = await pdf.getPage(pageNumber);
-            const textContent = await page.getTextContent();
-            let text = textContent.items.map(item => (item.str || '') + (item.hasEOL ? '\n' : ' ')).join('').trim();
-            const operators = await page.getOperatorList();
-            const hasImage = operators.fnArray.some(op => [pdfjs.OPS.paintImageXObject, pdfjs.OPS.paintInlineImageXObject, pdfjs.OPS.paintImageMaskXObject].includes(op));
-            const normal = page.getViewport({ scale: 1 });
-            if (text.replace(/\s/g, '').length < 40 || (hasImage && text.length < 250) || largeRaster(operators, pdfjs.OPS, normal.width*normal.height)) {
-                const scale = Math.min(2.5, Math.sqrt(4000000 / (normal.width * normal.height)));
-                const viewport = page.getViewport({ scale });
-                const canvas = canvasLib.createCanvas(Math.ceil(viewport.width), Math.ceil(viewport.height));
-                await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
-                const result = await recognize(canvas);
-                text = mergeText(text, result.text);
-                confidence = confidence === null ? result.confidence : Math.min(confidence, result.confidence);
-                if (result.confidence < 55) unreadable++;
-                canvas.width = canvas.height = 0;
-                ocr = true;
-            }
-            if (text.trim()) parts.push(`[Halaman ${pageNumber}]\n${text}`);
-            else unreadable++;
-            page.cleanup();
+            let pageConfidence = null, pageOcr = false;
+            let page, text = '';
+            try {
+                page = await pdf.getPage(pageNumber);
+                // A broken text layer may still have a readable scanned image.
+                try {
+                    const textContent = await page.getTextContent();
+                    text = textContent.items.map(item => (item.str || '') + (item.hasEOL ? '\n' : ' ')).join('').trim();
+                } catch (_) {}
+                const operators = await page.getOperatorList();
+                const hasImage = operators.fnArray.some(op => [pdfjs.OPS.paintImageXObject, pdfjs.OPS.paintInlineImageXObject, pdfjs.OPS.paintImageMaskXObject].includes(op));
+                const normal = page.getViewport({ scale: 1 });
+                if (text.replace(/\s/g, '').length < 40 || (hasImage && text.length < 250) || largeRaster(operators, pdfjs.OPS, normal.width*normal.height)) {
+                    const scale = Math.min(2.5, Math.sqrt(maxPixels / (normal.width * normal.height)));
+                    const viewport = page.getViewport({ scale });
+                    const canvas = canvasLib.createCanvas(Math.ceil(viewport.width), Math.ceil(viewport.height));
+                    try {
+                        await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+                        const result = await recognize(canvas);
+                        text = mergeText(text, result.text);
+                        confidence = confidence === null ? result.confidence : Math.min(confidence, result.confidence);
+                        pageConfidence = result.confidence; pageOcr = true;
+                        if (result.confidence < 55) unreadable++;
+                    } finally { canvas.width = canvas.height = 0; }
+                    ocr = true;
+                }
+                if (text.length > 1000000) throw Error('page_text_limit');
+                passages.push({ page: pageNumber, text, confidence: pageConfidence, engine: pageOcr ? 'pdfjs-6-tesseract-7' : 'pdfjs-6-text' });
+                if (text.trim()) parts.push(`[Halaman ${pageNumber}]\n${text}`);
+                else unreadable++;
+            } catch (error) {
+                // One damaged page must not hide readable pages later in the same PDF.
+                const retained = text.slice(0, 1000000).replace(/[\uD800-\uDBFF]$/, '');
+                passages.push({ page: pageNumber, text: retained, confidence: 0, engine: 'pdfjs-6-tesseract-7', error: error.message === 'page_text_limit' ? 'page_text_limit' : 'page_unreadable' });
+                if (retained.trim()) parts.push(`[Halaman ${pageNumber}]\n${retained}`);
+                unreadable++; confidence = 0;
+            } finally { if (page) page.cleanup(); }
         }
-        return { text: parts.join('\n\n'), page: end, pages: pdf.numPages, done: end >= pdf.numPages, unreadable, confidence,
+        return { text: parts.join('\n\n'), passages, page: end, pages: pdf.numPages, done: end >= pdf.numPages, unreadable, confidence,
             engine: ocr ? 'pdfjs-6-tesseract-7' : 'pdfjs-6-text' };
     } finally {
         if (worker) await worker.terminate().catch(() => {});
@@ -107,8 +127,10 @@ if (require.main === module) {
             const started = performance.now();
             const result = await read(JSON.parse(raw));
             process.stdout.write(JSON.stringify({ ...result, metrics: { duration_ms: Math.round(performance.now()-started), peak_rss_mb: Math.round(process.resourceUsage().maxRSS/1024) } }));
-        } catch (_) {
-            process.stderr.write('OCR_PROCESS_FAILED\n');
+        } catch (error) {
+            const category = error.name === 'PasswordException' ? 'protected_pdf' : error.name === 'InvalidPDFException' ? 'invalid_pdf'
+                : ['page_text_limit', 'page_limit', 'image_dimensions', 'invalid_source', 'unsupported_format'].includes(error.message) ? error.message : 'reader_failed';
+            process.stderr.write(`OCR_PROCESS_FAILED:${category}\n`);
             process.exitCode = 1;
         }
     });

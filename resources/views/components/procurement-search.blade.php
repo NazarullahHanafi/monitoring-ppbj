@@ -6,9 +6,10 @@
         <label class="pus-scope"><span>Ditemukan di</span><select data-pus-scope><option value="all">Semua sumber</option><option value="ppbj">Management PPBJ</option><option value="sp">Rincian SP</option><option value="spph">Rincian SPPH</option><option value="archive">Lampiran arsip / OCR</option></select></label>
         <button type="submit" class="pus-primary">Cari di semua PR</button><button type="button" data-pus-reset class="pus-secondary">Reset</button>
     </form>
-    <p class="pus-note">Tekan Enter atau klik Cari. Padanan umum seperti chair/kursi juga ditelusuri. Satu dokumen dapat terkait beberapa PR; periksa sumber untuk memastikan rincian barang.</p>
+    <p class="pus-note">Kata nyasar? Santai, kata yang ketemu tetap dicari dan kata yang belum ketemu kami jelaskan. Nomor PR, angka, dan ukuran tetap dicari utuh. Hasil scan dilengkapi halaman jika tersedia.</p>
     <div class="pus-summary" data-pus-summary hidden aria-label="Ringkasan hasil"></div>
     <p data-pus-status role="status" aria-live="polite" class="pus-status">Hasil lintas menu akan muncul di sini. Scan/foto lama diproses bertahap di latar belakang.</p>
+    <details data-pus-progress class="pus-progress" hidden><summary>Progres pembacaan arsip</summary><p data-pus-progressinfo></p></details>
     <div data-pus-results class="pus-results"></div>
     <nav data-pus-pagination class="pus-pagination" hidden aria-label="Halaman hasil pencarian"><button type="button" data-pus-prev class="pus-secondary">← Sebelumnya</button><span data-pus-page></span><button type="button" data-pus-next class="pus-secondary">Berikutnya →</button></nav>
 </section>
