@@ -34,7 +34,7 @@ class ProcurementOcrProcessor
             $manifest = $this->archive->call(['action' => 'manifest', 'kind' => $source->kind, 'after' => (int) $source->source_key - 1, 'limit' => 1]);
             $entry = $manifest['rows'][0] ?? null;
             if (! $entry || $entry['key'] !== $source->source_key || ! $entry['active']) {
-                DB::table('procurement_search_sources')->where('id', $source->id)->update(['active' => false, 'content' => null]);
+                DB::table('procurement_search_sources')->where('id', $source->id)->where('fingerprint', $source->fingerprint)->update(['active' => false, 'content' => null]);
 
                 return true;
             }
@@ -52,9 +52,10 @@ class ProcurementOcrProcessor
             // Identical bytes are OCR'd once, even if referenced by several archive packages.
             $checksum = hash_file('sha256', $path);
             $duplicate = (int) $source->page === 0 ? DB::table('procurement_search_sources')->where('checksum', $checksum)->where('active', true)
-                ->where('state', 'ready')->where('id', '!=', $source->id)->first(['content', 'pages']) : null;
+                ->where('state', 'ready')->where('id', '!=', $source->id)->first(['content', 'pages', 'reading_engine', 'reading_confidence']) : null;
             if ($duplicate) {
-                $result = ['text' => $duplicate->content ?? '', 'page' => $duplicate->pages ?: 1, 'pages' => $duplicate->pages ?: 1, 'done' => true];
+                $result = ['text' => $duplicate->content ?? '', 'page' => $duplicate->pages ?: 1, 'pages' => $duplicate->pages ?: 1, 'done' => true,
+                    'engine' => $duplicate->reading_engine, 'confidence' => $duplicate->reading_confidence];
                 $this->writer->append($source, $result);
                 $this->linkReferences($source, $result['text']);
                 @unlink($path);
@@ -71,14 +72,16 @@ class ProcurementOcrProcessor
             if (in_array($extension, ['pdf', 'jpg', 'jpeg', 'png'], true)) {
                 $result = $this->read($path, $extension, (int) $source->page + 1);
             } elseif (in_array($extension, ['txt', 'csv', 'docx', 'xlsx', 'pptx'], true)) {
-                $result = ['text' => $this->officeText($path, $extension), 'page' => 1, 'pages' => 1, 'done' => true];
+                $result = ['text' => $this->officeText($path, $extension), 'page' => 1, 'pages' => 1, 'done' => true, 'engine' => 'office-text'];
             } else {
                 DB::table('procurement_search_sources')->where('id', $source->id)->update(['state' => 'unsupported', 'error' => 'Format perlu dikonversi ke PDF/foto agar isinya bisa dibaca.', 'updated_at' => now()]);
 
                 return true;
             }
             $this->writer->append($source, $result);
-            $this->linkReferences($source, $result['text']);
+            if (! isset($result['confidence']) || $result['confidence'] >= 55) {
+                $this->linkReferences($source, $result['text']);
+            }
             if ($result['done'] ?? true) {
                 @unlink($path);
             }
@@ -109,19 +112,17 @@ class ProcurementOcrProcessor
     {
         // Explicit, existing PR numbers only. Never create a PR or guess fuzzy OCR references.
         $numbers = Cache::remember('procurement-search:known-prs', 300, fn () => Ppbj::pluck('ppbj_no', 'id')->all());
-        $flat = preg_replace('/[^A-Z0-9]/', '', strtoupper($text));
+        $text = mb_strtoupper(mb_substr($text, 0, config('procurement_search.max_text')));
         $links = [];
         foreach ($numbers as $id => $number) {
             $normal = preg_replace('/[^A-Z0-9]/', '', strtoupper($number));
             if (strlen($normal) < 8 || ! preg_match('/[A-Z]/', $normal)) {
                 continue;
             }
-            $position = strpos($flat, $normal);
-            if ($position === false) {
-                continue;
-            }
-            $after = substr($flat, $position + strlen($normal), 1);
-            if (ctype_digit(substr($normal, -1)) && $after !== '' && ctype_digit($after)) {
+            // Separators may vary in a scan, but letters/numbers must have real boundaries.
+            $parts = preg_split('/[^A-Z0-9]+/', strtoupper($number), -1, PREG_SPLIT_NO_EMPTY);
+            $pattern = '/(?<![A-Z0-9])'.implode('[\s\/._-]*', array_map(fn ($part) => preg_quote($part, '/'), $parts)).'(?![A-Z0-9])/';
+            if (! preg_match($pattern, $text)) {
                 continue;
             }
             $links[] = ['source_id' => $source->id, 'ppbj_id' => (int) $id, 'inferred' => true];
@@ -145,16 +146,22 @@ class ProcurementOcrProcessor
             'start' => $start, 'count' => config('procurement_search.pages_per_pass'), 'languages' => config('procurement_search.languages')], JSON_THROW_ON_ERROR));
         $process->setTimeout(config('procurement_search.process_timeout'));
         $process->start();
-        while ($process->isRunning()) {
-            $process->checkTimeout();
-            if (PHP_OS_FAMILY === 'Linux') {
-                $status = @file_get_contents('/proc/'.$process->getPid().'/status');
-                if ($status && preg_match('/^VmRSS:\s+(\d+)\s+kB/m', $status, $match) && (int) $match[1] > (int) config('procurement_search.max_rss_mb') * 1024) {
-                    $process->stop(1);
-                    throw new \RuntimeException('ocr_memory_budget');
+        try {
+            while ($process->isRunning()) {
+                $process->checkTimeout();
+                if (PHP_OS_FAMILY === 'Linux') {
+                    $status = @file_get_contents('/proc/'.$process->getPid().'/status');
+                    if ($status && preg_match('/^VmRSS:\s+(\d+)\s+kB/m', $status, $match) && (int) $match[1] > (int) config('procurement_search.max_rss_mb') * 1024) {
+                        throw new \RuntimeException('ocr_memory_budget');
+                    }
                 }
+                usleep(200000);
             }
-            usleep(200000);
+        } finally {
+            // Timeouts and memory failures must never leave a CPU-consuming child alive.
+            if ($process->isRunning()) {
+                $process->stop(1);
+            }
         }
         if (! $process->isSuccessful()) {
             throw new \Symfony\Component\Process\Exception\ProcessFailedException($process);

@@ -6,7 +6,7 @@
     const get = name => root.querySelector(`[data-pus-${name}]`);
     const form = get('form'), input = get('query'), scope = get('scope'), status = get('status'), results = get('results');
     const pagination = get('pagination'), submit = form.querySelector('[type="submit"]');
-    let controller, sequence = 0, currentPage = 1, appliedQuery = '', appliedScope = 'all';
+    let controller, sequence = 0, currentPage = 1, lastPage = 1, appliedQuery = '', appliedScope = 'all', pendingKey = '';
     const labels = { ppbj: 'PPBJ', sp: 'SP', spph: 'SPPH', archive_document: 'Arsip', archive_attachment: 'Lampiran arsip' };
     function element(tag, className, text) {
         const node = document.createElement(tag);
@@ -28,6 +28,11 @@
     }
     function render(data) {
         results.replaceChildren();
+        const summary = get('summary');
+        if (summary) {
+            summary.hidden = false;
+            summary.replaceChildren(element('strong', '', `${data.total || 0} PR ditemukan`), element('span', '', data.elapsed_ms ? `Selesai dalam ${(data.elapsed_ms / 1000).toLocaleString('id-ID', { maximumFractionDigits: 3 })} detik` : 'Hasil dikelompokkan per PR'));
+        }
         for (const row of data.rows || []) {
             const card = element('article', 'pus-card');
             const heading = element('div', 'pus-card-head'), title = element('div');
@@ -41,6 +46,9 @@
                 if (match.kind.startsWith('archive_')) source.append(element('span', 'pus-badge', ['pending', 'partial', 'failed'].includes(match.state) ? `Isi diproses · ${match.page || 0}/${match.pages || '?'} halaman` : 'Hasil pembacaan otomatis'));
                 if (['uncertain', 'empty', 'limited', 'unsupported'].includes(match.state)) source.append(element('span', 'pus-badge', 'Perlu diperiksa'));
                 if (match.inferred) source.append(element('span', 'pus-badge', 'Nomor PR terbaca dari scan · periksa kecocokan'));
+                const engines = { 'pdfjs-6-text': 'Teks asli PDF', 'pdfjs-6-tesseract-7': 'Teks PDF + scan', 'tesseract-7-ind-eng': 'Scan / foto', 'office-text': 'Teks dokumen' };
+                if (engines[match.reading?.engine]) source.append(element('span', 'pus-badge', engines[match.reading.engine]));
+                if (match.reading?.confidence != null && match.reading.confidence < 55) source.append(element('span', 'pus-badge pus-warning', 'Bacaan kurang jelas · periksa file asli'));
                 item.append(source, element('p', 'pus-snippet', match.snippet));
                 if (match.url) {
                     const anchor = link(match.url, match.kind.startsWith('archive_') ? 'Buka lampiran ↗' : 'Buka dokumen →', 'pus-open');
@@ -63,32 +71,47 @@
         if (data.index?.needs_review) status.textContent += ` ${data.index.needs_review} lampiran perlu diperiksa karena teks/formatnya belum dapat dibaca seluruhnya.`;
         if (data.index?.archive_state === 'deferred') status.textContent += ' Sinkronisasi arsip sedang tertunda; hasil lama yang kedaluwarsa disembunyikan sementara.';
         if (data.index?.state === 'starting') status.textContent += ' Indeks awal sedang disiapkan.';
+        if (Object.keys(data.equivalents || {}).length) status.textContent += ' Padanan yang turut dicari: ' + Object.entries(data.equivalents).map(([word, equivalents]) => `${word} (${equivalents.join(', ')})`).join('; ') + '.';
         currentPage = data.page;
+        lastPage = data.last_page;
         pagination.hidden = data.last_page <= 1;
         get('page').textContent = `${data.page} / ${data.last_page}`;
         get('prev').disabled = data.page <= 1;
         get('next').disabled = data.page >= data.last_page;
     }
     async function search(page = 1) {
+        const key = JSON.stringify([appliedQuery, appliedScope, page]);
+        if (pendingKey === key) return;
         controller?.abort();
         controller = new AbortController();
+        pendingKey = key;
         const serial = ++sequence;
         status.dataset.error = 'false';
         status.textContent = 'Mencari barang dan dokumen…';
         submit.disabled = true;
+        get('prev').disabled = get('next').disabled = true;
+        const timeout = setTimeout(() => { if (serial === sequence) controller.abort(); }, 20000);
         try {
             const url = new URL(root.dataset.endpoint, window.location.origin);
             url.search = new URLSearchParams({ q: appliedQuery, scope: appliedScope, page });
             const response = await fetch(url, { headers: { Accept: 'application/json' }, signal: controller.signal, credentials: 'same-origin' });
-            const data = await response.json();
             if (serial !== sequence) return;
             if (!response.ok) throw new Error(response.status === 429 ? 'Pencarian terlalu sering. Tunggu sebentar, lalu coba lagi.' : response.status === 422 ? 'Periksa kata pencarian dan pilihan sumber.' : 'Pencarian belum dapat dimuat. Coba kembali.');
+            let data;
+            try { data = await response.json(); } catch (error) {
+                if (error.name === 'AbortError') throw error;
+                throw new Error('Hasil belum dapat dibaca. Muat ulang halaman dan coba kembali.');
+            }
+            if (serial !== sequence) return;
             render(data);
         } catch (error) {
-            if (serial !== sequence || error.name === 'AbortError') return;
+            if (serial !== sequence) return;
             status.dataset.error = 'true';
-            status.textContent = error.message === 'Failed to fetch' ? 'Koneksi terputus. Coba kembali.' : error.message;
-        } finally { if (serial === sequence) submit.disabled = false; }
+            status.textContent = error.name === 'AbortError' ? 'Pencarian terlalu lama. Coba lagi dengan kata yang lebih spesifik.' : error.message === 'Failed to fetch' ? 'Koneksi terputus. Coba kembali.' : error.message;
+        } finally {
+            clearTimeout(timeout);
+            if (serial === sequence) { submit.disabled = false; pendingKey = ''; get('prev').disabled = currentPage <= 1; get('next').disabled = currentPage >= lastPage; }
+        }
     }
     form.addEventListener('submit', event => {
         event.preventDefault();
@@ -99,8 +122,11 @@
     input.addEventListener('input', () => { status.textContent = 'Pilihan belum diterapkan. Tekan Enter atau klik Cari.'; });
     scope.addEventListener('change', () => { status.textContent = 'Pilihan belum diterapkan. Klik Cari untuk menerapkan.'; });
     get('reset').addEventListener('click', () => {
-        controller?.abort(); sequence++; submit.disabled = false; input.value = ''; scope.value = 'all';
+        controller?.abort(); sequence++; pendingKey = ''; submit.disabled = false; input.value = ''; scope.value = 'all';
+        currentPage = lastPage = 1;
         results.replaceChildren(); pagination.hidden = true;
+        if (get('summary')) get('summary').hidden = true;
+        status.dataset.error = 'false';
         status.textContent = 'Ketik nama barang untuk mencari PR dan lampiran terkait.';
     });
     get('prev').addEventListener('click', () => search(Math.max(1, currentPage-1)));

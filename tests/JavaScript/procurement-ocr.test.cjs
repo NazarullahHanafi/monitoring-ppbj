@@ -11,18 +11,20 @@ const languages = path.join(base, 'public/assets/document-reader/v1/lang');
 const available = fs.existsSync(path.join(runtime, 'node_modules/@napi-rs/canvas')) && fs.existsSync(path.join(languages, 'eng.traineddata.gz'));
 
 // A real image-only PDF assembled from a synthetic JPEG, with no embedded text.
-function scanPdf(jpeg, width, height) {
-    const draw = Buffer.from('q 540 0 0 255 36 360 cm /Im Do Q\n');
+function scanPdf(jpeg, width, height, mixed = false) {
+    const native = mixed ? 'BT /F1 10 Tf 3 Tr 36 750 Td (NATIVE-REFERENCE-777 '+ 'Digital document header retained for verification. '.repeat(8) + ') Tj ET\n' : '';
+    const draw = Buffer.from(native + 'q 540 0 0 255 36 360 cm /Im Do Q\n');
     const objects = [
         Buffer.from('<< /Type /Catalog /Pages 2 0 R >>'),
         Buffer.from('<< /Type /Pages /Kids [3 0 R 4 0 R 5 0 R] /Count 3 >>'),
-        ...[1, 2, 3].map(() => Buffer.from('<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /XObject << /Im 7 0 R >> >> /Contents 6 0 R >>')),
+        ...[1, 2, 3].map(() => Buffer.from('<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /XObject << /Im 7 0 R >> /Font << /F1 8 0 R >> >> /Contents 6 0 R >>')),
         Buffer.concat([Buffer.from(`<< /Length ${draw.length} >>\nstream\n`), draw, Buffer.from('endstream')]),
         Buffer.concat([Buffer.from(`<< /Type /XObject /Subtype /Image /Width ${width} /Height ${height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpeg.length} >>\nstream\n`), jpeg, Buffer.from('\nendstream')]),
+        Buffer.from('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>'),
     ];
     const parts = [Buffer.from('%PDF-1.4\n')], offsets = [0]; let length = parts[0].length;
     objects.forEach((obj, i) => { offsets.push(length); const item = Buffer.concat([Buffer.from(`${i+1} 0 obj\n`), obj, Buffer.from('\nendobj\n')]); parts.push(item); length += item.length; });
-    parts.push(Buffer.from(`xref\n0 8\n0000000000 65535 f \n${offsets.slice(1).map(x => String(x).padStart(10, '0')+' 00000 n ').join('\n')}\ntrailer\n<< /Size 8 /Root 1 0 R >>\nstartxref\n${length}\n%%EOF`));
+    parts.push(Buffer.from(`xref\n0 9\n0000000000 65535 f \n${offsets.slice(1).map(x => String(x).padStart(10, '0')+' 00000 n ').join('\n')}\ntrailer\n<< /Size 9 /Root 1 0 R >>\nstartxref\n${length}\n%%EOF`));
     return Buffer.concat(parts);
 }
 
@@ -35,10 +37,13 @@ test('private OCR recognizes a photo and resumes every page of a real scanned PD
         ctx.fillText('KURSI ERGONOMIS KANTOR', 70, 170); ctx.fillText('PENGADAAN PRINTER LASER', 70, 320); ctx.fillText('PR-2026-TEST-001', 70, 470);
         fs.writeFileSync(path.join(root, 'photo.png'), canvas.toBuffer('image/png'));
         fs.writeFileSync(path.join(root, 'scan.pdf'), scanPdf(canvas.toBuffer('image/jpeg'), canvas.width, canvas.height));
-        for (const [file, extension, start] of [['photo.png', 'png', 1], ['scan.pdf', 'pdf', 1], ['scan.pdf', 'pdf', 2], ['scan.pdf', 'pdf', 3]]) {
+        fs.writeFileSync(path.join(root, 'mixed.pdf'), scanPdf(canvas.toBuffer('image/jpeg'), canvas.width, canvas.height, true));
+        for (const [file, extension, start] of [['photo.png', 'png', 1], ['scan.pdf', 'pdf', 1], ['scan.pdf', 'pdf', 2], ['scan.pdf', 'pdf', 3], ['mixed.pdf', 'pdf', 1]]) {
             const output = cp.execFileSync(process.execPath, [path.join(runtime, 'read.cjs')], { input: JSON.stringify({ file: path.join(root, file), root, extension, start, count: 1, languages }), encoding: 'utf8', timeout: 20000, stdio: ['pipe', 'pipe', 'pipe'] });
             const result = JSON.parse(output);
             assert.match(result.text, /KURSI/i); assert.match(result.text, /PRINTER/i);
+            assert.ok(result.confidence >= 55 && result.confidence <= 100);
+            if (file === 'mixed.pdf') { assert.match(result.text, /NATIVE-REFERENCE-777/); assert.equal(result.engine, 'pdfjs-6-tesseract-7'); }
             assert.equal(result.page, start);
             if (extension === 'pdf') { assert.equal(result.pages, 3); assert.equal(result.done, start === 3); }
         }
@@ -46,7 +51,7 @@ test('private OCR recognizes a photo and resumes every page of a real scanned PD
         assert.notEqual(bad.status, 0); assert.equal(bad.stdout, '');
     } finally {
         // Only known synthetic fixtures in this newly created test directory are removed.
-        for (const file of ['photo.png', 'scan.pdf']) if (fs.existsSync(path.join(root, file))) fs.unlinkSync(path.join(root, file));
+        for (const file of ['photo.png', 'scan.pdf', 'mixed.pdf']) if (fs.existsSync(path.join(root, file))) fs.unlinkSync(path.join(root, file));
         fs.rmdirSync(root);
     }
 });

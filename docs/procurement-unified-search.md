@@ -56,3 +56,23 @@ Scheduler aplikasi menjalankan pekerja tiap menit melalui cron `schedule:run` ya
 - Audit npm pada dependensi OCR tidak melaporkan advisori saat persiapan rilis 10 November 2026.
 
 Referensi primer: [API Tesseract.js](https://github.com/naptha/tesseract.js/blob/master/docs/api.md), [contoh PDF.js pada Node](https://github.com/mozilla/pdf.js/blob/master/examples/node/pdf2png/pdf2png.mjs).
+
+## Pembaruan 11 November 2026
+
+Pembacaan dokumen memakai kombinasi teks asli PDF, analisis penempatan gambar pada halaman, dan OCR adaptif. Gambar besar pada PDF campuran tetap dibaca walaupun halaman sudah memiliki banyak teks digital. Teks asli dipertahankan dan baris identik digabungkan. Logo kecil tidak otomatis memicu OCR tambahan.
+
+Pada bacaan sulit, pekerja dapat mencoba peningkatan kontras grayscale satu kali per giliran, jika percobaan dimulai dalam 20 detik pertama. Hasil pengganti dipakai hanya jika skor bacaan meningkat atau hasil pertama kosong. Halaman kosong tidak dipaksa menjadi hasil sukses. Batas memori/proses sebelumnya tetap berlaku; gambar asli tidak diubah.
+
+Kolom `reading_engine` dan `reading_confidence` menyimpan metode dan skor terendah sepanjang giliran dokumen. Skor adalah perkiraan mesin, bukan persentase akurasi bisnis. Bacaan di bawah 55 ditandai perlu diperiksa; nomor PR tidak disimpulkan dari giliran dengan skor rendah. Bacaan lama tanpa skor tetap tersedia, tanpa membuat skor buatan atau mengulang OCR semua arsip. Pembaruan metadata mempertahankan kursor/hasil, sementara pergantian fingerprint mengosongkan kualitas dan teks lama.
+
+Padanan barang Indonesia/Inggris terkurasi tersedia melalui `config/procurement_search.php`, misalnya kursi/chair dan kantor/office. Setiap kata tetap wajib cocok dalam satu sumber, tetapi boleh menggunakan padanannya. Perluasan dibatasi dan tetap menggunakan indeks awalan kata. Tidak ada layanan AI eksternal, pemindahan dokumen, atau pencocokan samar nomor PR/nominal. Padanan yang digunakan ditampilkan pada hasil. Ini pencarian istilah terkurasi, bukan pemahaman bebas seluruh bahasa.
+
+Query kutipan memakai satu `ROW_NUMBER()` untuk seluruh PR yang terlihat, menggantikan pengulangan persilangan token pada sepuluh cabang UNION. Batas lima sumber per PR dan empat kutipan tetap dipertahankan. Memerlukan MySQL 8+, MariaDB 10.2+, atau SQLite dengan window functions; hosting diverifikasi MariaDB 10.6.28. Metadata yang dikirim dari DB dibatasi 320 karakter per kutipan. Tidak ada cache hasil lintas pengguna yang berpotensi mempertahankan izin lama.
+
+Sinkronisasi mengambil peta nomor PR dan dokumen gabungan per batch. Term dan hubungan bisnis yang sama tidak ditulis ulang pada setiap penyegaran. Token dari teks yang melewati batas retensi tidak dimasukkan ke indeks. Pengenalan referensi PR memerlukan batas huruf/angka, sehingga `PR-2026-0012` tidak dianggap cocok dengan `XPR-2026-0012`, `PR-2026-00123`, atau `PR-2026-0012A`.
+
+Antarmuka menampilkan ringkasan PR, durasi pencarian di server, metode pembacaan, dan peringatan bacaan kurang jelas. Tidak ada polling tambahan. Pengiriman identik yang masih berjalan digabungkan, respons terlambat diabaikan, dan pencarian dihentikan setelah 20 detik dengan opsi mencoba ulang. Kontrol tetap dapat dipakai setelah respons HTML/error atau koneksi gagal. Kartu di luar viewport memakai `content-visibility` dengan fallback tampilan normal.
+
+Sebelum pembaruan, sampel hosting mencatat 2.537 halaman terbaca dari 20.725 halaman yang sudah diketahui, sekitar 3,16 MB teks indeks, dan pencarian hangat empat istilah sekitar 17–50 ms. Ini sampel singkat; bukan jaminan seluruh situs bebas lag. Arsip yang belum selesai tetap diproses oleh satu pekerja pada jadwal terbatas. Tidak dilakukan penghapusan arsip, perubahan dokumen bisnis, atau pemaksaan tutorial.
+
+Audit dependensi juga menemukan enam advisori produksi pada Symfony HTTP Foundation, HTTP Kernel, dan Routing, serta satu advisori pengembangan pada YAML. Empat paket diperbarui ke 7.4.23 melalui perubahan minimum pada lockfile; versi mayor Laravel dipertahankan. Cache route harus dibangun ulang setelah pemasangan patch Routing. Referensi: [advisori resmi Routing](https://symfony.com/cve-2026-118516), [advisori resmi HTTP Kernel](https://github.com/symfony/symfony/security/advisories/GHSA-wg5q-m2ww-f3c9), dan [advisori resmi YAML](https://github.com/symfony/symfony/security/advisories/GHSA-hwfg-qwvh-2wfx).

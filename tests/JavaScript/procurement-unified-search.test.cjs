@@ -14,13 +14,13 @@ class Element {
 }
 function setup() {
     const nodes = {};
-    for (const name of ['form', 'query', 'scope', 'status', 'results', 'pagination', 'prev', 'next', 'reset', 'page', 'submit']) nodes[name] = new Element();
+    for (const name of ['form', 'query', 'scope', 'status', 'results', 'pagination', 'prev', 'next', 'reset', 'page', 'submit', 'summary']) nodes[name] = new Element();
     nodes.scope.value = 'all';
     nodes.form.querySelector = () => nodes.submit;
     const root = new Element(); root.dataset.endpoint = 'https://app.test/procurement/search';
     root.querySelector = selector => nodes[selector.match(/data-pus-(\w+)/)?.[1]];
     const requests = [];
-    const context = { window: { location: { origin: 'https://app.test' } }, document: { getElementById: () => root, createElement: () => new Element() }, URL, URLSearchParams, AbortController,
+    const context = { window: { location: { origin: 'https://app.test' } }, document: { getElementById: () => root, createElement: () => new Element() }, URL, URLSearchParams, AbortController, setTimeout: fn => { context.timeout = fn; return 1; }, clearTimeout() {},
         fetch: (url, options) => new Promise(resolve => requests.push({ url: String(url), options, resolve })) };
     const source = fs.readFileSync(path.join(__dirname, '../../public/assets/app/procurement-search.js'), 'utf8');
     vm.runInNewContext(source, context);
@@ -88,4 +88,36 @@ test('document navigation retains hologram context and attachments open without 
     assert.match(card.children[2].children[0].href, /office_frame=33/);
     const file = card.children[1].children[0].children[2];
     assert.equal(file.target, '_blank'); assert.equal(file.rel, 'noopener noreferrer');
+});
+
+test('duplicate in-flight submits share one request, HTTP HTML errors recover, and last-page buttons stay disabled', async () => {
+    const f = setup(); submit(f, 'kursi'); submit(f, 'kursi');
+    assert.equal(f.requests.length, 1);
+    f.requests[0].resolve({ ok: false, status: 503, json: async () => { throw Error('PRIVATE HTML'); } }); await flush();
+    assert.doesNotMatch(f.nodes.status.textContent, /PRIVATE/);
+    assert.equal(f.nodes.submit.disabled, false);
+    submit(f, 'kursi'); f.requests[1].resolve({ ok: true, json: async () => data() }); await flush();
+    assert.equal(f.nodes.next.disabled, true);
+    assert.equal(f.nodes.prev.disabled, true);
+});
+
+test('timeout restores controls and reset removes stale error/summary state', async () => {
+    const f = setup(); submit(f, 'kursi');
+    f.context.timeout();
+    assert.equal(f.requests[0].options.signal.aborted, true);
+    // Fetch rejects an aborted request in a browser.
+    f.requests[0].resolve({ ok: true, json: async () => { throw Object.assign(Error('abort'), { name: 'AbortError' }); } }); await flush();
+    assert.equal(f.nodes.submit.disabled, false);
+    assert.match(f.nodes.status.textContent, /terlalu lama/);
+    f.nodes.reset.fire('click');
+    assert.equal(f.nodes.status.dataset.error, 'false');
+    assert.equal(f.nodes.summary.hidden, true);
+});
+
+test('poor scan quality is visible without disclosing raw scores as accuracy guarantees', async () => {
+    const f = setup(); submit(f, 'sensor');
+    const result = data(); result.rows[0].matches[0].reading = { engine: 'pdfjs-6-tesseract-7', confidence: 30 };
+    f.requests[0].resolve({ ok: true, json: async () => result }); await flush();
+    const badges = f.nodes.results.children[0].children[1].children[0].children[0].children.map(n => n.textContent).join(' ');
+    assert.match(badges, /Teks PDF \+ scan/); assert.match(badges, /kurang jelas/); assert.doesNotMatch(badges, /30%/);
 });

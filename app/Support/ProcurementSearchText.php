@@ -33,4 +33,16 @@ final class ProcurementSearchText
 
         return ($start ? '…' : '').mb_substr($text, $start, 220).(mb_strlen($text) > $start + 220 ? '…' : '');
     }
+
+    public static function equivalents(string $word): array
+    {
+        foreach (config('procurement_search.equivalents', []) as $group) {
+            if (in_array($word, $group, true)) {
+                // Configuration cannot introduce LIKE wildcards or unbounded query expansion.
+                return array_values(array_unique(array_merge([$word], array_slice(array_filter($group, fn ($value) => is_string($value) && preg_match('/^[a-z]{2,32}$/D', $value)), 0, 3))));
+            }
+        }
+
+        return [$word];
+    }
 }

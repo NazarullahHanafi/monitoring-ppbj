@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { createRequire } = require('node:module');
 const { pathToFileURL } = require('node:url');
+const { score, mergeText, largeRaster, enhance } = require('./quality.cjs');
 
 async function read(input) {
     const filename = fs.realpathSync(input.file);
@@ -11,8 +12,9 @@ async function read(input) {
     if (!filename.startsWith(root + path.sep) || fs.statSync(filename).size > 30 * 1024 * 1024) throw Error('invalid_source');
     const extension = String(input.extension || '').toLowerCase();
     const canvasLib = require('@napi-rs/canvas');
-    let worker;
-    async function recognize(image) {
+    let worker, retries = 0;
+    const started = performance.now();
+    async function recognize(canvas) {
         if (!worker) {
             const { createWorker } = require('tesseract.js');
             worker = await createWorker('ind+eng', 1, {
@@ -20,8 +22,14 @@ async function read(input) {
                 logger() {}, errorHandler() {},
             });
         }
-        const result = await worker.recognize(image, { rotateAuto: true });
-        return result.data.text.trim();
+        let result = score((await worker.recognize(canvas.toBuffer('image/png'), { rotateAuto: true })).data);
+        // One optional retry for the entire pass, only for difficult, non-blank scans.
+        if (result.confidence < 55 && retries < 1 && performance.now()-started < 20000 && enhance(canvas)) {
+            retries++;
+            const candidate = score((await worker.recognize(canvas.toBuffer('image/png'), { rotateAuto: true })).data);
+            if (candidate.text && (!result.text || candidate.confidence > result.confidence)) result = candidate;
+        }
+        return result;
     }
     let task;
     try {
@@ -30,10 +38,12 @@ async function read(input) {
             if (image.width * image.height > 25000000) throw Error('image_dimensions');
             const scale = Math.min(1, Math.sqrt(4000000 / (image.width * image.height)));
             const canvas = canvasLib.createCanvas(Math.max(1, Math.round(image.width * scale)), Math.max(1, Math.round(image.height * scale)));
-            canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
-            const text = await recognize(canvas.toBuffer('image/png'));
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+            const result = await recognize(canvas);
             canvas.width = canvas.height = 0;
-            return { text, page: 1, pages: 1, done: true, engine: 'tesseract-7-ind-eng' };
+            return { ...result, page: 1, pages: 1, done: true, unreadable: !result.text || result.confidence < 55 ? 1 : 0, engine: 'tesseract-7-ind-eng' };
         }
         if (extension !== 'pdf') throw Error('unsupported_format');
         const requireFromHere = createRequire(__filename);
@@ -56,20 +66,23 @@ async function read(input) {
         const end = Math.min(pdf.numPages, start + Math.min(3, Math.max(1, Number(input.count) || 2)) - 1);
         if (start > pdf.numPages) return { text: '', page: pdf.numPages, pages: pdf.numPages, done: true };
         const parts = [];
-        let ocr = false, unreadable = 0;
+        let ocr = false, unreadable = 0, confidence = null;
         for (let pageNumber = start; pageNumber <= end; pageNumber++) {
             const page = await pdf.getPage(pageNumber);
             const textContent = await page.getTextContent();
             let text = textContent.items.map(item => (item.str || '') + (item.hasEOL ? '\n' : ' ')).join('').trim();
             const operators = await page.getOperatorList();
             const hasImage = operators.fnArray.some(op => [pdfjs.OPS.paintImageXObject, pdfjs.OPS.paintInlineImageXObject, pdfjs.OPS.paintImageMaskXObject].includes(op));
-            if (text.replace(/\s/g, '').length < 40 || (hasImage && text.length < 250)) {
-                const normal = page.getViewport({ scale: 1 });
+            const normal = page.getViewport({ scale: 1 });
+            if (text.replace(/\s/g, '').length < 40 || (hasImage && text.length < 250) || largeRaster(operators, pdfjs.OPS, normal.width*normal.height)) {
                 const scale = Math.min(2.5, Math.sqrt(4000000 / (normal.width * normal.height)));
                 const viewport = page.getViewport({ scale });
                 const canvas = canvasLib.createCanvas(Math.ceil(viewport.width), Math.ceil(viewport.height));
                 await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
-                text = await recognize(canvas.toBuffer('image/png'));
+                const result = await recognize(canvas);
+                text = mergeText(text, result.text);
+                confidence = confidence === null ? result.confidence : Math.min(confidence, result.confidence);
+                if (result.confidence < 55) unreadable++;
                 canvas.width = canvas.height = 0;
                 ocr = true;
             }
@@ -77,7 +90,7 @@ async function read(input) {
             else unreadable++;
             page.cleanup();
         }
-        return { text: parts.join('\n\n'), page: end, pages: pdf.numPages, done: end >= pdf.numPages, unreadable,
+        return { text: parts.join('\n\n'), page: end, pages: pdf.numPages, done: end >= pdf.numPages, unreadable, confidence,
             engine: ocr ? 'pdfjs-6-tesseract-7' : 'pdfjs-6-text' };
     } finally {
         if (worker) await worker.terminate().catch(() => {});

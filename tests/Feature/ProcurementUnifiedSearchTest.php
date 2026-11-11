@@ -262,4 +262,103 @@ class ProcurementUnifiedSearchTest extends TestCase
         $this->assertStringStartsWith('attachment;', $response->headers->get('Content-Disposition'));
         $this->assertSame("sandbox; default-src 'none'", $response->headers->get('Content-Security-Policy'));
     }
+
+    public function test_reading_quality_accumulates_across_passes_and_resets_only_for_a_new_file(): void
+    {
+        $pr = $this->pr();
+        $source = $this->archive($pr);
+        $writer = app(ProcurementSearchWriter::class);
+        $writer->append($source, ['text' => 'Sensor tekanan', 'page' => 1, 'pages' => 2, 'done' => false, 'confidence' => 42, 'engine' => 'pdfjs-6-tesseract-7']);
+        $source = DB::table('procurement_search_sources')->find($source->id);
+        $writer->append($source, ['text' => 'Kalibrasi digital', 'page' => 2, 'pages' => 2, 'done' => true, 'engine' => 'pdfjs-6-text']);
+        $this->search('sensor')->assertJsonPath('rows.0.matches.0.state', 'uncertain')
+            ->assertJsonPath('rows.0.matches.0.reading.confidence', 42)->assertJsonPath('rows.0.matches.0.reading.engine', 'pdfjs-6-tesseract-7');
+        $this->archive($pr);
+        $this->assertSame(42, DB::table('procurement_search_sources')->find($source->id)->reading_confidence);
+        $writer->source('archive_attachment', '44', 'Revisi', 'REV', '', '', [$pr->id], hash('sha256', 'new-file'), true);
+        $this->assertNull(DB::table('procurement_search_sources')->find($source->id)->reading_confidence);
+        $this->search('sensor')->assertJsonPath('total', 0);
+    }
+
+    public function test_text_outside_retention_limit_never_enters_the_search_index(): void
+    {
+        config(['procurement_search.max_text' => 14]);
+        $pr = $this->pr();
+        $writer = app(ProcurementSearchWriter::class);
+        $writer->source('ppbj', 'limited', 'Uji', 'UJI', '', 'kursi kantor   TERSEMBUNYI', [$pr->id], hash('sha256', 'local-limit'));
+        $this->search('TERSEMBUNYI')->assertJsonPath('total', 0);
+        $source = $this->archive($pr);
+        $writer->append($source, ['text' => 'sensor suhu   RAHASIABATAS', 'page' => 1, 'pages' => 1, 'done' => true]);
+        $this->search('sensor')->assertJsonPath('total', 1)->assertJsonPath('rows.0.matches.0.state', 'limited');
+        $this->search('RAHASIABATAS')->assertJsonPath('total', 0);
+    }
+
+    public function test_unchanged_sync_does_not_rewrite_terms_or_business_links_and_pr_lookups_are_batched(): void
+    {
+        $pr = $this->pr();
+        [$sp] = $this->documents($pr);
+        foreach (range(1, 8) as $i) {
+            $copy = $sp->replicate();
+            $copy->nomor_sp = 'SP-BATCH-'.$i;
+            $copy->nomor_pr = $this->pr('PR-BATCH-'.$i)->ppbj_no;
+            $copy->sequence_number = $i + 1;
+            $copy->save();
+        }
+        $sync = app(ProcurementSearchSync::class);
+        $sync->local();
+        DB::enableQueryLog();
+        $sync->local();
+        $queries = collect(DB::getQueryLog())->pluck('query');
+        DB::disableQueryLog();
+        $this->assertCount(0, $queries->filter(fn ($sql) => preg_match('/^\s*(insert|update|delete)\b/i', $sql) && preg_match('/procurement_search_(terms|links)/', $sql)));
+        $this->assertCount(0, $queries->filter(fn ($sql) => preg_match('/from "ppbj" where "ppbj_no" =/', $sql)));
+        $this->search($pr->ppbj_no)->assertJsonPath('total', 1);
+    }
+
+    public function test_many_sources_on_one_pr_cannot_starve_another_pr_or_expand_token_queries(): void
+    {
+        $first = $this->pr();
+        $second = $this->pr('PR-OTHER-2026');
+        $writer = app(ProcurementSearchWriter::class);
+        foreach (range(1, 30) as $i) {
+            $writer->source('ppbj', 'many-'.$i, 'Sensor', 'MANY-'.$i, 'sensor tekanan', '', [$first->id], hash('sha256', 'many-'.$i));
+        }
+        $writer->source('ppbj', 'other', 'Sensor', 'OTHER', 'sensor tekanan', '', [$second->id], hash('sha256', 'other'));
+        DB::enableQueryLog();
+        $response = $this->search('sensor tekanan')->assertJsonPath('total', 2);
+        $queries = collect(DB::getQueryLog())->pluck('query');
+        DB::disableQueryLog();
+        $this->assertCount(1, $response->json('rows.0.matches'));
+        $this->assertCount(4, $response->json('rows.1.matches'));
+        $this->assertSame(1, $response->json('rows.1.more_sources'));
+        $ranked = $queries->first(fn ($sql) => str_contains($sql, 'ROW_NUMBER()'));
+        $this->assertStringNotContainsString('union', strtolower($ranked));
+        $this->assertSame(2, substr_count($ranked, '"term" like'));
+    }
+
+    public function test_pr_inference_requires_boundaries_and_does_not_concatenate_unrelated_words(): void
+    {
+        $pr = $this->pr('PR-2026-0012');
+        $source = $this->archive($pr);
+        DB::table('procurement_search_links')->where('source_id', $source->id)->delete();
+        $ocr = app(ProcurementOcrProcessor::class);
+        $ocr->linkReferences($source, 'XPR / 2026 / 0012, PR-2026-00123, PR-2026-0012A');
+        $this->assertDatabaseCount('procurement_search_links', 0);
+        $ocr->linkReferences($source, 'Referensi: PR / 2026 / 0012.');
+        $this->assertDatabaseHas('procurement_search_links', ['source_id' => $source->id, 'ppbj_id' => $pr->id, 'inferred' => true]);
+        $this->getJson(route('procurement.search', ['q' => '%%%']))->assertUnprocessable();
+    }
+
+    public function test_curated_equivalents_search_existing_tokens_in_both_languages_without_guessing_prs(): void
+    {
+        $pr = $this->pr();
+        [$sp] = $this->documents($pr);
+        app(ProcurementSearchSync::class)->local();
+        $this->search('office chair')->assertJsonPath('total', 1)->assertJsonPath('rows.0.number', $pr->ppbj_no)->assertJsonPath('equivalents.chair.0', 'kursi');
+        foreach (['ppbj', 'sp', 'spph'] as $kind) {
+            $this->get(route($kind.'.index', ['search' => 'office chair']))->assertOk()->assertSee($kind === 'sp' ? $sp->nomor_sp : $pr->ppbj_no);
+        }
+        $this->assertSame(['0012'], \App\Support\ProcurementSearchText::equivalents('0012'));
+        $this->search('PKB/PR-26/CON/1202')->assertJsonPath('total', 0);
+    }
 }

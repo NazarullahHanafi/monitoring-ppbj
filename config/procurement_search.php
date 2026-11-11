@@ -13,4 +13,26 @@ return [
     'max_rss_mb' => 448,
     'source_batch' => 80,
     'archive_fresh_minutes' => 15,
+    // Curated single-word equivalents, never fuzzy substitutions for PR/amounts.
+    'equivalents' => [
+        ['kursi', 'chair', 'chairs'],
+        ['meja', 'desk', 'table'],
+        ['kantor', 'office'],
+        ['komputer', 'computer', 'computers'],
+        ['printer', 'pencetak'],
+        ['pemindai', 'scanner'],
+        ['lemari', 'cabinet', 'cabinets'],
+        ['kulkas', 'refrigerator'],
+    ],
+    // Curated single-word equivalents, never fuzzy substitutions for PR/amounts.
+    'equivalents' => [
+        ['kursi', 'chair', 'chairs'],
+        ['meja', 'desk', 'table'],
+        ['kantor', 'office'],
+        ['komputer', 'computer', 'computers'],
+        ['printer', 'pencetak'],
+        ['pemindai', 'scanner'],
+        ['lemari', 'cabinet', 'cabinets'],
+        ['kulkas', 'refrigerator'],
+    ],
 ];

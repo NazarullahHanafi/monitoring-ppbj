@@ -27,6 +27,7 @@ class ProcurementSearchSync
                 $query = $class::withTrashed()->with(['items', 'ppbjs:id,ppbj_no']);
             }
             $rows = $query->where('id', '>', $cursor)->orderBy('id')->limit($batch)->get();
+            $legacyNumbers = $kind === 'ppbj' ? collect() : Ppbj::whereIn('ppbj_no', $rows->pluck('nomor_pr')->filter()->unique())->pluck('id', 'ppbj_no');
             $details = $kind === 'ppbj' ? collect() : ProcurementDetailAttachment::where('kind', $kind)->whereIn('document_id', $rows->modelKeys())->whereNotNull('reviewed_at')->get()->groupBy('document_id');
             foreach ($rows as $row) {
                 if ($kind === 'ppbj') {
@@ -40,7 +41,9 @@ class ProcurementSearchSync
                     $text = $row->items->pluck('nama_barang')->implode(' ').' '.($details->get($row->id)?->pluck('reviewed_text')->implode(' ') ?? '');
                     $ids = $row->ppbjs->modelKeys();
                     if ($row->nomor_pr) {
-                        $ids = array_merge($ids, Ppbj::where('ppbj_no', $row->nomor_pr)->pluck('id')->all());
+                        if ($legacyNumbers->has($row->nomor_pr)) {
+                            $ids[] = $legacyNumbers->get($row->nomor_pr);
+                        }
                     }
                 }
                 $text = ProcurementSearchText::plain($text);
@@ -67,13 +70,19 @@ class ProcurementSearchSync
             }
             $key = 'procurement-search:cursor:'.$kind;
             $page = $this->archive->call(['action' => 'manifest', 'kind' => $kind, 'after' => (int) Cache::get($key, 0), 'limit' => $batch]);
+            $numbers = collect($page['rows'])->flatMap(fn ($row) => $row['pr_numbers'])->unique()->all();
+            $prMap = Ppbj::whereIn('ppbj_no', $numbers)->pluck('id', 'ppbj_no');
+            $groups = [];
+            foreach (['sp' => Sp::class, 'spph' => Spph::class] as $module => $class) {
+                $references = collect($page['rows'])->filter(fn ($row) => strtolower($row['module']) === $module)->pluck('reference')->unique();
+                $groups[$module] = $references->isEmpty() ? collect() : $class::with('ppbjs:id,ppbj_no')->whereIn($module === 'sp' ? 'nomor_sp' : 'nomor_spph', $references)->get()->keyBy($module === 'sp' ? 'nomor_sp' : 'nomor_spph');
+            }
             foreach ($page['rows'] as $row) {
-                $ids = Ppbj::whereIn('ppbj_no', array_unique($row['pr_numbers']))->pluck('id')->all();
+                $ids = $prMap->only($row['pr_numbers'])->values()->all();
                 // A grouped SP/SPPH may link one archived document to multiple PRs.
                 $module = strtolower($row['module']);
                 if (in_array($module, ['sp', 'spph'], true)) {
-                    $class = $module === 'sp' ? Sp::class : Spph::class;
-                    $document = $class::with('ppbjs:id,ppbj_no')->where($module === 'sp' ? 'nomor_sp' : 'nomor_spph', $row['reference'])->first();
+                    $document = $groups[$module]->get($row['reference']);
                     if ($document) {
                         $ids = array_merge($ids, $document->ppbjs->modelKeys());
                     }
