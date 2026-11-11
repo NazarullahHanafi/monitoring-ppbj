@@ -6,7 +6,7 @@
     const get = name => root.querySelector(`[data-pus-${name}]`);
     const form = get('form'), input = get('query'), scope = get('scope'), status = get('status'), results = get('results');
     const pagination = get('pagination'), submit = form.querySelector('[type="submit"]');
-    const filterNames = ['buyer', 'vendor', 'creator'];
+    const filterNames = ['buyer', 'vendor', 'creator', 'exclude'];
     let controller, sequence = 0, currentPage = 1, lastPage = 1, appliedQuery = '', appliedScope = 'all', appliedMatch = 'source', appliedSort = 'relevance', appliedLexical = 'expanded', appliedFilters = {}, pendingKey = '';
     const evidenceControllers = new Set();
     const labels = { ppbj: 'PPBJ', sp: 'SP', spph: 'SPPH', archive_document: 'Arsip', archive_attachment: 'Lampiran arsip' };
@@ -248,7 +248,7 @@
             get('progressinfo').textContent = progress.join(' ');
         } else if (progress.length) status.textContent += ' ' + progress.join(' ');
         if (Object.keys(data.equivalents || {}).length) status.textContent += ' Padanan yang turut dicari: ' + Object.entries(data.equivalents).map(([word, equivalents]) => `${word} (${equivalents.join(', ')})`).join('; ') + '.';
-        const refinements = filterNames.filter(name => appliedFilters[name]).map(name => `${({ buyer: 'Buyer', vendor: 'Vendor', creator: 'Pembuat TOR' })[name]}: ${appliedFilters[name]}`);
+        const refinements = filterNames.filter(name => appliedFilters[name]).map(name => `${({ buyer: 'Buyer', vendor: 'Vendor', creator: 'Pembuat TOR', exclude: 'Hindari kata utuh' })[name]}: ${appliedFilters[name]}`);
         if (refinements.length) status.textContent += ' Filter aktif — ' + refinements.join('; ') + '.';
         if (data.match === 'related') status.textContent += ' Kata dapat berasal dari dokumen berbeda dalam PR yang sama.';
         if (data.match === 'reference') status.textContent += ' Seluruh nomor dokumen dicocokkan secara persis.';

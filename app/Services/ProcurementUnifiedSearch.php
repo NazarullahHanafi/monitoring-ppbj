@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Ppbj;
 use App\Support\ProcurementSearchText;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
@@ -121,11 +122,54 @@ class ProcurementUnifiedSearch
     public function vocabulary(string $scope, array $filters)
     {
         $prs = Ppbj::query()->select('ppbj.id');
-        app(ProcurementSearchContext::class)->apply($prs, $filters);
+        $this->applyFilters($prs, $scope, $filters);
         $sources = $this->scopedSources($scope)->select('src.id')->whereExists(fn ($links) => $links->selectRaw('1')->from('procurement_search_links as vocabulary_link')
             ->whereColumn('vocabulary_link.source_id', 'src.id')->whereIn('vocabulary_link.ppbj_id', $prs));
 
         return DB::table('procurement_search_terms')->whereIn('source_id', $sources)->select('term')->distinct();
+    }
+
+    private function excludedWords(array $filters): array
+    {
+        $value = trim((string) ($filters['exclude'] ?? ''));
+        $words = ProcurementSearchText::words($value);
+        if ($value !== '' && (! $words || count($words) > 4 || min(array_map('strlen', $words)) < 2)) {
+            throw \Illuminate\Validation\ValidationException::withMessages(['exclude' => 'Gunakan maksimal 4 kata pengecualian, masing-masing minimal 2 karakter.']);
+        }
+
+        return $words;
+    }
+
+    private function applyFilters(Builder $query, string $scope, array $filters): void
+    {
+        app(ProcurementSearchContext::class)->apply($query, $filters);
+        $excluded = $this->excludedWords($filters);
+        if ($excluded) {
+            // Whole tokens only. Exclude the PR if any fresh, active source in the
+            // selected scope contains a forbidden token; no OCR body scans.
+            $sources = $this->scopedSources($scope)->whereIn('src.id', DB::table('procurement_search_terms')->select('source_id')->whereIn('term', $excluded));
+            $query->whereNotIn('ppbj.id', $sources->join('procurement_search_links as excluded_link', 'excluded_link.source_id', '=', 'src.id')->select('excluded_link.ppbj_id'));
+        }
+    }
+
+    public function confirmedSuggestions(array $suggestions, string $scope, array $filters, string $match): array
+    {
+        $union = null;
+        foreach (array_slice($suggestions, 0, 4) as $position => $suggestion) {
+            $words = ProcurementSearchText::words($suggestion['query']);
+            if (! $words || count($words) > 16 || ($match === 'related' && count($words) > 8)) {
+                continue;
+            }
+            $prs = Ppbj::query()->selectRaw('1');
+            $this->applyFilters($prs, $scope, $filters);
+            $prs->whereIn('ppbj.id', $match === 'related' && count($words) > 1
+                ? $this->relatedPrIds($words, $scope, 'expanded') : $this->linkedPrIds($words, $scope));
+            $part = DB::query()->selectRaw('? AS candidate', [$position])->whereExists($prs->toBase());
+            $union = $union ? $union->unionAll($part) : $part;
+        }
+        $positions = $union ? $union->pluck('candidate')->all() : [];
+
+        return array_values(array_intersect_key($suggestions, array_flip($positions)));
     }
 
     public function resolve(string $term, string $scope = 'all', string $lexical = 'expanded'): array
@@ -158,6 +202,7 @@ class ProcurementUnifiedSearch
     {
         $started = hrtime(true);
         $this->validateQuery($term, $match);
+        $excluded = $this->excludedWords($filters);
         $lexical = $match === 'reference' ? 'exact' : ($options['lexical'] ?? 'expanded');
         $evidencePr = isset($options['pr']) ? (int) $options['pr'] : null;
         $after = max(0, (int) ($options['after'] ?? 0));
@@ -176,7 +221,7 @@ class ProcurementUnifiedSearch
             $query->whereIn('ppbj.id', $this->relatedPrIds($plan['used'], $scope, $lexical));
         }
         $context = app(ProcurementSearchContext::class);
-        $context->apply($query, $filters);
+        $this->applyFilters($query, $scope, $filters);
         if ($sort !== 'newest') {
             $query->orderByRaw('CASE WHEN LOWER(ppbj.ppbj_no) = ? THEN 1 ELSE 0 END DESC', [mb_strtolower(trim($term))])->orderByDesc('search_score.relevance_score');
         }
@@ -225,7 +270,7 @@ class ProcurementUnifiedSearch
                 ->selectRaw('SUBSTR(passage.content, CASE WHEN INSTR(LOWER(passage.content), hit.term) > 60 THEN INSTR(LOWER(passage.content), hit.term) - 60 ELSE 1 END, 320) AS content')->get()->keyBy('source_id');
         }
 
-        $suggestions = $evidencePr || $lexical === 'exact' ? [] : app(ProcurementSearchSuggestions::class)->forQuery($term, $scope, $filters, $plan, $prs->total());
+        $suggestions = $evidencePr || $lexical === 'exact' ? [] : app(ProcurementSearchSuggestions::class)->forQuery($term, $scope, $filters, $plan, $prs->total(), $match);
 
         return ['rows' => $prs->map(function ($pr) use ($matches, $texts, $pageTexts, $effective, $contexts, $evidence, $plan, $term, $match, $sourceLimit, $after, $evidencePr) {
             $sources = $matches->get($pr->id, collect());
@@ -252,7 +297,7 @@ class ProcurementUnifiedSearch
                 'evidence' => ['after' => $evidencePr ? (int) ($sources->take($sourceLimit)->last()?->id ?? $after) : 0, 'has_more' => $sources->count() > $sourceLimit]];
         })->values(), 'total' => $prs->total(), 'page' => $prs->currentPage(), 'last_page' => $prs->lastPage(),
             'query' => $plan,
-            'match' => $match, 'sort' => $sort, 'lexical' => $lexical, 'suggestions' => $suggestions,
+            'match' => $match, 'sort' => $sort, 'lexical' => $lexical, 'excluded' => $excluded, 'suggestions' => $suggestions,
             'equivalents' => $lexical === 'exact' ? [] : collect($words)->mapWithKeys(fn ($word) => [$word => array_values(array_diff(ProcurementSearchText::equivalents($word), [$word]))])->filter(fn ($values) => count($values) > 0)->all(),
             'elapsed_ms' => max(1, (int) round((hrtime(true) - $started) / 1000000)),
             'index' => Cache::get('procurement-search:progress', ['state' => 'starting', 'ready' => 0, 'pending' => 0])];

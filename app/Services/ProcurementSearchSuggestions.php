@@ -7,7 +7,7 @@ use App\Support\ProcurementSearchText;
 /** Bounded, opt-in spelling suggestions from the visible indexed vocabulary only. */
 class ProcurementSearchSuggestions
 {
-    public function forQuery(string $term, string $scope, array $filters, array $plan, int $total): array
+    public function forQuery(string $term, string $scope, array $filters, array $plan, int $total, string $match = 'source'): array
     {
         // Codes, numeric specifications, punctuation and quoted searches are never corrected.
         if (! preg_match('/^[\p{L}\s]+$/uD', trim($term))) {
@@ -27,6 +27,14 @@ class ProcurementSearchSuggestions
                 $exact[] = substr($word, 0, $i).substr($word, $i + 1);
                 if ($i + 1 < strlen($word)) {
                     $exact[] = substr($word, 0, $i).$word[$i + 1].$word[$i].substr($word, $i + 2);
+                }
+            }
+            // Indexed equality candidates cover a damaged/missing initial letter,
+            // including vocabulary outside the curated synonym groups.
+            foreach (range('a', 'z') as $letter) {
+                foreach ([0, 1] as $position) {
+                    $exact[] = substr_replace($word, $letter, $position, 1);
+                    $exact[] = substr_replace($word, $letter, $position, 0);
                 }
             }
             foreach (config('procurement_search.equivalents', []) as $group) {
@@ -52,12 +60,12 @@ class ProcurementSearchSuggestions
                 }
                 $suggestions[] = ['word' => $word, 'replacement' => $candidate, 'query' => $query];
                 if (count($suggestions) >= 4) {
-                    return $suggestions;
+                    return app(ProcurementUnifiedSearch::class)->confirmedSuggestions($suggestions, $scope, $filters, $match);
                 }
             }
         }
 
-        return $suggestions;
+        return app(ProcurementUnifiedSearch::class)->confirmedSuggestions($suggestions, $scope, $filters, $match);
     }
 
     private function close(string $word, array $candidates, int $limit): array

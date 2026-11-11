@@ -60,6 +60,91 @@ class ProcurementUnifiedSearchTest extends TestCase
         return $this->getJson(route('procurement.search', ['q' => $q] + $params))->assertOk();
     }
 
+    public function test_initial_letter_typos_outside_synonym_groups_have_opt_in_suggestions(): void
+    {
+        $pr = $this->pr();
+        $source = $this->archive($pr);
+        app(ProcurementSearchWriter::class)->append($source, ['text' => 'spektrometer optik', 'page' => 1, 'pages' => 1, 'done' => true]);
+        foreach (['xpektrometer', 'pektrometer', 'spketrometer'] as $typo) {
+            $response = $this->search($typo, ['scope' => 'archive'])->assertJsonPath('total', 0)->assertJsonPath('query.used', [$typo]);
+            $this->assertContains('spektrometer', array_column($response->json('suggestions'), 'replacement'));
+        }
+        $this->search('xpektrometer 100')->assertJsonPath('suggestions', []);
+        $this->search('xpektrometer', ['lexical' => 'exact'])->assertJsonPath('suggestions', []);
+        Http::assertNothingSent();
+    }
+
+    public function test_suggestions_require_the_corrected_words_to_match_together_in_the_selected_mode(): void
+    {
+        $pr = $this->pr();
+        $other = $this->pr('PR-OTHER-CONTEXT');
+        $writer = app(ProcurementSearchWriter::class);
+        $writer->source('archive_attachment', 'context-plastic', 'Scan', 'SCAN-P', 'plastik', '', [$pr->id], hash('sha256', 'context-plastic'), true);
+        $writer->source('sp', 'context-optic', 'SP', 'SP-O', 'optik', '', [$other->id], hash('sha256', 'context-optic'));
+        $this->search('plastikk optik')->assertJsonPath('suggestions', []);
+        $this->search('plastikk optik', ['match' => 'related'])->assertJsonPath('suggestions', []);
+        $writer->source('sp', 'context-optic', 'SP', 'SP-O', 'optik', '', [$pr->id], hash('sha256', 'context-optic'));
+        $this->search('plastikk optik')->assertJsonPath('suggestions', []);
+        $response = $this->search('plastikk optik', ['match' => 'related']);
+        $this->assertContains('plastik optik', array_column($response->json('suggestions'), 'query'));
+        $this->search('plastikk optik', ['match' => 'related', 'scope' => 'archive'])->assertJsonPath('suggestions', []);
+        $this->search('plastikk optik', ['match' => 'related', 'buyer' => 'Tidak cocok'])->assertJsonPath('suggestions', []);
+    }
+
+    public function test_exclusions_apply_to_whole_prs_with_whole_tokens_and_selected_source_scope(): void
+    {
+        $pr = $this->pr();
+        $safe = $this->pr('PR-SAFE');
+        $writer = app(ProcurementSearchWriter::class);
+        $writer->source('archive_attachment', 'excluded-chair', 'Kursi', 'SCAN-K', 'kursi', '', [$pr->id], hash('sha256', 'excluded-chair'), true);
+        $writer->source('sp', 'excluded-condition', 'Kondisi', 'SP-K', 'bekas', '', [$pr->id], hash('sha256', 'excluded-condition'));
+        $writer->source('ppbj', 'excluded-safe', 'Baru', 'PPBJ-SAFE', 'kursi bekasnya', '', [$safe->id], hash('sha256', 'excluded-safe'));
+        $this->search('kursi', ['exclude' => 'bekas'])->assertJsonPath('total', 1)->assertJsonPath('rows.0.id', $safe->id)->assertJsonPath('excluded', ['bekas']);
+        $this->search('kursi', ['exclude' => 'used'])->assertJsonPath('total', 2); // No synonym expansion for excluded words.
+        $this->search('kursi', ['exclude' => 'bekas', 'scope' => 'archive'])->assertJsonPath('total', 1)->assertJsonPath('rows.0.id', $pr->id);
+        $this->search('SCAN-K', ['match' => 'reference', 'exclude' => 'bekas'])->assertJsonPath('total', 0);
+        $this->search('kursi', ['pr' => $pr->id, 'after' => 0, 'exclude' => 'bekas'])->assertJsonPath('rows', []);
+        Http::assertNothingSent();
+    }
+
+    public function test_inactive_expired_or_unlinked_sources_do_not_exclude_valid_prs(): void
+    {
+        $pr = $this->pr();
+        $writer = app(ProcurementSearchWriter::class);
+        $writer->source('ppbj', 'good-pump', 'Pompa', 'PPBJ-P', 'pompa', '', [$pr->id], hash('sha256', 'good-pump'));
+        foreach (['inactive', 'expired', 'unlinked'] as $kind) {
+            $id = $writer->source('archive_attachment', 'excluded-'.$kind, 'Scan', 'SCAN-'.$kind, 'bekas', '', [$pr->id], hash('sha256', $kind), true);
+            if ($kind === 'inactive') {
+                DB::table('procurement_search_sources')->where('id', $id)->update(['active' => false]);
+            }
+            if ($kind === 'expired') {
+                DB::table('procurement_search_sources')->where('id', $id)->update(['verified_at' => now()->subHour()]);
+            }
+            if ($kind === 'unlinked') {
+                DB::table('procurement_search_links')->where('source_id', $id)->delete();
+            }
+        }
+        $this->search('pompa', ['exclude' => 'bekas'])->assertJsonPath('total', 1);
+    }
+
+    public function test_suggestions_respect_exclusions_and_invalid_exclusions_fail_before_index_queries(): void
+    {
+        $pr = $this->pr();
+        $writer = app(ProcurementSearchWriter::class);
+        $writer->source('ppbj', 'excluded-spelling', 'Pompa', 'PPBJ-S', 'spektrometer bekas', '', [$pr->id], hash('sha256', 'excluded-spelling'));
+        $this->search('xpektrometer', ['exclude' => 'bekas'])->assertJsonPath('suggestions', []);
+        foreach (['a', '!!!', 'satu dua tiga empat lima'] as $invalid) {
+            DB::flushQueryLog();
+            DB::enableQueryLog();
+            $this->getJson(route('procurement.search', ['q' => 'sensor', 'exclude' => $invalid]))->assertUnprocessable()->assertJsonValidationErrors('exclude');
+            $queries = collect(DB::getQueryLog())->pluck('query');
+            DB::disableQueryLog();
+            $this->assertFalse($queries->contains(fn ($sql) => str_contains($sql, 'procurement_search_')));
+        }
+        $this->getJson(route('procurement.search', ['q' => 'sensor', 'exclude' => ['bad']]))->assertUnprocessable();
+        $this->getJson(route('procurement.search', ['q' => 'sensor', 'exclude' => str_repeat('a', 121)]))->assertUnprocessable();
+    }
+
     public function test_whole_tokens_do_not_expand_prefixes_synonyms_or_drop_unknown_words(): void
     {
         $pr = $this->pr();

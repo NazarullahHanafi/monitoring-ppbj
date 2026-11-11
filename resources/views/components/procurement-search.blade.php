@@ -12,6 +12,7 @@
             <label><span>Buyer / PIC PPBJ</span><input data-pus-buyer type="search" maxlength="120" placeholder="Nama buyer" autocomplete="off"></label>
             <label><span>Vendor PPBJ, SP, atau penawaran SPPH</span><input data-pus-vendor type="search" maxlength="120" placeholder="Sebagian nama vendor" autocomplete="off"></label>
             <label><span>Pembuat TOR / PR</span><input data-pus-creator type="search" maxlength="120" placeholder="Nama pembuat TOR asli" autocomplete="off"></label>
+            <label><span>Hindari PR yang memuat kata</span><input data-pus-exclude type="search" maxlength="120" placeholder="Contoh: bekas rekondisi" autocomplete="off"><small>Maksimal 4 kata utuh. Berlaku pada semua dokumen PR dalam sumber yang dipilih.</small></label>
         </div><p class="pus-note">Isi yang diperlukan, lalu klik Cari. Kata utuh mencocokkan token tanpa memperluas awalan/padanan; urutan kata tidak diwajibkan. Nomor dokumen persis mencocokkan seluruh nomor tercatat. Mode lintas dokumen: maksimal 8 kata, minimal 2 karakter per kata. Vendor penawaran belum tentu vendor terpilih.</p></details>
     </form>
     <p class="pus-note">Cari isi scan langsung dari filter pencarian menu ini atau kolom di atas. Hasil menampilkan PR, buyer, vendor, dan pembuat TOR jika tercatat. Kata yang belum ketemu dijelaskan; nomor PR, angka, dan ukuran tetap dicari utuh.</p>

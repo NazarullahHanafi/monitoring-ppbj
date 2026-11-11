@@ -14,7 +14,7 @@ class Element {
 }
 function setup(initialQuery = '') {
     const nodes = {};
-    for (const name of ['form', 'query', 'scope', 'match', 'sort', 'lexical', 'suggestions', 'buyer', 'vendor', 'creator', 'status', 'results', 'pagination', 'prev', 'next', 'reset', 'page', 'submit', 'summary', 'progress', 'progressinfo']) nodes[name] = new Element();
+    for (const name of ['form', 'query', 'scope', 'match', 'sort', 'lexical', 'suggestions', 'buyer', 'vendor', 'creator', 'exclude', 'status', 'results', 'pagination', 'prev', 'next', 'reset', 'page', 'submit', 'summary', 'progress', 'progressinfo']) nodes[name] = new Element();
     nodes.scope.value = 'all';
     nodes.query.value = initialQuery;
     nodes.match.value = 'source'; nodes.sort.value = 'relevance'; nodes.lexical.value = 'expanded';
@@ -51,6 +51,29 @@ test('a restored search field stays idle until its own form is submitted', () =>
     submit(f, '0454');
     assert.equal(f.requests.length, 1);
     assert.equal(new URL(f.requests[0].url).searchParams.get('q'), '0454');
+});
+
+test('word exclusions apply manually and remain frozen for pagination and evidence browsing', async () => {
+    const f = setup(); f.nodes.exclude.value = 'bekas rekondisi'; f.nodes.exclude.fire('input');
+    assert.equal(f.requests.length, 0);
+    submit(f, 'kursi'); assert.equal(new URL(f.requests[0].url).searchParams.get('exclude'), 'bekas rekondisi');
+    const response = sourceBatch(1, 4, true); response.last_page = 2;
+    f.requests[0].resolve({ ok: true, json: async () => response }); await flush();
+    assert.match(f.nodes.status.textContent, /Hindari kata utuh: bekas rekondisi/);
+    f.nodes.exclude.value = 'Draft';
+    walk(f.nodes.results, node => node.className === 'pus-secondary pus-evidence-load')[0].fire('click');
+    assert.equal(new URL(f.requests[1].url).searchParams.get('exclude'), 'bekas rekondisi');
+    f.nodes.next.fire('click'); assert.equal(new URL(f.requests[2].url).searchParams.get('exclude'), 'bekas rekondisi');
+    f.nodes.reset.fire('click'); assert.equal(f.nodes.exclude.value, '');
+    submit(f, 'pompa'); assert.equal(new URL(f.requests[3].url).searchParams.has('exclude'), false);
+});
+
+test('accepting a spelling suggestion preserves applied exclusions instead of an unsent draft', async () => {
+    const f = setup(); f.nodes.exclude.value = 'bekas'; submit(f, 'xpektrometer');
+    f.requests[0].resolve({ ok: true, json: async () => ({ ...data(), suggestions: [{ word: 'xpektrometer', replacement: 'spektrometer', query: 'spektrometer' }] }) }); await flush();
+    f.nodes.exclude.value = 'Draft'; f.nodes.suggestions.children[0].fire('click');
+    assert.equal(new URL(f.requests[1].url).searchParams.get('exclude'), 'bekas');
+    assert.equal(f.nodes.exclude.value, 'bekas');
 });
 
 test('related mode and sorting apply manually and pagination retains applied options', async () => {
