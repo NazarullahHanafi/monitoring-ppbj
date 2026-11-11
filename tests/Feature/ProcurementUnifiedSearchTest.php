@@ -126,6 +126,10 @@ class ProcurementUnifiedSearchTest extends TestCase
         $this->search('kursi', ['vendor' => '100%_A'])->assertJsonPath('total', 2);
         $this->search('kursi', ['vendor' => '%_Z'])->assertJsonPath('total', 0);
         $this->search('kursi', ['buyer' => '100%_A'])->assertJsonPath('total', 1)->assertJsonPath('rows.0.id', $pr->id);
+        $spph->update(['vendor_names' => ['PT Étoile "Unggul"', 'PT A\\B', 'PT 50%_C']]);
+        foreach (['Étoile "Unggul"', 'A\\B', '50%_C'] as $name) {
+            $this->search('kursi', ['vendor' => $name])->assertJsonPath('total', 1)->assertJsonPath('rows.0.id', $pr->id);
+        }
         $sp->ppbjs()->attach($pr->id); // Legacy plus pivot must not duplicate the document.
         $this->assertCount(2, $this->search('kursi')->json('rows.1.context.documents'));
         $response = $this->search('kursi')->assertJsonPath('rows.1.context.documents_truncated', false);

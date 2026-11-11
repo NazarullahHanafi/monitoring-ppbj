@@ -37,7 +37,14 @@ class ProcurementSearchContext
                         $documents = $class::query()->selectRaw('1')->where(function ($names) use ($table, $kind, $pattern) {
                             $names->whereRaw($table.".nama_vendor LIKE ? ESCAPE '!'", [$pattern]);
                             if ($kind === 'spph') {
-                                $names->orWhereRaw($table.".vendor_names LIKE ? ESCAPE '!'", [$pattern]);
+                                // Search decoded JSON values, not JSON's escaped quotes/Unicode.
+                                $json = "CASE WHEN JSON_VALID({$table}.vendor_names) THEN {$table}.vendor_names ELSE '[]' END";
+                                if ($names->getConnection()->getDriverName() === 'mysql') {
+                                    $names->orWhereRaw("JSON_SEARCH({$json}, 'one', CONVERT(? USING utf8mb4) COLLATE utf8mb4_unicode_ci, '!', '$[*]') IS NOT NULL", [$pattern]);
+                                } else {
+                                    $names->orWhereExists(fn ($candidate) => $candidate->selectRaw('1')->fromRaw("json_each({$json}) AS context_vendor")
+                                        ->where('context_vendor.type', 'text')->whereRaw("context_vendor.value LIKE ? ESCAPE '!'", [$pattern]));
+                                }
                             }
                         })->where(function ($links) use ($class, $table, $kind) {
                             $links->whereExists(fn ($pivot) => $pivot->selectRaw('1')->from($kind.'_ppbj')
