@@ -110,6 +110,23 @@
             item.append(anchor);
         }
         if (match.notice) item.append(element('p', 'pus-read-notice', match.notice));
+        if (match.word_evidence?.length) {
+            const details = element('details', 'pus-word-evidence');
+            details.append(element('summary', '', 'Bukti kecocokan per kata'));
+            details.append(element('p', 'pus-note', 'Lokasi pertama yang tercatat di indeks; kata dapat muncul lagi di halaman lain.'));
+            const list = element('ul', 'pus-word-locations');
+            for (const hit of match.word_evidence.slice(0, 16)) {
+                const row = element('li');
+                const type = { exact: 'Kata utuh', prefix: 'Awalan', equivalent: 'Padanan' }[hit.type] || 'Kecocokan';
+                row.append(element('span', '', `${hit.word}${hit.word === hit.matched ? '' : ` → ${hit.matched}`} · ${type}`));
+                const page = hit.location === 'page' && Number.isSafeInteger(hit.page) && hit.page > 0 && hit.page <= 2000 ? hit.page : null;
+                if (page && typeof hit.url === 'string') {
+                    const anchor = link(hit.url, `Halaman ${page}`, 'pus-open'); anchor.target = '_blank'; anchor.rel = 'noopener noreferrer'; row.append(anchor);
+                } else row.append(element('span', '', page ? `Halaman ${page}` : hit.location === 'document' ? 'Data dokumen' : 'Lokasi belum tercatat'));
+                list.append(row);
+            }
+            details.append(list); item.append(details);
+        }
         return item;
     }
     async function readResponse(response) {

@@ -53,6 +53,45 @@ test('a restored search field stays idle until its own form is submitted', () =>
     assert.equal(new URL(f.requests[0].url).searchParams.get('q'), '0454');
 });
 
+test('word evidence stays collapsed and distinguishes page links from metadata and unknown positions', async () => {
+    const f = setup(); submit(f, 'kursi sens kabel'); const response = data();
+    response.rows[0].matches[0].word_evidence = [
+        { word: 'kursi', matched: 'chair', type: 'equivalent', location: 'page', page: 7, url: '/procurement/search/files/12#page=7' },
+        { word: 'sens', matched: 'sensor', type: 'prefix', location: 'document', page: null, url: null },
+        { word: 'kabel', matched: 'kabel', type: 'exact', location: 'unknown', page: null, url: null }
+    ];
+    f.requests[0].resolve({ ok: true, json: async () => response }); await flush();
+    const details = walk(f.nodes.results, node => node.className === 'pus-word-evidence')[0];
+    assert.notEqual(details.open, true); details.fire('toggle'); assert.equal(f.requests.length, 1);
+    const text = node => node.textContent + node.children.map(text).join(' ');
+    assert.match(text(details), /kursi → chair · Padanan/); assert.match(text(details), /sens → sensor · Awalan/);
+    assert.match(text(details), /kabel · Kata utuh/); assert.match(text(details), /Data dokumen/); assert.match(text(details), /Lokasi belum tercatat/);
+    const links = walk(details, node => Boolean(node.href)); assert.equal(links.length, 1);
+    assert.equal(links[0].href, '/procurement/search/files/12#page=7'); assert.equal(links[0].rel, 'noopener noreferrer');
+});
+
+test('word evidence cannot execute OCR HTML or navigate to an external or invalid page link', async () => {
+    const f = setup(); submit(f, 'kursi'); const response = data();
+    response.rows[0].matches[0].word_evidence = [
+        { word: '<script>hit</script>', matched: '<img onerror=1>', type: 'equivalent', location: 'page', page: 2, url: 'javascript:alert(1)' },
+        { word: 'kursi', matched: 'kursi', type: 'exact', location: 'page', page: 0, url: '/procurement/search/files/12#page=1' },
+        { word: 'kursi', matched: 'kursi', type: 'exact', location: 'page', page: 2001, url: 'https://evil.test/' }
+    ];
+    f.requests[0].resolve({ ok: true, json: async () => response }); await flush();
+    const details = walk(f.nodes.results, node => node.className === 'pus-word-evidence')[0];
+    assert.equal(walk(details, node => Boolean(node.href)).length, 0);
+    assert.equal(walk(details, node => node.textContent.includes('<script>hit</script>')).length, 1);
+});
+
+test('additional sources render their own word evidence without fetching another document', async () => {
+    const f = setup(); submit(f, 'sensor'); f.requests[0].resolve({ ok: true, json: async () => sourceBatch(1, 4, true) }); await flush();
+    const button = walk(f.nodes.results, node => node.className === 'pus-secondary pus-evidence-load')[0]; button.fire('click');
+    const next = sourceBatch(5, 5, false); next.rows[0].matches[0].word_evidence = [{ word: 'sensor', matched: 'sensor', type: 'exact', location: 'page', page: 11, url: '/procurement/search/files/5#page=11' }];
+    f.requests[1].resolve({ ok: true, json: async () => next }); await flush();
+    assert.equal(f.requests.length, 2);
+    assert.equal(walk(f.nodes.results, node => node.href === '/procurement/search/files/5#page=11').length, 1);
+});
+
 test('word exclusions apply manually and remain frozen for pagination and evidence browsing', async () => {
     const f = setup(); f.nodes.exclude.value = 'bekas rekondisi'; f.nodes.exclude.fire('input');
     assert.equal(f.requests.length, 0);

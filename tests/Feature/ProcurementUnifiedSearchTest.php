@@ -60,6 +60,77 @@ class ProcurementUnifiedSearchTest extends TestCase
         return $this->getJson(route('procurement.search', ['q' => $q] + $params))->assertOk();
     }
 
+    public function test_literal_tokens_rank_before_prefixes_and_equivalents_without_changing_newest_order(): void
+    {
+        $literal = $this->pr('PR-LITERAL');
+        $prefix = $this->pr('PR-PREFIX');
+        $synonym = $this->pr('PR-SYNONYM');
+        $writer = app(ProcurementSearchWriter::class);
+        $writer->source('archive_attachment', 'literal-rank', 'Scan', 'SCAN-L', 'kursi', '', [$literal->id], hash('sha256', 'literal-rank'), true);
+        $writer->source('ppbj', 'prefix-rank', 'Prefix', 'DOC-P', 'kursinya', '', [$prefix->id], hash('sha256', 'prefix-rank'));
+        $writer->source('ppbj', 'synonym-rank', 'Padanan', 'DOC-S', 'chair', '', [$synonym->id], hash('sha256', 'synonym-rank'));
+        $response = $this->search('kursi')->assertJsonPath('total', 3);
+        $this->assertSame([$literal->id, $prefix->id, $synonym->id], array_column($response->json('rows'), 'id'));
+        $this->assertSame([$synonym->id, $prefix->id, $literal->id], array_column($this->search('kursi', ['sort' => 'newest'])->json('rows'), 'id'));
+        $synonym->update(['ppbj_no' => 'KURSI']);
+        $this->search('kursi')->assertJsonPath('rows.0.id', $synonym->id)->assertJsonPath('rows.0.relevance.reason', 'Nomor PR persis');
+        $this->search('kursi', ['lexical' => 'exact'])->assertJsonPath('total', 1)->assertJsonPath('rows.0.id', $literal->id);
+        Http::assertNothingSent();
+    }
+
+    public function test_multiple_exact_words_and_the_strongest_source_are_not_hidden_by_many_prefix_matches(): void
+    {
+        $pr = $this->pr();
+        $other = $this->pr('PR-WORD-STRENGTH');
+        $writer = app(ProcurementSearchWriter::class);
+        for ($i = 0; $i < 8; $i++) {
+            $writer->source('ppbj', 'rank-prefix-'.$i, 'Prefix', 'P-'.$i, 'sensornya tekanannya', '', [$pr->id], hash('sha256', 'rank-prefix-'.$i));
+        }
+        $exact = $writer->source('archive_attachment', 'rank-exact', 'Scan', 'EXACT-SCAN', 'sensor tekanan', '', [$pr->id], hash('sha256', 'rank-exact'), true);
+        $writer->source('ppbj', 'rank-partial', 'Partial', 'PARTIAL', 'sensor tekanannya', '', [$other->id], hash('sha256', 'rank-partial'));
+        $response = $this->search('sensor tekanan')->assertJsonPath('rows.0.id', $pr->id)->assertJsonPath('rows.0.matches.0.id', $exact);
+        $this->assertCount(4, $response->json('rows.0.matches'));
+        $this->assertSame($response->json('rows.0.matches.0.id'), $this->search('sensor sensor tekanan')->json('rows.0.matches.0.id'));
+    }
+
+    public function test_word_evidence_identifies_real_tokens_and_distinct_pages_and_selects_a_supported_preview(): void
+    {
+        $pr = $this->pr();
+        $writer = app(ProcurementSearchWriter::class);
+        $id = $writer->source('archive_attachment', 'word-map', 'Scan', 'SCAN-MAP', '', '', [$pr->id], hash('sha256', 'word-map'), true);
+        $writer->passages($id, [['page' => 1, 'text' => 'chair'], ['page' => 5, 'text' => 'sensor baja']]);
+        $response = $this->search('kursi sens baja')->assertJsonPath('total', 1)->assertJsonPath('rows.0.matches.0.match_page', 5);
+        $hits = collect($response->json('rows.0.matches.0.word_evidence'))->keyBy('word');
+        $this->assertSame(['kursi', 'sens', 'baja'], $response->json('rows.0.matches.0.matched_words'));
+        $this->assertSame('chair', $hits['kursi']['matched']);
+        $this->assertSame('equivalent', $hits['kursi']['type']);
+        $this->assertSame(1, $hits['kursi']['page']);
+        $this->assertSame('page', $hits['kursi']['location']);
+        $this->assertStringEndsWith('#page=1', $hits['kursi']['url']);
+        $this->assertSame('prefix', $hits['sens']['type']);
+        $this->assertSame('sensor', $hits['sens']['matched']);
+        $this->assertSame('exact', $hits['baja']['type']);
+        $this->assertSame(5, $hits['baja']['page']);
+        $this->assertStringEndsWith('#page=5', $response->json('rows.0.matches.0.url'));
+        $this->assertStringContainsString('sensor baja', $response->json('rows.0.matches.0.snippet'));
+        $batch = $this->search('kursi sens baja', ['pr' => $pr->id, 'after' => 0]);
+        $this->assertSame($response->json('rows.0.matches.0.word_evidence'), $batch->json('rows.0.matches.0.word_evidence'));
+        Http::assertNothingSent();
+    }
+
+    public function test_exact_token_evidence_takes_precedence_over_an_earlier_equivalent_and_never_fabricates_locations(): void
+    {
+        $pr = $this->pr();
+        $writer = app(ProcurementSearchWriter::class);
+        $id = $writer->source('archive_attachment', 'stronger-page', 'Scan', 'SCAN-PAGE', 'kabel', '', [$pr->id], hash('sha256', 'stronger-page'), true);
+        $writer->passages($id, [['page' => 1, 'text' => 'chair'], ['page' => 8, 'text' => 'kursi sensor']]);
+        $response = $this->search('kursi')->assertJsonPath('rows.0.matches.0.match_page', 8)->assertJsonPath('rows.0.matches.0.word_evidence.0.type', 'exact')->assertJsonPath('rows.0.matches.0.word_evidence.0.page', 8);
+        $this->search('kabel')->assertJsonPath('rows.0.matches.0.word_evidence.0.location', 'document')->assertJsonPath('rows.0.matches.0.word_evidence.0.page', null)->assertJsonPath('rows.0.matches.0.word_evidence.0.url', null);
+        DB::table('procurement_search_terms')->where('source_id', $id)->where('term', 'sensor')->update(['first_page' => null]);
+        $this->search('sensor')->assertJsonPath('rows.0.matches.0.word_evidence.0.location', 'unknown')->assertJsonPath('rows.0.matches.0.word_evidence.0.page', null)->assertJsonPath('rows.0.matches.0.match_page', null);
+        $this->search('SCAN-PAGE', ['match' => 'reference'])->assertJsonPath('rows.0.matches.0.word_evidence', [])->assertJsonPath('rows.0.matches.0.match_page', null);
+    }
+
     public function test_initial_letter_typos_outside_synonym_groups_have_opt_in_suggestions(): void
     {
         $pr = $this->pr();
@@ -705,7 +776,9 @@ class ProcurementUnifiedSearchTest extends TestCase
         $this->assertSame(1, $response->json('rows.1.more_sources'));
         $ranked = $queries->first(fn ($sql) => str_contains($sql, 'ROW_NUMBER()') && str_contains($sql, 'ranked_sources'));
         $this->assertStringNotContainsString('union', strtolower($ranked));
-        $this->assertSame(2, substr_count($ranked, '"term" like'));
+        // Two token intersections plus one shared two-word ranking aggregate;
+        // the number of lookups does not grow with the 30 documents on one PR.
+        $this->assertSame(4, substr_count($ranked, '"term" like'));
     }
 
     public function test_pr_inference_requires_boundaries_and_does_not_concatenate_unrelated_words(): void

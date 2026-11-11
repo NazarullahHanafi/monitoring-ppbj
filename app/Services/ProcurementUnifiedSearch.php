@@ -109,14 +109,40 @@ class ProcurementUnifiedSearch
         return DB::query()->fromSub($union, 'word_prs')->select('ppbj_id')->groupBy('ppbj_id')->havingRaw('COUNT(*) = ?', [count($words)]);
     }
 
-    private function scoreSql(): string
+    private function scoreSql(bool $tokens = false): string
     {
         // Discrete evidence priorities, never a probability or OCR accuracy percentage.
-        return 'CASE WHEN LOWER(src.reference) = ? THEN 32 ELSE 0 END'
+        return 'CASE WHEN LOWER(src.reference) = ? THEN 100000 ELSE 0 END'
+            .($tokens ? ' + COALESCE(token_score.exact_words, 0) * 1000 + COALESCE(token_score.direct_words, 0) * 50' : '')
             .' + CASE WHEN link.inferred = 0 THEN 8 ELSE 0 END'
             ." + CASE WHEN src.state = 'ready' THEN 4 WHEN src.state IN ('partial', 'pending') THEN 2 ELSE 0 END"
             ." + CASE WHEN src.kind IN ('ppbj', 'sp', 'spph') THEN 2 ELSE 0 END"
             .' + CASE WHEN src.reading_confidence >= 80 THEN 1 ELSE 0 END';
+    }
+
+    private function tokenScores(array $words)
+    {
+        $exact = implode(' + ', array_fill(0, count($words), 'MAX(CASE WHEN term = ? THEN 1 ELSE 0 END)'));
+        $direct = implode(' + ', array_fill(0, count($words), 'MAX(CASE WHEN term LIKE ? THEN 1 ELSE 0 END)'));
+
+        return DB::table('procurement_search_terms')->select('source_id')->selectRaw($exact.' AS exact_words', $words)
+            ->selectRaw($direct.' AS direct_words', array_map(fn ($word) => $word.'%', $words))
+            ->where(fn ($terms) => $this->termMatch($terms, $words, 'expanded'))->groupBy('source_id');
+    }
+
+    private function wordEvidence($visible, array $words, string $lexical)
+    {
+        $union = null;
+        foreach ($words as $word) {
+            // One strongest indexed token per query word/source. Page zero means
+            // document metadata, not page one; NULL means the location is unknown.
+            $part = DB::table('procurement_search_terms')->whereIn('source_id', $visible)
+                ->where(fn ($terms) => $this->termMatch($terms, [$word], $lexical))->select('source_id', 'term', 'first_page')->selectRaw('? AS query_word', [$word])
+                ->selectRaw('ROW_NUMBER() OVER (PARTITION BY source_id ORDER BY CASE WHEN term = ? THEN 2 WHEN term LIKE ? THEN 1 ELSE 0 END DESC, CASE WHEN first_page IS NULL THEN 1 ELSE 0 END, first_page, term) AS word_rank', [$word, $word.'%']);
+            $union = $union ? $union->unionAll($part) : $part;
+        }
+
+        return $union && $visible->isNotEmpty() ? DB::query()->fromSub($union, 'word_positions')->where('word_rank', 1)->get()->groupBy('source_id') : collect();
     }
 
     public function vocabulary(string $scope, array $filters)
@@ -209,9 +235,14 @@ class ProcurementUnifiedSearch
         $sourceLimit = $evidencePr ? 8 : 4;
         $plan = $this->resolve($term, $scope, $lexical);
         $effective = implode(' ', $plan['used']);
+        $rankTokens = ! $evidencePr && $match !== 'reference' && $lexical !== 'exact' && count($plan['used']) > 0;
+        $rankPrTokens = $rankTokens && $sort !== 'newest';
         $scores = $this->matchingSources($plan['used'], $scope, $match, $lexical, $term)
             ->join('procurement_search_links as link', 'link.source_id', '=', 'src.id')
-            ->select('link.ppbj_id')->selectRaw('MAX('.$this->scoreSql().') AS relevance_score', [mb_strtolower(trim($term))])->groupBy('link.ppbj_id');
+            ->select('link.ppbj_id')->selectRaw('MAX('.$this->scoreSql($rankPrTokens).') AS relevance_score', [mb_strtolower(trim($term))])->groupBy('link.ppbj_id');
+        if ($rankPrTokens) {
+            $scores->joinSub($this->tokenScores($plan['used']), 'token_score', fn ($join) => $join->on('token_score.source_id', '=', 'src.id'));
+        }
         if ($evidencePr) {
             $scores->where('link.ppbj_id', $evidencePr);
         }
@@ -235,20 +266,16 @@ class ProcurementUnifiedSearch
         if ($evidencePr) {
             $matches = $prs->isEmpty() ? collect() : $ranked->where('src.id', '>', $after)->orderBy('src.id')->limit(9)->get()->groupBy('ppbj_id');
         } else {
-            $ranked->selectRaw('ROW_NUMBER() OVER (PARTITION BY link.ppbj_id ORDER BY '.$this->scoreSql().' DESC, src.kind, src.id) as source_rank', [mb_strtolower(trim($term))]);
+            if ($rankTokens) {
+                $ranked->joinSub($this->tokenScores($plan['used']), 'token_score', fn ($join) => $join->on('token_score.source_id', '=', 'src.id'));
+            }
+            $ranked->selectRaw('ROW_NUMBER() OVER (PARTITION BY link.ppbj_id ORDER BY '.$this->scoreSql($rankTokens).' DESC, src.kind, src.id) as source_rank', [mb_strtolower(trim($term))]);
             $matches = $prs->isEmpty() ? collect() : DB::query()->fromSub($ranked, 'ranked_sources')->where('source_rank', '<=', 5)->orderBy('ppbj_id')->orderBy('source_rank')->get()->groupBy('ppbj_id');
         }
         // Read bounded snippets only for visible cards, not every matching document.
         $visible = $matches->flatMap(fn ($rows) => $rows->take($sourceLimit))->pluck('id')->unique();
-        $evidence = collect();
-        if ($match === 'related' && count($plan['used']) > 1 && $visible->isNotEmpty()) {
-            $union = null;
-            foreach ($plan['used'] as $word) {
-                $part = $this->sourceQuery([$word], $scope, $lexical)->whereIn('src.id', $visible)->select('src.id')->selectRaw('? as word', [$word]);
-                $union = $union ? $union->unionAll($part) : $part;
-            }
-            $evidence = $union->get()->groupBy('id')->map(fn ($rows) => $rows->pluck('word')->all());
-        }
+        $wordEvidence = $match === 'reference' ? collect() : $this->wordEvidence($visible, $plan['used'], $lexical);
+        $evidence = $wordEvidence->map(fn ($rows) => $rows->pluck('query_word')->all());
         $words = $plan['used'];
         usort($words, fn ($a, $b) => strlen($b) <=> strlen($a));
         $firstWord = $words[0] ?? '';
@@ -261,25 +288,34 @@ class ProcurementUnifiedSearch
         }
         $texts = $visible->isEmpty() ? collect() : $textQuery->get()->keyBy('id');
         $pageTexts = collect();
-        if ($match !== 'reference' && $visible->isNotEmpty() && $words) {
-            $positions = DB::table('procurement_search_terms')->whereIn('source_id', $visible)->where('first_page', '>', 0)
-                ->where(fn ($terms) => $this->termMatch($terms, $words, $lexical))->select('source_id', 'first_page', 'term')->selectRaw('ROW_NUMBER() OVER (PARTITION BY source_id ORDER BY first_page, term) AS position_rank');
-            $firstPosition = DB::query()->fromSub($positions, 'positions')->where('position_rank', 1);
-            $pageTexts = DB::table('procurement_search_passages as passage')->joinSub($firstPosition, 'hit', fn ($join) => $join->on('hit.source_id', '=', 'passage.source_id')->on('hit.first_page', '=', 'passage.page'))
+        $positions = null;
+        foreach ($wordEvidence as $sourceId => $hits) {
+            // Prefer the page supporting most of the selected word locations,
+            // then the earlier page. These are first locations, not all occurrences.
+            $page = $hits->filter(fn ($hit) => $hit->first_page > 0)->groupBy('first_page')
+                ->sort(fn ($a, $b) => $b->count() <=> $a->count() ?: (int) $a->first()->first_page <=> (int) $b->first()->first_page)->first();
+            if ($page) {
+                $hit = $page->first();
+                $part = DB::query()->selectRaw('? AS source_id, ? AS page, ? AS term', [$sourceId, $hit->first_page, $hit->term]);
+                $positions = $positions ? $positions->unionAll($part) : $part;
+            }
+        }
+        if ($positions) {
+            $pageTexts = DB::table('procurement_search_passages as passage')->joinSub($positions, 'hit', fn ($join) => $join->on('hit.source_id', '=', 'passage.source_id')->on('hit.page', '=', 'passage.page'))
                 ->select('passage.source_id', 'passage.page', 'passage.engine', 'passage.confidence')
                 ->selectRaw('SUBSTR(passage.content, CASE WHEN INSTR(LOWER(passage.content), hit.term) > 60 THEN INSTR(LOWER(passage.content), hit.term) - 60 ELSE 1 END, 320) AS content')->get()->keyBy('source_id');
         }
 
         $suggestions = $evidencePr || $lexical === 'exact' ? [] : app(ProcurementSearchSuggestions::class)->forQuery($term, $scope, $filters, $plan, $prs->total(), $match);
 
-        return ['rows' => $prs->map(function ($pr) use ($matches, $texts, $pageTexts, $effective, $contexts, $evidence, $plan, $term, $match, $sourceLimit, $after, $evidencePr) {
+        return ['rows' => $prs->map(function ($pr) use ($matches, $texts, $pageTexts, $effective, $contexts, $evidence, $wordEvidence, $plan, $term, $match, $sourceLimit, $after, $evidencePr) {
             $sources = $matches->get($pr->id, collect());
 
             return ['id' => $pr->id, 'number' => $pr->ppbj_no, 'description' => $pr->uraian, 'portfolio' => $pr->portofolio,
                 'context' => $contexts[$pr->id] ?? null,
                 'relevance' => ['reason' => mb_strtolower(trim($pr->ppbj_no)) === mb_strtolower(trim($term)) ? 'Nomor PR persis' : ($sources->first()?->inferred ? 'Relasi PR terbaca dari scan; periksa kecocokan' : 'Kecocokan dari sumber dengan relasi PR tercatat')],
                 'links' => ['ppbj' => route('ppbj.index', ['search' => $pr->ppbj_no]), 'sp' => route('sp.index', ['search' => $pr->ppbj_no]), 'spph' => route('spph.index', ['search' => $pr->ppbj_no])],
-                'matches' => $sources->take($sourceLimit)->map(function ($source) use ($texts, $pageTexts, $effective, $evidence, $plan, $match) {
+                'matches' => $sources->take($sourceLimit)->map(function ($source) use ($texts, $pageTexts, $effective, $evidence, $wordEvidence, $plan, $match) {
                     $text = $texts->get($source->id);
                     $passage = $pageTexts->get($source->id);
                     $archive = str_starts_with($source->kind, 'archive_');
@@ -290,6 +326,14 @@ class ProcurementUnifiedSearch
                             'confidence' => ($passage ? $passage->confidence : $source->reading_confidence) === null ? null : (int) ($passage ? $passage->confidence : $source->reading_confidence)],
                         'match_page' => $passage?->page,
                         'matched_words' => $evidence->get($source->id, $match === 'related' && count($plan['used']) > 1 ? [] : $plan['used']),
+                        'word_evidence' => $wordEvidence->get($source->id, collect())->map(function ($hit) use ($source, $archive) {
+                            $page = $hit->first_page === null ? null : (int) $hit->first_page;
+
+                            return ['word' => $hit->query_word, 'matched' => $hit->term,
+                                'type' => $hit->term === $hit->query_word ? 'exact' : (str_starts_with($hit->term, $hit->query_word) ? 'prefix' : 'equivalent'),
+                                'location' => $page === null ? 'unknown' : ($page > 0 ? 'page' : 'document'), 'page' => $page > 0 ? $page : null,
+                                'url' => $archive && $page > 0 ? route('procurement.search.file', ['source' => $source->id]).'#page='.$page : null];
+                        })->values(),
                         'notice' => $archive ? $source->error : null,
                         'snippet' => ProcurementSearchText::snippet($passage->content ?? (($text->content ?? '') !== '' ? $text->content : ($text->metadata_text ?? '')), $effective, $archive),
                         'url' => $archive ? route('procurement.search.file', ['source' => $source->id]).($passage ? '#page='.$passage->page : '') : route($source->kind.'.index', ['search' => $source->reference] + ($source->kind === 'sp' && str_starts_with($source->label, 'SP Oracle ') ? ['mode' => 'oracle'] : []))];
