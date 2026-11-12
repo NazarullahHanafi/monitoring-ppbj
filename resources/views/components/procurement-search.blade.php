@@ -15,7 +15,7 @@
             <label><span>Hindari PR yang memuat kata</span><input data-pus-exclude type="search" maxlength="120" placeholder="Contoh: bekas rekondisi" autocomplete="off"><small>Maksimal 4 kata utuh. Berlaku pada semua dokumen PR dalam sumber yang dipilih.</small></label>
         </div><p class="pus-note">Isi yang diperlukan, lalu klik Cari. Kata utuh mencocokkan token tanpa memperluas awalan/padanan; urutan kata tidak diwajibkan. Nomor dokumen persis mencocokkan seluruh nomor tercatat. Mode lintas dokumen: maksimal 8 kata, minimal 2 karakter per kata. Vendor penawaran belum tentu vendor terpilih.</p></details>
     </form>
-    <p class="pus-note">Cari isi scan langsung dari filter pencarian menu ini atau kolom di atas. Hasil menampilkan PR, buyer, vendor, dan pembuat TOR jika tercatat. Kata yang belum ketemu dijelaskan; nomor PR, angka, dan ukuran tetap dicari utuh.</p>
+    <p class="pus-note">Cari isi scan langsung dari filter pencarian menu ini atau kolom di atas. Hasil menampilkan PR, buyer, vendor, dan pembuat TOR jika tercatat. Buka Penelusur bukti halaman pada hasil lampiran untuk mencari kemunculan lain atau frasa berurutan. Kata yang belum ketemu dijelaskan; nomor PR, angka, dan ukuran tetap dicari utuh.</p>
     <div class="pus-summary" data-pus-summary hidden aria-label="Ringkasan hasil"></div>
     <p data-pus-status role="status" aria-live="polite" class="pus-status">Isi kolom di atas lalu tekan Enter atau klik Cari di semua PR. Scan/foto lama diproses bertahap di latar belakang.</p>
     <div data-pus-suggestions class="pus-suggestions" hidden aria-label="Saran perbaikan pencarian"></div>

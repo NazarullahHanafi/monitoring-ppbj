@@ -38,6 +38,63 @@ function data(number = 'PR-001') {
 const flush = () => new Promise(resolve => setImmediate(resolve));
 function submit(f, query) { f.nodes.query.value = query; f.nodes.form.fire('submit', { preventDefault() {} }); }
 
+async function pagePanel() {
+    const f = setup(); submit(f, 'kursi plastik');
+    const result = data(); result.rows[0].matches[0].id = 55;
+    result.rows[0].matches[0].word_evidence = [{word:'kursi', matched:'kursi'}, {word:'plastik', matched:'plastik'}];
+    f.requests[0].resolve({ok:true, json:async()=>result}); await flush();
+    const panel = walk(f.nodes.results, node=>node.className==='pus-details pus-page-evidence')[0];
+    const controls = walk(panel, node=>node.tag==='form')[0];
+    const field = walk(panel, node=>node.tag==='input')[0], mode=walk(panel,node=>node.tag==='select')[0];
+    const more=walk(panel,node=>node.textContent==='Lanjutkan penelusuran')[0], cancel=walk(panel,node=>node.textContent==='Batal muat')[0];
+    const apply=()=>controls.fire('submit',{preventDefault(){}});
+    return {...f,panel,controls,field,mode,more,cancel,apply};
+}
+function pageData(overrides={}) {
+    return {source:55, version:'a'.repeat(64), after:20, scanned:20, stored:25, pages:30, index_complete:false, unit:'Halaman', has_more:true,
+        rows:[{page:1, snippet:'kursi plastik', url:'/procurement/search/files/55#page=1'}],issues:[],...overrides};
+}
+
+test('page evidence is manual and cursor paging keeps its own applied phrase, separate from all PR filters',async()=>{
+    const f=await pagePanel();assert.equal(f.requests.length,1);assert.equal(f.field.value,'kursi plastik');
+    f.field.value='kursi plastik';f.mode.value='phrase';f.apply();f.apply();assert.equal(f.requests.length,2);
+    const first=new URL(f.requests[1].url);assert.equal(first.pathname,'/procurement/search/files/55/evidence');
+    assert.equal(first.searchParams.get('mode'),'phrase');assert.equal(first.searchParams.has('buyer'),false);
+    f.requests[1].resolve({ok:true,json:async()=>pageData()});await flush();
+    assert.equal(f.more.hidden,false);
+    f.field.value='draft lain';f.mode.value='words';f.more.fire('click');
+    const next=new URL(f.requests[2].url);assert.equal(next.searchParams.get('q'),'kursi plastik');assert.equal(next.searchParams.get('mode'),'phrase');
+    assert.equal(next.searchParams.get('after'),'20');assert.equal(next.searchParams.get('version'),'a'.repeat(64));
+    f.requests[2].resolve({ok:true,json:async()=>pageData({after:25,scanned:5,has_more:false,rows:[{page:1,snippet:'duplicate'},{page:25,snippet:'kursi plastik'}]})});await flush();
+    assert.equal(walk(f.panel,node=>node.className==='pus-page-result').length,2);assert.equal(f.more.hidden,true);
+    assert.equal(f.nodes.query.value,'kursi plastik');
+    assert.equal(walk(f.panel,node=>String(node.textContent).includes('Indeks belum lengkap')).length,1);
+});
+
+test('page evidence rejects stale cursor responses and preserves its cursor after failure',async()=>{
+    const f=await pagePanel();f.apply();f.requests[1].resolve({ok:true,json:async()=>pageData()});await flush();
+    f.more.fire('click');f.requests[2].resolve({ok:true,json:async()=>pageData({after:20,has_more:true})});await flush();
+    assert.equal(walk(f.panel,node=>node.className==='pus-page-result').length,1);
+    assert.equal(walk(f.panel,node=>String(node.textContent).includes('Posisi bukti berubah')).length,1);
+    f.more.fire('click');assert.equal(new URL(f.requests[3].url).searchParams.get('after'),'20');
+    f.requests[3].resolve({ok:false,status:409});await flush();assert.equal(f.more.disabled,false);
+});
+
+test('page evidence cancels on reset and late content cannot repopulate the search',async()=>{
+    const f=await pagePanel();f.apply();f.nodes.reset.fire('click');assert.equal(f.requests[1].options.signal.aborted,true);
+    f.requests[1].resolve({ok:true,json:async()=>pageData()});await flush();
+    assert.equal(f.nodes.results.children.length,0);assert.equal(walk(f.panel,node=>node.className==='pus-page-result').length,0);
+});
+
+test('page evidence cancel ignores an aborted response, and OCR text, issue notes and links stay safe',async()=>{
+    const f=await pagePanel();f.apply();f.cancel.fire('click');assert.equal(f.requests[1].options.signal.aborted,true);
+    f.requests[1].resolve({ok:true,json:async()=>pageData()});await flush();assert.equal(walk(f.panel,node=>node.className==='pus-page-result').length,0);
+    f.apply();f.requests[2].resolve({ok:true,json:async()=>pageData({has_more:false,rows:[{page:4,snippet:'<img onerror=1>',url:'https://evil.test/file'}],issues:[{page:5,reason:'<script>unsafe</script>'}]})});await flush();
+    assert.equal(walk(f.panel,node=>node.textContent==='<img onerror=1>').length,1);
+    assert.equal(walk(f.panel,node=>String(node.href||'').startsWith('https://evil')).length,0);
+    assert.equal(walk(f.panel,node=>String(node.textContent).includes('<script>unsafe')).length,1);
+});
+
 test('global archive catalog is manual, uses safe text and freezes its own pagination query', async () => {
     const f = setup(); f.nodes['catalog-query'].value = 'plastik'; assert.equal(f.requests.length, 0);
     f.nodes['catalog-form'].fire('submit', { preventDefault() {} });

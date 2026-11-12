@@ -97,6 +97,7 @@
                 if (item.url) { const anchor = link(item.url, 'Buka file arsip', 'pus-open'); anchor.target = '_blank'; anchor.rel = 'noopener noreferrer'; row.append(anchor); }
                 for (const pr of item.prs || []) row.append(link(pr.url, pr.number, 'pus-open'));
                 if (!(item.prs || []).length) row.append(element('p', 'pus-note', 'Belum ada relasi PR yang tercatat.'));
+                if (Number.isSafeInteger(item.id) && item.id > 0) row.append(pageEvidencePanel(item, {query: {used: [query]}}));
                 get('catalog-rows').append(row);
             }
             catalogQuery = query; catalogAfter = data.after; get('catalog-more').hidden = !data.has_more;
@@ -225,7 +226,62 @@
             }
             details.append(list); item.append(details);
         }
+        if (file && Number.isSafeInteger(match.id) && match.id > 0) item.append(pageEvidencePanel(match, data));
         return item;
+    }
+    function pageEvidencePanel(match, data) {
+        const panel = element('details', 'pus-details pus-page-evidence');
+        panel.append(element('summary', '', 'Penelusur bukti halaman'));
+        panel.append(element('p', 'pus-note', 'Cari pada halaman yang sudah tersimpan: kata utuh tanpa padanan atau frasa berurutan. Spasi/tanda baca umum disetarakan; angka dan pecahan tetap utuh.'));
+        const controls = element('form'), field = element('input'), mode = element('select');
+        field.type = 'search'; field.required = true; field.maxLength = 255;
+        field.value = (match.word_evidence || []).map(hit => hit.matched).join(' ') || (data.query?.used || []).join(' ') || appliedQuery;
+        const fieldLabel = element('label', 'pus-field', 'Cari di lampiran ini'); fieldLabel.append(field);
+        const modeLabel = element('label', 'pus-scope', 'Bukti yang dicari');
+        for (const [value, label] of [['words', 'Semua kata di halaman yang sama'], ['phrase', 'Frasa tepat berurutan']]) { const option = element('option', '', label); option.value = value; mode.append(option); }
+        mode.value = 'words'; modeLabel.append(mode);
+        const search = element('button', 'pus-primary', 'Telusuri'); search.type = 'submit';
+        const more = element('button', 'pus-secondary', 'Lanjutkan penelusuran'), cancel = element('button', 'pus-secondary', 'Batal muat'); more.type = cancel.type = 'button'; more.hidden = cancel.hidden = true;
+        const message = element('p', 'pus-note', 'Tidak ada permintaan tambahan sebelum Anda menekan Telusuri.'), list = element('div', 'pus-page-results'); message.setAttribute?.('role', 'status');
+        controls.append(fieldLabel, modeLabel, search); panel.append(controls, message, list, more, cancel);
+        let after = 0, version = '', params, busy = false, pending, scanned = 0, found = 0;
+        const seen = new Set();
+        cancel.addEventListener('click', () => pending?.abort());
+        async function load() {
+            if (busy || !params) return;
+            busy = true; search.disabled = more.disabled = true; cancel.hidden = false;
+            const serial = sequence; pending = new AbortController(); const request = pending; evidenceControllers.add(request);
+            const timeout = setTimeout(() => request.abort(), 20000);
+            message.textContent = 'Menelusuri satu kelompok halaman…';
+            try {
+                const url = new URL(`${root.dataset.pageEvidenceBase || '/procurement/search/files'}/${match.id}/evidence`, window.location.origin);
+                if (url.origin !== window.location.origin) throw Error('Alamat bukti tidak valid.');
+                url.search = new URLSearchParams({...params, after, ...(version ? {version} : {})});
+                const next = await readResponse(await fetch(url, {headers: {Accept: 'application/json'}, credentials: 'same-origin', signal: request.signal}));
+                if (serial !== sequence || request.signal.aborted) return;
+                if (next.source !== match.id || !Number.isSafeInteger(next.after) || next.after < after || (next.has_more && next.after <= after) || !/^[a-f0-9]{64}$/.test(next.version || '')) throw Error('Posisi bukti berubah. Klik Telusuri untuk memulai lagi.');
+                for (const row of next.rows || []) {
+                    if (!Number.isSafeInteger(row.page) || row.page < 1 || seen.has(row.page)) continue;
+                    seen.add(row.page); found++;
+                    const card = element('div', 'pus-page-result'); card.append(element('strong', '', `${next.unit === 'Bagian' ? 'Bagian' : 'Halaman'} ${row.page}`));
+                    card.append(snippet(row.snippet || '', {query: {used: params.q.toLowerCase().split(/[^a-z0-9]+/)} , lexical: 'exact'}));
+                    if (row.reading?.reviewed) card.append(element('span', 'pus-badge', 'Sudah diperiksa manusia'));
+                    if (row.url) { const anchor = link(row.url, 'Buka sumber asli ↗', 'pus-open'); anchor.target = '_blank'; anchor.rel = 'noopener noreferrer'; card.append(anchor); }
+                    list.append(card);
+                }
+                for (const issue of next.issues || []) list.append(element('p', 'pus-read-notice', `${next.unit === 'Bagian' ? 'Bagian' : 'Halaman'} ${issue.page}: ${issue.reason}`));
+                scanned += Number(next.scanned) || 0; after = next.after; version = next.version; more.hidden = !next.has_more;
+                const unit = next.unit === 'Bagian' ? 'bagian' : 'halaman';
+                message.textContent = `“${params.q}” · ${params.mode === 'phrase' ? 'Frasa berurutan' : 'Kata utuh'}. ${found} ${unit} cocok dari ${scanned} ditelusuri. ${next.stored ?? '?'}/${next.pages ?? '?'} ${unit} tersimpan. ${next.has_more ? 'Lanjutkan untuk kelompok berikutnya.' : 'Selesai menelusuri bagian yang tersedia.'} ${next.index_complete ? '' : 'Indeks belum lengkap.'}${next.unit === 'Bagian' ? ' Bagian Office bukan nomor halaman cetak.' : ''}`;
+            } catch (error) {
+                if (serial === sequence) message.textContent = error.name === 'AbortError' ? 'Pemuatan dihentikan. Hasil sebelumnya tetap ada; klik Lanjutkan atau Telusuri untuk mencoba lagi.' : `${error.message} Klik Telusuri untuk memulai ulang bila bacaan berubah.`;
+            } finally {
+                clearTimeout(timeout); evidenceControllers.delete(request); busy = false; search.disabled = more.disabled = false; cancel.hidden = true;
+            }
+        }
+        controls.addEventListener('submit', event => { event.preventDefault(); if (busy || !field.value.trim()) return; params = {q: field.value.trim(), mode: mode.value}; after = scanned = found = 0; version = ''; seen.clear(); list.replaceChildren(); more.hidden = true; load(); });
+        more.addEventListener('click', load);
+        return panel;
     }
     async function readResponse(response) {
         if (!response.ok) {

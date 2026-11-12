@@ -2,6 +2,8 @@
 
 Panel yang sama tersedia pada Management PPBJ, Penomoran SP, dan Penomoran SPPH. Pencarian dijalankan melalui Enter/tombol Cari; mengetik tidak mengirim permintaan. Filter pencarian tabel juga memakai indeks bersama, sedangkan aturan PIC, tanggal, nominal, dan mode Oracle tetap berlaku.
 
+Untuk mencari kemunculan lain, semua kata pada satu halaman, atau frasa berurutan di dalam satu lampiran, gunakan [Penelusur bukti halaman](procurement-page-evidence.md). Panel ini membaca teks halaman yang sudah tersimpan secara bertahap dan tidak membuka proses OCR baru.
+
 Hasil dikelompokkan per PR, dilengkapi sumber, kutipan, dan tautan dokumen. Satu dokumen gabungan dapat terkait beberapa PR; hasil ini tidak menyatakan alokasi barang ke PR tertentu. Kata dicocokkan lintas kolom dalam satu sumber, tanpa bergantung pada urutan, menggunakan awalan kata. Dalam frasa biasa, kata yang belum ditemukan pada indeks sumber berizin dijelaskan dan kata yang tersedia tetap dicari. Query dengan nomor, angka, ukuran, kutipan, atau operator tetap mewajibkan semua kata. Tidak ada pencarian samar yang menebak nomor PR.
 
 ## Pemrosesan scan/foto
@@ -21,7 +23,7 @@ Hasil dikelompokkan per PR, dilengkapi sumber, kutipan, dan tautan dokumen. Satu
 - Satu pekerja memakai kunci lintas proses, prioritas CPU `nice -n 15`, dan berhenti memulai giliran baru setelah anggaran 15 detik setiap menit. Satu giliran memiliki timeout 65 detik; tidak ada pekerja OCR paralel.
 - Batas berkas 30 MiB, raster 4 juta piksel, foto sumber 25 juta piksel, ringkasan sumber 400.000 karakter, heap Node 384 MiB, dan pengawas RSS Linux 448 MiB. Teks scan lengkap disimpan per halaman, maksimal satu juta karakter per halaman dengan penanda jika batas tercapai. Cache sementara privat dibatasi delapan berkas/100 MiB.
 - Kegagalan dicoba paling banyak tiga kali dengan jeda bertingkat. Status dan kemajuan ditampilkan agar dokumen yang belum selesai tidak dianggap sudah seluruhnya bisa dicari.
-- Hanya akun aktif Department Umum yang dapat mencari/membuka hasil, termasuk viewer yang memang memiliki akses baca. Akun operasional dan pengunjung ditolak. Tidak ada endpoint web untuk mengubah indeks.
+- Hanya akun aktif Department Umum yang dapat mencari/membuka hasil, termasuk viewer yang memang memiliki akses baca. Akun operasional dan pengunjung ditolak. Permintaan pencarian tidak mengubah indeks. Koreksi bacaan oleh Super Admin Umum memerlukan pemeriksaan eksplisit, versi bacaan, alasan, CSRF, dan riwayat; penerapannya berjalan di latar belakang.
 - URL cloud/signature tidak dikirim dalam JSON hasil. Tautan file melewati gateway autentikasi, whitelist origin arsip, fingerprint, hubungan PR, dan metadata yang masih segar. Konten selain PDF/gambar aman/teks biasa dipaksa menjadi unduhan.
 - Metadata arsip yang tidak diverifikasi selama 15 menit disembunyikan. Dokumen yang dimusnahkan/dihapus dinonaktifkan; gateway arsip juga memeriksa kondisi file saat dibuka.
 

@@ -90,6 +90,8 @@ Route::get('/procurement/search', \App\Http\Controllers\ProcurementUnifiedSearch
     ->middleware(['auth', 'dept:umum', 'throttle:60,1'])->name('procurement.search');
 Route::get('/procurement/search/status', [\App\Http\Controllers\ProcurementSearchQueueController::class, 'status'])
     ->middleware(['auth', 'dept:umum', 'throttle:30,1'])->name('procurement.search.status');
+Route::get('/procurement/search/files/{source}/evidence', \App\Http\Controllers\ProcurementPageEvidenceController::class)
+    ->whereNumber('source')->middleware(['auth', 'dept:umum', 'throttle:30,1'])->name('procurement.search.evidence');
 Route::get('/procurement/search/coverage', [\App\Http\Controllers\ProcurementSearchQueueController::class, 'coverage'])
     ->middleware(['auth', 'dept:umum', 'throttle:30,1'])->name('procurement.search.coverage');
 Route::get('/procurement/search/archive-catalog', [\App\Http\Controllers\ProcurementReadingReviewController::class, 'catalog'])
