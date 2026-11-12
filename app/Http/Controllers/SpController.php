@@ -13,6 +13,7 @@ use App\Models\Vendor;
 use App\Services\ProcurementJourneyService;
 use App\Support\CacheBatch;
 use App\Support\ProcurementDocumentSearch;
+use App\Support\ProcurementExportRows;
 use App\Traits\HasPresence;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
@@ -735,27 +736,32 @@ class SpController extends Controller
     // =========================================================
     public function export(Request $request)
     {
+        $request->validate(['pic' => 'nullable|string|max:255', 'dari' => 'nullable|date_format:Y-m-d', 'sampai' => 'nullable|date_format:Y-m-d']);
         $search = ProcurementDocumentSearch::term($request);
         $pic = $request->get('pic', '');
         $dari = $request->get('dari', '');
         $sampai = $request->get('sampai', '');
         $oracleMode = $this->isOracleMode($request);
 
-        $data = ProcurementDocumentSearch::apply($this->spModeQuery($oracleMode), $search)->with('items')
+        $query = ProcurementDocumentSearch::apply($this->spModeQuery($oracleMode), $search)
             ->when($pic, fn ($q) => $q->where('pic', $pic))
             ->when($dari, fn ($q) => $q->where('tanggal_sp', '>=', $dari))
             ->when($sampai, fn ($q) => $q->where('tanggal_sp', '<=', $sampai))
-            ->orderBy('sequence_number', 'desc')
-            ->get();
+            ->select(['id', 'sequence_number', 'nomor_sp', 'tanggal_sp', 'nilai_sp', 'nomor_pr', 'nilai_pr', 'sph', 'tgl_sph', 'nama_vendor', 'deskripsi_pengadaan', 'pic']);
+        $query = ProcurementExportRows::snapshot($query);
+        $hasItems = (clone $query)->whereHas('items')->exists();
+        if ($hasItems) {
+            $query->with('items');
+        }
 
         $filename = 'SP_'.now()->format('Ymd_His').'.csv';
 
-        $callback = function () use ($data) {
+        $callback = function () use ($query, $hasItems) {
+            $data = ProcurementExportRows::rows($query, 'sequence_number');
             $file = fopen('php://output', 'w');
             fprintf($file, chr(0xEF).chr(0xBB).chr(0xBF));
 
             // Cek apakah ada data dengan items
-            $hasItems = $data->contains(fn ($row) => $row->items && $row->items->isNotEmpty());
 
             if ($hasItems) {
                 // Header dengan detail items

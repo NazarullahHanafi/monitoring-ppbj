@@ -180,39 +180,43 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
     Route::prefix('chat')->name('chat.')->middleware('auth')->group(function () {
         Route::get('/messages', [App\Http\Controllers\ChatController::class, 'messages'])
             ->name('messages')
+            ->middleware('throttle:120,1,chat-messages:')
             ->middleware(\App\Http\Middleware\DisableLoggingForPolling::class); // ← TAMBAHKAN INI
         Route::get('/mentions/unread', [App\Http\Controllers\ChatController::class, 'unreadMentions'])
             ->name('mentions.unread')
+            ->middleware('throttle:60,1,chat-mentions:')
             ->middleware(\App\Http\Middleware\DisableLoggingForPolling::class);
         Route::get('/search', [App\Http\Controllers\ChatController::class, 'search'])
             ->name('search')
-            ->middleware('throttle:60,1');
+            ->middleware('throttle:60,1,chat-search:');
         Route::get('/followups', [App\Http\Controllers\ChatController::class, 'followups'])
             ->name('followups')
-            ->middleware('throttle:60,1');
+            ->middleware('throttle:60,1,chat-followups:');
         Route::get('/reactions', [App\Http\Controllers\ChatController::class, 'reactions'])
             ->name('reactions')
+            ->middleware('throttle:120,1,chat-reactions:')
             ->middleware(\App\Http\Middleware\DisableLoggingForPolling::class);
         Route::post('/share', [App\Http\Controllers\ChatController::class, 'share'])
             ->name('share')
-            ->middleware('throttle:30,1');
+            ->middleware('throttle:30,1,chat-share:');
         Route::post('/followup', [App\Http\Controllers\ChatController::class, 'followup'])
             ->name('followup')
-            ->middleware('throttle:30,1');
+            ->middleware('throttle:30,1,chat-followup:');
         Route::post('/quick-mood', [App\Http\Controllers\ChatController::class, 'quickMood'])
             ->name('quick-mood')
-            ->middleware('throttle:20,1');
-        Route::post('/{id}/reaction', [App\Http\Controllers\ChatController::class, 'react'])->name('react');
-        Route::post('/send', [App\Http\Controllers\ChatController::class, 'send'])->name('send');
-        Route::patch('/{id}', [App\Http\Controllers\ChatController::class, 'update'])->name('update');
-        Route::delete('/{id}', [App\Http\Controllers\ChatController::class, 'destroy'])->name('destroy');
+            ->middleware('throttle:20,1,chat-quick-mood:');
+        Route::post('/{id}/reaction', [App\Http\Controllers\ChatController::class, 'react'])->whereNumber('id')->middleware('throttle:60,1,chat-react:')->name('react');
+        Route::post('/send', [App\Http\Controllers\ChatController::class, 'send'])->middleware('throttle:30,1,chat-send:')->name('send');
+        Route::patch('/{id}', [App\Http\Controllers\ChatController::class, 'update'])->whereNumber('id')->middleware('throttle:30,1,chat-update:')->name('update');
+        Route::delete('/{id}', [App\Http\Controllers\ChatController::class, 'destroy'])->whereNumber('id')->middleware('throttle:30,1,chat-delete:')->name('destroy');
     });
 
-    Route::post('/chat/read', [ChatController::class, 'markRead'])->name('chat.read');
+    Route::post('/chat/read', [ChatController::class, 'markRead'])->middleware('throttle:120,1,chat-read:')->name('chat.read');
     Route::get('/chat/{id}/reads', [ChatController::class, 'getReads'])
         ->whereNumber('id')
+        ->middleware('throttle:60,1,chat-readers:')
         ->name('chat.reads');
-    Route::get('/chat/users', [ChatController::class, 'getUsers'])->name('chat.users');
+    Route::get('/chat/users', [ChatController::class, 'getUsers'])->middleware('throttle:30,1,chat-users:')->name('chat.users');
 
     Route::prefix('collaboration-calendar')->name('collaboration-calendar.')->group(function () {
         Route::get('/', [CollaborationCalendarController::class, 'index'])->name('index');

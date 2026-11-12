@@ -42,6 +42,7 @@ class AppServiceProvider extends ServiceProvider
                 'virtual-office.game.invite', 'virtual-office.meetings.invite', 'virtual-office.world' => 30,
                 default => 180,
             };
+
             return \Illuminate\Cache\RateLimiting\Limit::perMinute($maximum)
                 ->by('office-v2:'.($request->user()?->id ?? $request->ip()).':'.$route)
                 ->response(fn ($request, $headers) => response()->json([
@@ -50,14 +51,26 @@ class AppServiceProvider extends ServiceProvider
                 ], 429, $headers)->header('Cache-Control', 'private, no-store'));
         });
         \Event::listen(\Illuminate\Auth\Events\Login::class, function ($event) {
-            if ($event->user instanceof User) app(\App\Services\VirtualOfficeRecreation::class)->daily($event->user);
+            if ($event->user instanceof User) {
+                app(\App\Services\VirtualOfficeRecreation::class)->daily($event->user);
+            }
         });
         // Directory contains presentation fields only; heartbeat's raw SQL last-seen
         // updates do not invalidate it. Account edits/locks do invalidate it.
-        User::saved(fn () => Cache::forget(\App\Services\VirtualOfficePresence::DIRECTORY_KEY));
-        User::deleted(fn () => Cache::forget(\App\Services\VirtualOfficePresence::DIRECTORY_KEY));
-        User::created(fn () => Cache::forget(\App\Services\VirtualOfficeHomes::KEY));
-        User::deleted(fn () => Cache::forget(\App\Services\VirtualOfficeHomes::KEY));
+        // Cache::forget(false) must not become an event listener's return value:
+        // Laravel interprets false as a request to stop later listeners.
+        User::saved(function (): void {
+            Cache::forget(\App\Services\VirtualOfficePresence::DIRECTORY_KEY);
+            Cache::forget('chat:mention_users:v2');
+        });
+        User::deleted(function (): void {
+            Cache::forget(\App\Services\VirtualOfficePresence::DIRECTORY_KEY);
+            Cache::forget(\App\Services\VirtualOfficeHomes::KEY);
+            Cache::forget('chat:mention_users:v2');
+        });
+        User::created(function (): void {
+            Cache::forget(\App\Services\VirtualOfficeHomes::KEY);
+        });
         // ✅ Hapus presence saat user logout
         \Event::listen(Logout::class, function (Logout $event) {
             if ($event->user && isset($event->user->id)) {

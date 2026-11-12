@@ -22,10 +22,12 @@
         timer = setTimeout(lease.cancel, 20000);
         return lease;
     }
-    window.addEventListener('pagehide', function () {
+    function cancelAll() {
         Array.from(pending.values()).forEach(function (lease) { lease.cancel(); });
-    });
-    window.SimonBackgroundReads = { begin: begin };
+    }
+    window.addEventListener('pagehide', cancelAll);
+    document.addEventListener('visibilitychange', function () { if (document.hidden) cancelAll(); });
+    window.SimonBackgroundReads = { begin: begin, cancel: function (key) { var lease = pending.get(key); if (lease) lease.cancel(); } };
 })();
 /* END SHELL BACKGROUND READS */
 
@@ -593,7 +595,7 @@
                 searchPanel.classList.toggle('open', show);
                 if (searchBtn) searchBtn.classList.toggle('active', show);
                 if (show) { setTimeout(function () { if (searchInput) searchInput.focus() }, 50) }
-                else { clearTimeout(searchTimer); searchSequence++; if (searchInput) searchInput.value = ''; if (searchResults) searchResults.innerHTML = ''; if (searchStatus) searchStatus.textContent = 'Ketik minimal 2 karakter.' }
+                else { clearTimeout(searchTimer); searchSequence++; window.SimonBackgroundReads.cancel('chat-search'); if (searchInput) searchInput.value = ''; if (searchResults) searchResults.innerHTML = ''; if (searchStatus) searchStatus.textContent = 'Ketik minimal 2 karakter.' }
             }
 
             function renderSearchResults(messages, query) {
@@ -613,12 +615,14 @@
             function runSearch(query) {
                 query = (query || '').trim();
                 if (!searchStatus || !searchResults) return;
-                if (query.length < 2) { searchStatus.textContent = 'Ketik minimal 2 karakter.'; searchResults.innerHTML = ''; return }
-                var sequence = ++searchSequence; searchStatus.textContent = 'Mencari...'; searchResults.innerHTML = '';
-                fetch(URL_SEARCH + '?q=' + encodeURIComponent(query), { headers: { 'Accept': 'application/json' } })
+                var sequence = ++searchSequence, lease = window.SimonBackgroundReads.begin('chat-search', true);
+                if (query.length < 2) { lease.release(); searchStatus.textContent = 'Ketik minimal 2 karakter.'; searchResults.innerHTML = ''; return }
+                searchStatus.textContent = 'Mencari...'; searchResults.innerHTML = '';
+                fetch(URL_SEARCH + '?q=' + encodeURIComponent(query), { signal: lease.signal, headers: { 'Accept': 'application/json' } })
                     .then(function (response) { if (!response.ok) throw new Error(response.status); return response.json() })
-                    .then(function (data) { if (sequence !== searchSequence) return; renderSearchResults(data.messages || [], query) })
-                    .catch(function () { if (sequence === searchSequence) searchStatus.textContent = 'Pencarian gagal. Coba lagi.' });
+                    .then(function (data) { if (!lease.current() || sequence !== searchSequence) return; renderSearchResults(data.messages || [], query) })
+                    .catch(function () { if (sequence === searchSequence) searchStatus.textContent = lease.signal.aborted ? 'Pencarian dihentikan. Ketik lagi untuk mencoba kembali.' : 'Pencarian gagal. Coba lagi.' })
+                    .finally(lease.release);
             }
 
             updateNotifyButton();
@@ -626,9 +630,18 @@
             document.addEventListener('pointerdown', unlockChatAudio, { once: true });
             if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', function (event) { if (event.data && event.data.type === 'OPEN_TEAM_CHAT') { if (!chatOpen) doToggle(); else if (chatMinimized) restoreChat() } });
 
+            var usersRequest = null;
             function getAllUsers() {
                 if (allUsersLoaded) return Promise.resolve(allUsersLoaded);
-                return fetch(URL_USERS, { headers: { 'Accept': 'application/json' } }).then(function (r) { if (!r.ok) throw 0; return r.json() }).then(function (data) { allUsersLoaded = data.map(function (u) { var p = (u.name || '').split(' '); return { id: u.id, name: u.name, department: u.department || '', initials: p.length >= 2 ? (p[0][0] + p[1][0]).toUpperCase() : (u.name || '??').substring(0, 2).toUpperCase(), color: UCLS[u.id % UCLS.length] } }); return allUsersLoaded }).catch(function () { return [] });
+                if (usersRequest) return usersRequest;
+                var lease = window.SimonBackgroundReads.begin('chat-users');
+                if (!lease) return Promise.resolve([]);
+                usersRequest = fetch(URL_USERS, { signal: lease.signal, headers: { 'Accept': 'application/json' } })
+                    .then(function (r) { if (!r.ok) throw 0; return r.json() })
+                    .then(function (data) { if (!lease.current() || !Array.isArray(data)) return []; allUsersLoaded = data.map(function (u) { var p = (u.name || '').split(' '); return { id: u.id, name: u.name, department: u.department || '', initials: p.length >= 2 ? (p[0][0] + p[1][0]).toUpperCase() : (u.name || '??').substring(0, 2).toUpperCase(), color: UCLS[u.id % UCLS.length] } }); return allUsersLoaded })
+                    .catch(function () { return [] })
+                    .finally(function () { usersRequest = null; lease.release(); });
+                return usersRequest;
             }
 
             function getQuickMoodReply() {
@@ -725,7 +738,6 @@
                     .then(function (body) {
                         if (body.message && !messagesEl.querySelector('.msg-wrap[data-msg-id="' + body.message.id + '"]')) {
                             appendMsg(body.message);
-                            chatMaxId = Math.max(chatMaxId, body.message.id);
                             sBB();
                         }
                         toast('Quick chat mood terkirim. Sekali sehari biar nggak spam awkwk', 'success');
@@ -834,7 +846,7 @@
                     .then(function (body) {
                         if (!body.message) throw new Error('Respons tidak valid');
                         sE(false); if (!messagesEl.querySelector('.msg-wrap[data-msg-id="' + body.message.id + '"]')) appendMsg(body.message);
-                        chatMaxId = Math.max(chatMaxId, body.message.id); closeFollowupDd(); removeFollowupToken(); sBB();
+                        closeFollowupDd(); removeFollowupToken(); sBB();
                         toast('Follow up dikirim ke Chat Tim', 'success');
                     })
                     .catch(function (error) { toast(error.message || 'Gagal mengirim follow up', 'error') })
@@ -1154,6 +1166,7 @@
             }
 
             function appendMsg(m, prepend) {
+                if (messagesEl && messagesEl.querySelector('[data-msg-id="' + Number(m.id) + '"]')) return;
                 if (!messagesEl) return; var isMe = String(m.user_id) === String(MY_ID), time = ''; try { time = new Date(m.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) } catch (e) { }
                 var wr = document.createElement('div'); wr.className = 'msg-wrap' + (isMe ? ' mine' : '');
                 if (amMentioned(m.mentions_parsed) && !isMe) wr.classList.add('mentioned-me');
@@ -1174,7 +1187,11 @@
                     if (m.can_delete) { var dl = document.createElement('button'); dl.type = 'button'; dl.className = 'msg-del'; dl.title = isMe ? 'Hapus pesan untuk semua maksimal 6 jam' : 'Hapus pesan dari tampilan saya'; dl.textContent = '\u2715'; dl.setAttribute('data-del-id', m.id); mt.appendChild(dl); scheduleDeleteExpiry(wr, m.delete_expires_at) }
                 }
                 bd.appendChild(mt); var reactions = document.createElement('div'); reactions.className = 'msg-reactions'; bd.appendChild(reactions); wr.appendChild(av); wr.appendChild(bd);
-                if (prepend) { var firstMessage = messagesEl.querySelector('.msg-wrap'); messagesEl.insertBefore(wr, firstMessage || null) } else messagesEl.appendChild(wr);
+                var entries = messagesEl.querySelectorAll('.msg-wrap[data-msg-id]'), next = null;
+                if (entries.length && Number(entries[entries.length - 1].getAttribute('data-msg-id')) > Number(m.id)) {
+                    for (var index = 0; index < entries.length; index++) if (Number(entries[index].getAttribute('data-msg-id')) > Number(m.id)) { next = entries[index]; break; }
+                }
+                messagesEl.insertBefore(wr, next);
                 renderReactionsForMessage(m.id, m.reactions || []);
             }
 
@@ -1183,13 +1200,14 @@
             var crb = document.getElementById('btnCancelReply'); if (crb) crb.addEventListener('click', function (e) { e.stopPropagation(); doCancelReply() });
 
             /* ── Load messages ── */
-            function loadMessages(initial) {
+            function loadMessages(initial, catchUpBudget) {
                 if (!chatOpen || chatMinimized || document.hidden) return;
+                catchUpBudget = Number.isInteger(catchUpBudget) ? catchUpBudget : 2;
                 var lease = window.SimonBackgroundReads.begin('chat-messages', initial);
                 if (!lease) return;
                 ensureReadPopupStillValid();
                 if (initial) closeReadPopup();
-                var since = initial ? 0 : chatMaxId;
+                var since = initial ? 0 : chatMaxId, catchUp = false;
                 fetch(URL_MSGS + '?since=' + since, { signal: lease.signal, headers: { 'Accept': 'application/json' } })
                     .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json() })
                     .then(function (data) {
@@ -1235,11 +1253,12 @@
                             if (nc > 0 && !isChatReadable()) { uB(); updateMentionBadges() }
                         }
                         chatMaxId = data.max_id || chatMaxId; if (wasB || initial) sBB();
+                        catchUp = !initial && data.has_more === true && chatMaxId > since && catchUpBudget > 0;
                         var idsToRead = []; for (var k = 0; k < msgs.length; k++) { if (String(msgs[k].user_id) !== String(MY_ID)) idsToRead.push(msgs[k].id) }
                         if (idsToRead.length && isChatReadable()) markRead(idsToRead);
                     })
                     .catch(function () { })
-                    .finally(lease.release);
+                    .finally(function () { var continueRead = lease.current() && catchUp; lease.release(); if (continueRead) setTimeout(function () { loadMessages(false, catchUpBudget - 1); }, 150); });
             }
 
             function loadOlderMessages() {
@@ -1271,7 +1290,7 @@
                 var body = { message: txt }; if (replyToId) body.reply_to = replyToId; if (draftMentions.length) body.mentions = draftMentions;
                 fetch(URL_SEND, { method: 'POST', headers: { 'X-CSRF-TOKEN': CSRF, 'Accept': 'application/json', 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
                     .then(function (r) { if (r.status === 429) { toast('Terlalu cepat! Tunggu.', 'warning'); throw new Error('429') } if (!r.ok) throw new Error('HTTP ' + r.status); return r.json() })
-                    .then(function (data) { if (!data.message) { toast('Respons tidak valid', 'error'); throw new Error('No message') } sE(false); appendMsg(data.message); chatMaxId = Math.max(chatMaxId, data.message.id); inp.value = ''; inp.style.height = 'auto'; if (charEl) { charEl.textContent = '0/' + MAX_LEN; charEl.className = 'cp-char' } doCancelReply(); draftMentions = []; updateAtBadge(); sBB(); sendBtn.classList.add('send-flash'); setTimeout(function () { sendBtn.classList.remove('send-flash') }, 500) })
+                    .then(function (data) { if (!data.message) { toast('Respons tidak valid', 'error'); throw new Error('No message') } sE(false); appendMsg(data.message); inp.value = ''; inp.style.height = 'auto'; if (charEl) { charEl.textContent = '0/' + MAX_LEN; charEl.className = 'cp-char' } doCancelReply(); draftMentions = []; updateAtBadge(); sBB(); sendBtn.classList.add('send-flash'); setTimeout(function () { sendBtn.classList.remove('send-flash') }, 500) })
                     .catch(function (err) { if (err.message === '429') return; toast('Gagal mengirim', 'error') })
                     .finally(function () { sending = false; setSL(false); rSB() });
             }
@@ -1301,7 +1320,7 @@
                                 if (chatOpen) {
                                     if (chatMinimized) restoreChat();
                                     sE(false); if (!messagesEl.querySelector('.msg-wrap[data-msg-id="' + body.message.id + '"]')) appendMsg(body.message);
-                                    chatMaxId = Math.max(chatMaxId, body.message.id); sBB();
+                                    sBB();
                                 } else doToggle();
                                 toast(label + ' dibagikan ke Chat Tim', 'success');
                             })

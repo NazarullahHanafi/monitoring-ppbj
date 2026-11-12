@@ -73,6 +73,34 @@
     document.addEventListener('input', event => { const field = event.target; if (field.dataset?.uxError) { clearField(field); if (field.form) summary(field.form); } });
     document.addEventListener('change', event => { const field = event.target; if (field.dataset?.uxError) { clearField(field); if (field.form) summary(field.form); } });
     document.addEventListener('reset', event => { if (event.target.tagName === 'FORM') clear(event.target); });
+    const submissions = new Map();
+    function releaseSubmission(form) {
+        const state = submissions.get(form); if (!state) return;
+        clearTimeout(state.timer); submissions.delete(form); form.classList.remove('ux-submitting');
+        if (state.busy === null) form.removeAttribute('aria-busy'); else form.setAttribute('aria-busy', state.busy);
+        for (const [button, value] of state.buttons) {
+            if (value === null) button.removeAttribute('aria-disabled'); else button.setAttribute('aria-disabled', value);
+        }
+    }
+    document.addEventListener('submit', event => {
+        if (submissions.has(event.target)) { event.preventDefault(); event.stopImmediatePropagation(); }
+    }, true);
+    window.addEventListener('submit', event => {
+        const form = event.target;
+        queueMicrotask(() => {
+            // Async/confirmation handlers own their submit lifecycle. Preserve
+            // every enabled field and submitter value for normal form encoding.
+            const method = event.submitter?.getAttribute('formmethod') || form.getAttribute('method') || 'get';
+            const target = event.submitter?.getAttribute('formtarget') || form.getAttribute('target');
+            if (event.defaultPrevented || method.toLowerCase() === 'get' || target === '_blank'
+                || form.dataset.uxNativeGuard === 'off' || submissions.has(form)) return;
+            const state = { busy: form.getAttribute('aria-busy'), buttons: [...form.querySelectorAll('button[type=submit],button:not([type]),input[type=submit]')].map(button => [button, button.getAttribute('aria-disabled')]) };
+            submissions.set(form, state); form.classList.add('ux-submitting'); form.setAttribute('aria-busy', 'true');
+            state.buttons.forEach(([button]) => button.setAttribute('aria-disabled', 'true'));
+            state.timer = setTimeout(() => releaseSubmission(form), 60000);
+        });
+    });
+    window.addEventListener('pageshow', () => [...submissions.keys()].forEach(releaseSubmission));
     async function confirm(options) {
         const prior = document.activeElement, dialog = document.createElement('dialog'); dialog.className = 'ux-confirm';
         const title = document.createElement('h2'); title.id = `uxConfirm${++serial}`; title.textContent = options.title || 'Konfirmasi'; dialog.setAttribute('aria-labelledby', title.id);

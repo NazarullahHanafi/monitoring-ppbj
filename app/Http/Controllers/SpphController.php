@@ -13,6 +13,7 @@ use App\Services\SpphPrintPolicy;
 use App\Support\CacheBatch;
 use App\Support\PrintPreviewFile;
 use App\Support\ProcurementDocumentSearch;
+use App\Support\ProcurementExportRows;
 use App\Traits\HasPresence;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
@@ -264,24 +265,26 @@ class SpphController extends Controller
     // =========================================================
     public function export(Request $request)
     {
+        $request->validate(['pic' => 'nullable|string|max:255', 'vendor' => 'nullable|string|max:255', 'dari' => 'nullable|date_format:Y-m-d', 'sampai' => 'nullable|date_format:Y-m-d']);
         $search = ProcurementDocumentSearch::term($request);
         $pic = $request->get('pic', '');
         $vendorFilter = $request->get('vendor', '');
         $dari = $request->get('dari', '');
         $sampai = $request->get('sampai', '');
 
-        $data = ProcurementDocumentSearch::apply(Spph::query(), $search)
+        $query = ProcurementDocumentSearch::apply(Spph::query(), $search)
             ->when($pic, fn ($q) => $q->where('pic', $pic))
             ->when($vendorFilter, fn ($q) => $this->applyVendorFilter($q, $vendorFilter))
             ->when($dari, fn ($q) => $q->where('tanggal', '>=', $dari))
             ->when($sampai, fn ($q) => $q->where('tanggal', '<=', $sampai))
-            ->orderBy('id', 'desc')
-            ->get();
+            ->select(['id', 'nomor_spph', 'tanggal', 'nomor_pr', 'nama_vendor', 'vendor_names', 'deskripsi_pengadaan', 'pic']);
+        $query = ProcurementExportRows::snapshot($query);
 
         $filename = 'SPPH_'.now()->format('Ymd_His').'.csv';
         $headers = ['No', 'Nomor SPPH', 'Tanggal', 'Nomor PR', 'Nama Vendor', 'Deskripsi Pengadaan', 'PIC'];
 
-        $callback = function () use ($data, $headers) {
+        $callback = function () use ($query, $headers) {
+            $data = ProcurementExportRows::rows($query);
             $file = fopen('php://output', 'w');
             fprintf($file, chr(0xEF).chr(0xBB).chr(0xBF));
             fputcsv($file, $headers);

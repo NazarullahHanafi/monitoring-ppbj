@@ -52,8 +52,11 @@ class ChatController extends Controller
      */
     public function messages(Request $request)
     {
-        $since = (int) $request->get('since', 0);
-        $before = (int) $request->get('before', 0);
+        $input = $request->validate(['since' => 'nullable|integer|min:0|max:'.PHP_INT_MAX, 'before' => 'nullable|integer|min:0|max:'.PHP_INT_MAX]);
+        $since = (int) ($input['since'] ?? 0);
+        $before = (int) ($input['before'] ?? 0);
+        abort_if($since > 0 && $before > 0, 422, 'Pilih satu arah pemuatan pesan.');
+        $incremental = $before === 0 && $since > 0;
         $myId = Auth::id();
 
         $rows = DB::table('chat_messages')
@@ -69,15 +72,13 @@ class ChatController extends Controller
             })
             ->when($before > 0, fn ($query) => $query->where('id', '<', $before))
             ->when($before === 0 && $since > 0, fn ($query) => $query->where('id', '>', $since))
-            ->orderByDesc('id')
+            ->orderBy('id', $incremental ? 'asc' : 'desc')
             ->limit(self::PAGE_SIZE + 1)
             ->get();
 
         $hasMore = $rows->count() > self::PAGE_SIZE;
-        $rows = $rows
-            ->take(self::PAGE_SIZE)
-            ->reverse()
-            ->values();
+        $rows = $rows->take(self::PAGE_SIZE);
+        $rows = ($incremental ? $rows : $rows->reverse())->values();
 
         if ($rows->isEmpty()) {
             return response()->json([
@@ -105,8 +106,9 @@ class ChatController extends Controller
     {
         $authId = Auth::id();
 
-        $users = Cache::remember('chat:mention_users:v1', 60, function () {
+        $users = Cache::remember('chat:mention_users:v2', 60, function () {
             return DB::table('users')
+                ->where('is_active', true)
                 ->select('id', 'name', 'department')
                 ->orderBy('name')
                 ->get();
@@ -193,7 +195,10 @@ class ChatController extends Controller
         ]);
 
         $term = trim($validated['q']);
-        $like = '%'.$term.'%';
+        if (mb_strlen($term) < 2) {
+            throw \Illuminate\Validation\ValidationException::withMessages(['q' => 'Ketik minimal 2 karakter pencarian.']);
+        }
+        $like = '%'.str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $term).'%';
 
         $rows = DB::table('chat_messages')
             ->where(function ($query) {
@@ -207,8 +212,8 @@ class ChatController extends Controller
                     ->where('chat_message_deletions.user_id', Auth::id());
             })
             ->where(function ($query) use ($like) {
-                $query->where('message', 'like', $like)
-                    ->orWhere('user_name', 'like', $like);
+                $query->whereRaw("message LIKE ? ESCAPE '!'", [$like])
+                    ->orWhereRaw("user_name LIKE ? ESCAPE '!'", [$like]);
             })
             ->orderByDesc('id')
             ->limit(self::SEARCH_LIMIT)
@@ -780,17 +785,21 @@ class ChatController extends Controller
     public function markRead(Request $request)
     {
         $request->validate([
-            'message_ids' => 'required|array',
-            'message_ids.*' => 'required|integer',
+            'message_ids' => 'required|array|max:40',
+            'message_ids.*' => 'required|integer|min:1|max:'.PHP_INT_MAX,
         ]);
 
         $userId = Auth::id();
         $now = now();
-        $rows = collect($request->input('message_ids', []))
+        $ids = collect($request->input('message_ids', []))
             ->map(fn ($id) => (int) $id)
             ->filter(fn ($id) => $id > 0)
             ->unique()
-            ->take(self::PAGE_SIZE)
+            ->all();
+        $rows = DB::table('chat_messages')->whereIn('id', $ids)->where('user_id', '!=', $userId)
+            ->where(fn ($q) => $q->whereNull('share_type')->orWhere('share_type', '!=', self::SYSTEM_ACTIVITY_SHARE_TYPE))
+            ->whereNotExists(fn ($q) => $q->selectRaw('1')->from('chat_message_deletions')->whereColumn('message_id', 'chat_messages.id')->where('user_id', $userId))
+            ->pluck('id')
             ->map(fn ($id) => [
                 'message_id' => $id,
                 'user_id' => $userId,
@@ -853,24 +862,18 @@ class ChatController extends Controller
         }
 
         $messageIds = $rows->pluck('id')->map(fn ($id) => (int) $id)->all();
-        $readCounts = DB::table('chat_reads')
+        $receipts = DB::table('chat_reads')
             ->whereIn('message_id', $messageIds)
-            ->where('user_id', '!=', $myId)
-            ->select('message_id', DB::raw('COUNT(*) as cnt'))
+            ->select('message_id')
+            ->selectRaw('SUM(CASE WHEN user_id != ? THEN 1 ELSE 0 END) as cnt, MAX(CASE WHEN user_id = ? THEN 1 ELSE 0 END) as mine', [$myId, $myId])
             ->groupBy('message_id')
-            ->pluck('cnt', 'message_id')
-            ->toArray();
-        $myReads = DB::table('chat_reads')
-            ->whereIn('message_id', $messageIds)
-            ->where('user_id', $myId)
-            ->pluck('message_id')
-            ->flip()
-            ->toArray();
+            ->get()->keyBy('message_id');
         $reactions = $this->reactionMap($messageIds, $myId);
 
         foreach ($rows as $row) {
-            $row->read_count = (int) $row->user_id === $myId ? ($readCounts[$row->id] ?? 0) : 0;
-            $row->i_read = isset($myReads[$row->id]);
+            $receipt = $receipts->get($row->id);
+            $row->read_count = (int) $row->user_id === $myId ? (int) ($receipt->cnt ?? 0) : 0;
+            $row->i_read = (bool) ($receipt->mine ?? false);
             $row->mentions_parsed = $this->parseMentions($row->mentions ?? null);
             $row->reactions = $reactions[$row->id] ?? [];
             $row->share_data_parsed = $this->parseShareData($row->share_data ?? null);
