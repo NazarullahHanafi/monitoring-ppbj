@@ -16,6 +16,7 @@ function setup(initialQuery = '') {
     const nodes = {};
     for (const name of ['form', 'query', 'scope', 'match', 'sort', 'lexical', 'suggestions', 'buyer', 'vendor', 'creator', 'exclude', 'status', 'results', 'pagination', 'prev', 'next', 'reset', 'page', 'submit', 'summary', 'progress', 'progressinfo', 'check-status', 'check-coverage', 'coverage', 'coverage-info', 'coverage-rows', 'coverage-page', 'coverage-prev', 'coverage-next', 'coverage-back', 'catalog-form', 'catalog-query', 'catalog-rows', 'catalog-info', 'catalog-more']) nodes[name] = new Element();
     nodes['catalog-form'].dataset.endpoint = '/procurement/search/archive-catalog';
+    for (const name of ['focus', 'focus-label', 'focus-clear']) nodes[name] = new Element();
     nodes['check-coverage'].dataset.coverageEndpoint = '/procurement/search/coverage';
     nodes.scope.value = 'all';
     nodes.query.value = initialQuery;
@@ -37,6 +38,39 @@ function data(number = 'PR-001') {
 }
 const flush = () => new Promise(resolve => setImmediate(resolve));
 function submit(f, query) { f.nodes.query.value = query; f.nodes.form.fire('submit', { preventDefault() {} }); }
+
+test('focus is explicit, preserves applied filters, persists for another query and is included in manual totals', async () => {
+    const f=setup();f.nodes.buyer.value='Nazar';submit(f,'kursi');const result=data('PR-FOCUS');result.rows[0].id=12;
+    f.requests[0].resolve({ok:true,json:async()=>result});await flush();assert.equal(f.requests.length,1);
+    f.nodes.query.value='draft';f.nodes.buyer.value='Draft buyer';
+    walk(f.nodes.results,n=>n.textContent==='Fokus PR ini')[0].fire('click');
+    let url=new URL(f.requests[1].url);assert.equal(url.searchParams.get('pr_id'),'12');assert.equal(url.searchParams.get('q'),'kursi');assert.equal(url.searchParams.get('buyer'),'Nazar');
+    assert.equal(f.nodes.query.value,'kursi');assert.equal(f.nodes.buyer.value,'Nazar');assert.equal(f.nodes['focus-label'].textContent,'Fokus PR: PR-FOCUS');assert.equal(f.nodes.submit.textContent,'Cari di PR ini');
+    f.requests[1].resolve({ok:true,json:async()=>({...result,totals:'deferred',total:null,last_page:null,has_more:false})});await flush();
+    assert.equal(walk(f.nodes.results,n=>n.textContent==='Fokus PR ini').length,0);
+    submit(f,'plastik');url=new URL(f.requests[2].url);assert.equal(url.searchParams.get('pr_id'),'12');assert.equal(url.searchParams.get('q'),'plastik');
+    f.requests[2].resolve({ok:true,json:async()=>({...result,totals:'deferred',total:null,last_page:null,has_more:false})});await flush();
+    walk(f.nodes.summary,n=>n.textContent==='Hitung hasil PR ini')[0].fire('click');url=new URL(f.requests[3].url);assert.equal(url.searchParams.get('pr_id'),'12');
+    f.nodes['focus-clear'].fire('click');assert.equal(f.requests[3].options.signal.aborted,true);
+    url=new URL(f.requests[4].url);assert.equal(url.searchParams.has('pr_id'),false);assert.equal(url.searchParams.get('q'),'plastik');assert.equal(f.nodes.focus.hidden,true);
+});
+
+test('reset cancels focus requests, clears its identifier and stale focus buttons cannot change new results', async () => {
+    const f=setup();submit(f,'kursi');const result=data('PR-OLD');result.rows[0].id=7;
+    f.requests[0].resolve({ok:true,json:async()=>result});await flush();const old=walk(f.nodes.results,n=>n.textContent==='Fokus PR ini')[0];
+    submit(f,'plastik');old.fire('click');assert.equal(f.requests.length,2);
+    f.requests[1].resolve({ok:true,json:async()=>result});await flush();walk(f.nodes.results,n=>n.textContent==='Fokus PR ini')[0].fire('click');
+    f.nodes.reset.fire('click');assert.equal(f.requests[2].options.signal.aborted,true);assert.equal(f.nodes.focus.hidden,true);assert.equal(f.nodes.submit.textContent,'Cari di semua PR');
+    f.requests[2].resolve({ok:true,json:async()=>result});await flush();assert.equal(f.nodes.results.children.length,0);
+    submit(f,'kursi');assert.equal(new URL(f.requests[3].url).searchParams.has('pr_id'),false);
+});
+
+test('focus labels stay inert and malformed PR identifiers cannot create focus requests', async () => {
+    const f=setup();submit(f,'kursi');const result=data('<img onerror=1>');result.rows[0].id='12';
+    f.requests[0].resolve({ok:true,json:async()=>result});await flush();assert.equal(walk(f.nodes.results,n=>n.textContent==='Fokus PR ini').length,0);
+    submit(f,'kursi');result.rows[0].id=12;f.requests[1].resolve({ok:true,json:async()=>result});await flush();
+    walk(f.nodes.results,n=>n.textContent==='Fokus PR ini')[0].fire('click');assert.equal(f.nodes['focus-label'].textContent,'Fokus PR: <img onerror=1>');
+});
 
 test('progressive results paginate without pretending a missing total is zero', async () => {
     const f = setup(); submit(f, 'kursi');

@@ -4,6 +4,8 @@ Panel yang sama tersedia pada Management PPBJ, Penomoran SP, dan Penomoran SPPH.
 
 Widget memakai [pencarian bertahap](procurement-progressive-search.md): maksimal 10 PR tampil lebih dahulu, dengan navigasi ke hasil berikutnya. Tombol **Hitung seluruh PR** tersedia ketika total lengkap diperlukan, menggunakan filter yang sudah diterapkan.
 
+Pilih **Fokus PR ini** pada kartu hasil untuk [melanjutkan pencarian dalam satu PR](procurement-focused-search.md). Kata, hitungan, dan sumber tambahan mengikuti PR pilihan sampai pengguna keluar fokus atau Reset.
+
 Untuk mencari kemunculan lain, semua kata pada satu halaman, atau frasa berurutan di dalam satu lampiran, gunakan [Penelusur bukti halaman](procurement-page-evidence.md). Panel ini membaca teks halaman yang sudah tersimpan secara bertahap dan tidak membuka proses OCR baru.
 
 Hasil dikelompokkan per PR, dilengkapi sumber, kutipan, dan tautan dokumen. Satu dokumen gabungan dapat terkait beberapa PR; hasil ini tidak menyatakan alokasi barang ke PR tertentu. Kata dicocokkan lintas kolom dalam satu sumber, tanpa bergantung pada urutan, menggunakan awalan kata. Dalam frasa biasa, kata yang belum ditemukan pada indeks sumber berizin dijelaskan dan kata yang tersedia tetap dicari. Query dengan nomor, angka, ukuran, kutipan, atau operator tetap mewajibkan semua kata. Tidak ada pencarian samar yang menebak nomor PR.

@@ -60,6 +60,59 @@ class ProcurementUnifiedSearchTest extends TestCase
         return $this->getJson(route('procurement.search', ['q' => $q] + $params))->assertOk();
     }
 
+    public function test_focus_search_preserves_evidence_ranking_but_confines_every_mode_to_one_live_pr(): void
+    {
+        $pr = $this->pr();
+        $other = $this->pr('PR-FOCUS-OTHER');
+        $writer = app(ProcurementSearchWriter::class);
+        for ($i = 0; $i < 7; $i++) {
+            $writer->source('archive_attachment', 'focus-'.$i, 'Scan', 'SCAN-FOCUS-'.$i, $i === 6 ? 'kursi plastik' : 'kursinya plastiknya', '', [$pr->id, $other->id], hash('sha256', 'focus-'.$i), true);
+        }
+        $full = collect($this->search('kursi plastik')->json('rows'))->keyBy('id');
+        foreach (['exact', 'deferred'] as $totals) {
+            $response = $this->search('kursi plastik', ['pr_id' => $pr->id, 'totals' => $totals])->assertJsonCount(1, 'rows')->assertJsonPath('rows.0.id', $pr->id)->assertJsonPath('has_more', false);
+            $this->assertSame($full[$pr->id]['matches'], $response->json('rows.0.matches'));
+            $this->assertSame('Nazar', $response->json('rows.0.context.buyer'));
+        }
+        $this->search('kursi plastik', ['pr_id' => $pr->id, 'totals' => 'only'])->assertJsonPath('total', 1);
+        $this->search('kursi plastik', ['pr_id' => $pr->id, 'buyer' => 'Other buyer'])->assertJsonPath('total', 0);
+        $this->search('SCAN-FOCUS-6', ['pr_id' => $pr->id, 'match' => 'reference'])->assertJsonPath('total', 1);
+        $this->search('kursi plastik', ['pr_id' => $pr->id, 'lexical' => 'exact'])->assertJsonPath('total', 1);
+        $this->search('kursi plastik', ['pr_id' => $pr->id, 'match' => 'related'])->assertJsonPath('total', 1);
+        $this->search('kursi', ['pr_id' => $pr->id, 'exclude' => 'plastik'])->assertJsonPath('total', 0);
+        $this->search('kursi', ['pr_id' => $pr->id, 'pr' => $other->id, 'after' => 0])->assertJsonPath('total', 0);
+        $this->search('kursi', ['pr_id' => $pr->id, 'pr' => $pr->id, 'after' => 0])->assertJsonCount(7, 'rows.0.matches');
+        $pr->delete();
+        $this->search('kursi', ['pr_id' => $pr->id])->assertJsonPath('total', 0);
+        $this->search('kursi', ['pr_id' => $pr->id, 'totals' => 'only'])->assertJsonPath('total', 0);
+        Http::assertNothingSent();
+    }
+
+    public function test_focus_word_diagnostics_and_suggestions_do_not_use_other_prs_to_claim_words_exist(): void
+    {
+        $pr = $this->pr();
+        $other = $this->pr('PR-FOCUS-VOCAB');
+        $writer = app(ProcurementSearchWriter::class);
+        $source = $writer->source('archive_attachment', 'focus-vocab', 'Scan', 'SCAN-FOCUS', 'kursi', '', [$pr->id], hash('sha256', 'focus-vocab'), true);
+        $writer->source('ppbj', 'focus-other-vocab', 'Other', 'OTHER', 'plastik spektrometer', '', [$other->id], hash('sha256', 'other-vocab'));
+        $this->search('kursi plastik')->assertJsonPath('total', 0);
+        $this->search('kursi plastik', ['pr_id' => $pr->id])->assertJsonPath('total', 1)->assertJsonPath('query.missing', ['plastik'])->assertJsonPath('query.used', ['kursi']);
+        $this->search('spektromter', ['pr_id' => $pr->id])->assertJsonPath('suggestions', []);
+        $this->search('kursi 0454', ['pr_id' => $pr->id])->assertJsonPath('total', 0)->assertJsonPath('query.strict', true);
+        DB::table('procurement_search_sources')->where('id', $source)->update(['verified_at' => now()->subHour()]);
+        $this->search('kursi', ['pr_id' => $pr->id, 'scope' => 'archive'])->assertJsonPath('total', 0);
+    }
+
+    public function test_focus_identifier_is_validated_and_uses_the_existing_user_permissions(): void
+    {
+        foreach ([0, -1, '1 OR 1=1', [1]] as $invalid) {
+            $this->getJson(route('procurement.search', ['q' => 'kursi', 'pr_id' => $invalid]))->assertUnprocessable();
+        }
+        $this->search('kursi', ['pr_id' => 999999])->assertJsonPath('total', 0);
+        $this->actingAs(User::factory()->create(['department' => 'operasional']))
+            ->getJson(route('procurement.search', ['q' => 'kursi', 'pr_id' => 1]))->assertForbidden();
+    }
+
     public function test_deferred_results_preserve_ranking_and_page_boundaries_without_a_count_query(): void
     {
         $writer = app(ProcurementSearchWriter::class);

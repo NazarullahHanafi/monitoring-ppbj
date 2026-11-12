@@ -16,6 +16,7 @@
         </div><p class="pus-note">Isi yang diperlukan, lalu klik Cari. Kata utuh mencocokkan token tanpa memperluas awalan/padanan; urutan kata tidak diwajibkan. Nomor dokumen persis mencocokkan seluruh nomor tercatat. Mode lintas dokumen: maksimal 8 kata, minimal 2 karakter per kata. Vendor penawaran belum tentu vendor terpilih.</p></details>
     </form>
     <p class="pus-note">Cari isi scan langsung dari filter pencarian menu ini atau kolom di atas. Hasil menampilkan PR, buyer, vendor, dan pembuat TOR jika tercatat. Buka Penelusur bukti halaman pada hasil lampiran untuk mencari kemunculan lain atau frasa berurutan. Kata yang belum ketemu dijelaskan; nomor PR, angka, dan ukuran tetap dicari utuh.</p>
+    <div class="pus-focus" data-pus-focus hidden><div><strong data-pus-focus-label role="status" aria-live="polite"></strong><p class="pus-note">Pencarian utama hanya pada dokumen yang terhubung ke PR ini. Ganti kata di atas, lalu klik Cari di PR ini.</p></div><button type="button" data-pus-focus-clear class="pus-secondary">Keluar fokus</button></div>
     <div class="pus-summary" data-pus-summary hidden aria-label="Ringkasan hasil"></div>
     <p data-pus-status role="status" aria-live="polite" class="pus-status">Isi kolom di atas lalu tekan Enter atau klik Cari di semua PR. Hasil ditampilkan bertahap; gunakan Hitung seluruh PR bila memerlukan total. Scan/foto lama diproses bertahap di latar belakang.</p>
     <div data-pus-suggestions class="pus-suggestions" hidden aria-label="Saran perbaikan pencarian"></div>

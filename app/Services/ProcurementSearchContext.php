@@ -16,6 +16,9 @@ class ProcurementSearchContext
 {
     public function apply(Builder $query, array $filters): void
     {
+        if (isset($filters['pr_id'])) {
+            $query->where('ppbj.id', (int) $filters['pr_id']);
+        }
         foreach (['buyer', 'vendor', 'creator'] as $field) {
             $value = trim((string) ($filters[$field] ?? ''));
             if ($value === '') {

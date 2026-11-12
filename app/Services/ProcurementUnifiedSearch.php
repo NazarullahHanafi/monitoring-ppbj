@@ -125,14 +125,21 @@ class ProcurementUnifiedSearch
             .' + CASE WHEN src.reading_confidence >= 80 THEN 1 ELSE 0 END';
     }
 
-    private function tokenScores(array $words)
+    private function tokenScores(array $words, ?array $prIds = null)
     {
         $exact = implode(' + ', array_fill(0, count($words), 'MAX(CASE WHEN term = ? THEN 1 ELSE 0 END)'));
         $direct = implode(' + ', array_fill(0, count($words), 'MAX(CASE WHEN term LIKE ? THEN 1 ELSE 0 END)'));
 
-        return DB::table('procurement_search_terms')->select('source_id')->selectRaw($exact.' AS exact_words', $words)
+        $query = DB::table('procurement_search_terms')->select('source_id')->selectRaw($exact.' AS exact_words', $words)
             ->selectRaw($direct.' AS direct_words', array_map(fn ($word) => $word.'%', $words))
             ->where(fn ($terms) => $this->termMatch($terms, $words, 'expanded'))->groupBy('source_id');
+        if ($prIds !== null) {
+            // Score only sources linked to these PRs; duplicate links must not
+            // multiply token scores. The outer source query still checks liveness.
+            $query->whereIn('source_id', DB::table('procurement_search_links')->select('source_id')->whereIn('ppbj_id', $prIds));
+        }
+
+        return $query;
     }
 
     private function wordEvidence($visible, array $words, string $lexical)
@@ -203,7 +210,7 @@ class ProcurementUnifiedSearch
         return array_values(array_intersect_key($suggestions, array_flip($positions)));
     }
 
-    public function resolve(string $term, string $scope = 'all', string $lexical = 'expanded'): array
+    public function resolve(string $term, string $scope = 'all', string $lexical = 'expanded', ?int $prId = null): array
     {
         $words = ProcurementSearchText::words($term);
         $plan = ['mode' => 'all', 'used' => $words, 'missing' => [], 'strict' => true];
@@ -216,7 +223,8 @@ class ProcurementUnifiedSearch
         foreach ($words as $word) {
             $visible = $this->sourceQuery([$word], $scope)->selectRaw('1')
                 ->whereExists(fn ($links) => $links->selectRaw('1')->from('procurement_search_links as known_link')
-                    ->join('ppbj as known_pr', 'known_pr.id', '=', 'known_link.ppbj_id')->whereColumn('known_link.source_id', 'src.id'));
+                    ->join('ppbj as known_pr', 'known_pr.id', '=', 'known_link.ppbj_id')->whereColumn('known_link.source_id', 'src.id')
+                    ->when($prId !== null, fn ($query) => $query->where('known_pr.id', $prId)));
             $part = DB::query()->selectRaw('? as word', [$word])->whereExists($visible);
             $presence = $presence ? $presence->unionAll($part) : $part;
         }
@@ -238,7 +246,8 @@ class ProcurementUnifiedSearch
         $evidencePr = isset($options['pr']) ? (int) $options['pr'] : null;
         $after = max(0, (int) ($options['after'] ?? 0));
         $sourceLimit = $evidencePr ? 8 : 4;
-        $plan = $this->resolve($term, $scope, $lexical);
+        $focusPr = isset($filters['pr_id']) ? (int) $filters['pr_id'] : null;
+        $plan = $this->resolve($term, $scope, $lexical, $focusPr);
         $totals = $evidencePr ? 'exact' : ($options['totals'] ?? 'exact');
         // Membership uses indexed semijoins; counting never computes relevance,
         // token scores, provenance, snippets or OCR page text.
@@ -261,7 +270,8 @@ class ProcurementUnifiedSearch
         }
         $effective = implode(' ', $plan['used']);
         $rankTokens = ! $evidencePr && $match !== 'reference' && $lexical !== 'exact' && count($plan['used']) > 0;
-        $rankPrTokens = $rankTokens && $sort !== 'newest';
+        // A single focused PR needs source ranking, not a global PR token ranking.
+        $rankPrTokens = $rankTokens && $sort !== 'newest' && ! $focusPr;
         $scores = $this->matchingSources($plan['used'], $scope, $match, $lexical, $term)
             ->join('procurement_search_links as link', 'link.source_id', '=', 'src.id')
             ->select('link.ppbj_id')->selectRaw('MAX('.$this->scoreSql($rankPrTokens).') AS relevance_score', [mb_strtolower(trim($term))])->groupBy('link.ppbj_id');
@@ -270,6 +280,9 @@ class ProcurementUnifiedSearch
         }
         if ($evidencePr) {
             $scores->where('link.ppbj_id', $evidencePr);
+        }
+        if ($focusPr) {
+            $scores->where('link.ppbj_id', $focusPr);
         }
         $query = Ppbj::select(array_values(array_unique(array_merge(ProcurementProvenanceService::PPBJ_COLUMNS,
             ['penyedia_eksternal', 'tgl_ppbj', 'status', 'progres']))))->joinSub($scores, 'search_score', fn ($join) => $join->on('search_score.ppbj_id', '=', 'ppbj.id'));
@@ -295,7 +308,7 @@ class ProcurementUnifiedSearch
             $matches = $prs->isEmpty() ? collect() : $ranked->where('src.id', '>', $after)->orderBy('src.id')->limit(9)->get()->groupBy('ppbj_id');
         } else {
             if ($rankTokens) {
-                $ranked->joinSub($this->tokenScores($plan['used']), 'token_score', fn ($join) => $join->on('token_score.source_id', '=', 'src.id'));
+                $ranked->joinSub($this->tokenScores($plan['used'], $focusPr ? [$focusPr] : null), 'token_score', fn ($join) => $join->on('token_score.source_id', '=', 'src.id'));
             }
             $ranked->selectRaw('ROW_NUMBER() OVER (PARTITION BY link.ppbj_id ORDER BY '.$this->scoreSql($rankTokens).' DESC, src.kind, src.id) as source_rank', [mb_strtolower(trim($term))]);
             $matches = $prs->isEmpty() ? collect() : DB::query()->fromSub($ranked, 'ranked_sources')->where('source_rank', '<=', 5)->orderBy('ppbj_id')->orderBy('source_rank')->get()->groupBy('ppbj_id');

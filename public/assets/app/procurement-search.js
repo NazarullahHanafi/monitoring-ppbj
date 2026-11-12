@@ -9,6 +9,7 @@
     const filterNames = ['buyer', 'vendor', 'creator', 'exclude'];
     let controller, sequence = 0, currentPage = 1, lastPage = 1, appliedQuery = '', appliedScope = 'all', appliedMatch = 'source', appliedSort = 'relevance', appliedLexical = 'expanded', appliedFilters = {}, pendingKey = '';
     const evidenceControllers = new Set();
+    let focusedPr = null;
     const labels = { ppbj: 'PPBJ', sp: 'SP', spph: 'SPPH', archive_document: 'Arsip', archive_attachment: 'Lampiran arsip', local_sp_attachment: 'Lampiran SP', local_spph_attachment: 'Lampiran SPPH' };
     let coverageController, coverageSequence = 0, coveragePage = 1, coverageLast = 1, coverageSource = null;
     async function loadCoverage(page = 1, source = null) {
@@ -433,8 +434,22 @@
         url.search = new URLSearchParams({ q: appliedQuery, scope: appliedScope, match: appliedMatch, sort: appliedSort, lexical: appliedLexical, page, ...appliedFilters, totals });
         return url;
     }
+    function restoreAppliedFields() {
+        input.value = appliedQuery; scope.value = appliedScope;
+        for (const [name, value] of [['match', appliedMatch], ['sort', appliedSort], ['lexical', appliedLexical]]) if (get(name)) get(name).value = value;
+        for (const name of filterNames) if (get(name)) get(name).value = appliedFilters[name] || '';
+    }
+    function showFocus() {
+        if (get('focus')) get('focus').hidden = !focusedPr;
+        if (get('focus-label')) get('focus-label').textContent = focusedPr ? `Fokus PR: ${focusedPr.number}` : '';
+        submit.textContent = focusedPr ? 'Cari di PR ini' : 'Cari di semua PR';
+    }
+    get('focus-clear')?.addEventListener('click', () => {
+        if (!focusedPr) return;
+        focusedPr = null; delete appliedFilters.pr_id; showFocus(); restoreAppliedFields(); search();
+    });
     function totalButton(summary) {
-        const button = element('button', 'pus-secondary', 'Hitung seluruh PR'); button.type = 'button';
+        const button = element('button', 'pus-secondary', focusedPr ? 'Hitung hasil PR ini' : 'Hitung seluruh PR'); button.type = 'button';
         const message = element('span', 'pus-note', 'Total dihitung hanya saat diperlukan.');
         const url = searchUrl(1, 'only'), serial = sequence;
         button.addEventListener('click', async () => {
@@ -501,6 +516,17 @@
             const links = element('div', 'pus-links');
             for (const [kind, href] of Object.entries(row.links || {})) links.append(link(href, `Buka ${labels[kind] || kind} →`, ''));
             card.append(links);
+            if (!focusedPr && Number.isSafeInteger(row.id) && row.id > 0 && typeof row.number === 'string' && row.number.length <= 255) {
+                const focus = element('button', 'pus-secondary pus-focus-button', 'Fokus PR ini'); focus.type = 'button';
+                focus.title = `Lanjutkan pencarian hanya pada ${row.number}`;
+                const serial = sequence;
+                focus.addEventListener('click', () => {
+                    if (serial !== sequence) return;
+                    focusedPr = {id: row.id, number: row.number}; appliedFilters = {...appliedFilters, pr_id: row.id};
+                    showFocus(); restoreAppliedFields(); search(); input.focus?.();
+                });
+                card.append(focus);
+            }
             if (row.context) card.append(contextDetails(row.context));
             if (row.more_sources && Number.isSafeInteger(row.id) && row.id > 0) card.append(evidencePanel(row));
             if (root.dataset.canPrioritize === '1' && Number.isSafeInteger(row.id) && row.id > 0) card.append(queuePanel(row));
@@ -522,6 +548,7 @@
         if (data.match === 'related') status.textContent += ' Kata dapat berasal dari dokumen berbeda dalam PR yang sama.';
         if (data.match === 'reference') status.textContent += ' Seluruh nomor dokumen dicocokkan secara persis.';
         else if (data.lexical === 'exact') status.textContent += ' Kata utuh, tanpa perluasan awalan atau padanan; urutan kata bebas.';
+        if (focusedPr) status.textContent += ` Fokus aktif pada ${focusedPr.number}. Pilih Keluar fokus untuk mencari seluruh PR.`;
         currentPage = data.page;
         lastPage = deferred ? data.page + (data.has_more ? 1 : 0) : data.last_page;
         pagination.hidden = data.page <= 1 && !(deferred ? data.has_more : data.last_page > 1);
@@ -566,7 +593,7 @@
         appliedMatch = get('match')?.value || 'source'; appliedSort = get('sort')?.value || 'relevance';
         appliedLexical = appliedMatch === 'reference' ? 'exact' : get('lexical')?.value || 'expanded';
         if (get('lexical')) get('lexical').value = appliedLexical;
-        appliedFilters = Object.fromEntries(filterNames.map(name => [name, get(name)?.value.trim() || '']).filter(([, value]) => value));
+        appliedFilters = {...Object.fromEntries(filterNames.map(name => [name, get(name)?.value.trim() || '']).filter(([, value]) => value)), ...(focusedPr ? {pr_id: focusedPr.id} : {})};
         search();
     });
     input.addEventListener('input', () => { status.textContent = 'Pilihan belum diterapkan. Tekan Enter atau klik Cari.'; });
@@ -584,6 +611,7 @@
         if (get('coverage')) get('coverage').hidden = true;
         controller?.abort(); cancelEvidence(); sequence++; pendingKey = ''; submit.disabled = false; input.value = ''; scope.value = 'all';
         appliedFilters = {};
+        focusedPr = null; showFocus();
         appliedMatch = 'source'; appliedSort = 'relevance'; appliedLexical = 'expanded';
         if (get('lexical')) get('lexical').value = appliedLexical;
         if (get('match')) get('match').value = appliedMatch;
