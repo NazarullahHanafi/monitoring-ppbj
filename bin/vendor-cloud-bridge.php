@@ -111,6 +111,13 @@ try {
     echo json_encode(['ok' => true, 'item_id' => $id, 'verified' => true]);
 } catch (Throwable $e) {
     // Keep cloud responses, identifiers, tokens and document text out of logs.
+    $reason = 'cloud';
+    if ($e instanceof Illuminate\Http\Client\RequestException) {
+        $reason = in_array($e->response->status(), [401, 403], true) ? 'authentication' : ($e->response->status() === 429 ? 'busy' : 'cloud');
+    } elseif ($e instanceof RuntimeException && in_array($e->getMessage(), ['upload integrity', 'download integrity', 'cloud integrity', 'download exceeds size'], true)) {
+        $reason = 'integrity';
+    }
+    echo json_encode(['ok' => false, 'error' => $reason]);
     fwrite(STDERR, "Vendor cloud operation failed.\n");
     exit(1);
 }

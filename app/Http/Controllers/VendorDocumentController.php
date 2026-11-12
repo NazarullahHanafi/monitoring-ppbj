@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Exceptions\VendorCloudException;
 use App\Models\ActivityLog;
 use App\Models\Vendor;
 use App\Models\VendorDocument;
@@ -9,6 +10,7 @@ use App\Services\VendorDocumentCloud;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -90,11 +92,12 @@ class VendorDocumentController extends Controller
         } catch (\Symfony\Component\HttpKernel\Exception\HttpExceptionInterface $e) {
             throw $e;
         } catch (\Throwable $e) {
+            $this->recordFailure($e, 'upload', $id);
             if (isset($document) && $document?->exists && $document->status !== 'ready') {
                 $document->forceFill(['status' => 'failed'])->save();
             }
 
-            return response()->json(['message' => 'Unggahan belum terkonfirmasi. Pilih berkas yang sama dan coba lagi, atau muat ulang daftar. Tidak perlu membuat unggahan baru.', 'upload_id' => $id], 503);
+            return response()->json(['message' => $e instanceof VendorCloudException ? $e->getMessage() : 'Unggahan belum terkonfirmasi. Pilih berkas yang sama dan coba lagi, atau muat ulang daftar. Tidak perlu membuat unggahan baru.', 'error_code' => $e instanceof VendorCloudException ? $e->reason : 'upload_failed', 'upload_id' => $id], 503);
         } finally {
             if ($temporary && is_file($temporary)) {
                 unlink($temporary);
@@ -136,11 +139,12 @@ class VendorDocumentController extends Controller
                 throw new \RuntimeException('download verification');
             }
         } catch (\Throwable $e) {
+            $this->recordFailure($e, 'download', $document->id);
             if ($temporary && is_file($temporary)) {
                 unlink($temporary);
             }
 
-            return response()->json(['message' => 'Unduhan OneDrive belum berhasil. Silakan coba kembali.'], 503);
+            return response()->json(['message' => $e instanceof VendorCloudException ? $e->getMessage() : 'Unduhan OneDrive belum berhasil. Silakan coba kembali.'], 503);
         }
 
         return response()->download($temporary, $document->original_name, ['Content-Type' => $document->mime, 'Cache-Control' => 'private, no-store', 'X-Content-Type-Options' => 'nosniff'])->deleteFileAfterSend(true);
@@ -166,7 +170,9 @@ class VendorDocumentController extends Controller
         } catch (\Symfony\Component\HttpKernel\Exception\HttpExceptionInterface $e) {
             throw $e;
         } catch (\Throwable $e) {
-            return response()->json(['message' => 'Penghapusan OneDrive belum terkonfirmasi. Muat ulang daftar lalu coba hapus kembali.'], 503);
+            $this->recordFailure($e, 'delete', $document->id);
+
+            return response()->json(['message' => $e instanceof VendorCloudException ? $e->getMessage() : 'Penghapusan OneDrive belum terkonfirmasi. Muat ulang daftar lalu coba hapus kembali.'], 503);
         } finally {
             $lock->release();
         }
@@ -182,6 +188,12 @@ class VendorDocumentController extends Controller
         ActivityLog::create(['user_id' => $request->user()->id, 'model_type' => Vendor::class, 'model_id' => $document->vendor_id,
             'action' => $action, 'description' => 'Lampiran vendor dikelola melalui penyimpanan OneDrive.',
             'changes' => ['document_id' => $document->id, 'type' => $document->type, 'version' => $document->version]]);
+    }
+
+    private function recordFailure(\Throwable $error, string $operation, string $id): void
+    {
+        Log::warning('Vendor document operation failed', ['operation' => $operation, 'document_id' => $id,
+            'reason' => $error instanceof VendorCloudException ? $error->reason : 'local_operation', 'exception_class' => get_class($error)]);
     }
 
     private function temporary(VendorDocumentCloud $cloud): string

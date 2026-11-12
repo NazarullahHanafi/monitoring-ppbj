@@ -311,4 +311,28 @@ class VendorDocumentsTest extends TestCase
             $second->release();
         }
     }
+
+    public function test_runtime_failure_has_specific_safe_message_and_preserves_retry_record(): void
+    {
+        $this->cloud(fn () => throw new \App\Exceptions\VendorCloudException('runtime'));
+        $id = (string) Str::uuid();
+        $this->postJson($this->url(), $this->payload(['upload_id' => $id]))->assertStatus(503)
+            ->assertJsonPath('error_code', 'runtime')->assertSee('PHP CLI')->assertDontSee('access_token');
+        $this->assertDatabaseHas('vendor_documents', ['id' => $id, 'status' => 'failed']);
+        $this->assertSame([], glob($this->work.'/*'));
+    }
+
+    public function test_unavailable_cli_releases_global_slot_and_reports_configuration_problem(): void
+    {
+        config(['procurement_search.archive_root' => base_path(), 'procurement_search.php_cli' => base_path('missing-cli')]);
+        try {
+            app(VendorDocumentCloud::class)->call(['action' => 'status']);
+            $this->fail('Invalid CLI must fail before starting a cloud process');
+        } catch (\App\Exceptions\VendorCloudException $e) {
+            $this->assertSame('runtime', $e->reason);
+        }
+        $slot = Cache::lock('vendor-cloud:slot:0', 360);
+        $this->assertTrue($slot->get());
+        $slot->release();
+    }
 }

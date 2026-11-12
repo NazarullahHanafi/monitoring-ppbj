@@ -19,7 +19,7 @@ class ProcurementArchiveBridge
         if (! is_dir($work)) {
             mkdir($work, 0700, true);
         }
-        $process = new Process([PHP_BINARY, base_path('bin/procurement-archive-bridge.php'), $root, $work, (string) config('services.pr_archive.base_url')], null, \App\Support\IsolatedProcessEnvironment::make());
+        $process = new Process([app(\App\Support\PhpCli::class)->executable(), base_path('bin/procurement-archive-bridge.php'), $root, $work, (string) config('services.pr_archive.base_url')], null, \App\Support\IsolatedProcessEnvironment::make());
         $process->setInput(json_encode($input, JSON_THROW_ON_ERROR));
         $process->setTimeout(50);
         $process->mustRun();

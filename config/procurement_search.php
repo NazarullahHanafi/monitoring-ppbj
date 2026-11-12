@@ -3,6 +3,7 @@
 return [
     'enabled' => env('PROCUREMENT_SEARCH_ENABLED', true),
     'archive_root' => env('PROCUREMENT_SEARCH_ARCHIVE_ROOT', ''),
+    'php_cli' => env('PROCUREMENT_PHP_CLI', ''),
     'node' => env('PROCUREMENT_OCR_NODE', 'node'),
     'languages' => env('PROCUREMENT_OCR_LANG_PATH', public_path('assets/document-reader/v1/lang')),
     'max_bytes' => 30 * 1024 * 1024,

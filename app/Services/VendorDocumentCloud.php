@@ -2,7 +2,9 @@
 
 namespace App\Services;
 
+use App\Exceptions\VendorCloudException;
 use App\Support\IsolatedProcessEnvironment;
+use App\Support\PhpCli;
 use Illuminate\Support\Facades\Cache;
 use Symfony\Component\Process\Process;
 
@@ -22,7 +24,7 @@ class VendorDocumentCloud
     {
         $root = (string) config('procurement_search.archive_root');
         if ($root === '' || ! is_dir($root)) {
-            throw new \RuntimeException('Koneksi OneDrive belum tersedia.');
+            throw new VendorCloudException('configuration');
         }
         $slot = null;
         foreach ([0, 1] as $number) {
@@ -33,20 +35,28 @@ class VendorDocumentCloud
             }
         }
         if (! $slot) {
-            throw new \RuntimeException('Transfer OneDrive sedang penuh. Coba lagi setelah beberapa saat.');
+            throw new VendorCloudException('busy');
         }
         try {
-            $process = new Process([PHP_BINARY, base_path('bin/vendor-cloud-bridge.php'), $root, $this->workDirectory()], null, IsolatedProcessEnvironment::make());
+            try {
+                $binary = app(PhpCli::class)->executable();
+            } catch (\Throwable) {
+                throw new VendorCloudException('runtime');
+            }
+            $process = new Process([$binary, base_path('bin/vendor-cloud-bridge.php'), $root, $this->workDirectory()], null, IsolatedProcessEnvironment::make());
             $process->setInput(json_encode($input, JSON_THROW_ON_ERROR));
             $process->setTimeout(300);
-            $process->run();
-            if (! $process->isSuccessful()) {
-                // Never include process stderr: Graph errors may contain pre-authenticated URLs.
-                throw new \RuntimeException('OneDrive belum berhasil memproses berkas. Coba lagi dengan berkas yang sama.');
+            try {
+                $process->run();
+            } catch (\Symfony\Component\Process\Exception\ProcessTimedOutException) {
+                throw new VendorCloudException('timeout');
             }
-            $result = json_decode($process->getOutput(), true, flags: JSON_THROW_ON_ERROR);
-            if (! is_array($result) || ($result['ok'] ?? false) !== true) {
-                throw new \RuntimeException('OneDrive belum berhasil memproses berkas. Coba lagi dengan berkas yang sama.');
+            $result = json_decode($process->getOutput(), true);
+            if (! $process->isSuccessful() || ! is_array($result) || ($result['ok'] ?? false) !== true) {
+                // Only accept allowlisted codes; never expose stdout/stderr,
+                // Graph responses, credentials, filenames or pre-authenticated URLs.
+                $reason = $result['error'] ?? '';
+                throw new VendorCloudException(in_array($reason, ['configuration', 'authentication', 'integrity', 'busy'], true) ? $reason : 'cloud');
             }
 
             return $result;

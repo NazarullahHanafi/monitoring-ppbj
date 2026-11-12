@@ -34,3 +34,11 @@ Perubahan metadata/teks dan penghapusan memakai versi positif dari server. Kunci
 - Migrasi aditif `2026_11_12_130000_create_vendor_documents_tables`; kode lama tidak bergantung pada kedua tabel baru. Rollback aplikasi dapat mempertahankan tabel dan berkas cloud agar data pengguna tidak hilang.
 
 Rujukan protokol: [upload Microsoft Graph](https://learn.microsoft.com/graph/api/driveitem-put-content), [delete Microsoft Graph](https://learn.microsoft.com/en-us/graph/api/driveitem-delete?view=graph-rest-1.0).
+
+## Perbaikan runtime web (12 November 2026)
+
+Pada LiteSpeed, `PHP_BINARY` adalah `lsphp`, bukan executable PHP CLI. Memakainya untuk proses anak membuat adapter CLI berhenti; pengujian dari SSH saja tidak mereproduksi masalah ini. `App\Support\PhpCli` memilih kandidat CLI yang sesuai versi PHP dan memeriksa SAPI proses anak sebelum menjalankan adapter. `PROCUREMENT_PHP_CLI` dapat diisi path absolut CLI untuk konfigurasi khusus; konfigurasi yang salah tidak diam-diam diganti dengan executable web. Pemilihan yang sama dipakai adapter pencarian arsip agar jalur web konsisten.
+
+Kegagalan memakai kode aman yang dibatasi (`runtime`, `configuration`, `busy`, `timeout`, `authentication`, `integrity`, `cloud`) dan pesan yang menjelaskan tindakan pengguna/admin. Catatan kegagalan hanya memuat operasi, document UUID, kategori, dan kelas exception; tidak menyertakan isi exception atau output proses yang mungkin berisi rahasia.
+
+Validasi tambahan mencakup kandidat LiteSpeed, konfigurasi CLI invalid, pelepasan slot saat gagal, dan pesan runtime. Pengujian HTTP multipart di runtime LiteSpeed berhasil mengunggah PDF sintetis (201), mengunduh dan mencocokkan SHA-256, lalu menghapus berkas cloud. Data uji di database di-rollback dan pemeriksaan sementara dihapus.
