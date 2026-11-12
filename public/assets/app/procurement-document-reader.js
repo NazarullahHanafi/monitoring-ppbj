@@ -13,8 +13,8 @@
         return ocrLibrary;
     }
     function check(signal) { if (signal.aborted) throw new DOMException('Dibatalkan', 'AbortError'); }
-    async function readPdf(file, update, signal) {
-        const base = window.PROCUREMENT_DETAILS_CONFIG.readerUrl;
+    async function readPdf(file, update, signal, readerBase) {
+        const base = readerBase || window.PROCUREMENT_DETAILS_CONFIG.readerUrl;
         update('Menyiapkan pembaca PDF di perangkat Anda…');
         if (!pdfModule) pdfModule = import(`${base}/pdf.min.mjs`).catch(error => { pdfModule = null; throw error; });
         const pdfjs = await pdfModule;
@@ -82,5 +82,41 @@
             await task.destroy().catch(() => {});
         }
     }
-    window.ProcurementDocumentReader = { readPdf };
+    async function readImage(file, update, signal, readerBase) {
+        const base = readerBase || window.PROCUREMENT_DETAILS_CONFIG.readerUrl;
+        let bitmap, worker, canvas;
+        const cancel = () => { if (worker) worker.terminate(); };
+        signal.addEventListener('abort', cancel, { once: true });
+        try {
+            update('Menyiapkan pembaca foto di perangkat Anda…');
+            bitmap = await createImageBitmap(file);
+            check(signal);
+            if (bitmap.width * bitmap.height > 16000000) throw new Error('Foto melebihi 16 megapiksel. Perkecil foto sebelum membaca teks. Berkas asli tetap dapat diunggah.');
+            const scale = Math.min(1, Math.sqrt(3500000 / (bitmap.width * bitmap.height)));
+            canvas = document.createElement('canvas');
+            canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+            canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+            const context = canvas.getContext('2d');
+            context.fillStyle = '#fff'; context.fillRect(0, 0, canvas.width, canvas.height);
+            context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+            bitmap.close(); bitmap = null;
+            const ocr = await loadOcr(base);
+            check(signal);
+            worker = await ocr.createWorker('ind+eng', 1, { workerPath: `${base}/worker.min.js`,
+                corePath: `${base}/core`, langPath: `${base}/lang`, workerBlobURL: false,
+                logger: event => { if (!signal.aborted) update(`Membaca foto… ${Math.round((event.progress || 0) * 100)}%`); }, errorHandler: () => {} });
+            check(signal);
+            const result = await worker.recognize(canvas);
+            check(signal);
+            const text = result.data.text.trim();
+            if (text.length > 200000) throw new Error('Teks terlalu panjang. Lengkapi teks pencarian secara manual.');
+            return { text, method: 'image-ocr' };
+        } finally {
+            signal.removeEventListener('abort', cancel);
+            if (bitmap) bitmap.close();
+            if (worker) await worker.terminate().catch(() => {});
+            if (canvas) canvas.width = canvas.height = 0;
+        }
+    }
+    window.ProcurementDocumentReader = { readPdf, readImage };
 })();

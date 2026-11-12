@@ -36,8 +36,10 @@ class VendorController extends Controller
                 ->orWhere('email', 'like', "%{$search}%")
                 ->orWhere('npwp', 'like', "%{$search}%")
                 ->orWhere('direktur', 'like', "%{$search}%")
-                ->orWhere('jabatan', 'like', "%{$search}%");
+                ->orWhere('jabatan', 'like', "%{$search}%")
+                ->orWhereHas('documents', fn ($docs) => $docs->where('status', 'ready')->search($search));
             }))
+            ->withCount(['documents as documents_count' => fn ($docs) => $docs->where('status', 'ready')])
             ->orderBy('nama_vendor')
             ->paginate(10)
             ->withQueryString();
@@ -143,6 +145,9 @@ class VendorController extends Controller
 
     public function destroy(Vendor $vendor)
     {
+        if ($vendor->documents()->exists()) {
+            return back()->withErrors(['error' => 'Vendor masih memiliki lampiran OneDrive. Hapus lampirannya terlebih dahulu atau nonaktifkan vendor.']);
+        }
         if ($vendor->sps()->exists()) {
             return back()->withErrors([
                 'error' => "Vendor \"{$vendor->nama_vendor}\" tidak bisa dihapus karena masih memiliki data SP. Nonaktifkan saja.",

@@ -40,6 +40,22 @@ Artisan::command('procurement:prune-detail-drafts', function () {
 })->purpose('Remove only expired, unclaimed procurement detail uploads');
 Schedule::command('procurement:prune-detail-drafts')->dailyAt('02:50')->withoutOverlapping();
 
+Artisan::command('vendor:prune-temporary-files', function () {
+    $directory = storage_path('app/private/vendor-documents');
+    if (! is_dir($directory)) {
+        $this->info('No vendor temporary files.');
+        return;
+    }
+    $count = 0;
+    foreach (new \DirectoryIterator($directory) as $file) {
+        if (! $file->isLink() && $file->isFile() && preg_match('/^[a-f0-9]{32}\.bin$/D', $file->getFilename()) && $file->getMTime() < time() - 7200) {
+            if (unlink($file->getPathname())) { $count++; }
+        }
+    }
+    $this->info("Removed {$count} abandoned vendor transfer files older than two hours.");
+})->purpose('Remove only abandoned temporary vendor transfers; cloud originals are untouched');
+Schedule::command('vendor:prune-temporary-files')->hourly()->withoutOverlapping();
+
 Schedule::command('owner:backup-email')
     ->weeklyOn(5, '02:00')
     ->timezone(config('app.timezone', 'Asia/Jakarta'))

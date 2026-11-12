@@ -401,6 +401,14 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
 
         // Gunakan /vendors agar tidak bentrok dengan folder asset public/vendor milik file preview.
         Route::get('/vendors/search', [VendorController::class, 'search'])->name('vendor.search')->middleware('throttle:60,1');
+        Route::prefix('vendors/{vendor}/documents')->name('vendor.documents.')->controller(\App\Http\Controllers\VendorDocumentController::class)->group(function () {
+            Route::get('/', 'index')->middleware('throttle:60,1,vendor-doc-list:')->name('index');
+            Route::post('/', 'store')->middleware('throttle:10,1,vendor-doc-upload:')->name('store');
+            Route::get('/{document}', 'show')->whereUuid('document')->middleware('throttle:30,1,vendor-doc-detail:')->name('show');
+            Route::get('/{document}/download', 'download')->whereUuid('document')->middleware('throttle:20,1,vendor-doc-download:')->name('download');
+            Route::put('/{document}', 'update')->whereUuid('document')->middleware('throttle:20,1,vendor-doc-update:')->name('update');
+            Route::delete('/{document}', 'destroy')->whereUuid('document')->middleware('throttle:10,1,vendor-doc-delete:')->name('destroy');
+        });
         Route::resource('vendors', VendorController::class)
             ->names('vendor')
             ->parameters(['vendors' => 'vendor'])

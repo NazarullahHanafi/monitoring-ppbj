@@ -49,6 +49,11 @@ class Vendor extends Model
         return $this->hasMany(Sp::class, 'nama_vendor', 'nama_vendor');
     }
 
+    public function documents()
+    {
+        return $this->hasMany(VendorDocument::class);
+    }
+
     // ===== SCOPE =====
 
     public function scopeActive(Builder $q): Builder

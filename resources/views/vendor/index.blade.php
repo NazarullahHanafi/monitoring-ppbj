@@ -4,6 +4,7 @@
 
 @push('styles')
     <link rel="stylesheet" href="{{ asset('assets/vendor/vendor.css') }}?v=20260814a">
+    <link rel="stylesheet" href="{{ asset('assets/vendor/documents.css') }}?v={{ filemtime(public_path('assets/vendor/documents.css')) }}">
 @endpush
 
 @section('content')
@@ -12,6 +13,13 @@
         $safeBackUrl = $previousUrl && $previousUrl !== request()->fullUrl()
             ? $previousUrl
             : route('dashboard');
+    @endphp
+
+    @php
+        $vendorDocumentsReadOnly = auth()->user()->isReadOnly() || \Illuminate\Support\Facades\Cache::get('simonpr:read_only_mode', false);
+        $vendorUploadLimit = ini_parse_quantity(ini_get('upload_max_filesize'));
+        $vendorPostLimit = ini_parse_quantity(ini_get('post_max_size'));
+        $vendorDocumentMaxBytes = max(1, min(10485760, $vendorUploadLimit > 0 ? $vendorUploadLimit : 10485760, $vendorPostLimit > 0 ? $vendorPostLimit - 1048576 : 10485760));
     @endphp
 
     <div class="space-y-6">
@@ -132,6 +140,7 @@
                 </button>
             </div>
             <p id="filterPendingHint" role="status" aria-live="polite" class="text-xs text-gray-600 dark:text-gray-300 mt-3">Pencarian tidak otomatis. Tekan Enter atau klik Terapkan Filter.</p>
+            <p class="text-xs text-gray-600 dark:text-gray-300 mt-2">Pencarian mencakup data vendor dan lampiran siap pakai: jenis, judul, nomor, nama berkas, serta teks yang telah diperiksa. Buka tombol Lampiran untuk mengelola dokumen di OneDrive.</p>
             @if($search !== '')
                 <div class="flex items-center gap-2 flex-wrap mt-3">
                     <span class="inline-flex items-center gap-1 text-xs bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 px-2 py-0.5 rounded-full">
@@ -194,6 +203,7 @@
                                 <td class="px-3 py-3">
                                     <div class="font-semibold text-gray-800 dark:text-gray-100">
                                         {{ $v->nama_vendor }}</div>
+                                    <button type="button" data-vd-open data-vendor-id="{{ $v->id }}" data-vendor-name="{{ $v->nama_vendor }}" class="text-xs text-emerald-700 dark:text-emerald-300 hover:underline mt-1">Lampiran · {{ $v->documents_count }}</button>
                                 </td>
                                 <td class="px-3 py-3 text-gray-600 dark:text-gray-300 text-xs max-w-xs truncate"
                                     title="{{ $v->alamat }}">
@@ -487,6 +497,7 @@
             </form>
         </div>
     </div>
+    @include('vendor.documents')
 @endsection
 
 @push('scripts')
@@ -494,10 +505,14 @@
         $vendorPageConfig = [
             'indexUrl' => route('vendor.index'),
         ];
+        $vendorDocumentsConfig = ['baseUrl' => url('/vendors'), 'csrf' => csrf_token(), 'readOnly' => $vendorDocumentsReadOnly, 'readerUrl' => asset('assets/document-reader/v1'), 'maxBytes' => $vendorDocumentMaxBytes];
     @endphp
     <script>
         window.VENDOR_PAGE_CONFIG = @json($vendorPageConfig);
+        window.VENDOR_DOCUMENTS_CONFIG = @json($vendorDocumentsConfig);
     </script>
     <script src="{{ asset('assets/app/procurement-filters.js') }}?v={{ filemtime(public_path('assets/app/procurement-filters.js')) }}" defer></script>
     <script src="{{ asset('assets/vendor/vendor.js') }}?v={{ filemtime(public_path('assets/vendor/vendor.js')) }}" defer></script>
+    <script src="{{ asset('assets/app/procurement-document-reader.js') }}?v={{ filemtime(public_path('assets/app/procurement-document-reader.js')) }}" defer></script>
+    <script src="{{ asset('assets/vendor/documents.js') }}?v={{ filemtime(public_path('assets/vendor/documents.js')) }}" defer></script>
 @endpush
