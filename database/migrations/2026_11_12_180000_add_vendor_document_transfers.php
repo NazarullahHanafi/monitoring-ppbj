@@ -26,7 +26,7 @@ return new class extends Migration
             $table->unsignedInteger('completed')->default(0);
             $table->string('file', 40)->nullable();
             $table->unsignedBigInteger('size')->default(0);
-            $table->timestamp('expires_at');
+            $table->dateTime('expires_at');
             $table->timestamps();
             $table->index(['user_id', 'vendor_id', 'fingerprint'], 'vendor_bundle_reuse');
             $table->index(['status', 'created_at'], 'vendor_bundle_queue');

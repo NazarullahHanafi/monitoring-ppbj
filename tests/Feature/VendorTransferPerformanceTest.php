@@ -174,6 +174,7 @@ class VendorTransferPerformanceTest extends TestCase
         $downloads->process($bundle);
         $bundle->refresh();
         $this->assertSame('ready', $bundle->status);
+        $this->assertTrue($bundle->expires_at->greaterThan(now()->addMinutes(55)), 'Progress updates must not replace the one-hour expiry.');
         $zip = new ZipArchive;
         $this->assertTrue($zip->open($downloads->bundlePath($bundle)));
         $this->assertSame(2, $zip->numFiles);

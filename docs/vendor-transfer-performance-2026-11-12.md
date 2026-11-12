@@ -19,3 +19,5 @@ Paket hanya dapat dilihat/diunduh oleh pemilik permintaan yang tetap berhak meng
 Perubahan ini mempercepat alur vendor dan mengurangi pekerjaan hosting per transfer. Kecepatan jaringan pengguna, hosting, serta OneDrive tetap memengaruhi waktu penyelesaian; bukan klaim seluruh website bebas lag.
 
 Pengujian: `VendorTransferPerformanceTest`, regresi `VendorDocumentsTest`, dan browser `vendor-transfers.cjs` desktop/ponsel. Referensi API: [Microsoft Graph download content](https://learn.microsoft.com/en-us/graph/api/driveitem-get-content?view=graph-rest-1.0), [upload small files](https://learn.microsoft.com/en-us/graph/api/driveitem-put-content?view=graph-rest-1.0).
+
+Verifikasi hosting MariaDB menemukan `explicit_defaults_for_timestamp=OFF` menambahkan pembaruan otomatis pada kolom TIMESTAMP masa berlaku. Kolom paket memakai DATETIME dengan migrasi koreksi untuk menjaga masa berlaku satu jam saat progres berubah. Uji aktual melalui LiteSpeed mengonfirmasi penerimaan HTTP 202 sebelum cloud, peluncuran CLI terpisah, checksum unduhan langsung/ZIP, dan penggunaan ulang paket; data sintetis dan berkas cloud uji dibersihkan.

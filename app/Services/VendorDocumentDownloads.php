@@ -231,7 +231,9 @@ class VendorDocumentDownloads
             return true;
         } catch (\Throwable $error) {
             $bundle->forceFill(['status' => 'failed', 'file' => null])->save();
-            \Illuminate\Support\Facades\Log::warning('Vendor bundle preparation failed.', ['bundle_id' => $bundle->id, 'exception_class' => get_class($error)]);
+            $code = in_array($error->getMessage(), ['bundle changed', 'bundle capacity', 'zip open', 'zip source', 'zip entry', 'zip close', 'bundle entry changed', 'bundle time limit', 'download integrity'], true) ? $error->getMessage() : 'unexpected';
+            \Illuminate\Support\Facades\Log::warning('Vendor bundle preparation failed.', ['bundle_id' => $bundle->id, 'exception_class' => get_class($error),
+                'failure_code' => $code, 'location' => basename($error->getFile()).':'.$error->getLine()]);
 
             return true;
         } finally {
