@@ -60,6 +60,81 @@ class ProcurementUnifiedSearchTest extends TestCase
         return $this->getJson(route('procurement.search', ['q' => $q] + $params))->assertOk();
     }
 
+    public function test_deferred_results_preserve_ranking_and_page_boundaries_without_a_count_query(): void
+    {
+        $writer = app(ProcurementSearchWriter::class);
+        for ($i = 1; $i <= 11; $i++) {
+            $pr = $this->pr('PR-FAST-'.$i);
+            $writer->source('ppbj', 'fast-'.$i, 'Kursi', 'DOC-'.$i, 'kursi plastik', '', [$pr->id], hash('sha256', 'fast-'.$i));
+        }
+        $expected = $this->search('kursi')->assertJsonPath('total', 11)->json('rows');
+        DB::enableQueryLog();
+        $first = $this->search('kursi', ['totals' => 'deferred'])->assertJsonPath('total', null)
+            ->assertJsonPath('last_page', null)->assertJsonPath('has_more', true)->assertJsonCount(10, 'rows');
+        $queries = collect(DB::getQueryLog())->pluck('query')->implode("\n");
+        DB::disableQueryLog();
+        $this->assertDoesNotMatchRegularExpression('/count\(\*\) as aggregate/i', $queries);
+        $this->assertSame(array_column($expected, 'id'), array_column($first->json('rows'), 'id'));
+        $second = $this->search('kursi', ['totals' => 'deferred', 'page' => 2])->assertJsonPath('has_more', false)->assertJsonCount(1, 'rows');
+        $this->assertNotContains($second->json('rows.0.id'), array_column($first->json('rows'), 'id'));
+        $this->search('kursi', ['totals' => 'deferred', 'page' => 3])->assertJsonPath('has_more', false)->assertJsonCount(0, 'rows');
+        $this->search('zzzzzzzz', ['totals' => 'deferred'])->assertJsonPath('total', null)->assertJsonPath('has_more', false)->assertJsonCount(0, 'rows');
+        Http::assertNothingSent();
+    }
+
+    public function test_total_only_counts_unique_live_prs_with_identical_scopes_filters_and_word_modes(): void
+    {
+        $pr = $this->pr();
+        $other = $this->pr('PR-OTHER');
+        $other->update(['buyer' => 'Buyer lain']);
+        $this->documents($pr);
+        app(ProcurementSearchSync::class)->local();
+        $writer = app(ProcurementSearchWriter::class);
+        $writer->source('archive_attachment', 'fast-shared', 'Scan', 'SCAN-FAST', 'kursi plastik', '', [$pr->id, $other->id], hash('sha256', 'fast-shared'), true);
+        $writer->source('archive_attachment', 'fast-second', 'Scan', 'SCAN-TWO', 'kursi ergonomis', '', [$pr->id], hash('sha256', 'fast-second'), true);
+        foreach ([['kursi', []], ['kursi', ['scope' => 'archive']], ['kursi plastik', ['match' => 'related']],
+            ['kursi plastik', ['match' => 'source']], ['chair', ['lexical' => 'expanded']], ['chair', ['lexical' => 'exact']],
+            ['SCAN-FAST', ['match' => 'reference']], ['kursi', ['scope' => 'sp']], ['kursi', ['scope' => 'spph']],
+            ['kursi', ['buyer' => 'Nazar']], ['kursi', ['vendor' => 'Vendor A']], ['kursi', ['creator' => 'Unknown']],
+            ['kursi', ['exclude' => 'plastik']]] as [$term, $filters]) {
+            $full = $this->search($term, $filters)->json('total');
+            $this->search($term, $filters + ['totals' => 'only'])->assertJsonPath('total', $full)->assertJsonPath('totals', 'only')->assertJsonMissingPath('rows');
+        }
+        $this->search('kursi', ['scope' => 'archive', 'totals' => 'only'])->assertJsonPath('total', 2);
+        $other->delete();
+        DB::table('procurement_search_sources')->where('source_key', 'fast-second')->update(['active' => false]);
+        $this->search('kursi', ['scope' => 'archive', 'totals' => 'only'])->assertJsonPath('total', 1);
+        DB::table('procurement_search_sources')->where('source_key', 'fast-shared')->update(['verified_at' => now()->subHour()]);
+        $this->search('kursi', ['scope' => 'archive', 'totals' => 'only'])->assertJsonPath('total', 0);
+    }
+
+    public function test_count_path_never_loads_scores_context_snippets_or_ocr_bodies_and_retains_access_controls(): void
+    {
+        $pr = $this->pr();
+        app(ProcurementSearchWriter::class)->source('ppbj', 'count-light', 'Kursi', 'DOC-LIGHT', 'kursi', '', [$pr->id], hash('sha256', 'light'));
+        DB::enableQueryLog();
+        $this->search('kursi', ['totals' => 'only'])->assertJsonPath('total', 1)->assertHeader('Cache-Control', 'no-store, private');
+        $queries = collect(DB::getQueryLog())->pluck('query')->implode("\n");
+        DB::disableQueryLog();
+        $this->assertDoesNotMatchRegularExpression('/row_number|relevance_score|token_score|substr\(|procurement_search_passages|metadata_text/i', $queries);
+        $this->assertSame(1, preg_match_all('/count\(\*\) as aggregate/i', $queries));
+        $this->getJson(route('procurement.search', ['q' => 'kursi', 'totals' => 'unlimited']))->assertUnprocessable();
+        $this->actingAs(User::factory()->create(['department' => 'operasional']))->getJson(route('procurement.search', ['q' => 'kursi', 'totals' => 'only']))->assertForbidden();
+        auth()->forgetGuards();
+        $this->getJson(route('procurement.search', ['q' => 'kursi', 'totals' => 'only']))->assertUnauthorized();
+        Http::assertNothingSent();
+    }
+
+    public function test_progressive_ocr_hits_keep_search_pagination_separate_from_document_page_locations(): void
+    {
+        $pr = $this->pr();
+        $source = $this->archive($pr);
+        $writer = app(ProcurementSearchWriter::class);
+        $writer->passages($source->id, [['page' => 8, 'text' => 'kursi plastik', 'engine' => 'native-pdf', 'confidence' => 95]]);
+        $this->search('kursi plastik', ['totals' => 'deferred'])->assertJsonPath('page', 1)
+            ->assertJsonPath('rows.0.matches.0.match_page', 8)->assertJsonPath('has_more', false)->assertJsonPath('total', null);
+    }
+
     public function test_literal_tokens_rank_before_prefixes_and_equivalents_without_changing_newest_order(): void
     {
         $literal = $this->pr('PR-LITERAL');

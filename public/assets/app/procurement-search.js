@@ -428,8 +428,38 @@
             }
         } finally { clearTimeout(timeout); evidenceControllers.delete(pending); button.disabled = false; }
     });
+    function searchUrl(page, totals) {
+        const url = new URL(root.dataset.endpoint, window.location.origin);
+        url.search = new URLSearchParams({ q: appliedQuery, scope: appliedScope, match: appliedMatch, sort: appliedSort, lexical: appliedLexical, page, ...appliedFilters, totals });
+        return url;
+    }
+    function totalButton(summary) {
+        const button = element('button', 'pus-secondary', 'Hitung seluruh PR'); button.type = 'button';
+        const message = element('span', 'pus-note', 'Total dihitung hanya saat diperlukan.');
+        const url = searchUrl(1, 'only'), serial = sequence;
+        button.addEventListener('click', async () => {
+            if (button.disabled || serial !== sequence) return;
+            const pending = new AbortController(); evidenceControllers.add(pending);
+            const timeout = setTimeout(() => pending.abort(), 20000);
+            button.disabled = true; message.textContent = 'Menghitung PR sesuai pencarian yang diterapkan…';
+            try {
+                const response = await fetch(url, {headers: {Accept: 'application/json'}, credentials: 'same-origin', signal: pending.signal});
+                const result = await readResponse(response);
+                if (serial !== sequence) return;
+                if (pending.signal.aborted) throw Error('Perhitungan terlalu lama. Coba lagi bila diperlukan.');
+                if (!Number.isSafeInteger(result.total) || result.total < 0 || result.totals !== 'only') throw Error('Total belum dapat diverifikasi. Coba lagi.');
+                message.textContent = `Total saat dihitung: ${result.total.toLocaleString('id-ID')} PR. Arsip baru dapat mengubah hasil.`;
+                button.hidden = true;
+            } catch (error) {
+                if (serial === sequence && !pending.signal.aborted) message.textContent = error.message;
+                else if (serial === sequence) message.textContent = 'Perhitungan terlalu lama. Coba lagi bila diperlukan.';
+            } finally { clearTimeout(timeout); evidenceControllers.delete(pending); button.disabled = false; }
+        });
+        summary.append(button, message);
+    }
     function render(data) {
         results.replaceChildren();
+        const deferred = data.totals === 'deferred', hasResults = (data.rows || []).length > 0 || data.total > 0;
         const suggestions = get('suggestions');
         if (suggestions) {
             suggestions.replaceChildren();
@@ -452,7 +482,9 @@
         const summary = get('summary');
         if (summary) {
             summary.hidden = false;
-            summary.replaceChildren(element('strong', '', `${data.total || 0} PR ditemukan`), element('span', '', data.elapsed_ms ? `Selesai dalam ${(data.elapsed_ms / 1000).toLocaleString('id-ID', { maximumFractionDigits: 3 })} detik` : 'Hasil dikelompokkan per PR'));
+            const range = (data.rows || []).length ? `Menampilkan PR ${(data.page - 1) * 10 + 1}–${(data.page - 1) * 10 + data.rows.length}` : 'Tidak ada PR pada halaman ini';
+            summary.replaceChildren(element('strong', '', deferred ? range : `${data.total || 0} PR ditemukan`), element('span', '', data.elapsed_ms ? `Selesai dalam ${(data.elapsed_ms / 1000).toLocaleString('id-ID', { maximumFractionDigits: 3 })} detik` : 'Hasil dikelompokkan per PR'));
+            if (deferred) totalButton(summary);
             if (data.index?.pages_known) summary.append(element('span', '', `${data.index.pages_processed || 0}/${data.index.pages_known} halaman terpetakan sudah diproses`));
         }
         for (const row of data.rows || []) {
@@ -474,13 +506,13 @@
             if (root.dataset.canPrioritize === '1' && Number.isSafeInteger(row.id) && row.id > 0) card.append(queuePanel(row));
             results.append(card);
         }
-        status.textContent = data.total ? `${data.total} PR cocok untuk “${appliedQuery}”. Ditampilkan per PR agar hubungan dokumennya jelas.` : 'Belum ada PR yang cocok. Coba kata yang lebih singkat atau pilih semua sumber.';
+        status.textContent = hasResults ? `${deferred ? 'Hasil' : `${data.total} PR`} cocok untuk “${appliedQuery}”. Ditampilkan per PR agar hubungan dokumennya jelas.` : 'Belum ada PR yang cocok. Coba kata yang lebih singkat atau pilih semua sumber.';
         if (data.query?.missing?.length) {
             const missing = data.query.missing.map(word => `“${word}”`).join(', ');
             status.textContent = `Kata ${missing} belum ketemu di indeks sumber ini, cuy.`;
-            if (data.query.used?.length) status.textContent += data.total ? ` Tapi “${data.query.used.join(' ')}” ketemu! Ini ${data.total} PR yang cocok.` : ` Kata “${data.query.used.join(' ')}” ada, tapi belum ketemu bersamaan dalam ${data.match === 'related' ? 'PR yang sama' : 'satu dokumen'}. Coba cari salah satunya dulu.`;
+            if (data.query.used?.length) status.textContent += hasResults ? ` Tapi “${data.query.used.join(' ')}” ketemu! ${deferred ? 'Berikut PR' : `Ini ${data.total} PR`} yang cocok.` : ` Kata “${data.query.used.join(' ')}” ada, tapi belum ketemu bersamaan dalam ${data.match === 'related' ? 'PR yang sama' : 'satu dokumen'}. Coba cari salah satunya dulu.`;
             else status.textContent += ' Coba kata yang lebih singkat atau pilih semua sumber, ya.';
-        } else if (!data.total && !data.query?.strict && data.query?.used?.length > 1 && !/[0-9=<>"']/.test(appliedQuery)) {
+        } else if (!hasResults && !data.query?.strict && data.query?.used?.length > 1 && !/[0-9=<>"']/.test(appliedQuery)) {
             status.textContent = `Kata-katanya ada, cuy, tapi belum ketemu bersamaan dalam ${data.match === 'related' ? 'PR yang sama' : 'satu dokumen'}. Coba cari salah satu kata atau pilih semua sumber.`;
         }
         showProgress(data.index);
@@ -491,11 +523,11 @@
         if (data.match === 'reference') status.textContent += ' Seluruh nomor dokumen dicocokkan secara persis.';
         else if (data.lexical === 'exact') status.textContent += ' Kata utuh, tanpa perluasan awalan atau padanan; urutan kata bebas.';
         currentPage = data.page;
-        lastPage = data.last_page;
-        pagination.hidden = data.last_page <= 1;
-        get('page').textContent = `${data.page} / ${data.last_page}`;
+        lastPage = deferred ? data.page + (data.has_more ? 1 : 0) : data.last_page;
+        pagination.hidden = data.page <= 1 && !(deferred ? data.has_more : data.last_page > 1);
+        get('page').textContent = deferred ? `Halaman ${data.page}${data.has_more ? ' · masih ada hasil' : ' · akhir hasil'}` : `${data.page} / ${data.last_page}`;
         get('prev').disabled = data.page <= 1;
-        get('next').disabled = data.page >= data.last_page;
+        get('next').disabled = data.page >= lastPage;
     }
     async function search(page = 1) {
         const key = JSON.stringify([appliedQuery, appliedScope, appliedMatch, appliedSort, appliedLexical, appliedFilters, page]);
@@ -507,12 +539,12 @@
         status.dataset.error = 'false';
         status.textContent = 'Mencari barang dan dokumen…';
         if (get('suggestions')) get('suggestions').hidden = true;
+        if (get('summary')) get('summary').hidden = true;
         submit.disabled = true;
         get('prev').disabled = get('next').disabled = true;
         const timeout = setTimeout(() => { if (serial === sequence) controller.abort(); }, 20000);
         try {
-            const url = new URL(root.dataset.endpoint, window.location.origin);
-            url.search = new URLSearchParams({ q: appliedQuery, scope: appliedScope, match: appliedMatch, sort: appliedSort, lexical: appliedLexical, page, ...appliedFilters });
+            const url = searchUrl(page, 'deferred');
             const response = await fetch(url, { headers: { Accept: 'application/json' }, signal: controller.signal, credentials: 'same-origin' });
             if (serial !== sequence) return;
             const data = await readResponse(response);

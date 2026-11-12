@@ -239,6 +239,26 @@ class ProcurementUnifiedSearch
         $after = max(0, (int) ($options['after'] ?? 0));
         $sourceLimit = $evidencePr ? 8 : 4;
         $plan = $this->resolve($term, $scope, $lexical);
+        $totals = $evidencePr ? 'exact' : ($options['totals'] ?? 'exact');
+        // Membership uses indexed semijoins; counting never computes relevance,
+        // token scores, provenance, snippets or OCR page text.
+        $count = function () use ($plan, $scope, $match, $lexical, $term, $evidencePr, $filters) {
+            $candidates = Ppbj::query()->whereIn('ppbj.id', $this->matchingSources($plan['used'], $scope, $match, $lexical, $term)
+                ->join('procurement_search_links as count_link', 'count_link.source_id', '=', 'src.id')->select('count_link.ppbj_id'));
+            if ($match === 'related' && count($plan['used']) > 1) {
+                $candidates->whereIn('ppbj.id', $this->relatedPrIds($plan['used'], $scope, $lexical));
+            }
+            if ($evidencePr) {
+                $candidates->where('ppbj.id', $evidencePr);
+            }
+            $this->applyFilters($candidates, $scope, $filters);
+
+            return $candidates->count();
+        };
+        if ($totals === 'only') {
+            return ['total' => $count(), 'query' => $plan, 'totals' => 'only',
+                'elapsed_ms' => max(1, (int) round((hrtime(true) - $started) / 1000000))];
+        }
         $effective = implode(' ', $plan['used']);
         $rankTokens = ! $evidencePr && $match !== 'reference' && $lexical !== 'exact' && count($plan['used']) > 0;
         $rankPrTokens = $rankTokens && $sort !== 'newest';
@@ -261,7 +281,9 @@ class ProcurementUnifiedSearch
         if ($sort !== 'newest') {
             $query->orderByRaw('CASE WHEN LOWER(ppbj.ppbj_no) = ? THEN 1 ELSE 0 END DESC', [mb_strtolower(trim($term))])->orderByDesc('search_score.relevance_score');
         }
-        $prs = $query->orderByDesc('ppbj.id')->paginate($evidencePr ? 1 : 10, ['*'], 'page', $evidencePr ? 1 : $page);
+        $query->orderByDesc('ppbj.id');
+        $prs = $totals === 'deferred' ? $query->simplePaginate(10, ['*'], 'page', $page)
+            : $query->paginate($evidencePr ? 1 : 10, ['*'], 'page', $evidencePr ? 1 : $page, $count);
         $contexts = $evidencePr ? [] : $context->forPrs($prs->getCollection());
         // Resolve token intersections once for all visible PRs, instead of repeating
         // every token subquery in ten UNION branches. The per-PR bound is preserved.
@@ -298,10 +320,10 @@ class ProcurementUnifiedSearch
         foreach ($wordEvidence as $sourceId => $hits) {
             // Prefer the page supporting most of the selected word locations,
             // then the earlier page. These are first locations, not all occurrences.
-            $page = $hits->filter(fn ($hit) => $hit->first_page > 0)->groupBy('first_page')
+            $pageHits = $hits->filter(fn ($hit) => $hit->first_page > 0)->groupBy('first_page')
                 ->sort(fn ($a, $b) => $b->count() <=> $a->count() ?: (int) $a->first()->first_page <=> (int) $b->first()->first_page)->first();
-            if ($page) {
-                $hit = $page->first();
+            if ($pageHits) {
+                $hit = $pageHits->first();
                 $part = DB::query()->selectRaw('? AS source_id, ? AS page, ? AS term', [$sourceId, $hit->first_page, $hit->term]);
                 $positions = $positions ? $positions->unionAll($part) : $part;
             }
@@ -312,7 +334,8 @@ class ProcurementUnifiedSearch
                 ->selectRaw('SUBSTR(passage.content, CASE WHEN INSTR(LOWER(passage.content), hit.term) > 60 THEN INSTR(LOWER(passage.content), hit.term) - 60 ELSE 1 END, 320) AS content')->get()->keyBy('source_id');
         }
 
-        $suggestions = $evidencePr || $lexical === 'exact' ? [] : app(ProcurementSearchSuggestions::class)->forQuery($term, $scope, $filters, $plan, $prs->total(), $match);
+        // Spelling suggestions only need to know whether there are any results.
+        $suggestions = $evidencePr || $lexical === 'exact' ? [] : app(ProcurementSearchSuggestions::class)->forQuery($term, $scope, $filters, $plan, $totals === 'deferred' ? ($page > 1 ? 1 : $prs->count()) : $prs->total(), $match);
 
         return ['rows' => $prs->map(function ($pr) use ($matches, $texts, $pageTexts, $effective, $contexts, $evidence, $wordEvidence, $plan, $term, $match, $sourceLimit, $after, $evidencePr) {
             $sources = $matches->get($pr->id, collect());
@@ -350,7 +373,8 @@ class ProcurementUnifiedSearch
                         'url' => $archive ? route('procurement.search.file', ['source' => $source->id]).($passage && $source->reading_engine !== 'office-text' ? '#page='.$passage->page : '') : route($source->kind.'.index', ['search' => $source->reference] + ($source->kind === 'sp' && str_starts_with($source->label, 'SP Oracle ') ? ['mode' => 'oracle'] : []))];
                 })->values(), 'more_sources' => max(0, $sources->count() - $sourceLimit),
                 'evidence' => ['after' => $evidencePr ? (int) ($sources->take($sourceLimit)->last()?->id ?? $after) : 0, 'has_more' => $sources->count() > $sourceLimit]];
-        })->values(), 'total' => $prs->total(), 'page' => $prs->currentPage(), 'last_page' => $prs->lastPage(),
+        })->values(), 'total' => $totals === 'deferred' ? null : $prs->total(), 'page' => $prs->currentPage(), 'last_page' => $totals === 'deferred' ? null : $prs->lastPage(),
+            'has_more' => $prs->hasMorePages(), 'totals' => $totals,
             'query' => $plan,
             'match' => $match, 'sort' => $sort, 'lexical' => $lexical, 'excluded' => $excluded, 'suggestions' => $suggestions,
             'equivalents' => $lexical === 'exact' ? [] : collect($words)->mapWithKeys(fn ($word) => [$word => array_values(array_diff(ProcurementSearchText::equivalents($word), [$word]))])->filter(fn ($values) => count($values) > 0)->all(),

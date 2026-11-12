@@ -38,6 +38,56 @@ function data(number = 'PR-001') {
 const flush = () => new Promise(resolve => setImmediate(resolve));
 function submit(f, query) { f.nodes.query.value = query; f.nodes.form.fire('submit', { preventDefault() {} }); }
 
+test('progressive results paginate without pretending a missing total is zero', async () => {
+    const f = setup(); submit(f, 'kursi');
+    assert.equal(new URL(f.requests[0].url).searchParams.get('totals'), 'deferred');
+    f.requests[0].resolve({ok: true, json: async () => ({...data(), total: null, last_page: null, totals: 'deferred', has_more: true})}); await flush();
+    assert.equal(f.nodes.next.disabled, false); assert.equal(f.nodes.prev.disabled, true); assert.equal(f.nodes.pagination.hidden, false);
+    assert.match(f.nodes.status.textContent, /Hasil cocok/);
+    assert.equal(walk(f.nodes.summary, n => n.textContent === 'Menampilkan PR 1–1').length, 1);
+    f.nodes.query.value = 'draft'; f.nodes.next.fire('click');
+    assert.equal(new URL(f.requests[1].url).searchParams.get('q'), 'kursi');
+    assert.equal(new URL(f.requests[1].url).searchParams.get('page'), '2');
+    f.requests[1].resolve({ok: true, json: async () => ({...data(), total: null, last_page: null, totals: 'deferred', has_more: false, page: 2})}); await flush();
+    assert.equal(f.nodes.next.disabled, true); assert.equal(f.nodes.prev.disabled, false); assert.equal(f.nodes.pagination.hidden, false);
+    assert.match(f.nodes.page.textContent, /akhir hasil/);
+});
+
+test('count is manual, freezes applied filters, avoids duplicates and leaves result cards and pagination intact', async () => {
+    const f = setup(); f.nodes.buyer.value = 'Nazar'; f.nodes.vendor.value = 'Vendor'; submit(f, 'kursi');
+    f.requests[0].resolve({ok:true,json:async()=>({...data(), total:null, last_page:null, totals:'deferred',has_more:true})});await flush();
+    assert.equal(f.requests.length,1);
+    const card=f.nodes.results.children[0], button=walk(f.nodes.summary,n=>n.textContent==='Hitung seluruh PR')[0];
+    f.nodes.query.value='draft';f.nodes.buyer.value='Draft buyer';button.fire('click');button.fire('click');
+    assert.equal(f.requests.length,2); const url=new URL(f.requests[1].url);
+    assert.equal(url.searchParams.get('totals'),'only'); assert.equal(url.searchParams.get('q'),'kursi');
+    assert.equal(url.searchParams.get('buyer'),'Nazar'); assert.equal(url.searchParams.get('vendor'),'Vendor');
+    f.requests[1].resolve({ok:true,json:async()=>({total:312,totals:'only'})});await flush();
+    assert.equal(f.nodes.results.children[0],card);assert.equal(button.hidden,true);assert.equal(f.nodes.next.disabled,false);
+    assert.equal(walk(f.nodes.summary,n=>String(n.textContent).includes('312 PR')).length,1);
+});
+
+test('count cancels on reset or new search and cannot overwrite new results', async () => {
+    const f=setup();submit(f,'kursi');f.requests[0].resolve({ok:true,json:async()=>({...data(),total:null,totals:'deferred',has_more:false})});await flush();
+    const button=walk(f.nodes.summary,n=>n.textContent==='Hitung seluruh PR')[0];button.fire('click');
+    submit(f,'plastik');assert.equal(f.requests[1].options.signal.aborted,true);
+    f.requests[2].resolve({ok:true,json:async()=>data('PR-NEW')});await flush();
+    f.requests[1].resolve({ok:true,json:async()=>({total:999,totals:'only'})});await flush();
+    assert.equal(walk(f.nodes.summary,n=>String(n.textContent).includes('999')).length,0);
+    f.nodes.reset.fire('click');button.fire('click');assert.equal(f.requests.length,3);
+});
+
+test('failed or malformed counts can be retried while result cards stay usable', async () => {
+    const f=setup();submit(f,'kursi');f.requests[0].resolve({ok:true,json:async()=>({...data(),total:null,totals:'deferred',has_more:false})});await flush();
+    const button=walk(f.nodes.summary,n=>n.textContent==='Hitung seluruh PR')[0];button.fire('click');
+    f.requests[1].resolve({ok:true,json:async()=>({total:'<img onerror=1>',totals:'only'})});await flush();
+    assert.equal(button.disabled,false);assert.equal(button.hidden,undefined);assert.equal(f.nodes.results.children.length,1);
+    button.fire('click');f.context.timeout();assert.equal(f.requests[2].options.signal.aborted,true);
+    f.requests[2].resolve({ok:true,json:async()=>({total:2,totals:'only'})});await flush();
+    assert.equal(walk(f.nodes.summary,n=>String(n.textContent).includes('Total saat dihitung:')).length,0);
+    button.fire('click');f.nodes.reset.fire('click');assert.equal(f.requests[3].options.signal.aborted,true);
+});
+
 async function pagePanel() {
     const f = setup(); submit(f, 'kursi plastik');
     const result = data(); result.rows[0].matches[0].id = 55;
