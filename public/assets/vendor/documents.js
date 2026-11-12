@@ -13,6 +13,30 @@
     let vendorId, vendorName, base, busy = false, dirty = false, editDocument = null, uploadId = null;
     let page = 1, applied = { q: '', type: '', attention: '' }, sequence = 0, listAbort, readAbort, confirming = false;
     let lastAttempt = { page: 1, criteria: { q: '', type: '', attention: '' } };
+    let transferTimer, bundleTimer, watchDeadline = 0, activeTransfers = 0, bundleId = null;
+    function stopWatching() { clearTimeout(transferTimer); clearTimeout(bundleTimer); }
+    function transferInfo(count) {
+        activeTransfers = count;
+        const node = find('[data-vd-transfer-status]'); node.hidden = !count;
+        node.textContent = `${count} berkas sedang dikirim dan diverifikasi di OneDrive. Anda boleh menutup jendela ini; proses tetap berjalan.`;
+    }
+    function watchTransfers() {
+        clearTimeout(transferTimer);
+        if (!activeTransfers || !dialog.open || Date.now() > watchDeadline) return;
+        transferTimer = setTimeout(async () => {
+            if (!dialog.open || document.hidden || busy || !editor.hidden) { watchTransfers(); return; }
+            const scope = base;
+            try {
+                const result = await request(`${scope}/transfers`);
+                if (scope !== base || !dialog.open) return;
+                if (!Number.isInteger(result.active_count) || result.active_count < 0) throw new Error('Status transfer belum tersedia.');
+                const changed = result.active_count !== activeTransfers;
+                transferInfo(result.active_count);
+                if (changed) await load(page, applied);
+            } catch (_) { /* A visible manual refresh remains available. */ }
+            watchTransfers();
+        }, 7000);
+    }
 
     function status(message = '', error = false) {
         const node = find('[data-vd-status]'); node.textContent = message; node.dataset.error = String(error);
@@ -79,12 +103,13 @@
             card.append(element('p', info.join(' · ')));
             if (doc.expires_at && doc.expires_at <= new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10)) card.append(element('p', 'Periksa masa berlaku dokumen ini.', 'vd-expiring'));
             if (doc.snippet) card.append(element('blockquote', doc.snippet));
-            card.append(element('p', doc.status === 'ready' ? (doc.has_text ? 'Teks diperiksa · dapat dicari' : 'Metadata dapat dicari · teks scan belum dilengkapi') : doc.status === 'deleting' ? 'Penghapusan belum terkonfirmasi · coba hapus kembali' : 'Unggahan belum terkonfirmasi · ulangi dengan berkas yang sama'));
+            card.append(element('p', doc.status === 'ready' ? (doc.has_text ? 'Teks diperiksa · dapat dicari' : 'Metadata dapat dicari · teks scan belum dilengkapi') : ['queued', 'transferring'].includes(doc.status) ? 'Transfer latar belakang aktif · berkas sudah diterima hosting.' : doc.status === 'deleting' ? 'Penghapusan belum terkonfirmasi · coba hapus kembali' : 'Unggahan belum terkonfirmasi · ulangi dengan berkas yang sama'));
             const actions = element('div', undefined, 'vd-toolbar');
             if (doc.status === 'ready') {
-                const link = element('a', 'Unduh'); link.href = `${base}/${doc.id}/download`; link.target = '_blank'; link.rel = 'noopener'; actions.append(link);
+                const link = element('a', 'Unduh cepat'); link.href = `${base}/${doc.id}/download?direct=1`; link.target = '_blank'; link.rel = 'noopener noreferrer'; actions.append(link);
                 if (!config.readOnly) actions.append(button('Periksa / ubah', () => edit(doc)));
-            } else if (doc.status !== 'deleting' && !config.readOnly) actions.append(button('Lanjutkan unggahan', () => edit(doc, true)));
+            } else if (['queued', 'transferring'].includes(doc.status)) card.append(element('p', doc.status === 'queued' ? 'Menunggu transfer latar belakang · tidak perlu unggah ulang.' : 'Sedang dikirim dan diverifikasi · Anda boleh melanjutkan pekerjaan.', 'vd-transfer'));
+            else if (doc.status !== 'deleting' && !config.readOnly) actions.append(button('Lanjutkan unggahan', () => edit(doc, true)));
             if (!config.readOnly) actions.append(button('Hapus', () => remove(doc)));
             card.append(actions); list.append(card);
         }
@@ -102,6 +127,7 @@
             if (ticket !== sequence) return;
             if (!Array.isArray(result.data) || !result.data.every(validDocument) || typeof result.has_more !== 'boolean') throw new Error('Daftar belum valid. Coba muat ulang.');
             page = targetPage; applied = { ...criteria }; render(result.data); list.hidden = false;
+            transferInfo(Number.isInteger(result.active_count) ? result.active_count : 0); watchTransfers();
             const diagnosis = find('[data-vd-diagnosis]'); diagnosis.replaceChildren();
             if (!result.data.length && result.diagnosis?.missing?.length) {
                 diagnosis.hidden = false; diagnosis.append(element('p', `Kata ${result.diagnosis.missing.join(', ')} belum ditemukan pada filter ini. Coba kata yang lebih singkat atau periksa teks dokumennya.`));
@@ -159,6 +185,8 @@
         if (succeeded && await load(1)) status('Lampiran telah dihapus.');
     }
     document.querySelectorAll('[data-vd-open]').forEach(node => node.addEventListener('click', () => {
+        stopWatching(); bundleId = null; watchDeadline = Date.now() + 10 * 60000;
+        find('[data-vd-bundle-panel]').hidden = true; find('[data-vd-bundle-link]').hidden = true;
         vendorId = node.dataset.vendorId; vendorName = node.dataset.vendorName;
         base = `${config.baseUrl}/${encodeURIComponent(vendorId)}/documents`;
         resetEditor(); filter.reset(); applied = { q: '', type: '', attention: '' }; page = 1;
@@ -166,7 +194,7 @@
     }));
     async function close() {
         if (busy || !await discard()) return;
-        sequence++; listAbort?.abort(); dialog.close(); resetEditor(); status();
+        sequence++; listAbort?.abort(); stopWatching(); dialog.close(); resetEditor(); status();
     }
     find('[data-vd-close]').addEventListener('click', close);
     dialog.addEventListener('cancel', event => { event.preventDefault(); close(); });
@@ -200,12 +228,13 @@
         const body = new FormData(editor);
         if (!field('search_text').value.trim()) body.delete('text_confirmed');
         if (editDocument) { body.delete('file'); body.set('version', editDocument.version); body.set('_method', 'PUT'); }
-        else { uploadId ||= crypto.randomUUID(); body.set('upload_id', uploadId); }
-        freeze(true); status(editDocument ? 'Menyimpan hasil pemeriksaan…' : 'Mengirim ke OneDrive dan memeriksa integritas berkas. Tunggu hingga selesai…');
-        let succeeded = false, failedFields;
+        else { uploadId ||= crypto.randomUUID(); body.set('upload_id', uploadId); body.set('background', '1'); }
+        freeze(true); status(editDocument ? 'Menyimpan hasil pemeriksaan…' : 'Menerima berkas untuk transfer latar belakang…');
+        let succeeded = false, queued = false, failedFields;
         try {
             const result = await request(editDocument ? `${base}/${editDocument.id}` : base, { method: 'POST', body });
-            if (!validDocument(result.document) || result.document.status !== 'ready' || result.document.id !== (editDocument?.id || uploadId)) throw new Error('Simpanan belum terkonfirmasi. Muat ulang daftar sebelum mencoba kembali.');
+            queued = result.queued === true && ['queued', 'transferring'].includes(result.document?.status);
+            if (!validDocument(result.document) || (!queued && result.document.status !== 'ready') || result.document.id !== (editDocument?.id || uploadId)) throw new Error('Simpanan belum terkonfirmasi. Muat ulang daftar sebelum mencoba kembali.');
             if (result.reused === true) {
                 editDocument = result.document; uploadId = null; dirty = true;
                 find('[data-vd-file-wrap]').hidden = true; field('file').required = false;
@@ -217,7 +246,7 @@
             succeeded = true; resetEditor();
         } catch (error) { status(error.message, true); failedFields = error.fields; } finally { freeze(false); }
         if (failedFields) window.FormUX.errors(editor, failedFields);
-        if (succeeded) { filter.reset(); if (await load(1, { q: '', type: '', attention: '' })) status('Lampiran tersimpan. Metadata dan teks yang diperiksa sudah dapat dicari.'); }
+        if (succeeded) { filter.reset(); watchDeadline = Date.now() + 10 * 60000; if (await load(1, { q: '', type: '', attention: '' })) status(queued ? 'Berkas diterima. Transfer ke OneDrive berjalan di latar belakang; Anda boleh melanjutkan pekerjaan. Status siap muncul setelah verifikasi selesai.' : 'Lampiran tersimpan. Metadata dan teks yang diperiksa sudah dapat dicari.'); }
     });
     find('[data-vd-read]').addEventListener('click', async () => {
         if (busy || config.readOnly) return;
@@ -253,6 +282,45 @@
         finally { clearTimeout(timer); freeze(false); readAbort = null; }
     });
     find('[data-vd-cancel-read]').addEventListener('click', () => readAbort?.abort());
+    function showBundle(result) {
+        if (!result || !/^[a-f0-9-]{36}$/.test(result.id) || !['queued', 'processing', 'ready', 'failed'].includes(result.status)
+            || !Number.isInteger(result.total) || !Number.isInteger(result.completed)) throw new Error('Status ZIP belum valid. Tekan Unduh semua untuk memuat kembali.');
+        bundleId = result.id;
+        find('[data-vd-bundle-panel]').hidden = false;
+        const link = find('[data-vd-bundle-link]'); link.hidden = result.status !== 'ready';
+        find('[data-vd-bundle-status]').textContent = result.status === 'ready' ? `ZIP siap · ${result.total} lampiran. Berlaku sampai satu jam; tombol dapat digunakan kembali.`
+            : result.status === 'failed' ? 'Paket belum berhasil disiapkan. Tidak ada ZIP tidak lengkap yang diberikan. Tekan Unduh semua untuk mencoba kembali.'
+                : `Menyiapkan ${result.completed}/${result.total} lampiran siap. Berkas yang masih ditransfer belum masuk ZIP. Anda boleh menutup jendela ini dan mengambilnya nanti.`;
+        if (result.status === 'ready') { link.href = `${base}/bundle/${result.id}/download`; link.target = '_blank'; link.rel = 'noopener'; }
+        return ['queued', 'processing'].includes(result.status);
+    }
+    function watchBundle() {
+        clearTimeout(bundleTimer);
+        if (!bundleId || !dialog.open || Date.now() > watchDeadline) return;
+        bundleTimer = setTimeout(async () => {
+            if (!dialog.open || document.hidden || busy) { watchBundle(); return; }
+            const scope = base, id = bundleId;
+            try {
+                const result = await request(`${scope}/bundle/${id}`);
+                if (scope !== base || id !== bundleId || !dialog.open) return;
+                if (showBundle(result)) watchBundle();
+            } catch (error) { find('[data-vd-bundle-status]').textContent = `${error.message} Tekan Unduh semua untuk memuat status kembali.`; }
+        }, 5000);
+    }
+    find('[data-vd-bundle]').addEventListener('click', async () => {
+        if (busy) return;
+        freeze(true); find('[data-vd-bundle-panel]').hidden = false;
+        find('[data-vd-bundle-status]').textContent = 'Menyiapkan paket privat untuk vendor ini…';
+        const scope = base;
+        try {
+            const result = await request(`${scope}/bundle`, { method: 'POST' });
+            if (scope !== base) return;
+            watchDeadline = Date.now() + 10 * 60000;
+            if (showBundle(result)) watchBundle();
+        } catch (error) { find('[data-vd-bundle-status]').textContent = error.message; }
+        finally { freeze(false); }
+    });
+    window.addEventListener('pagehide', stopWatching);
     find('[data-vd-refresh]').addEventListener('click', () => load(lastAttempt.page, lastAttempt.criteria));
     filter.addEventListener('submit', event => { event.preventDefault(); if (window.FormUX?.validate(filter)) load(1, { q: filter.elements.q.value.trim(), type: filter.elements.type.value, attention: filter.elements.attention.value }); });
     find('[data-vd-reset]').addEventListener('click', () => { filter.reset(); load(1, { q: '', type: '', attention: '' }); });

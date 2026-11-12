@@ -30,15 +30,16 @@ try {
         throw new RuntimeException('path');
     }
     $item = null;
-    $lookup = function () use ($cloud, $path, $input) {
-        $itemId = $input['item_id'] ?? null;
+    $token = $cloud->accessToken();
+    $lookup = function (?string $specificId = null) use ($token, $path, $input) {
+        $itemId = $specificId ?? $input['item_id'] ?? null;
         if ($itemId !== null && (! is_string($itemId) || strlen($itemId) > 255 || $itemId === '')) {
             throw new RuntimeException('item');
         }
         $url = $itemId ? 'https://graph.microsoft.com/v1.0/me/drive/items/'.rawurlencode($itemId)
             : 'https://graph.microsoft.com/v1.0/me/drive/root:/'.implode('/', array_map('rawurlencode', explode('/', $path)));
-        $response = Illuminate\Support\Facades\Http::withToken($cloud->accessToken())->timeout(30)
-            ->get($url, ['$select' => 'id,size']);
+        $response = Illuminate\Support\Facades\Http::withToken($token)->connectTimeout(10)->timeout(30)
+            ->get($url, ['$select' => 'id,size,eTag']);
         if ($response->status() === 404) {
             return null;
         }
@@ -52,6 +53,21 @@ try {
             $cloud->delete($item['id']);
         }
         echo json_encode(['ok' => true]);
+        exit;
+    }
+    if ($action === 'link') {
+        $item = $lookup();
+        if (! $item || (int) $item['size'] !== (int) ($input['size'] ?? 0) || empty($input['etag'])
+            || ! hash_equals($input['etag'], $item['eTag'] ?? '')) {
+            throw new RuntimeException('download integrity');
+        }
+        $response = Illuminate\Support\Facades\Http::withToken($token)->connectTimeout(10)->timeout(20)
+            ->withOptions(['allow_redirects' => false])->get('https://graph.microsoft.com/v1.0/me/drive/items/'.rawurlencode($item['id']).'/content');
+        $response->throw();
+        if (! $response->redirect()) {
+            throw new RuntimeException('download link');
+        }
+        echo json_encode(['ok' => true, 'url' => $response->header('Location')]);
         exit;
     }
     $local = $input['local'] ?? '';
@@ -71,10 +87,28 @@ try {
         if (! is_file($destination) || filesize($destination) !== $size || ! hash_equals($checksum, hash_file('sha256', $destination))) {
             throw new RuntimeException('upload integrity');
         }
-        $segments = explode('/', $path);
-        $name = array_pop($segments);
-        $item = $cloud->upload($destination, $name, 'application/octet-stream', $segments);
-        $id = $item['item_id'];
+        // Existing monthly folders need one PUT, rather than resolving every
+        // ancestor for every upload. Only a missing parent uses provisioning.
+        $stream = fopen($destination, 'rb');
+        try {
+            $response = Illuminate\Support\Facades\Http::withToken($token)->connectTimeout(10)->timeout(120)
+                ->withBody($stream, 'application/octet-stream')->put('https://graph.microsoft.com/v1.0/me/drive/root:/'.implode('/', array_map('rawurlencode', explode('/', $path))).':/content');
+        } finally {
+            fclose($stream);
+        }
+        if ($response->status() === 404) {
+            $segments = explode('/', $path);
+            $name = array_pop($segments);
+            $uploaded = $cloud->upload($destination, $name, 'application/octet-stream', $segments);
+            $item = $lookup($uploaded['item_id']);
+        } else {
+            $response->throw();
+            $item = $response->json();
+        }
+        if (empty($item['id']) || (int) ($item['size'] ?? 0) !== $size) {
+            throw new RuntimeException('upload integrity');
+        }
+        $id = $item['id'];
     } elseif ($action === 'download') {
         $item = $lookup();
         if (! $item || (int) $item['size'] !== $size || file_exists($destination)) {
@@ -86,32 +120,37 @@ try {
     }
     // Verify cloud bytes before acknowledging success. Bound every transfer to
     // the validated ten MiB file size; no original is retained on hosting.
-    $response = Illuminate\Support\Facades\Http::withToken($cloud->accessToken())->timeout(120)
-        ->withOptions(['allow_redirects' => true, 'progress' => function ($total, $downloaded) use ($size) {
-            if ($total > $size || $downloaded > $size) {
-                throw new RuntimeException('download exceeds size');
-            }
-        }])->get('https://graph.microsoft.com/v1.0/me/drive/items/'.rawurlencode($id).'/content')->throw();
-    $body = $response->body();
-    if (strlen($body) !== $size || ! hash_equals($checksum, hash('sha256', $body))) {
-        throw new RuntimeException('cloud integrity');
+    $verifiedPath = $action === 'download' ? $destination : $work.DIRECTORY_SEPARATOR.bin2hex(random_bytes(16)).'.bin';
+    $handle = fopen($verifiedPath, 'x+b');
+    if (! $handle) {
+        throw new RuntimeException('destination');
     }
-    if ($action === 'download') {
-        $handle = fopen($destination, 'x+b');
-        if (! $handle) {
-            throw new RuntimeException('destination');
-        }
-        try {
-            chmod($destination, 0600);
-            if (fwrite($handle, $body) !== $size) {
-                throw new RuntimeException('write');
-            }
-        } finally {
+    chmod($verifiedPath, 0600);
+    try {
+        $downloadResponse = Illuminate\Support\Facades\Http::withToken($token)->connectTimeout(10)->timeout(120)
+            ->withOptions(['sink' => $handle, 'allow_redirects' => true, 'progress' => function ($total, $downloaded) use ($size) {
+                if ($total > $size || $downloaded > $size) {
+                    throw new RuntimeException('download exceeds size');
+                }
+            }])->get('https://graph.microsoft.com/v1.0/me/drive/items/'.rawurlencode($id).'/content')->throw();
+    } finally {
+        if (is_resource($handle)) {
             fclose($handle);
         }
     }
-    echo json_encode(['ok' => true, 'item_id' => $id, 'verified' => true]);
+    clearstatcache(true, $verifiedPath);
+    if (filesize($verifiedPath) !== $size || ! hash_equals($checksum, hash_file('sha256', $verifiedPath))) {
+        throw new RuntimeException('cloud integrity');
+    }
+    if ($action === 'upload') {
+        unlink($verifiedPath);
+        $verifiedPath = null;
+    }
+    echo json_encode(['ok' => true, 'item_id' => $id, 'etag' => $item['eTag'] ?? null, 'verified' => true]);
 } catch (Throwable $e) {
+    if (isset($verifiedPath) && $verifiedPath && is_file($verifiedPath)) {
+        @unlink($verifiedPath);
+    }
     // Keep cloud responses, identifiers, tokens and document text out of logs.
     $reason = 'cloud';
     if ($e instanceof Illuminate\Http\Client\RequestException) {

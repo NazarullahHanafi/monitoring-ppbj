@@ -405,6 +405,11 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
             Route::get('/', 'index')->middleware('throttle:60,1,vendor-doc-list:')->name('index');
             Route::post('/', 'store')->middleware('throttle:10,1,vendor-doc-upload:')->name('store');
             Route::post('/extract', 'extract')->middleware('throttle:8,1,vendor-doc-extract:')->name('extract');
+            Route::get('/transfers', 'transfers')->middleware('throttle:30,1,vendor-doc-transfer-status:')->name('transfers');
+            // A ZIP is a private read derivative, so viewers can prepare it too.
+            Route::post('/bundle', 'bundle')->withoutMiddleware('readonly.block')->middleware('throttle:6,1,vendor-doc-bundle:')->name('bundle');
+            Route::get('/bundle/{bundle}', 'bundleStatus')->whereUuid('bundle')->middleware('throttle:60,1,vendor-doc-bundle-status:')->name('bundle.status');
+            Route::get('/bundle/{bundle}/download', 'bundleDownload')->whereUuid('bundle')->middleware('throttle:12,1,vendor-doc-bundle-download:')->name('bundle.download');
             Route::get('/{document}', 'show')->whereUuid('document')->middleware('throttle:30,1,vendor-doc-detail:')->name('show');
             Route::get('/{document}/download', 'download')->whereUuid('document')->middleware('throttle:20,1,vendor-doc-download:')->name('download');
             Route::put('/{document}', 'update')->whereUuid('document')->middleware('throttle:20,1,vendor-doc-update:')->name('update');

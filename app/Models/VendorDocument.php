@@ -16,13 +16,14 @@ class VendorDocument extends Model
 
     protected $guarded = [];
 
-    protected $hidden = ['cloud_item_id', 'cloud_path', 'checksum', 'search_text'];
+    protected $hidden = ['cloud_item_id', 'cloud_etag', 'cloud_path', 'checksum', 'search_text', 'staged_file'];
 
     protected $attributes = ['version' => 1, 'status' => 'pending'];
 
     protected function casts(): array
     {
-        return ['expires_at' => 'date:Y-m-d', 'version' => 'integer', 'size' => 'integer', 'vendor_id' => 'integer', 'uploaded_by' => 'integer'];
+        return ['expires_at' => 'date:Y-m-d', 'version' => 'integer', 'size' => 'integer', 'vendor_id' => 'integer', 'uploaded_by' => 'integer',
+            'transfer_attempts' => 'integer', 'transfer_after' => 'datetime', 'transfer_expires_at' => 'datetime'];
     }
 
     public static function terms(string $text): array

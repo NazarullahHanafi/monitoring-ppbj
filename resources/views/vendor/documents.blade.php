@@ -6,7 +6,9 @@
     <div class="vd-body">
         <p class="vd-note">Berkas asli disimpan di OneDrive. Nama, nomor, dan teks pencarian disimpan di sistem. Akses hanya untuk pengguna berwenang.</p>
         <p data-vd-status role="status" aria-live="polite"></p>
-        <div class="vd-toolbar"><button type="button" data-vd-new @disabled($vendorDocumentsReadOnly)>＋ Tambah lampiran</button><button type="button" data-vd-refresh>Muat ulang daftar</button></div>
+        <div class="vd-toolbar"><button type="button" data-vd-new @disabled($vendorDocumentsReadOnly)>＋ Tambah lampiran</button><button type="button" data-vd-refresh>Muat ulang daftar</button><button type="button" data-vd-bundle>Unduh semua · ZIP</button></div>
+        <div data-vd-bundle-panel class="vd-diagnosis" hidden><p data-vd-bundle-status role="status" aria-live="polite"></p><a data-vd-bundle-link hidden>Unduh ZIP siap</a></div>
+        <p data-vd-transfer-status class="vd-note" role="status" hidden></p>
         <form data-vd-editor hidden novalidate>
             <h3 data-vd-editor-title>Tambah lampiran</h3>
             <div class="vd-steps" aria-label="Tahapan lampiran"><span>01 · Pilih dokumen</span><span>02 · Periksa teks</span><span>03 · Simpan aman</span></div>

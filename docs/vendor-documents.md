@@ -4,6 +4,8 @@ Menu **Master Vendor → Lampiran** mendukung dokumen, Office, teks, dan gambar 
 
 ## Penyimpanan dan pemulihan
 
+Pembaruan alur latar belakang, unduhan langsung, cache sementara, dan paket ZIP dijelaskan pada [catatan performa transfer](vendor-transfer-performance-2026-11-12.md). Ketentuan cache/URL sementara pada pembaruan tersebut menggantikan alur transfer sinkron pada uraian awal di bawah.
+
 - Berkas asli berada di OneDrive yang sudah terhubung pada aplikasi arsip, di `SIMONPR-Vendor/YYYY/MM/<UUID>.<ext>`. Tidak membuat dokumen PR palsu dan tidak mengubah data arsip.
 - Proses anak CLI memakai konfigurasi/key milik aplikasi arsip, dengan lingkungan terisolasi. Kredensial, item ID, cloud path, dan URL OneDrive tidak dikirim ke browser.
 - Hosting hanya menyimpan metadata, teks yang dikonfirmasi, indeks kata, dan catatan aktivitas. Transfer memakai berkas sementara privat, dihapus setelah selesai/gagal; pembersihan setiap jam menghapus transfer tertinggal berumur lebih dari dua jam. Metadata/indeks tetap memakai kapasitas database.

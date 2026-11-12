@@ -55,6 +55,7 @@ Artisan::command('vendor:prune-temporary-files', function () {
     $this->info("Removed {$count} abandoned vendor transfer files older than two hours.");
 })->purpose('Remove only abandoned temporary vendor transfers; cloud originals are untouched');
 Schedule::command('vendor:prune-temporary-files')->hourly()->withoutOverlapping();
+Schedule::command('vendor:transfers --seconds=240 --limit=12')->everyMinute()->withoutOverlapping(15)->runInBackground();
 
 Schedule::command('owner:backup-email')
     ->weeklyOn(5, '02:00')

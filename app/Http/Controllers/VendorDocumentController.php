@@ -6,9 +6,13 @@ use App\Exceptions\VendorCloudException;
 use App\Models\ActivityLog;
 use App\Models\Vendor;
 use App\Models\VendorDocument;
+use App\Models\VendorDocumentBundle;
 use App\Services\ProcurementOfficeReader;
 use App\Services\ProcurementUploadInspector;
 use App\Services\VendorDocumentCloud;
+use App\Services\VendorDocumentDownloads;
+use App\Services\VendorDocumentTransfers;
+use App\Services\VendorTransferWorker;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -50,7 +54,19 @@ class VendorDocumentController extends Controller
             $diagnosis = ['matched' => $matched, 'missing' => $missing, 'suggestion' => implode(' ', $matched)];
         }
 
-        return response()->json(['data' => $rows->map(fn ($doc) => $this->present($doc)), 'has_more' => $rows->hasMorePages(), 'ready_count' => $vendor->documents()->where('status', 'ready')->count(), 'diagnosis' => $diagnosis])->header('Cache-Control', 'private, no-store');
+        return response()->json(['data' => $rows->map(fn ($doc) => $this->present($doc)), 'has_more' => $rows->hasMorePages(), 'diagnosis' => $diagnosis] + $this->transferCounts($vendor))->header('Cache-Control', 'private, no-store');
+    }
+
+    public function transfers(Vendor $vendor)
+    {
+        return response()->json($this->transferCounts($vendor))->header('Cache-Control', 'private, no-store');
+    }
+
+    private function transferCounts(Vendor $vendor): array
+    {
+        $counts = $vendor->documents()->selectRaw("SUM(CASE WHEN status = 'ready' THEN 1 ELSE 0 END) as ready, SUM(CASE WHEN status IN ('queued', 'transferring') THEN 1 ELSE 0 END) as active")->first();
+
+        return ['ready_count' => (int) $counts->ready, 'active_count' => (int) $counts->active];
     }
 
     public function show(Vendor $vendor, VendorDocument $document)
@@ -64,6 +80,7 @@ class VendorDocumentController extends Controller
     {
         $data = $request->validate($this->rules() + [
             'upload_id' => 'nullable|uuid',
+            'background' => 'nullable|boolean',
             'file' => ['required', 'file', 'max:10240'],
         ], self::VALIDATION_MESSAGES, ['file' => 'Berkas', 'title' => 'Judul dokumen', 'type' => 'Jenis dokumen']);
         $file = $request->file('file');
@@ -83,6 +100,11 @@ class VendorDocumentController extends Controller
                 if ($document->status === 'ready') {
                     return response()->json(['document' => $this->present($document), 'reused' => true]);
                 }
+                if (in_array($document->status, ['queued', 'transferring'], true) && $document->staged_file) {
+                    $document->forceFill($this->metadata($data))->save();
+
+                    return response()->json(['document' => $this->present($document), 'queued' => true], 202);
+                }
                 abort_if($document->status === 'deleting', 409, 'Lampiran sedang dihapus.');
                 $document->forceFill(['status' => 'pending'])->save();
             } else {
@@ -95,6 +117,13 @@ class VendorDocumentController extends Controller
                     'cloud_path' => 'SIMONPR-Vendor/'.now()->format('Y/m').'/'.$id.'.'.$extension,
                 ]);
             }
+            if ($request->boolean('background')) {
+                $document->forceFill($this->metadata($data))->save();
+                app(VendorDocumentTransfers::class)->stage($document, $file);
+                DB::afterCommit(fn () => app(VendorTransferWorker::class)->kick());
+
+                return response()->json(['document' => $this->present($document), 'queued' => true], 202);
+            }
             $temporary = $this->temporary($cloud);
             if (! copy($file->getRealPath(), $temporary)) {
                 throw new \RuntimeException('temporary upload');
@@ -105,7 +134,7 @@ class VendorDocumentController extends Controller
                 throw new \RuntimeException('cloud verification');
             }
             DB::transaction(function () use ($document, $result, $data, $request) {
-                $document->forceFill($this->metadata($data) + ['cloud_item_id' => $result['item_id'], 'status' => 'ready'])->save();
+                $document->forceFill($this->metadata($data) + ['cloud_item_id' => $result['item_id'], 'cloud_etag' => $result['etag'] ?? null, 'status' => 'ready'])->save();
                 $document->reindex();
                 $this->audit($request, $document, 'vendor_document_uploaded');
             });
@@ -165,6 +194,19 @@ class VendorDocumentController extends Controller
         abort_unless($document->status === 'ready', 409, 'Berkas belum siap diunduh.');
         $temporary = null;
         try {
+            if (request()->boolean('direct')) {
+                $downloads = app(VendorDocumentDownloads::class);
+                if ($document->cloud_etag) {
+                    return redirect()->away($downloads->direct($document), 302, ['Cache-Control' => 'private, no-store', 'Referrer-Policy' => 'no-referrer']);
+                }
+                $cached = $downloads->verified($document);
+                $temporary = $this->temporary($cloud);
+                if (! @link($cached, $temporary) && ! copy($cached, $temporary)) {
+                    throw new \RuntimeException('download copy');
+                }
+
+                return response()->download($temporary, $document->original_name, ['Content-Type' => $document->mime, 'Cache-Control' => 'private, no-store', 'X-Content-Type-Options' => 'nosniff'])->deleteFileAfterSend(true);
+            }
             $temporary = $this->temporary($cloud);
             $cloud->call($this->cloudInput($document, 'download') + ['local' => basename($temporary)]);
             if (! is_file($temporary) || filesize($temporary) !== $document->size || ! hash_equals($document->checksum, hash_file('sha256', $temporary))) {
@@ -193,6 +235,8 @@ class VendorDocumentController extends Controller
             abort_unless($document->version === (int) $data['version'], 409, 'Lampiran berubah. Muat ulang daftar terlebih dahulu.');
             $document->forceFill(['status' => 'deleting'])->save();
             $cloud->call($this->cloudInput($document, 'delete'));
+            app(VendorDocumentTransfers::class)->remove($document->staged_file);
+            app(VendorDocumentDownloads::class)->forget($document);
             DB::transaction(function () use ($request, $document) {
                 $this->audit($request, $document, 'vendor_document_removed');
                 $document->delete();
@@ -208,6 +252,37 @@ class VendorDocumentController extends Controller
         } finally {
             $lock->release();
         }
+    }
+
+    public function bundle(Request $request, Vendor $vendor, VendorDocumentDownloads $downloads)
+    {
+        $bundle = $downloads->prepare($vendor, $request->user()->id);
+        DB::afterCommit(fn () => app(VendorTransferWorker::class)->kick());
+
+        return response()->json($this->bundleData($bundle), $bundle->status === 'ready' ? 200 : 202)->header('Cache-Control', 'private, no-store');
+    }
+
+    public function bundleStatus(Request $request, Vendor $vendor, VendorDocumentBundle $bundle)
+    {
+        abort_unless($bundle->vendor_id === $vendor->id && $bundle->user_id === $request->user()->id, 404);
+        abort_if($bundle->expires_at->isPast(), 410, 'Paket kedaluwarsa. Siapkan ZIP kembali.');
+
+        return response()->json($this->bundleData($bundle))->header('Cache-Control', 'private, no-store');
+    }
+
+    public function bundleDownload(Request $request, Vendor $vendor, VendorDocumentBundle $bundle, VendorDocumentDownloads $downloads)
+    {
+        abort_unless($bundle->vendor_id === $vendor->id && $bundle->user_id === $request->user()->id, 404);
+        $path = $downloads->bundlePath($bundle);
+        $name = 'Lampiran - '.Str::slug($vendor->nama_vendor).'.zip';
+
+        return response()->download($path, $name, ['Content-Type' => 'application/zip', 'Cache-Control' => 'private, no-store', 'X-Content-Type-Options' => 'nosniff']);
+    }
+
+    private function bundleData(VendorDocumentBundle $bundle): array
+    {
+        return ['id' => $bundle->id, 'status' => $bundle->status, 'completed' => $bundle->completed, 'total' => count($bundle->documents),
+            'download_url' => $bundle->status === 'ready' ? route('vendor.documents.bundle.download', [$bundle->vendor_id, $bundle->id]) : null];
     }
 
     private function rules(): array
