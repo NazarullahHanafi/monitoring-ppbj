@@ -12,6 +12,10 @@ class ProcurementDetailAttachment extends Model
 
     protected $guarded = [];
 
+    // Keep the new in-memory model in sync with the database default so upload
+    // responses and their audit records can be used for immediate confirmation.
+    protected $attributes = ['version' => 1];
+
     protected $hidden = ['path', 'sha256'];
 
     protected $casts = ['reviewed_at' => 'datetime', 'version' => 'integer'];

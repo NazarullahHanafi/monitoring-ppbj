@@ -26,7 +26,7 @@ async function main() {
                 return res.end(JSON.stringify({attachment:{id:'7ace907e-d943-4c23-bdf1-7a86a2dadc48',name:lastUpload.name,size:100,method:lastUpload.method,text:lastUpload.text,version:1,reviewed:false,download_url:'/file',review_url:'/review',delete_url:'/delete'}}));
             }
             if (req.method==='PUT') {
-                const input = JSON.parse(bytes); return res.end(JSON.stringify({attachment:{id:'7ace907e-d943-4c23-bdf1-7a86a2dadc48',name:lastUpload.name,text:input.text,method:lastUpload.method,version:2,reviewed:true,review_url:'/review',delete_url:'/delete',download_url:'/file'}}));
+                const input = JSON.parse(bytes); assert.equal(input.version,1,'Immediate confirmation must send the version returned by upload'); return res.end(JSON.stringify({attachment:{id:'7ace907e-d943-4c23-bdf1-7a86a2dadc48',name:lastUpload.name,text:input.text,method:lastUpload.method,version:2,reviewed:true,review_url:'/review',delete_url:'/delete',download_url:'/file'}}));
             }
             res.statusCode=404;res.end('{}');
         } catch(error) { res.statusCode=500;res.end(String(error)); }

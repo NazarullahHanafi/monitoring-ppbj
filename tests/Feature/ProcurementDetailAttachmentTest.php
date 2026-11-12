@@ -74,6 +74,30 @@ class ProcurementDetailAttachmentTest extends TestCase
         return ProcurementDetailAttachment::findOrFail($response->json('attachment.id'));
     }
 
+    public function test_new_upload_returns_the_persisted_version_for_immediate_confirmation_and_audit(): void
+    {
+        $this->withoutMiddleware(\Illuminate\Routing\Middleware\ThrottleRequests::class);
+        foreach (['sp', 'spph'] as $kind) {
+            $document = $this->document($kind);
+            foreach ([null, $document->id] as $documentId) {
+                foreach (['docx', 'pdf'] as $format) {
+                    $file = $format === 'docx' ? $this->docx() : UploadedFile::fake()->createWithContent('rincian.pdf', "%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\n%%EOF");
+                    $response = $this->postJson(route('procurement.details.upload', $kind), [
+                        'document_file' => $file, 'document_id' => $documentId,
+                        'extracted_text' => 'Kertas A4 20 rim', 'method' => 'pdf-text',
+                    ])->assertCreated()->assertJsonPath('attachment.version', 1);
+                    $item = $response->json('attachment');
+                    $this->assertSame(1, ProcurementDetailAttachment::findOrFail($item['id'])->version);
+                    $log = \App\Models\ActivityLog::where('action', 'detail_uploaded')->latest('id')->firstOrFail();
+                    $this->assertSame(1, $log->changes['version']);
+                    $this->putJson($item['review_url'], ['text' => $item['text'], 'version' => $item['version']])
+                        ->assertOk()->assertJsonPath('attachment.reviewed', true)->assertJsonPath('attachment.version', 2);
+                    $this->putJson($item['review_url'], ['text' => 'Perubahan usang', 'version' => $item['version']])->assertConflict();
+                }
+            }
+        }
+    }
+
     public function test_intent_detects_indonesian_english_rich_text_and_explicit_negations(): void
     {
         foreach (['ATK terlampir', '<p>Rincian</p><p>menyusul</p>', 'lihat lampiran', 'sesuai lampiran', 'dilampirkan', 'ter lampir', 'lampiran', 'attachment to follow', 'as attached', 'detail akan menyusul'] as $value) {
