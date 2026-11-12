@@ -60,9 +60,9 @@ function runtime() {
     const dialog={...element(),open:false,querySelector:()=>close,querySelectorAll:()=>[],showModal(){this.open=true;},
         addEventListener:(type,fn)=>handlers[type]=fn,close(){this.open=false;handlers.close?.();}};
     const archive=element();
-    const nodes={wsConfig:{textContent:JSON.stringify(config)},wsDialog:dialog,wsStatus:status,wsBody:body,wsDialogTitle:title,wsArchiveResult:archive};
+    const nodes={wsConfig:{textContent:JSON.stringify(config)},wsDialog:dialog,wsStatus:status,wsBody:body,wsDialogTitle:title,wsArchiveResult:archive,wsFavoriteName:{value:'Favorit uji'},wsFavoriteCount:element()};
     const events={};
-    const document={activeElement:{isConnected:true,focus(){}},getElementById:id=>nodes[id],querySelector:()=>null,
+    const document={activeElement:{isConnected:true,focus(){}},getElementById:id=>nodes[id],querySelector:selector=>selector==='meta[name="csrf-token"]'?{content:'csrf'}:null,
         createElement:()=>element(),addEventListener:(type,fn)=>{(events[type] ||= []).push(fn);}};
     vm.runInNewContext(source,{window,document,URL,URLSearchParams,Intl,AbortController,
         navigator:{clipboard:{writeText:async text=>copies.push(text)}},
@@ -75,12 +75,30 @@ function runtime() {
         const button={dataset,hasAttribute:name=>Object.hasOwn(dataset,name.slice(5).replace(/-([a-z])/g,(_,letter)=>letter.toUpperCase()))};
         return events.click[0]({target:{closest:()=>button},preventDefault(){}});
     };
-    return {requests,dialog,body,status,click,copies,stages,archive,timers,
+    return {requests,dialog,body,status,click,copies,stages,archive,timers,config,
+        submitFavorite(){return events.submit[0]({target:{id:'wsFavoriteForm'},preventDefault(){}});},
+        timeoutSave(){const [id,timer]=[...timers][0];assert.equal(timer.delay,30000);timers.delete(id);timer.fn();},
         timeout(){const [id,timer]=[...timers][0];assert.equal(timer.delay,20000);timers.delete(id);timer.fn();},
         change:target=>events.change[0]({target})};
 }
 const response=data=>({ok:true,json:async()=>data});
 const detail=number=>({kind:'sp',number,title:'<img src=x onerror=alert(1)>',cache_seconds:20,fields:[{label:'Uraian',value:'<script>bad()</script>'}],items:[],prs:[]});
+
+test('saving preferences times out even during a hung JSON body and late acknowledgement cannot replace state',async()=>{
+    const h=runtime();await h.click({wsOpen:'favorites'});h.submitFavorite();h.submitFavorite();assert.equal(h.requests.length,1);
+    let finish;h.requests[0].resolve({ok:true,json:()=>new Promise(resolve=>{finish=resolve;})});await new Promise(setImmediate);
+    h.timeoutSave();await new Promise(setImmediate);assert.equal(h.requests[0].options.signal.aborted,true);assert.match(h.status.textContent,/30 detik/);assert.equal(h.timers.size,0);
+    finish({version:99,settings:h.config.state.settings,message:'LATE'});await new Promise(setImmediate);assert.doesNotMatch(h.status.textContent,/LATE/);
+    h.submitFavorite();assert.equal(h.requests.length,2);assert.equal(JSON.parse(h.requests[1].options.body).version,0);
+    h.requests[1].resolve(response({version:1,settings:h.config.state.settings,message:'Tersimpan'}));await new Promise(setImmediate);assert.equal(h.status.textContent,'Tersimpan');
+});
+
+test('malformed preference acknowledgement preserves the previous version and allows safe manual retry',async()=>{
+    const h=runtime();await h.click({wsOpen:'favorites'});h.submitFavorite();h.requests[0].resolve(response({version:null,settings:null}));await new Promise(setImmediate);
+    assert.match(h.status.textContent,/belum lengkap/);h.submitFavorite();assert.equal(JSON.parse(h.requests[1].options.body).version,0);
+    h.requests[1].resolve({ok:false,status:409,json:async()=>({version:3,settings:h.config.state.settings,message:'Versi terbaru dimuat'})});await new Promise(setImmediate);
+    assert.equal(h.status.textContent,'Versi terbaru dimuat');assert.equal(h.timers.size,0);
+});
 test('opening workspace adds no request; quick detail is fetched only on click and HTML is escaped',async()=>{
     const h=runtime();assert.equal(h.requests.length,0);
     await h.click({wsDetail:'1',wsKind:'sp'});

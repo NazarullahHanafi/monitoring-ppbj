@@ -11,6 +11,7 @@
 .pus textarea{width:100%;box-sizing:border-box;min-height:70px;resize:vertical;font:13px/1.6 ui-monospace,monospace;border:1px solid var(--ps-line);border-radius:10px;background:var(--ps-bg);color:var(--ps-ink);padding:12px;margin:6px 0}.pus textarea:focus{outline:2px solid #2a918d;outline-offset:2px}.pus textarea:disabled{opacity:.75}.pus-review-text{max-height:65vh}.pus [data-pus-catalog-rows]{display:grid;gap:10px;margin-top:12px}
 .pus .pus-page-hit{color:var(--ps-ink);border-color:#65a99d;font-weight:750}
 .pus-summary{flex-wrap:wrap}
+.pus-results[hidden]{display:none}
 .pus-focus{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;padding:14px;margin-top:14px;border:1px solid var(--ps-line);border-left:3px solid #087d78;border-radius:10px;background:var(--ps-soft);color:var(--ps-ink);font-size:12px}.pus-focus[hidden]{display:none}.pus-focus .pus-note{margin:6px 0 0}.pus-focus-button{margin-top:12px;min-height:36px}
 .pus-read-notice{font-size:11px;line-height:1.6;color:var(--ps-muted);margin:7px 0 0;border-top:1px dashed var(--ps-line);padding-top:7px}
 .pus-progress{margin-top:12px;border:1px solid var(--ps-line);border-radius:10px;padding:10px 12px;background:var(--ps-soft);font-size:11px;color:var(--ps-muted);line-height:1.7}

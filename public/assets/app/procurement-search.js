@@ -10,6 +10,7 @@
     let controller, sequence = 0, currentPage = 1, lastPage = 1, appliedQuery = '', appliedScope = 'all', appliedMatch = 'source', appliedSort = 'relevance', appliedLexical = 'expanded', appliedFilters = {}, pendingKey = '';
     const evidenceControllers = new Set();
     let focusedPr = null;
+    let retryPage = null;
     const labels = { ppbj: 'PPBJ', sp: 'SP', spph: 'SPPH', archive_document: 'Arsip', archive_attachment: 'Lampiran arsip', local_sp_attachment: 'Lampiran SP', local_spph_attachment: 'Lampiran SPPH' };
     let coverageController, coverageSequence = 0, coveragePage = 1, coverageLast = 1, coverageSource = null;
     async function loadCoverage(page = 1, source = null) {
@@ -563,29 +564,46 @@
         controller = new AbortController();
         pendingKey = key;
         const serial = ++sequence;
+        const pending = controller;
+        let succeeded = false, rejectAbort;
+        const cancelled = new Promise((_, reject) => { rejectAbort = () => reject(Object.assign(new Error('Dibatalkan'), {name: 'AbortError'})); pending.signal.addEventListener('abort', rejectAbort, {once: true}); });
+        retryPage = null;
+        if (get('retry')) { get('retry').hidden = true; get('retry').disabled = true; }
+        results.hidden = true; pagination.hidden = true;
         status.dataset.error = 'false';
         status.textContent = 'Mencari barang dan dokumen…';
         if (get('suggestions')) get('suggestions').hidden = true;
         if (get('summary')) get('summary').hidden = true;
         submit.disabled = true;
         get('prev').disabled = get('next').disabled = true;
-        const timeout = setTimeout(() => { if (serial === sequence) controller.abort(); }, 20000);
+        const timeout = setTimeout(() => pending.abort(), 20000);
         try {
             const url = searchUrl(page, 'deferred');
-            const response = await fetch(url, { headers: { Accept: 'application/json' }, signal: controller.signal, credentials: 'same-origin' });
-            if (serial !== sequence) return;
-            const data = await readResponse(response);
-            if (serial !== sequence) return;
+            const read = async () => {
+                const response = await fetch(url, { headers: { Accept: 'application/json' }, signal: pending.signal, credentials: 'same-origin' });
+                const data = await readResponse(response);
+                if (!data || !Array.isArray(data.rows)) throw Error('Hasil belum lengkap. Coba muat kembali.');
+                return data;
+            };
+            const data = await Promise.race([read(), cancelled]);
+            if (serial !== sequence || pending.signal.aborted) return;
             render(data);
+            succeeded = true; results.hidden = false;
         } catch (error) {
             if (serial !== sequence) return;
+            if (get('summary')) get('summary').hidden = true;
+            pagination.hidden = true;
             status.dataset.error = 'true';
             status.textContent = error.name === 'AbortError' ? 'Pencarian terlalu lama. Coba lagi dengan kata yang lebih spesifik.' : error.message === 'Failed to fetch' ? 'Koneksi terputus. Coba kembali.' : error.message;
+            retryPage = page;
+            if (get('retry')) { get('retry').hidden = false; get('retry').disabled = false; }
         } finally {
             clearTimeout(timeout);
-            if (serial === sequence) { submit.disabled = false; pendingKey = ''; get('prev').disabled = currentPage <= 1; get('next').disabled = currentPage >= lastPage; }
+            pending.signal.removeEventListener('abort', rejectAbort);
+            if (serial === sequence) { submit.disabled = false; pendingKey = ''; get('prev').disabled = !succeeded || currentPage <= 1; get('next').disabled = !succeeded || currentPage >= lastPage; }
         }
     }
+    get('retry')?.addEventListener('click', () => { if (retryPage !== null && !pendingKey) { restoreAppliedFields(); search(retryPage); } });
     form.addEventListener('submit', event => {
         event.preventDefault();
         if (!input.value.trim()) return;
@@ -619,12 +637,14 @@
         if (get('suggestions')) { get('suggestions').replaceChildren(); get('suggestions').hidden = true; }
         for (const name of filterNames) if (get(name)) get(name).value = '';
         currentPage = lastPage = 1;
+        retryPage = null;
+        if (get('retry')) { get('retry').hidden = true; get('retry').disabled = false; }
         results.replaceChildren(); pagination.hidden = true;
         if (get('summary')) get('summary').hidden = true;
         if (get('progress')) get('progress').hidden = true;
         status.dataset.error = 'false';
         status.textContent = 'Ketik nama barang untuk mencari PR dan lampiran terkait.';
     });
-    get('prev').addEventListener('click', () => search(Math.max(1, currentPage-1)));
-    get('next').addEventListener('click', () => search(currentPage+1));
+    get('prev').addEventListener('click', () => { if (!get('prev').disabled) search(Math.max(1, currentPage-1)); });
+    get('next').addEventListener('click', () => { if (!get('next').disabled) search(currentPage+1); });
 })();

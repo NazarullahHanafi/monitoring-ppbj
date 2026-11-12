@@ -17,6 +17,7 @@ function setup(initialQuery = '') {
     for (const name of ['form', 'query', 'scope', 'match', 'sort', 'lexical', 'suggestions', 'buyer', 'vendor', 'creator', 'exclude', 'status', 'results', 'pagination', 'prev', 'next', 'reset', 'page', 'submit', 'summary', 'progress', 'progressinfo', 'check-status', 'check-coverage', 'coverage', 'coverage-info', 'coverage-rows', 'coverage-page', 'coverage-prev', 'coverage-next', 'coverage-back', 'catalog-form', 'catalog-query', 'catalog-rows', 'catalog-info', 'catalog-more']) nodes[name] = new Element();
     nodes['catalog-form'].dataset.endpoint = '/procurement/search/archive-catalog';
     for (const name of ['focus', 'focus-label', 'focus-clear']) nodes[name] = new Element();
+    nodes.retry = new Element();
     nodes['check-coverage'].dataset.coverageEndpoint = '/procurement/search/coverage';
     nodes.scope.value = 'all';
     nodes.query.value = initialQuery;
@@ -38,6 +39,32 @@ function data(number = 'PR-001') {
 }
 const flush = () => new Promise(resolve => setImmediate(resolve));
 function submit(f, query) { f.nodes.query.value = query; f.nodes.form.fire('submit', { preventDefault() {} }); }
+
+test('failed search hides obsolete results and freezes retry criteria instead of paging the failed new query', async () => {
+    const f=setup();submit(f,'kursi');f.requests[0].resolve({ok:true,json:async()=>({...data(),last_page:3})});await flush();
+    assert.equal(f.nodes.results.hidden,false);assert.equal(f.nodes.next.disabled,false);
+    f.nodes.buyer.value='Nazar';submit(f,'plastik');f.requests[1].resolve({ok:false,status:500});await flush();
+    assert.equal(f.nodes.results.hidden,true);assert.equal(f.nodes.pagination.hidden,true);assert.equal(f.nodes.next.disabled,true);assert.equal(f.nodes.retry.hidden,false);
+    f.nodes.next.fire('click');assert.equal(f.requests.length,2);
+    f.nodes.query.value='draft';f.nodes.buyer.value='Draft buyer';f.nodes.retry.fire('click');f.nodes.retry.fire('click');
+    assert.equal(f.requests.length,3);const url=new URL(f.requests[2].url);assert.equal(url.searchParams.get('q'),'plastik');assert.equal(url.searchParams.get('buyer'),'Nazar');assert.equal(url.searchParams.get('page'),'1');
+    f.requests[2].resolve({ok:true,json:async()=>data('PR-NEW')});await flush();assert.equal(f.nodes.results.hidden,false);assert.equal(f.nodes.retry.hidden,true);
+});
+
+test('timeout settles a hung JSON body, frees controls and ignores a late response after retry', async () => {
+    const f=setup();submit(f,'kursi');let finishBody;
+    f.requests[0].resolve({ok:true,json:()=>new Promise(resolve=>{finishBody=resolve;})});await flush();
+    f.context.timeout();await flush();assert.equal(f.nodes.submit.disabled,false);assert.equal(f.nodes.retry.hidden,false);assert.equal(f.nodes.next.disabled,true);
+    f.nodes.retry.fire('click');f.requests[1].resolve({ok:true,json:async()=>data('PR-CURRENT')});await flush();const card=f.nodes.results.children[0];
+    finishBody(data('PR-LATE'));await flush();assert.equal(f.nodes.results.children[0],card);
+});
+
+test('retry preserves the requested next page and reset removes retry without another request', async () => {
+    const f=setup();submit(f,'kursi');f.requests[0].resolve({ok:true,json:async()=>({...data(),last_page:3})});await flush();
+    f.nodes.next.fire('click');f.requests[1].resolve({ok:false,status:503});await flush();f.nodes.retry.fire('click');
+    assert.equal(new URL(f.requests[2].url).searchParams.get('page'),'2');
+    f.nodes.reset.fire('click');assert.equal(f.requests[2].options.signal.aborted,true);f.nodes.retry.fire('click');assert.equal(f.requests.length,3);assert.equal(f.nodes.retry.hidden,true);
+});
 
 test('focus is explicit, preserves applied filters, persists for another query and is included in manual totals', async () => {
     const f=setup();f.nodes.buyer.value='Nazar';submit(f,'kursi');const result=data('PR-FOCUS');result.rows[0].id=12;

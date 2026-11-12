@@ -13,6 +13,7 @@ const html = template.slice(template.indexOf('<section'), template.lastIndexOf('
         for (const mobile of [false, true]) {
             const page = await browser.newPage({viewport: mobile ? {width: 390, height: 844} : {width: 1360, height: 1000}});
             const requests = [];
+            let failNext = true;
             page.on('pageerror', error => errors.push(error.message));
             await page.route('**/*', async route => {
                 const url = new URL(route.request().url()); assert.equal(url.origin, origin);
@@ -21,6 +22,7 @@ const html = template.slice(template.indexOf('<section'), template.lastIndexOf('
                     if (url.searchParams.get('totals') === 'only') return route.fulfill({json: {total: 11, totals: 'only'}});
                     assert.equal(url.searchParams.get('totals'), 'deferred');
                     const last = url.searchParams.get('page') === '2';
+                    if (last && failNext) { failNext = false; return route.fulfill({status: 503, json: {message: 'Temporarily unavailable'}}); }
                     return route.fulfill({json: {total: null, page: last ? 2 : 1, last_page: null, totals: 'deferred', has_more: !last,
                         elapsed_ms: 57, query: {used: ['kursi']}, index: {}, rows: Array.from({length: last ? 1 : 10}, (_, i) => ({
                             id: (last ? 11 : i+1), number: `PKB/PR-26/CON/${last ? '0011' : String(i+1).padStart(4,'0')}`, description: 'Pengadaan kebutuhan kantor', portfolio: 'CON', links: {},
@@ -51,6 +53,10 @@ const html = template.slice(template.indexOf('<section'), template.lastIndexOf('
             await page.screenshot({path: `tmp/progressive-search-${mobile ? 'mobile-dark' : 'desktop-light'}.png`});
             assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
             await page.locator('[data-pus-next]').click();
+            await page.getByRole('button', {name: 'Coba ulang pencarian', exact: true}).waitFor();
+            assert.equal(await page.locator('.pus-card').first().isVisible(), false);
+            assert.equal(await page.locator('[data-pus-pagination]').isVisible(), false);
+            await page.getByRole('button', {name: 'Coba ulang pencarian', exact: true}).click();
             await page.getByText('Menampilkan PR 11–11', {exact: true}).waitFor();
             assert.equal(requests[2].searchParams.get('q'), 'kursi');
             assert.equal(await page.locator('[data-pus-next]').isDisabled(), true);
@@ -58,7 +64,7 @@ const html = template.slice(template.indexOf('<section'), template.lastIndexOf('
             await page.locator('[data-pus-reset]').click();
             assert.equal(await page.locator('.pus-card').count(), 0);
             assert.equal(await page.locator('[data-pus-summary]').isVisible(), false);
-            console.log(`BROWSER_PROGRESSIVE_OK mobile=${mobile} requests=3 manual_count=true frozen_query=true`);
+            console.log(`BROWSER_PROGRESSIVE_OK mobile=${mobile} requests=4 manual_count=true frozen_query=true failed_page_retry=true`);
             await page.close();
         }
         assert.deepEqual(errors, []); console.log('BROWSER_PROGRESSIVE_ERRORS=0');

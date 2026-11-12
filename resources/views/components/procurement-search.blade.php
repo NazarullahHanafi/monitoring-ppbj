@@ -20,6 +20,7 @@
     <div class="pus-summary" data-pus-summary hidden aria-label="Ringkasan hasil"></div>
     <p data-pus-status role="status" aria-live="polite" class="pus-status">Isi kolom di atas lalu tekan Enter atau klik Cari di semua PR. Hasil ditampilkan bertahap; gunakan Hitung seluruh PR bila memerlukan total. Scan/foto lama diproses bertahap di latar belakang.</p>
     <div data-pus-suggestions class="pus-suggestions" hidden aria-label="Saran perbaikan pencarian"></div>
+    <button type="button" data-pus-retry class="pus-secondary pus-check-status" hidden>Coba ulang pencarian</button>
     <button type="button" data-pus-check-status class="pus-secondary pus-check-status">Cek status antrean arsip</button>
     <button type="button" data-pus-check-coverage data-coverage-endpoint="{{ route('procurement.search.coverage') }}" class="pus-secondary pus-check-status">Audit kelengkapan lampiran</button>
     @if(auth()->user()?->role === 'superadmin')

@@ -178,16 +178,26 @@
         }
         async function save(payload) {
             if (saving) return; saving = true; setStatus('Menyimpan preferensi pribadi…');
-            dialog.querySelectorAll('button').forEach(button=>button.disabled=true);
+            dialog.querySelectorAll('button, input, select').forEach(button=>button.disabled=true);
+            const controller = new AbortController();
+            let cancel;
+            const deadline = new Promise((_,reject)=>{cancel=()=>reject(new Error('Respons penyimpanan melewati 30 detik. Muat ulang halaman untuk memeriksa preferensi sebelum mencoba lagi.'));controller.signal.addEventListener('abort',cancel,{once:true});});
+            const timer = setTimeout(()=>controller.abort(),30000);
             try {
-                const response = await fetch(config.saveUrl,{method:'POST',headers:{Accept:'application/json','Content-Type':'application/json','X-CSRF-TOKEN':document.querySelector('meta[name="csrf-token"]').content},body:JSON.stringify({...payload,version:state.version})});
-                const data = await response.json();
-                if (!response.ok && response.status!==409) throw new Error(Object.values(data.errors || {}).flat()[0] || data.message || 'Preferensi belum tersimpan.');
+                const read = async () => {
+                    const response = await fetch(config.saveUrl,{method:'POST',headers:{Accept:'application/json','Content-Type':'application/json','X-CSRF-TOKEN':document.querySelector('meta[name="csrf-token"]').content},body:JSON.stringify({...payload,version:state.version}),credentials:'same-origin',signal:controller.signal});
+                    if (response.redirected) throw new Error('Sesi berubah. Muat ulang halaman untuk memeriksa preferensi.');
+                    const data = await response.json();
+                    if (!response.ok && response.status!==409) throw new Error(Object.values(data?.errors || {}).flat()[0] || data?.message || 'Preferensi belum tersimpan.');
+                    if (!data || !Number.isSafeInteger(data.version) || data.version < 0 || !Array.isArray(data.settings?.favorites) || !Array.isArray(data.settings?.layout?.visible) || !Array.isArray(data.settings?.layout?.order)) throw new Error('Respons preferensi belum lengkap. Muat ulang halaman untuk memeriksa hasilnya.');
+                    return data;
+                };
+                const data = await Promise.race([read(),deadline]);
                 state = {version:data.version,settings:data.settings}; updateTable(); deleteId=null;
                 document.getElementById('wsFavoriteCount').textContent = state.settings.favorites.length;
                 if(mode==='layout') renderLayout(true); else renderFavorites(); setStatus(data.message);
             } catch(error) { setStatus(error.message || 'Koneksi bermasalah. Periksa kembali sebelum mencoba ulang.'); }
-            finally { saving=false; dialog.querySelector('[data-ws-close]').disabled=false; if(mode==='layout') { const message=status.textContent; renderLayoutButtons();setStatus(message); } else dialog.querySelectorAll('button').forEach(button=>button.disabled=false); }
+            finally { clearTimeout(timer);controller.signal.removeEventListener('abort',cancel);saving=false;dialog.querySelectorAll('button, input, select').forEach(button=>button.disabled=false); if(mode==='layout') { const message=status.textContent; renderLayoutButtons();setStatus(message); } }
         }
         function renderLayoutButtons() { renderLayout(false); }
         document.addEventListener('change',event=>{

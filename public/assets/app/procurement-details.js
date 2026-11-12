@@ -38,24 +38,40 @@
     async function request(url, options = {}) {
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), options.body instanceof FormData ? 120000 : 30000);
+        let rejectAbort;
+        const cancelled = new Promise((_, reject) => { rejectAbort = () => reject(new Error('Dibatalkan')); controller.signal.addEventListener('abort', rejectAbort, {once: true}); });
         try {
-            const response = await fetch(url, { ...options, headers: { ...csrfHeaders(), ...(options.headers || {}) }, credentials: 'same-origin', signal: controller.signal });
-            const type = response.headers.get('content-type') || '';
-            const data = type.includes('application/json') ? await response.json() : {};
-            if (!response.ok) throw new Error(Object.values(data.errors || {}).flat()[0] || data.message || 'Permintaan belum berhasil. Coba muat ulang halaman.');
-            return data;
+            const read = async () => {
+                const response = await fetch(url, { ...options, headers: { ...csrfHeaders(), ...(options.headers || {}) }, credentials: 'same-origin', signal: controller.signal });
+                const type = response.headers.get('content-type') || '';
+                if (response.redirected || !type.includes('application/json')) throw new Error('Respons belum dapat diverifikasi. Muat ulang daftar lampiran sebelum mencoba lagi; berkas mungkin sudah tersimpan.');
+                const data = await response.json();
+                if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('Respons lampiran tidak lengkap. Muat ulang daftar untuk memeriksa hasilnya.');
+                if (!response.ok) throw new Error(Object.values(data.errors || {}).flat()[0] || data.message || 'Permintaan belum berhasil. Coba muat ulang halaman.');
+                return data;
+            };
+            return await Promise.race([read(), cancelled]);
         } catch (error) {
             if (controller.signal.aborted) throw new Error('Respons server terlalu lama. Muat ulang daftar lampiran untuk memeriksa hasil sebelum mengunggah ulang.');
+            if (error instanceof SyntaxError) throw new Error('Respons belum dapat dibaca. Muat ulang daftar lampiran untuk memeriksa hasilnya.');
             throw error;
-        } finally { clearTimeout(timer); }
+        } finally { clearTimeout(timer); controller.signal.removeEventListener('abort', rejectAbort); }
+    }
+    function attachmentResult(data, expectedId = null) {
+        const item = data?.attachment;
+        if (!item || typeof item.id !== 'string' || !item.id || (expectedId && item.id !== expectedId)
+            || !Number.isSafeInteger(item.version) || item.version < 1 || typeof item.text !== 'string' || typeof item.name !== 'string') {
+            throw new Error('Data lampiran belum lengkap. Muat ulang daftar sebelum mencoba lagi; teks yang diketik tetap dipertahankan.');
+        }
+        return item;
     }
     function status(text, error = false) {
         const node = dialog.querySelector('[data-pd-status]'); node.textContent = text; node.dataset.error = String(error);
     }
     function setBusy(value) {
         busy = value;
-        dialog.querySelectorAll('button, input[type=file]').forEach(button => { button.disabled = value; });
-        dialog.querySelector('[data-pd-cancel]').hidden = !value;
+        dialog.querySelectorAll('button, input[type=file], textarea').forEach(button => { button.disabled = value; });
+        dialog.querySelector('[data-pd-cancel]').hidden = !value || !operation;
         dialog.querySelector('[data-pd-cancel]').disabled = false;
         dialog.setAttribute('aria-busy', String(value));
     }
@@ -65,7 +81,7 @@
         dialog.innerHTML = `<div class="pd-dialog-head"><div><h2 id="pdTitle">Lampiran rincian barang / jasa</h2><p data-pd-number></p></div><button type="button" class="pd-close" data-pd-close aria-label="Tutup lampiran">×</button></div>
             <div class="pd-dialog-body"><p>Isi Word/PDF dapat ditemukan lewat pencarian setelah Anda memeriksa dan mengonfirmasinya. Pembacaan diproses di server sendiri atau perangkat Anda.</p>
             <div class="pd-drop" data-pd-upload><label for="pdFile"><strong>Pilih Word (.docx) atau PDF</strong></label><input type="file" id="pdFile" accept=".docx,.pdf,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"><p>Maksimal 10 MB per berkas dan 30 halaman PDF. Word lama (.doc) perlu disimpan sebagai .docx.</p><button type="button" class="pd-button" data-pd-upload-only hidden>Unggah berkas, periksa teks nanti</button></div>
-            <div class="pd-progress" data-pd-status role="status" aria-live="polite"></div><button type="button" class="pd-button pd-secondary" data-pd-cancel hidden>Batalkan pembacaan</button><div class="pd-files" data-pd-files></div></div>
+            <div class="pd-progress" data-pd-status role="status" aria-live="polite"></div><button type="button" class="pd-button pd-secondary" data-pd-cancel hidden>Batalkan pembacaan</button><button type="button" class="pd-button pd-secondary" data-pd-refresh hidden>Muat ulang daftar lampiran</button><div class="pd-files" data-pd-files></div></div>
             <div class="pd-dialog-foot"><button type="button" class="pd-button pd-secondary" data-pd-later>Lampiran belum dibuat · lengkapi nanti</button><button type="button" class="pd-button" data-pd-done>Selesai</button></div>`;
         document.body.appendChild(dialog);
         dialog.addEventListener('cancel', event => { event.preventDefault(); if (!busy) close(false); });
@@ -73,6 +89,18 @@
         dialog.querySelector('[data-pd-done]').onclick = () => close(true);
         dialog.querySelector('[data-pd-later]').onclick = defer;
         dialog.querySelector('[data-pd-cancel]').onclick = () => operation?.abort();
+        dialog.querySelector('[data-pd-refresh]').onclick = async () => {
+            if (busy || !state.id) return;
+            setBusy(true);
+            try {
+                const data = await request(endpoint(state.kind, state.id));
+                if (!Array.isArray(data.attachments)) throw new Error('Daftar lampiran belum dapat dibaca.');
+                for (const item of data.attachments) attachmentResult({attachment: item});
+                state.items = data.attachments; state.canManage = data.can_manage === true;
+                dialog.querySelector('[data-pd-upload]').hidden = !state.canManage;
+                renderFiles(); status('Daftar diperbarui. Koreksi teks yang belum disimpan tetap dipertahankan; cocokkan dengan versi terbaru sebelum konfirmasi.');
+            } catch (error) { status(error.message, true); } finally { setBusy(false); }
+        };
         dialog.querySelector('#pdFile').addEventListener('change', () => upload(false));
         dialog.querySelector('[data-pd-upload-only]').onclick = () => upload(true);
     }
@@ -97,25 +125,35 @@
             const link = box.querySelector('a'); link.textContent = attachment.name; link.href = attachment.download_url;
             box.querySelector('[data-pd-review-state]').textContent = attachment.reviewed ? '✓ Sudah diperiksa' : 'Perlu diperiksa';
             box.querySelector('[data-pd-method]').textContent = ({ 'docx-structure': 'Teks dan tabel Word dibaca langsung.', 'pdf-text': 'Teks PDF dibaca langsung.', 'pdf-ocr': 'Hasil pembacaan scan di perangkat Anda.', 'pdf-mixed': 'Gabungan teks digital dan pembacaan scan.', 'manual': 'Lengkapi teks dari dokumen sumber.' })[attachment.method];
-            const textarea = box.querySelector('textarea'); textarea.value = attachment.text;
+            const textarea = box.querySelector('textarea'); textarea.value = state.edits.get(attachment.id) ?? attachment.text;
+            box.dataset.pdDirty = String(textarea.value !== attachment.text);
+            if (box.dataset.pdDirty === 'true') box.querySelector('[data-pd-review-state]').textContent = 'Perubahan belum disimpan';
             textarea.setAttribute('aria-label', `Isi rincian ${attachment.name}`); textarea.readOnly = !state.canManage;
             box.querySelector('.pd-actions').hidden = !state.canManage;
-            textarea.addEventListener('input', () => { box.dataset.pdDirty = String(textarea.value !== attachment.text); box.querySelector('[data-pd-review-state]').textContent = 'Perubahan belum disimpan'; });
+            textarea.addEventListener('input', () => { state.edits.set(attachment.id, textarea.value); box.dataset.pdDirty = String(textarea.value !== attachment.text); box.querySelector('[data-pd-review-state]').textContent = 'Perubahan belum disimpan'; });
             box.querySelector('[data-pd-review]').onclick = async () => {
+                if (busy) return;
                 if (!textarea.value.trim()) { status('Isi rincian masih kosong. Lengkapi berdasarkan dokumen sebelum dikonfirmasi.', true); return; }
                 setBusy(true);
                 try {
                     const data = await request(attachment.review_url, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: textarea.value, version: attachment.version }) });
-                    state.items = state.items.map(item => item.id === attachment.id ? data.attachment : item);
-                    if (state.form?.detailDraft?.id === attachment.id) state.form.detailDraft = data.attachment;
+                    const confirmed = attachmentResult(data, attachment.id);
+                    if (!confirmed.reviewed || confirmed.version <= attachment.version) throw new Error('Konfirmasi belum dapat diverifikasi. Muat ulang daftar untuk memeriksa hasilnya.');
+                    state.items = state.items.map(item => item.id === attachment.id ? confirmed : item);
+                    state.edits.delete(attachment.id);
+                    if (state.form?.detailDraft?.id === attachment.id) state.form.detailDraft = confirmed;
                     state.changed = true; renderFiles(); status('Isi telah dikonfirmasi. Pencarian menggunakan teks yang Anda periksa.');
                 } catch (error) { status(error.message, true); } finally { setBusy(false); }
             };
             box.querySelector('[data-pd-delete]').onclick = async () => {
+                if (busy) return;
                 if (!confirm(`Hapus lampiran rincian "${attachment.name}"?`)) return;
                 setBusy(true);
                 try {
-                    await request(attachment.delete_url, { method: 'DELETE' }); state.items = state.items.filter(item => item.id !== attachment.id);
+                    const result = await request(attachment.delete_url, { method: 'DELETE' });
+                    if (typeof result.message !== 'string') throw new Error('Penghapusan belum dapat diverifikasi. Muat ulang daftar sebelum mencoba lagi.');
+                    state.items = state.items.filter(item => item.id !== attachment.id);
+                    state.edits.delete(attachment.id);
                     if (state.form && token(state.form).value === attachment.id) { token(state.form).value = ''; delete state.form.detailDraft; choice(state.form).value = ''; }
                     state.changed = true; renderFiles(); status('Lampiran dihapus.');
                 } catch (error) { status(error.message, true); } finally { setBusy(false); }
@@ -126,16 +164,19 @@
     async function open(kind, id, form = null, forSave = false) {
         if (busy) return false;
         createDialog(); previousFocus = document.activeElement;
-        state = { kind, id, form, forSave, items: [], canManage: true, changed: false };
+        state = { kind, id, form, forSave, items: [], edits: new Map(), canManage: true, changed: false };
         dialog.querySelector('[data-pd-number]').textContent = forSave ? 'Keterangan mengacu pada lampiran. Pilih unggah sekarang atau lengkapi nanti untuk melanjutkan penyimpanan.' : 'Rincian dan sumber dokumen';
         dialog.querySelector('#pdFile').value = '';
         dialog.querySelector('[data-pd-upload-only]').hidden = true;
+        dialog.querySelector('[data-pd-refresh]').hidden = !id;
         dialog.querySelector('[data-pd-done]').textContent = forSave ? 'Selesai · lanjutkan simpan' : 'Selesai';
         status(''); renderFiles(); dialog.showModal();
         if (id) {
             setBusy(true);
             try {
                 const data = await request(endpoint(kind, id));
+                if (!Array.isArray(data.attachments) || typeof data.can_manage !== 'boolean') throw new Error('Daftar lampiran belum lengkap. Gunakan Muat ulang daftar lampiran untuk mencoba kembali.');
+                for (const item of data.attachments) attachmentResult({attachment: item});
                 state.items = data.attachments; state.canManage = data.can_manage;
                 dialog.querySelector('[data-pd-number]').textContent = data.number;
             } catch (error) { state.canManage = false; status(error.message, true); }
@@ -152,7 +193,7 @@
         if (!file || busy) return;
         if (file.size > 10 * 1024 * 1024 || !/\.(docx|pdf)$/i.test(file.name)) { status('Gunakan Word .docx atau PDF maksimal 10 MB.', true); return; }
         if (!state.id && state.items.length) { status('Satu lampiran sementara sudah tersedia. Hapus dulu jika ingin menggantinya; lampiran tambahan bisa diunggah setelah dokumen disimpan.', true); return; }
-        setBusy(true); operation = new AbortController();
+        operation = new AbortController(); setBusy(true);
         dialog.querySelector('[data-pd-upload-only]').hidden = true;
         try {
             let result = { text: '', method: 'manual' };
@@ -172,20 +213,25 @@
             // Once upload starts it completes atomically; cancellation is for the local reader only.
             dialog.querySelector('[data-pd-cancel]').hidden = true;
             const data = await request(`${config.baseUrl}/${state.kind}/drafts`, { method: 'POST', body });
-            state.items.push(data.attachment); state.changed = true;
+            const uploaded = attachmentResult(data);
+            state.items.push(uploaded); state.changed = true;
             if (state.form) {
                 choice(state.form).value = 'now';
-                if (!state.id) { token(state.form).value = data.attachment.id; state.form.detailDraft = data.attachment; }
+                if (!state.id) { token(state.form).value = uploaded.id; state.form.detailDraft = uploaded; }
             }
             renderFiles(); dialog.querySelector('#pdFile').value = '';
-            status(data.attachment.text ? 'Lampiran tersimpan. Cocokkan hasil bacaan dengan dokumen, lalu Konfirmasi isi untuk pencarian.' : 'Lampiran tersimpan. Teks belum terbaca; Anda bisa melengkapinya di kotak pemeriksaan sekarang atau nanti.');
+            status(uploaded.text ? 'Lampiran tersimpan. Cocokkan hasil bacaan dengan dokumen, lalu Konfirmasi isi untuk pencarian.' : 'Lampiran tersimpan. Teks belum terbaca; Anda bisa melengkapinya di kotak pemeriksaan sekarang atau nanti.');
         } catch (error) { status(operation.signal.aborted ? 'Pembacaan dibatalkan. Berkas belum diunggah; Anda bisa mencoba lagi atau melengkapi nanti.' : error.message, !operation.signal.aborted); }
         finally { operation = null; setBusy(false); }
     }
     async function defer() {
+        if (busy) return;
         setBusy(true);
         try {
-            if (state.id) await request(`${endpoint(state.kind, state.id)}/defer`, { method: 'POST' });
+            if (state.id) {
+                const result = await request(`${endpoint(state.kind, state.id)}/defer`, { method: 'POST' });
+                if (typeof result.message !== 'string') throw new Error('Penandaan menyusul belum dapat diverifikasi. Muat ulang daftar untuk memeriksa hasilnya.');
+            }
             if (state.form) choice(state.form).value = 'later';
             state.changed = true; setBusy(false); close(true);
         } catch (error) { status(error.message, true); setBusy(false); }

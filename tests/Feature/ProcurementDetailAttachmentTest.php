@@ -76,7 +76,6 @@ class ProcurementDetailAttachmentTest extends TestCase
 
     public function test_new_upload_returns_the_persisted_version_for_immediate_confirmation_and_audit(): void
     {
-        $this->withoutMiddleware(\Illuminate\Routing\Middleware\ThrottleRequests::class);
         foreach (['sp', 'spph'] as $kind) {
             $document = $this->document($kind);
             foreach ([null, $document->id] as $documentId) {
@@ -96,6 +95,33 @@ class ProcurementDetailAttachmentTest extends TestCase
                 }
             }
         }
+    }
+
+    public function test_search_upload_confirmation_delete_and_defer_have_independent_request_budgets(): void
+    {
+        for ($i = 0; $i < 10; $i++) {
+            $this->getJson(route('procurement.search', ['q' => 'alat']))->assertOk();
+        }
+        $sp = $this->document('sp');
+        $attachment = $this->upload('sp', $sp->id);
+        for ($version = 1; $version <= 10; $version++) {
+            $this->putJson(route('procurement.details.review', $attachment), ['text' => 'Koreksi '.$version, 'version' => $version])->assertOk();
+        }
+        $this->deleteJson(route('procurement.details.delete', $attachment))->assertOk();
+        $this->postJson(route('procurement.details.defer', ['sp', $sp->id]))->assertOk();
+        $this->getJson(route('procurement.search', ['q' => 'alat']))->assertOk();
+    }
+
+    public function test_upload_limit_still_applies_per_user_without_blocking_confirmation_or_another_user(): void
+    {
+        $attachment = $this->upload('sp');
+        for ($i = 0; $i < 9; $i++) {
+            $this->postJson(route('procurement.details.upload', 'spph'), [])->assertUnprocessable();
+        }
+        $this->postJson(route('procurement.details.upload', 'sp'), [])->assertTooManyRequests();
+        $this->putJson(route('procurement.details.review', $attachment), ['text' => 'Kertas tetap bisa dikonfirmasi', 'version' => 1])->assertOk();
+        $this->actingAs(User::factory()->create(['department' => 'umum', 'role' => 'user']));
+        $this->upload('spph');
     }
 
     public function test_intent_detects_indonesian_english_rich_text_and_explicit_negations(): void

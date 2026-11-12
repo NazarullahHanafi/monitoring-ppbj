@@ -84,26 +84,26 @@ Route::get('/home', function () {
 // Personal presentation only: Viewer may personalize their own table without
 // granting any permission to mutate procurement records or other users.
 Route::post('/procurement-workspace/{page}', [\App\Http\Controllers\ProcurementWorkspaceController::class, 'save'])
-    ->whereIn('page', ['ppbj', 'sp', 'spph'])->middleware(['auth', 'dept:umum', 'throttle:20,1'])->name('procurement.workspace.save');
+    ->whereIn('page', ['ppbj', 'sp', 'spph'])->middleware(['auth', 'dept:umum', 'throttle:20,1,procurement-workspace:'])->name('procurement.workspace.save');
 
 Route::get('/procurement/search', \App\Http\Controllers\ProcurementUnifiedSearchController::class)
-    ->middleware(['auth', 'dept:umum', 'throttle:60,1'])->name('procurement.search');
+    ->middleware(['auth', 'dept:umum', 'throttle:60,1,procurement-search:'])->name('procurement.search');
 Route::get('/procurement/search/status', [\App\Http\Controllers\ProcurementSearchQueueController::class, 'status'])
-    ->middleware(['auth', 'dept:umum', 'throttle:30,1'])->name('procurement.search.status');
+    ->middleware(['auth', 'dept:umum', 'throttle:30,1,procurement-search-status:'])->name('procurement.search.status');
 Route::get('/procurement/search/files/{source}/evidence', \App\Http\Controllers\ProcurementPageEvidenceController::class)
-    ->whereNumber('source')->middleware(['auth', 'dept:umum', 'throttle:30,1'])->name('procurement.search.evidence');
+    ->whereNumber('source')->middleware(['auth', 'dept:umum', 'throttle:30,1,procurement-search-evidence:'])->name('procurement.search.evidence');
 Route::get('/procurement/search/coverage', [\App\Http\Controllers\ProcurementSearchQueueController::class, 'coverage'])
-    ->middleware(['auth', 'dept:umum', 'throttle:30,1'])->name('procurement.search.coverage');
+    ->middleware(['auth', 'dept:umum', 'throttle:30,1,procurement-search-coverage:'])->name('procurement.search.coverage');
 Route::get('/procurement/search/archive-catalog', [\App\Http\Controllers\ProcurementReadingReviewController::class, 'catalog'])
-    ->middleware(['auth', 'dept:umum', 'throttle:30,1'])->name('procurement.search.catalog');
+    ->middleware(['auth', 'dept:umum', 'throttle:30,1,procurement-search-catalog:'])->name('procurement.search.catalog');
 Route::get('/procurement/search/reviews/{source}/{page}', [\App\Http\Controllers\ProcurementReadingReviewController::class, 'show'])
-    ->whereNumber(['source', 'page'])->middleware(['auth', 'dept:umum', 'throttle:30,1'])->name('procurement.search.review');
+    ->whereNumber(['source', 'page'])->middleware(['auth', 'dept:umum', 'throttle:30,1,procurement-search-review-read:'])->name('procurement.search.review');
 Route::post('/procurement/search/reviews/{source}/{page}', [\App\Http\Controllers\ProcurementReadingReviewController::class, 'store'])
-    ->whereNumber(['source', 'page'])->middleware(['auth', 'dept:umum', 'readonly.block', 'throttle:6,1']);
+    ->whereNumber(['source', 'page'])->middleware(['auth', 'dept:umum', 'readonly.block', 'throttle:6,1,procurement-search-review-write:']);
 Route::post('/procurement/search/prs/{ppbj}/priority', [\App\Http\Controllers\ProcurementSearchQueueController::class, 'priority'])
-    ->whereNumber('ppbj')->middleware(['auth', 'dept:umum', 'readonly.block', 'throttle:6,1'])->name('procurement.search.priority');
+    ->whereNumber('ppbj')->middleware(['auth', 'dept:umum', 'readonly.block', 'throttle:6,1,procurement-search-priority:'])->name('procurement.search.priority');
 Route::get('/procurement/search/files/{source}', [ArchiveDownloadGatewayController::class, 'indexed'])
-    ->whereNumber('source')->middleware(['auth', 'dept:umum', 'throttle:20,1'])->name('procurement.search.file');
+    ->whereNumber('source')->middleware(['auth', 'dept:umum', 'throttle:20,1,procurement-search-file:'])->name('procurement.search.file');
 
 // Own avatar is a personal preference, including for read-only viewers.
 Route::get('/virtual-office/tutorial', [\App\Http\Controllers\VirtualOfficeTutorialController::class, 'show'])
