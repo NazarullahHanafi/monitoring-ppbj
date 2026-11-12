@@ -6,7 +6,7 @@ const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const load = import(pathToFileURL(path.resolve(__dirname, '../../resources/js/virtual-office-state.js')));
 const tick = () => new Promise(setImmediate);
-async function fixture({ canChat = true, meetingReady = false, tutorial = false } = {}) {
+async function fixture({ canChat = true, meetingReady = false, tutorial = false, night = false } = {}) {
     const state = await load, timers = new Map(), requests = [], calls = [], events = {}, documentEvents = {}, nodes = new Map(); let timerId = 0;
     class Element {
         constructor(id = '') { this.id = id; this.dataset = {}; this.attrs = {}; this.children = []; this.events = {}; this.hidden = false; this.value = ''; this.textContent = ''; this.scrollTop = 0; this.style = { setProperty() {} }; const classes = new Set(); this.classList = { add: x => classes.add(x), remove: x => classes.delete(x), contains: x => classes.has(x), toggle: x => classes.has(x) ? classes.delete(x) : classes.add(x) }; }
@@ -45,6 +45,7 @@ async function fixture({ canChat = true, meetingReady = false, tutorial = false 
         fetch: (url, options) => new Promise(resolve => requests.push({ url, options, resolve })), console };
     let code = fs.readFileSync(path.resolve(__dirname, '../../resources/js/virtual-office.js'), 'utf8');
     code = code.replace(/^import .*?;\s*/gm, '').replace("await import('./virtual-office-scene.js')", 'await window.__loadOfficeScene()').replace("import('./virtual-office-tutorial.js')", 'window.__loadOfficeTutorial()');
+    sandbox.isOfficeNight = () => night;
     vm.runInNewContext(code, sandbox);
     return { get, people, calls, filters, rooms, requests, sceneState, timers,
         search(value) { get('voSearch').value = value; get('voSearch').events.input[0](); },
@@ -89,10 +90,10 @@ test('selecting a game from lightweight mode retains the requested focus after l
     assert.deepEqual(f.sceneState.games,['badminton']);assert.notEqual(f.sceneState.rooms.at(-1),'badminton','Selecting a distant game must not pull the camera away from manual control.'); f.hide(true);
 });
 
-test('visiting a private home from lightweight mode retains its owner after lazy loading', async () => {
-    const f = await fixture(); f.get('voPeople').children.find(p => p.dataset.personId === 1).click();
+for (const night of [false, true]) test(`visiting a private home from lightweight mode retains its owner after lazy loading (${night ? 'night' : 'day'})`, async t => {
+    const f = await fixture({ night }); t.after(() => f.hide(true)); f.get('voPeople').children.find(p => p.dataset.personId === 1).click();
     f.get('voVisitHome').click(); f.resolveScene(); await tick();
-    assert.equal(f.sceneState.rooms.at(-1), 'all'); assert.equal(f.sceneState.homes.at(-1), 1);
+    assert.equal(f.sceneState.rooms.at(-1), night ? 'residences' : 'all'); assert.equal(f.sceneState.homes.at(-1), 1);
     assert.equal(f.requests.length, 0, 'Visiting a virtual home does not send a request or change real presence.');
     f.get('voCloseDetail').click(); assert.equal(f.get('voDetail').hidden, true); f.hide(true);
 });

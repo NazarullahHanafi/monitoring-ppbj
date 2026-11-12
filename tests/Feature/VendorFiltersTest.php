@@ -75,4 +75,16 @@ class VendorFiltersTest extends TestCase
         $this->assertSame(1, $reset->currentPage());
         $this->assertSame(13, $reset->total());
     }
+
+    public function test_vendor_json_create_and_edit_preserve_inactive_choice_and_duplicate_errors(): void
+    {
+        $response = $this->postJson(route('vendor.store'), ['nama_vendor' => 'Vendor Inaktif', 'is_active' => '0'])->assertCreated();
+        $vendor = Vendor::findOrFail($response->json('id'));
+        $this->assertFalse($vendor->is_active);
+        $this->assertSame(route('vendor.index', ['search' => 'Vendor Inaktif']), $response->json('redirect_url'));
+        $this->putJson(route('vendor.update', $vendor), ['nama_vendor' => 'Vendor Baru', 'is_active' => '0'])->assertOk()->assertJsonPath('id', $vendor->id);
+        $this->assertFalse($vendor->fresh()->is_active);
+        $this->postJson(route('vendor.store'), ['nama_vendor' => 'Vendor Baru'])->assertUnprocessable()->assertJsonValidationErrors('nama_vendor');
+        $this->get(route('vendor.index'))->assertSee('type="hidden" name="is_active" value="0"', false);
+    }
 }

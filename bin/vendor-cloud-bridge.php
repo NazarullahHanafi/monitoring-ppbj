@@ -24,7 +24,9 @@ try {
         exit;
     }
     $path = $input['cloud_path'] ?? '';
-    if (! preg_match('~^SIMONPR-Vendor/[0-9]{4}/(?:0[1-9]|1[0-2])/[0-9a-f-]{36}\.(pdf|jpg|png)$~D', $path)) {
+    require_once dirname(__DIR__).'/app/Support/ProcurementUploadFormats.php';
+    if (! preg_match('~^SIMONPR-Vendor/[0-9]{4}/(?:0[1-9]|1[0-2])/[0-9a-f-]{36}\.([a-z0-9]{2,5})$~D', $path, $pathMatch)
+        || ! isset(App\Support\ProcurementUploadFormats::FORMATS[$pathMatch[1]])) {
         throw new RuntimeException('path');
     }
     $item = null;

@@ -1,6 +1,6 @@
 # Lampiran vendor di OneDrive
 
-Menu **Master Vendor → Lampiran** mendukung PDF/JPG/PNG sampai 10 MiB per berkas (formulir menyesuaikan batas PHP bila lebih kecil): NPWP, NIB, akta, KK, KTP, SIUP, SPPKP, izin usaha, sertifikat, rekening bank, dan kategori lainnya. Vendor tidak dapat dihapus selama mempunyai lampiran (termasuk transfer yang belum selesai); nonaktifkan vendor atau hapus lampiran secara eksplisit.
+Menu **Master Vendor → Lampiran** mendukung dokumen, Office, teks, dan gambar (21 ekstensi) sampai 10 MiB per berkas (formulir menyesuaikan batas PHP bila lebih kecil): NPWP, NIB, akta, KK, KTP, SIUP, SPPKP, izin usaha, sertifikat, rekening bank, dan kategori lainnya. Vendor tidak dapat dihapus selama mempunyai lampiran (termasuk transfer yang belum selesai); nonaktifkan vendor atau hapus lampiran secara eksplisit. Pembaruan format, pembaca, filter perhatian, dan validasi dijelaskan di [audit unggah](procurement-upload-audit-2026-11-12.md).
 
 ## Penyimpanan dan pemulihan
 

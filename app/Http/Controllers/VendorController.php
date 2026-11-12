@@ -2,15 +2,17 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Sp;
 use App\Models\Vendor;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
-use App\Models\Sp;
 
 class VendorController extends Controller
 {
     private const CACHE_STATS = 300; // 5 menit
+
+    private const VALIDATION_MESSAGES = ['required' => ':attribute perlu diisi.', 'unique' => 'Nama vendor ini sudah ada. Cari atau ubah vendor yang tersedia.', 'email' => 'Masukkan alamat email perusahaan yang lengkap.', 'max' => ':attribute melewati batas panjang yang diizinkan.'];
 
     public function index(Request $request)
     {
@@ -28,7 +30,7 @@ class VendorController extends Controller
             'direktur',
             'jabatan',
             'is_active',
-        ])->when($search !== '', fn($q) => $q->where(function ($sub) use ($search) {
+        ])->when($search !== '', fn ($q) => $q->where(function ($sub) use ($search) {
             $sub->where('nama_vendor', 'like', "%{$search}%")
                 ->orWhere('alamat', 'like', "%{$search}%")
                 ->orWhere('telepon', 'like', "%{$search}%")
@@ -38,7 +40,7 @@ class VendorController extends Controller
                 ->orWhere('direktur', 'like', "%{$search}%")
                 ->orWhere('jabatan', 'like', "%{$search}%")
                 ->orWhereHas('documents', fn ($docs) => $docs->where('status', 'ready')->search($search));
-            }))
+        }))
             ->withCount(['documents as documents_count' => fn ($docs) => $docs->where('status', 'ready')])
             ->orderBy('nama_vendor')
             ->paginate(10)
@@ -68,7 +70,7 @@ class VendorController extends Controller
             'npwp' => 'nullable|string|max:50',
             'jabatan' => 'nullable|string|max:255',
             'is_active' => 'boolean',
-        ]);
+        ], self::VALIDATION_MESSAGES, ['nama_vendor' => 'Nama vendor', 'email' => 'Email perusahaan']);
 
         $vendor = DB::transaction(function () use ($request) {
             return Vendor::create([
@@ -96,6 +98,7 @@ class VendorController extends Controller
                 'direktur' => $vendor->direktur, // ← TAMBAH
                 'npwp' => $vendor->npwp,
                 'jabatan' => $vendor->jabatan,
+                'redirect_url' => route('vendor.index', ['search' => $vendor->nama_vendor]),
             ], 201);
         }
 
@@ -105,7 +108,7 @@ class VendorController extends Controller
     public function update(Request $request, Vendor $vendor)
     {
         $request->validate([
-            'nama_vendor' => 'required|string|max:255|unique:vendors,nama_vendor,' . $vendor->id,
+            'nama_vendor' => 'required|string|max:255|unique:vendors,nama_vendor,'.$vendor->id,
             'alamat' => 'nullable|string|max:500',
             'telepon' => 'nullable|string|max:50',
             'fax' => 'nullable|string|max:50',
@@ -114,7 +117,7 @@ class VendorController extends Controller
             'npwp' => 'nullable|string|max:50',
             'jabatan' => 'nullable|string|max:255',
             'is_active' => 'boolean',
-        ]);
+        ], self::VALIDATION_MESSAGES, ['nama_vendor' => 'Nama vendor', 'email' => 'Email perusahaan']);
 
         $oldName = $vendor->nama_vendor;
 
@@ -139,6 +142,10 @@ class VendorController extends Controller
         }
 
         Cache::forget('vendor:stats');
+
+        if ($request->expectsJson()) {
+            return response()->json(['id' => $vendor->id, 'nama_vendor' => $vendor->nama_vendor, 'redirect_url' => route('vendor.index', ['search' => $vendor->nama_vendor])]);
+        }
 
         return redirect()->route('vendor.index')->with('success', 'Vendor berhasil diperbarui!');
     }
@@ -166,7 +173,7 @@ class VendorController extends Controller
     public function toggleActive(Vendor $vendor)
     {
         $vendor->update([
-            'is_active' => !$vendor->is_active,
+            'is_active' => ! $vendor->is_active,
         ]);
 
         Cache::forget('vendor:stats');
@@ -195,7 +202,7 @@ class VendorController extends Controller
             'jabatan',
         ])
             ->where('is_active', true)
-            ->when($q, fn($query) => $query->where('nama_vendor', 'like', "%{$q}%"))
+            ->when($q, fn ($query) => $query->where('nama_vendor', 'like', "%{$q}%"))
             ->orderBy('nama_vendor')
             ->limit(20)
             ->get();

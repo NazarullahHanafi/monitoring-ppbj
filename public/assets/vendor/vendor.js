@@ -1,10 +1,12 @@
 // ===== MODAL =====
         function openModal(id) {
+            document.getElementById(id).querySelectorAll('[data-vendor-save-status]').forEach(node => { node.textContent = ''; });
             document.getElementById(id).classList.remove('hidden');
             document.getElementById(id).classList.add('flex');
             document.body.style.overflow = 'hidden';
         }
         function closeModal(id) {
+            if (document.getElementById(id).querySelector('form[data-saving="true"]')) return;
             document.getElementById(id).classList.add('hidden');
             document.getElementById(id).classList.remove('flex');
             document.body.style.overflow = '';
@@ -72,5 +74,46 @@
             if (urlParams.has('search')) {
                 searchInput.focus();
                 searchInput.select();
+            }
+            for (const id of ['addVendorForm', 'editFormVendor']) {
+                const form = document.getElementById(id);
+                if (!form) continue;
+                form.addEventListener('submit', async event => {
+                    event.preventDefault();
+                    if (form.dataset.saving === 'true') return;
+                    if (!window.FormUX?.validate(form)) return;
+                    const body = new FormData(form);
+                    const controls = [...form.querySelectorAll('button,input,select,textarea')];
+                    const disabled = controls.map(node => node.disabled);
+                    form.dataset.saving = 'true'; form.setAttribute('aria-busy', 'true');
+                    controls.forEach(node => { node.disabled = true; });
+                    let status = form.querySelector('[data-vendor-save-status]');
+                    if (!status) { status = document.createElement('p'); status.dataset.vendorSaveStatus = ''; status.setAttribute('role', 'status'); form.append(status); }
+                    status.textContent = 'Menyimpan data vendor…';
+                    const controller = new AbortController(); let timer, failure;
+                    try {
+                        const data = await Promise.race([
+                            (async () => {
+                                const response = await fetch(form.action, { method: 'POST', body, credentials: 'same-origin', signal: controller.signal,
+                                    headers: { Accept: 'application/json', 'X-CSRF-TOKEN': body.get('_token') || document.querySelector('meta[name=csrf-token]')?.content || '' } });
+                                if (response.redirected || !response.headers.get('content-type')?.includes('application/json')) throw new Error('Respons belum dapat diverifikasi. Muat ulang daftar sebelum mencoba menyimpan kembali.');
+                                const result = await response.json();
+                                if (!result || typeof result !== 'object' || Array.isArray(result)) throw new Error('Respons server belum lengkap. Muat ulang daftar sebelum mencoba kembali.');
+                                if (!response.ok) { const error = new Error(result.message || 'Data belum tersimpan. Periksa isian Anda.'); error.fields = result.errors; throw error; }
+                                if (!Number.isSafeInteger(result.id) || !result.redirect_url) throw new Error('Simpanan belum dapat diverifikasi. Muat ulang daftar sebelum mencoba kembali.');
+                                return result;
+                            })(),
+                            new Promise((_, reject) => { timer = setTimeout(() => { controller.abort(); reject(new Error('Respons server terlalu lama. Data formulir tetap tersedia; periksa daftar sebelum menyimpan ulang.')); }, 30000); }),
+                        ]);
+                        const target = new URL(data.redirect_url, location.href);
+                        if (target.origin !== location.origin || target.pathname !== new URL(vendorIndexUrl, location.href).pathname) throw new Error('Tujuan halaman belum valid. Muat ulang daftar vendor.');
+                        status.textContent = 'Vendor tersimpan. Membuka hasil…'; window.location.href = target.href;
+                    } catch (error) { failure = error; status.textContent = error.message; }
+                    finally {
+                        clearTimeout(timer); form.dataset.saving = 'false'; form.removeAttribute('aria-busy');
+                        controls.forEach((node, index) => { node.disabled = disabled[index]; });
+                        if (failure?.fields) window.FormUX.errors(form, failure.fields);
+                    }
+                });
             }
         });

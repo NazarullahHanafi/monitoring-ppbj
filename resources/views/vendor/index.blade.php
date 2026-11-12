@@ -398,6 +398,7 @@
                     </div>
                 </div>
                 <div class="flex items-center gap-2">
+                    <input type="hidden" name="is_active" value="0">
                     <input type="checkbox" name="is_active" id="addIsActive" value="1" checked
                         class="w-4 h-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500">
                     <label for="addIsActive"
@@ -482,6 +483,7 @@
                     </div>
                 </div>
                 <div class="flex items-center gap-2">
+                    <input type="hidden" name="is_active" value="0">
                     <input type="checkbox" name="is_active" id="editIsActive" value="1"
                         class="w-4 h-4 rounded border-gray-300 text-amber-600 focus:ring-amber-500">
                     <label for="editIsActive"
@@ -505,7 +507,7 @@
         $vendorPageConfig = [
             'indexUrl' => route('vendor.index'),
         ];
-        $vendorDocumentsConfig = ['baseUrl' => url('/vendors'), 'csrf' => csrf_token(), 'readOnly' => $vendorDocumentsReadOnly, 'readerUrl' => asset('assets/document-reader/v1'), 'maxBytes' => $vendorDocumentMaxBytes];
+        $vendorDocumentsConfig = ['baseUrl' => url('/vendors'), 'csrf' => csrf_token(), 'readOnly' => $vendorDocumentsReadOnly, 'readerUrl' => asset('assets/document-reader/v1'), 'maxBytes' => $vendorDocumentMaxBytes, 'formats' => \App\Support\ProcurementUploadFormats::FORMATS];
     @endphp
     <script>
         window.VENDOR_PAGE_CONFIG = @json($vendorPageConfig);

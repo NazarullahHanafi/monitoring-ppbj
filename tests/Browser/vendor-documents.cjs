@@ -14,7 +14,7 @@ async function main() {
             const url = new URL(req.url, origin);
             if (url.pathname === '/') {
                 res.setHeader('Content-Type', 'text/html;charset=utf-8');
-                return res.end(`<!doctype html><html lang="id"><head><meta charset="utf-8"><link rel="stylesheet" href="/assets/vendor/documents.css"><style>body{font-family:Arial;background:#edf4f5;color:#172b3a;padding:24px}button{cursor:pointer}</style></head><body><button data-vd-open data-vendor-id="1" data-vendor-name="CV Vendor Aman">Lampiran · 1</button>${component}<script>window.VENDOR_DOCUMENTS_CONFIG={baseUrl:'${origin}/vendors',csrf:'test',readOnly:${readOnly},readerUrl:'${origin}/assets/document-reader/v1'};</script><script src="/assets/app/procurement-document-reader.js"></script><script src="/assets/vendor/documents.js"></script></body></html>`);
+                return res.end(`<!doctype html><html lang="id"><head><meta charset="utf-8"><link rel="stylesheet" href="/assets/app/form-ux.css"><link rel="stylesheet" href="/assets/vendor/documents.css"><style>body{font-family:Arial;background:#edf4f5;color:#172b3a;padding:24px}button{cursor:pointer}</style></head><body><button data-vd-open data-vendor-id="1" data-vendor-name="CV Vendor Aman">Lampiran · 1</button>${component}<script>window.VENDOR_DOCUMENTS_CONFIG={baseUrl:'${origin}/vendors',csrf:'test',readOnly:${readOnly},readerUrl:'${origin}/assets/document-reader/v1'};</script><script src="/assets/app/form-ux.js"></script><script src="/assets/app/procurement-document-reader.js"></script><script src="/assets/vendor/documents.js"></script></body></html>`);
             }
             if (url.pathname.startsWith('/assets/')) {
                 const file = path.resolve(root, 'public', url.pathname.slice(1));
@@ -59,7 +59,7 @@ async function main() {
             const page = await browser.newPage({ viewport: mobile ? { width: 390, height: 844 } : { width: 1440, height: 1100 } });
             const errors = [], external = []; page.on('pageerror', error => errors.push(error.message));
             page.on('request', req => { if (!req.url().startsWith(origin) && !req.url().startsWith('data:') && !req.url().startsWith('blob:')) external.push(req.url()); });
-            page.on('dialog', dialog => dialog.accept());
+            page.on('dialog', dialog => { errors.push('Unexpected native dialog: '+dialog.type()); dialog.dismiss(); });
             await page.goto(origin); await page.locator('[data-vd-open]').click(); await page.locator('.vd-card').waitFor();
             assert.equal(await page.locator('.vd-card img').count(), 0);
             const initial = queries.length; await page.locator('[data-vd-filter] [name=q]').fill('Izin'); await page.waitForTimeout(80); assert.equal(queries.length, initial);
@@ -68,10 +68,12 @@ async function main() {
             outcome = 'success'; await page.locator('[data-vd-refresh]').click(); await page.locator('.vd-card').waitFor(); assert.equal(queries.at(-1), 'Izin');
             await page.locator('[data-vd-reset]').click(); await page.waitForFunction(() => !document.querySelector('[data-vd-status]').textContent);
             await page.locator('[data-vd-new]').click();
+            await page.locator('[data-vd-save]').click(); await page.locator('.ux-error-summary').waitFor();
+            assert.equal(writes.length, 0); assert.equal(await page.locator('[data-vd-editor] [name=title]').getAttribute('aria-invalid'), 'true');
             await page.locator('[data-vd-editor] [name=title]').fill('NPWP Perusahaan');
             await page.locator('[name=file]').setInputFiles({ name: 'npwp.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4 test') });
             await page.locator('[name=search_text]').fill('Industri plastik dari scan');
-            await page.locator('[data-vd-save]').click(); await page.getByText('Periksa teks lalu centang', { exact: false }).waitFor(); assert.equal(writes.length, 0);
+            await page.locator('[data-vd-save]').click(); await page.locator('[data-vd-status]').filter({hasText:'Periksa teks lalu centang'}).waitFor(); assert.equal(writes.length, 0);
             await page.locator('[name=text_confirmed]').check(); outcome = 'html';
             await page.locator('[data-vd-save]').click(); await page.getByText('Respons server tidak sesuai.', { exact: false }).waitFor();
             assert.equal(await page.locator('[name=search_text]').inputValue(), 'Industri plastik dari scan'); const uploadId = writes[0].upload_id;
@@ -90,13 +92,13 @@ async function main() {
             await page.evaluate(() => document.documentElement.classList.add('dark')); await page.screenshot({ path: `tmp/vendor-documents-${mobile ? 'mobile' : 'desktop'}-dark.png` });
             assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
             assert.equal(await page.locator('.vd-dialog').evaluate(el => el.scrollWidth > el.clientWidth), false);
-            await page.locator('[data-vd-cancel-editor]').click(); await page.locator('[data-vd-new]').click();
+            await page.locator('[data-vd-cancel-editor]').click(); await page.locator('.ux-confirm .ux-danger').click(); await page.locator('[data-vd-new]').click();
             await page.locator('[name=title]').fill('Retry kembali'); await page.locator('[name=file]').setInputFiles({ name: 'npwp.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-test') });
             outcome = 'reused'; await page.locator('[data-vd-save]').click(); await page.getByText('Berkas ini sudah tersimpan sebelumnya.', { exact: false }).waitFor();
             assert.equal(await page.locator('[data-vd-editor] [name=title]').inputValue(), 'Retry kembali');
             assert.equal(await page.locator('[data-vd-save]').innerText(), 'Simpan hasil pemeriksaan');
             assert.deepEqual(errors, []); assert.deepEqual(external, []);
-            await page.locator('[data-vd-cancel-editor]').click(); await page.locator('[data-vd-close]').click();
+            await page.locator('[data-vd-cancel-editor]').click(); await page.locator('.ux-confirm .ux-danger').click(); await page.locator('[data-vd-close]').click();
             readOnly = true; await page.reload(); await page.locator('[data-vd-open]').click(); await page.locator('.vd-card').first().waitFor();
             assert.equal(await page.locator('.vd-card button').count(), 0); assert.equal(await page.locator('[data-vd-new]').isDisabled(), true);
             await page.close(); console.log(`VENDOR_DOCUMENTS_UI_OK mobile=${mobile} safe_text=true manual_filter=true retry_id_preserved=true drafts_preserved=true readonly=true`);
@@ -113,6 +115,7 @@ async function main() {
         await generator.screenshot({ path: 'tmp/vendor-image-fixture.png' }); await generator.close();
         for (const name of ['native-fixture.pdf', 'image-fixture.png']) {
             await page.locator('[name=file]').setInputFiles(`tmp/vendor-${name}`); await page.locator('[data-vd-read]').click();
+            if (name.startsWith('image')) await page.locator('.ux-confirm .ux-accept').click();
             await page.getByText('Teks selesai dibaca.', { exact: false }).waitFor({ timeout: 120000 });
             assert.match(await page.locator('[name=search_text]').inputValue(), /plastik/i);
             assert.match(await page.locator('[name=search_text]').inputValue(), /73001234/);

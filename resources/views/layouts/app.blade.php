@@ -28,6 +28,7 @@
     <link href="{{ asset('assets/vendor/ui/select2.min.css') }}" rel="stylesheet">
     <link href="{{ asset('assets/app/activity-broadcast.css') }}?v={{ filemtime(public_path('assets/app/activity-broadcast.css')) }}" rel="stylesheet">
     <link href="{{ asset('assets/app/chatbot.css') }}?v={{ filemtime(public_path('assets/app/chatbot.css')) }}" rel="stylesheet">
+    <link rel="stylesheet" href="{{ asset('assets/app/form-ux.css') }}?v={{ filemtime(public_path('assets/app/form-ux.css')) }}">
     <script>
         (function () {
             var root = document.documentElement;
@@ -568,6 +569,7 @@
         })();
     </script>
 
+    <script src="{{ asset('assets/app/form-ux.js') }}?v={{ filemtime(public_path('assets/app/form-ux.js')) }}" defer></script>
     @stack('scripts')
 
     <script>

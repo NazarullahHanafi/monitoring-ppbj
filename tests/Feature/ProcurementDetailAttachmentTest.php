@@ -67,6 +67,23 @@ class ProcurementDetailAttachmentTest extends TestCase
             : Spph::create($attributes + ['nomor_spph' => '901/PKU-XI/SPPH/2026', 'tanggal' => '2026-11-09']);
     }
 
+    public function test_excel_csv_and_images_can_be_uploaded_reviewed_and_found_in_both_modules(): void
+    {
+        foreach (['sp', 'spph'] as $kind) {
+            $document = $this->document($kind);
+            foreach (['xlsx', 'csv', 'png'] as $extension) {
+                $file = \Tests\Support\DocumentUploadFixture::make($extension);
+                $this->temporary[] = $file->getRealPath();
+                $r = $this->postJson(route('procurement.details.upload', $kind), ['document_id' => $document->id, 'document_file' => $file, 'extracted_text' => 'Plastik industri 73001234', 'method' => 'image-ocr'])->assertCreated();
+                $item = $r->json('attachment');
+                $this->assertStringContainsString('Plastik industri', $item['text']);
+                $this->putJson($item['review_url'], ['text' => $item['text'], 'version' => $item['version']])->assertOk();
+            }
+            $rows = $this->get(route($kind.'.index', ['search' => '73001234']))->assertOk()->viewData($kind === 'sp' ? 'sps' : 'spphs');
+            $this->assertContains($document->id, $rows->modelKeys());
+        }
+    }
+
     private function upload(string $kind, ?int $id = null): ProcurementDetailAttachment
     {
         $response = $this->postJson(route('procurement.details.upload', $kind), ['document_file' => $this->docx()] + ($id ? ['document_id' => $id] : []))->assertCreated();

@@ -6,8 +6,9 @@ use App\Models\ActivityLog;
 use App\Models\ProcurementDetailAttachment;
 use App\Models\Sp;
 use App\Models\Spph;
-use App\Services\DetailDocxReader;
 use App\Services\ProcurementDetailService;
+use App\Services\ProcurementOfficeReader;
+use App\Services\ProcurementUploadInspector;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -64,29 +65,35 @@ class ProcurementDetailAttachmentController extends Controller
         ])->header('Cache-Control', 'private, no-store');
     }
 
-    public function upload(Request $request, string $kind, DetailDocxReader $reader, ProcurementDetailService $details)
+    public function upload(Request $request, string $kind, ProcurementDetailService $details)
     {
         abort_unless(in_array($kind, ['sp', 'spph'], true), 404);
         $input = $request->validate([
-            'document_file' => 'required|file|mimes:pdf,docx|max:10240',
+            'document_file' => 'required|file|max:10240',
             'document_id' => 'nullable|integer|min:1',
             'extracted_text' => 'nullable|string|max:200000',
-            'method' => 'nullable|in:pdf-text,pdf-ocr,pdf-mixed,manual',
+            'method' => 'nullable|in:pdf-text,pdf-ocr,pdf-mixed,image-ocr,manual',
         ]);
         $document = isset($input['document_id']) ? $this->document($kind, $input['document_id']) : null;
         abort_if($document && ! $this->canManage($request, $document), 403);
         $file = $request->file('document_file');
-        $extension = strtolower($file->getClientOriginalExtension());
-        if (! in_array($extension, ['pdf', 'docx'], true)) {
-            throw ValidationException::withMessages(['document_file' => 'Gunakan Word .docx atau PDF.']);
+        $format = app(ProcurementUploadInspector::class)->inspect($file, 'document_file');
+        $extension = $format['extension'];
+        $read = null;
+        if (in_array($format['reader'], ['office', 'text'], true)) {
+            try {
+                $read = app(ProcurementOfficeReader::class)->read($file->getRealPath(), $extension);
+            } catch (ValidationException) {
+                $read = ['text' => '', 'method' => 'manual'];
+            }
         }
-        $text = $extension === 'docx' ? $reader->read($file->getRealPath()) : ($input['extracted_text'] ?? '');
-        $method = $extension === 'docx' ? 'docx-structure' : ($input['method'] ?? 'manual');
+        $text = $read['text'] ?? ($input['extracted_text'] ?? '');
+        $method = $read['method'] ?? ($input['method'] ?? 'manual');
         $id = (string) Str::uuid();
         $path = $file->storeAs('procurement-details/'.now()->format('Y/m'), $id.'.'.$extension, 'local');
         abort_unless($path, 503, 'Berkas belum dapat disimpan. Silakan coba lagi.');
         try {
-            $attachment = DB::transaction(function () use ($request, $kind, $document, $file, $id, $path, $text, $method) {
+            $attachment = DB::transaction(function () use ($request, $kind, $document, $file, $id, $path, $text, $method, $format) {
                 if ($document) {
                     $document->newQuery()->whereKey($document->id)->lockForUpdate()->firstOrFail();
                     if (ProcurementDetailAttachment::where('kind', $kind)->where('document_id', $document->id)->count() >= 5) {
@@ -96,7 +103,7 @@ class ProcurementDetailAttachmentController extends Controller
                 $attachment = ProcurementDetailAttachment::create([
                     'id' => $id, 'kind' => $kind, 'document_id' => $document?->id, 'uploaded_by' => $request->user()->id,
                     'original_name' => Str::limit(preg_replace('/[\x00-\x1F\x7F]/u', '_', basename(str_replace('\\', '/', $file->getClientOriginalName()))) ?? 'rincian', 240, ''),
-                    'path' => $path, 'mime' => $file->getMimeType(), 'size' => $file->getSize(),
+                    'path' => $path, 'mime' => $format['mime'], 'size' => $file->getSize(),
                     'sha256' => hash_file('sha256', $file->getRealPath()), 'method' => $method, 'extracted_text' => $text,
                 ]);
                 $this->audit($request, $attachment, 'detail_uploaded', 'Lampiran rincian diunggah; menunggu pemeriksaan isi.');

@@ -6,6 +6,8 @@ use App\Exceptions\VendorCloudException;
 use App\Models\ActivityLog;
 use App\Models\Vendor;
 use App\Models\VendorDocument;
+use App\Services\ProcurementOfficeReader;
+use App\Services\ProcurementUploadInspector;
 use App\Services\VendorDocumentCloud;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -13,20 +15,42 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
-use Illuminate\Validation\ValidationException;
 
 class VendorDocumentController extends Controller
 {
+    private const VALIDATION_MESSAGES = ['required' => ':attribute perlu diisi.', 'max' => ':attribute melewati batas yang diizinkan.', 'accepted' => 'Periksa teks lalu centang konfirmasi sebelum menyimpan.', 'date_format' => 'Tanggal belum lengkap atau tidak valid. Pilih tanggal yang benar.', 'in' => 'Pilihan :attribute tidak tersedia.', 'file' => 'Pilih berkas yang valid.', 'uploaded' => 'Unggahan melewati batas server atau belum selesai. Pilih berkas lebih kecil lalu coba kembali.'];
+
     public function index(Request $request, Vendor $vendor)
     {
-        $data = $request->validate(['q' => 'nullable|string|max:160', 'type' => ['nullable', Rule::in(array_keys(VendorDocument::TYPES))], 'page' => 'nullable|integer|min:1|max:10000']);
-        $rows = $vendor->documents()->when(($data['q'] ?? '') !== '', fn ($q) => $q->search(trim($data['q'])))
-            ->when(! empty($data['type']), fn ($q) => $q->where('type', $data['type']))
+        $data = $request->validate(['q' => 'nullable|string|max:160', 'type' => ['nullable', Rule::in(array_keys(VendorDocument::TYPES))], 'attention' => 'nullable|in:metadata,expiring,unfinished', 'page' => 'nullable|integer|min:1|max:10000']);
+        $scope = $vendor->documents()->when(! empty($data['type']), fn ($q) => $q->where('type', $data['type']))
+            ->when(($data['attention'] ?? '') === 'metadata', fn ($q) => $q->where('status', 'ready')->where(fn ($q) => $q->whereNull('search_text')->orWhere('search_text', '')))
+            ->when(($data['attention'] ?? '') === 'expiring', fn ($q) => $q->where('status', 'ready')->whereNotNull('expires_at')->where('expires_at', '<=', now()->addDays(30)->toDateString()))
+            ->when(($data['attention'] ?? '') === 'unfinished', fn ($q) => $q->where('status', '!=', 'ready'));
+        $query = (clone $scope)->when(($data['q'] ?? '') !== '', fn ($q) => $q->search(trim($data['q'])))
             ->select(['id', 'vendor_id', 'type', 'title', 'document_number', 'expires_at', 'original_name', 'size', 'status', 'version', 'created_at'])
-            ->selectRaw("CASE WHEN search_text IS NOT NULL AND search_text <> '' THEN 1 ELSE 0 END as has_text")
-            ->orderByDesc('created_at')->orderBy('id')->simplePaginate(20);
+            ->selectRaw("CASE WHEN search_text IS NOT NULL AND search_text <> '' THEN 1 ELSE 0 END as has_text");
+        $terms = VendorDocument::terms(trim($data['q'] ?? ''));
+        if ($terms !== []) {
+            $query->selectRaw("SUBSTR(COALESCE(search_text, ''), CASE WHEN INSTR(LOWER(search_text), ?) > 60 THEN INSTR(LOWER(search_text), ?) - 60 ELSE 1 END, 240) as snippet", [$terms[0], $terms[0]]);
+        }
+        $rows = $query->orderByDesc('created_at')->orderBy('id')->simplePaginate(20);
+        $diagnosis = null;
+        if ($rows->isEmpty() && $rows->currentPage() === 1 && $terms !== []) {
+            $matched = [];
+            $missing = [];
+            foreach (array_slice($terms, 0, 8) as $term) {
+                $exists = (clone $scope)->where('status', 'ready')->search($term)->exists();
+                if ($exists) {
+                    $matched[] = $term;
+                } else {
+                    $missing[] = $term;
+                }
+            }
+            $diagnosis = ['matched' => $matched, 'missing' => $missing, 'suggestion' => implode(' ', $matched)];
+        }
 
-        return response()->json(['data' => $rows->map(fn ($doc) => $this->present($doc)), 'has_more' => $rows->hasMorePages(), 'ready_count' => $vendor->documents()->where('status', 'ready')->count()])->header('Cache-Control', 'private, no-store');
+        return response()->json(['data' => $rows->map(fn ($doc) => $this->present($doc)), 'has_more' => $rows->hasMorePages(), 'ready_count' => $vendor->documents()->where('status', 'ready')->count(), 'diagnosis' => $diagnosis])->header('Cache-Control', 'private, no-store');
     }
 
     public function show(Vendor $vendor, VendorDocument $document)
@@ -40,15 +64,13 @@ class VendorDocumentController extends Controller
     {
         $data = $request->validate($this->rules() + [
             'upload_id' => 'nullable|uuid',
-            'file' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png', 'extensions:pdf,jpg,jpeg,png', 'max:10240'],
-        ]);
+            'file' => ['required', 'file', 'max:10240'],
+        ], self::VALIDATION_MESSAGES, ['file' => 'Berkas', 'title' => 'Judul dokumen', 'type' => 'Jenis dokumen']);
         $file = $request->file('file');
         abort_if($file->getSize() < 1, 422, 'Berkas kosong tidak dapat disimpan.');
-        $mime = (new \finfo(FILEINFO_MIME_TYPE))->file($file->getRealPath());
-        $extension = ['application/pdf' => 'pdf', 'image/jpeg' => 'jpg', 'image/png' => 'png'][$mime] ?? null;
-        if (! $extension) {
-            throw ValidationException::withMessages(['file' => 'Gunakan PDF, JPG, atau PNG asli. Isi berkas tidak sesuai.']);
-        }
+        $format = app(ProcurementUploadInspector::class)->inspect($file);
+        $mime = $format['mime'];
+        $extension = $format['extension'];
         $id = strtolower($data['upload_id'] ?? (string) Str::uuid());
         $checksum = hash_file('sha256', $file->getRealPath());
         $lock = Cache::lock('vendor-document:'.$id, 900);
@@ -109,7 +131,7 @@ class VendorDocumentController extends Controller
     public function update(Request $request, Vendor $vendor, VendorDocument $document)
     {
         $this->belongs($vendor, $document);
-        $data = $request->validate($this->rules() + ['version' => 'required|integer|min:1']);
+        $data = $request->validate($this->rules() + ['version' => 'required|integer|min:1'], self::VALIDATION_MESSAGES, ['title' => 'Judul dokumen', 'type' => 'Jenis dokumen']);
         $lock = Cache::lock('vendor-document:'.$document->id, 900);
         abort_unless($lock->get(), 409, 'Lampiran sedang diproses. Coba lagi setelah proses selesai.');
         try {
@@ -125,6 +147,16 @@ class VendorDocumentController extends Controller
         }
 
         return response()->json(['document' => $this->present($document->fresh())]);
+    }
+
+    public function extract(Request $request, Vendor $vendor, ProcurementUploadInspector $inspector, ProcurementOfficeReader $reader)
+    {
+        $request->validate(['file' => 'required|file|max:10240'], self::VALIDATION_MESSAGES, ['file' => 'Berkas']);
+        $file = $request->file('file');
+        $format = $inspector->inspect($file);
+        abort_unless(in_array($format['reader'], ['office', 'text'], true), 422, 'Gunakan pembaca PDF/foto di perangkat atau lengkapi teks secara manual.');
+
+        return response()->json($reader->read($file->getRealPath(), $format['extension']))->header('Cache-Control', 'private, no-store');
     }
 
     public function download(Vendor $vendor, VendorDocument $document, VendorDocumentCloud $cloud)
@@ -225,6 +257,6 @@ class VendorDocumentController extends Controller
 
     private function present(VendorDocument $document): array
     {
-        return ['id' => $document->id, 'type' => $document->type, 'type_label' => VendorDocument::TYPES[$document->type], 'title' => $document->title, 'document_number' => $document->document_number, 'expires_at' => $document->expires_at?->format('Y-m-d'), 'original_name' => $document->original_name, 'size' => $document->size, 'status' => $document->status, 'version' => $document->version, 'has_text' => isset($document->has_text) ? (bool) $document->has_text : filled($document->search_text), 'download_url' => $document->status === 'ready' ? route('vendor.documents.download', [$document->vendor_id, $document->id]) : null];
+        return ['id' => $document->id, 'type' => $document->type, 'type_label' => VendorDocument::TYPES[$document->type], 'title' => $document->title, 'document_number' => $document->document_number, 'expires_at' => $document->expires_at?->format('Y-m-d'), 'original_name' => $document->original_name, 'size' => $document->size, 'status' => $document->status, 'version' => $document->version, 'has_text' => isset($document->has_text) ? (bool) $document->has_text : filled($document->search_text), 'snippet' => $document->snippet ?? '', 'download_url' => $document->status === 'ready' ? route('vendor.documents.download', [$document->vendor_id, $document->id]) : null];
     }
 }

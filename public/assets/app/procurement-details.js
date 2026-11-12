@@ -79,11 +79,12 @@
         if (dialog) return;
         dialog = document.createElement('dialog'); dialog.className = 'pd-dialog'; dialog.setAttribute('aria-labelledby', 'pdTitle');
         dialog.innerHTML = `<div class="pd-dialog-head"><div><h2 id="pdTitle">Lampiran rincian barang / jasa</h2><p data-pd-number></p></div><button type="button" class="pd-close" data-pd-close aria-label="Tutup lampiran">×</button></div>
-            <div class="pd-dialog-body"><p>Isi Word/PDF dapat ditemukan lewat pencarian setelah Anda memeriksa dan mengonfirmasinya. Pembacaan diproses di server sendiri atau perangkat Anda.</p>
-            <div class="pd-drop" data-pd-upload><label for="pdFile"><strong>Pilih Word (.docx) atau PDF</strong></label><input type="file" id="pdFile" accept=".docx,.pdf,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"><p>Maksimal 10 MB per berkas dan 30 halaman PDF. Word lama (.doc) perlu disimpan sebagai .docx.</p><button type="button" class="pd-button" data-pd-upload-only hidden>Unggah berkas, periksa teks nanti</button></div>
+            <div class="pd-dialog-body"><p>Dokumen, tabel Excel, dan scan dapat ditemukan lewat pencarian setelah teksnya diperiksa dan dikonfirmasi. Pembacaan berlangsung di server sendiri atau perangkat Anda.</p>
+            <div class="pd-drop" data-pd-upload><label for="pdFile"><strong>Pilih dokumen atau gambar</strong></label><input type="file" id="pdFile"><p>PDF, Word, Excel, PowerPoint, OpenDocument, CSV/TXT, dan gambar. Maksimal 10 MB; pembaca PDF sampai 30 halaman. Dokumen lama dapat dilengkapi teks secara manual.</p><button type="button" class="pd-button" data-pd-upload-only hidden>Unggah berkas, periksa teks nanti</button></div>
             <div class="pd-progress" data-pd-status role="status" aria-live="polite"></div><button type="button" class="pd-button pd-secondary" data-pd-cancel hidden>Batalkan pembacaan</button><button type="button" class="pd-button pd-secondary" data-pd-refresh hidden>Muat ulang daftar lampiran</button><div class="pd-files" data-pd-files></div></div>
             <div class="pd-dialog-foot"><button type="button" class="pd-button pd-secondary" data-pd-later>Lampiran belum dibuat · lengkapi nanti</button><button type="button" class="pd-button" data-pd-done>Selesai</button></div>`;
         document.body.appendChild(dialog);
+        dialog.querySelector('#pdFile').accept = Object.keys(config.formats || { pdf: {}, docx: {} }).map(extension => `.${extension}`).join(',');
         dialog.addEventListener('cancel', event => { event.preventDefault(); if (!busy) close(false); });
         dialog.querySelector('[data-pd-close]').onclick = () => close(false);
         dialog.querySelector('[data-pd-done]').onclick = () => close(true);
@@ -104,9 +105,9 @@
         dialog.querySelector('#pdFile').addEventListener('change', () => upload(false));
         dialog.querySelector('[data-pd-upload-only]').onclick = () => upload(true);
     }
-    function close(proceed) {
+    async function close(proceed) {
         if (busy) return;
-        if (dialog.querySelector('[data-pd-dirty="true"]') && !confirm('Perubahan teks belum dikonfirmasi. Tutup tanpa menyimpan perubahan teks tersebut?')) return;
+        if (dialog.querySelector('[data-pd-dirty="true"]') && (!window.FormUX || !await window.FormUX.confirm({ title: 'Teks belum disimpan', text: 'Perubahan teks belum dikonfirmasi. Kembali untuk memeriksa atau tutup tanpa menyimpan perubahan ini.', accept: 'Tutup tanpa menyimpan', danger: true }))) return;
         dialog.close();
         if (state.changed && state.id && !state.form) location.reload();
         if (state.form) updateForm(state.form);
@@ -124,7 +125,7 @@
             box.innerHTML = `<div class="pd-file-head"><a target="_blank" rel="noopener"></a><span data-pd-review-state></span></div><small data-pd-method></small><label>Isi yang akan masuk pencarian</label><textarea spellcheck="false" maxlength="200000"></textarea><div class="pd-actions"><button type="button" data-pd-review>Konfirmasi isi untuk pencarian</button><button type="button" class="pd-secondary" data-pd-delete>Hapus lampiran</button></div>`;
             const link = box.querySelector('a'); link.textContent = attachment.name; link.href = attachment.download_url;
             box.querySelector('[data-pd-review-state]').textContent = attachment.reviewed ? '✓ Sudah diperiksa' : 'Perlu diperiksa';
-            box.querySelector('[data-pd-method]').textContent = ({ 'docx-structure': 'Teks dan tabel Word dibaca langsung.', 'pdf-text': 'Teks PDF dibaca langsung.', 'pdf-ocr': 'Hasil pembacaan scan di perangkat Anda.', 'pdf-mixed': 'Gabungan teks digital dan pembacaan scan.', 'manual': 'Lengkapi teks dari dokumen sumber.' })[attachment.method];
+            box.querySelector('[data-pd-method]').textContent = ({ 'docx-structure': 'Teks dan tabel Word dibaca langsung.', 'office-structure': 'Teks dan tabel Office dibaca tanpa menjalankan makro atau rumus.', 'text-structure': 'Isi teks/CSV dibaca langsung.', 'image-ocr': 'Teks foto dibaca di perangkat Anda.', 'pdf-text': 'Teks PDF dibaca langsung.', 'pdf-ocr': 'Hasil pembacaan scan di perangkat Anda.', 'pdf-mixed': 'Gabungan teks digital dan pembacaan scan.', 'manual': 'Lengkapi teks dari dokumen sumber.' })[attachment.method] || 'Periksa teks dari dokumen sumber.';
             const textarea = box.querySelector('textarea'); textarea.value = state.edits.get(attachment.id) ?? attachment.text;
             box.dataset.pdDirty = String(textarea.value !== attachment.text);
             if (box.dataset.pdDirty === 'true') box.querySelector('[data-pd-review-state]').textContent = 'Perubahan belum disimpan';
@@ -147,7 +148,7 @@
             };
             box.querySelector('[data-pd-delete]').onclick = async () => {
                 if (busy) return;
-                if (!confirm(`Hapus lampiran rincian "${attachment.name}"?`)) return;
+                if (!window.FormUX || !await window.FormUX.confirm({ title: 'Hapus lampiran?', text: `Lampiran “${attachment.name}” akan dihapus dari dokumen ini.`, accept: 'Hapus lampiran', danger: true })) return;
                 setBusy(true);
                 try {
                     const result = await request(attachment.delete_url, { method: 'DELETE' });
@@ -191,14 +192,15 @@
     async function upload(skipReading) {
         const file = dialog.querySelector('#pdFile').files[0];
         if (!file || busy) return;
-        if (file.size > 10 * 1024 * 1024 || !/\.(docx|pdf)$/i.test(file.name)) { status('Gunakan Word .docx atau PDF maksimal 10 MB.', true); return; }
+        const extension = file.name.split('.').pop().toLowerCase(), format = (config.formats || { pdf: { reader: 'pdf' }, docx: { reader: 'office' } })[extension];
+        if (!file.size || file.size > 10 * 1024 * 1024 || !format) { status('Pilih dokumen atau gambar yang didukung, maksimal 10 MB.', true); return; }
         if (!state.id && state.items.length) { status('Satu lampiran sementara sudah tersedia. Hapus dulu jika ingin menggantinya; lampiran tambahan bisa diunggah setelah dokumen disimpan.', true); return; }
         operation = new AbortController(); setBusy(true);
         dialog.querySelector('[data-pd-upload-only]').hidden = true;
         try {
             let result = { text: '', method: 'manual' };
-            if (/\.pdf$/i.test(file.name) && !skipReading) {
-                try { result = await window.ProcurementDocumentReader.readPdf(file, text => status(text), operation.signal); }
+            if (['pdf', 'image'].includes(format.reader) && !skipReading) {
+                try { result = await window.ProcurementDocumentReader[format.reader === 'pdf' ? 'readPdf' : 'readImage'](file, text => status(text), operation.signal); }
                 catch (error) {
                     if (operation.signal.aborted) throw error;
                     dialog.querySelector('[data-pd-upload-only]').hidden = false;

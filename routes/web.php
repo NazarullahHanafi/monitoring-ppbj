@@ -404,6 +404,7 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
         Route::prefix('vendors/{vendor}/documents')->name('vendor.documents.')->controller(\App\Http\Controllers\VendorDocumentController::class)->group(function () {
             Route::get('/', 'index')->middleware('throttle:60,1,vendor-doc-list:')->name('index');
             Route::post('/', 'store')->middleware('throttle:10,1,vendor-doc-upload:')->name('store');
+            Route::post('/extract', 'extract')->middleware('throttle:8,1,vendor-doc-extract:')->name('extract');
             Route::get('/{document}', 'show')->whereUuid('document')->middleware('throttle:30,1,vendor-doc-detail:')->name('show');
             Route::get('/{document}/download', 'download')->whereUuid('document')->middleware('throttle:20,1,vendor-doc-download:')->name('download');
             Route::put('/{document}', 'update')->whereUuid('document')->middleware('throttle:20,1,vendor-doc-update:')->name('update');

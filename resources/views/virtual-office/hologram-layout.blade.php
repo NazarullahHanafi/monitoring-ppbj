@@ -24,6 +24,8 @@
     <script src="{{ asset('assets/vendor/ui/jquery-3.7.1.min.js') }}"></script>
     <script src="{{ asset('assets/vendor/ui/sweetalert2.all.min.js') }}"></script>
     <script src="{{ asset('assets/vendor/ui/select2.min.js') }}"></script>
+    <link rel="stylesheet" href="{{ asset('assets/app/form-ux.css') }}?v={{ filemtime(public_path('assets/app/form-ux.css')) }}">
+    <script src="{{ asset('assets/app/form-ux.js') }}?v={{ filemtime(public_path('assets/app/form-ux.js')) }}" defer></script>
     @stack('scripts')
     <script src="{{ asset('assets/virtual-office/hologram-frame.js') }}?v={{ filemtime(public_path('assets/virtual-office/hologram-frame.js')) }}" defer></script>
 </body>
