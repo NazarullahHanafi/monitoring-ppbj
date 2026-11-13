@@ -7,6 +7,7 @@ use App\Models\ProcurementDetailAttachment;
 use App\Models\Sp;
 use App\Models\Spph;
 use App\Services\ProcurementDetailService;
+use App\Services\ProcurementLocalFiles;
 use App\Services\ProcurementOfficeReader;
 use App\Services\ProcurementUploadInspector;
 use Illuminate\Http\Request;
@@ -148,9 +149,10 @@ class ProcurementDetailAttachmentController extends Controller
     public function download(Request $request, ProcurementDetailAttachment $attachment)
     {
         $this->authorizeAttachment($request, $attachment, false);
-        abort_unless(Storage::disk('local')->exists($attachment->path), 404);
+        $path = app(ProcurementLocalFiles::class)->path($attachment);
+        abort_unless($path, 404);
 
-        return Storage::disk('local')->download($attachment->path, $attachment->original_name, ['X-Content-Type-Options' => 'nosniff', 'Cache-Control' => 'private, no-store']);
+        return response()->download($path, $attachment->original_name, ['X-Content-Type-Options' => 'nosniff', 'Cache-Control' => 'private, no-store'])->setPrivate();
     }
 
     public function destroy(Request $request, ProcurementDetailAttachment $attachment, ProcurementDetailService $details)

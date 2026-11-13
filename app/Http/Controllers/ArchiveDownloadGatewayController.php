@@ -41,7 +41,7 @@ class ArchiveDownloadGatewayController extends Controller
             $path = app(\App\Services\ProcurementLocalFiles::class)->path($attachment);
             abort_unless($path, 404);
 
-            return response()->file($path, ['Cache-Control' => 'private, no-store', 'X-Content-Type-Options' => 'nosniff', 'Content-Security-Policy' => "sandbox; default-src 'none'"]);
+            return response()->file($path, ['Cache-Control' => 'private, no-store', 'X-Content-Type-Options' => 'nosniff', 'Content-Security-Policy' => "sandbox; default-src 'none'"])->setPrivate();
         }
         $target = Cache::get('procurement-search:download:'.$row->id);
         abort_unless(is_array($target) && is_string($target['url'] ?? null) && ($target['fingerprint'] ?? '') === $row->fingerprint, 404, 'Tautan lampiran sedang disinkronkan. Coba kembali sebentar lagi.');
