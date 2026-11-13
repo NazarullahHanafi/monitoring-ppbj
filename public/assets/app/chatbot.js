@@ -4,6 +4,98 @@ let conversationHistory = [];
     const isAuthenticated = Boolean(window.CHATBOT_CONFIG?.authenticated);
     const userDept = window.CHATBOT_CONFIG?.department || '';
     const userName = window.CHATBOT_CONFIG?.firstName || 'Kawan';
+    let chatbotOperation = null;
+    let chatbotGeneration = 0;
+    let chatbotInterrupted = false;
+
+    function chatbotContext() {
+        const recent = conversationHistory.slice(isAuthenticated ? -20 : -6);
+        let remaining = 12000;
+        const result = [];
+        for (let i = recent.length - 1; i >= 0 && remaining > 0; i--) {
+            const content = Array.from(String(recent[i].content)).slice(0, Math.min(2000, remaining)).join('');
+            if (content) { result.unshift({role: recent[i].role, content}); remaining -= Array.from(content).length; }
+        }
+        return result;
+    }
+    function rememberChatbotExchange(message, answer) {
+        for (const [role, text] of [['user', message], ['assistant', answer]]) {
+            conversationHistory.push({role, content: Array.from(String(text)).slice(0, 2000).join('')});
+        }
+        conversationHistory = conversationHistory.slice(-20);
+    }
+    function setChatbotBusy(value) {
+        isLoading = value;
+        document.getElementById('chatbot-input').disabled = value;
+        document.getElementById('send-btn').disabled = value;
+        document.getElementById('chatbot-form').setAttribute('aria-busy', String(value));
+        document.querySelectorAll('#clear-confirm-modal button, [onclick="showClearConfirmation()"]').forEach(button => { button.disabled = value; });
+    }
+    function beginChatbotOperation() {
+        const operation = {generation: ++chatbotGeneration, controller: new AbortController()};
+        chatbotOperation = operation;
+        setChatbotBusy(true);
+        return operation;
+    }
+    function currentChatbotOperation(operation) {
+        return chatbotOperation === operation && operation.generation === chatbotGeneration;
+    }
+    async function requestChatbot(path, operation, body, method = 'POST') {
+        const signal = operation.controller.signal;
+        const timeout = setTimeout(() => operation.controller.abort(), method === 'DELETE' ? 15000 : 55000);
+        let onAbort;
+        const aborted = new Promise((_, reject) => {
+            onAbort = () => reject(new Error('Respons belum diterima tepat waktu. Periksa hasil sebelum mengirim ulang.'));
+            signal.addEventListener('abort', onAbort, {once: true});
+            if (signal.aborted) onAbort();
+        });
+        try {
+            const read = async () => {
+                const response = await fetch(path, {
+                    method, credentials: 'same-origin', signal,
+                    headers: {'Content-Type': 'application/json', Accept: 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || ''},
+                    ...(body ? {body: JSON.stringify(body)} : {})
+                });
+                if (response.redirected || !(response.headers.get('content-type') || '').includes('application/json')) {
+                    throw new Error('Sesi atau respons belum dapat diverifikasi. Muat ulang halaman dan periksa hasil sebelum mencoba lagi.');
+                }
+                const data = await response.json();
+                if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('Respons asisten belum lengkap.');
+                if (!response.ok || data.success !== true) {
+                    throw new Error(Object.values(data.errors || {}).flat()[0] || data.message || 'Permintaan belum berhasil. Periksa hasil sebelum mencoba lagi.');
+                }
+                if (typeof data.message !== 'string') throw new Error('Respons asisten belum lengkap.');
+                return data;
+            };
+            return await Promise.race([read(), aborted]);
+        } catch (error) {
+            if (error instanceof SyntaxError) throw new Error('Respons asisten belum dapat dibaca. Periksa hasil sebelum mencoba lagi.');
+            throw error;
+        } finally { clearTimeout(timeout); signal.removeEventListener('abort', onAbort); }
+    }
+    function localChatbotAnswer(answer, operation) {
+        return new Promise((resolve, reject) => {
+            const signal = operation.controller.signal;
+            const cancel = () => { clearTimeout(timer); reject(new Error('Dibatalkan')); };
+            const timer = setTimeout(() => { signal.removeEventListener('abort', cancel); resolve(answer); }, 800);
+            signal.addEventListener('abort', cancel, {once: true});
+            if (signal.aborted) cancel();
+        });
+    }
+    window.addEventListener('pagehide', () => {
+        chatbotInterrupted = Boolean(chatbotOperation);
+        if (chatbotOperation?.message && !document.getElementById('chatbot-input').value) document.getElementById('chatbot-input').value = chatbotOperation.message;
+        chatbotGeneration++;
+        chatbotOperation?.controller.abort();
+        chatbotOperation = null;
+        removeTyping();
+        setChatbotBusy(false);
+    });
+    window.addEventListener('pageshow', () => {
+        if (!chatbotInterrupted) return;
+        chatbotInterrupted = false;
+        appendMessage('Respons sebelumnya belum terverifikasi saat meninggalkan halaman. Periksa hasil sebelum mengirim ulang.', 'assistant', true);
+    });
 
     const prKeywords = [
         'cek pr', 'pr pending', 'notifikasi pr', 'notif pr', 'approval pr',
@@ -286,32 +378,18 @@ Ada pertanyaan lain? 😊`,
     // SEND STARTER MESSAGE
     // =====================================================
     function sendStarterMessage(text) {
-        const suggestions = document.getElementById('starter-suggestions');
-        if (suggestions) suggestions.style.display = 'none';
-
-        appendMessage(text, 'user');
-
-        if (starterResponses[text]?.skipAPI) {
-            showTyping();
-            setTimeout(() => {
-                removeTyping();
-                appendMessage(starterResponses[text].response, 'assistant');
-                conversationHistory.push({ role: 'user', content: text });
-                conversationHistory.push({ role: 'assistant', content: starterResponses[text].response });
-            }, 800);
-            return;
-        }
-
+        if (isLoading) return;
         document.getElementById('chatbot-input').value = text;
-        sendMessage(new Event('submit'));
+        return sendMessage(new Event('submit'));
     }
 
     // =====================================================
     // SEND QUICK REPLY
     // =====================================================
     function sendQuickReply(text) {
+        if (isLoading) return;
         document.getElementById('chatbot-input').value = text;
-        sendMessage(new Event('submit'));
+        return sendMessage(new Event('submit'));
     }
 
     // =====================================================
@@ -340,67 +418,42 @@ Ada pertanyaan lain? 😊`,
         const input = document.getElementById('chatbot-input');
         const message = input.value.trim();
         if (!message) return;
+        if (Array.from(message).length > (isAuthenticated ? 2000 : 500)) {
+            appendMessage(`Pesan maksimal ${isAuthenticated ? 2000 : 500} karakter. Ringkas pesan Anda sebelum mengirim.`, 'assistant', true);
+            return;
+        }
 
         const suggestions = document.getElementById('starter-suggestions');
         if (suggestions) suggestions.style.display = 'none';
 
-        input.disabled = true;
-        document.getElementById('send-btn').disabled = true;
+        const context = chatbotContext();
+        const operation = beginChatbotOperation();
+        operation.message = message;
         input.value = '';
 
         appendMessage(message, 'user');
-        conversationHistory.push({ role: 'user', content: message });
-
-        // Special: Nazar easter egg
-        if (checkIfAboutNazar(message)) {
-            isLoading = true;
-            showTyping();
-            setTimeout(() => {
-                removeTyping();
-                const resp = starterResponses['Siapa Nazarullah?'].response;
-                appendMessage(resp, 'assistant');
-                conversationHistory.push({ role: 'assistant', content: resp });
-                isLoading = false;
-                input.disabled = false;
-                document.getElementById('send-btn').disabled = false;
-                input.focus();
-            }, 1000);
-            return;
-        }
-
-        isLoading = true;
         showTyping();
 
         try {
-            const token = document.querySelector('meta[name="csrf-token"]');
-            const response = await fetch('/chatbot/chat', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json',
-                    'X-CSRF-TOKEN': token ? token.content : ''
-                },
-                body: JSON.stringify({ message, conversation: conversationHistory })
-            });
-
-            const data = await response.json();
+            const local = starterResponses[message]?.skipAPI ? starterResponses[message].response
+                : checkIfAboutNazar(message) ? starterResponses['Siapa Nazarullah?'].response : null;
+            const answer = local !== null ? await localChatbotAnswer(local, operation)
+                : (await requestChatbot('/chatbot/chat', operation, {message, conversation: context})).message;
+            if (!currentChatbotOperation(operation)) return;
             removeTyping();
-
-            if (data.success && data.message) {
-                appendMessage(data.message, 'assistant');
-                conversationHistory.push({ role: 'assistant', content: data.message });
-            } else {
-                appendMessage(data.message || 'Maaf, terjadi kesalahan pada server.', 'assistant', true);
-            }
-
+            appendMessage(answer, 'assistant');
+            rememberChatbotExchange(message, answer);
         } catch (error) {
+            if (!currentChatbotOperation(operation)) return;
             removeTyping();
-            appendMessage('Tidak dapat terhubung ke server. Cek koneksi internet Anda.', 'assistant', true);
+            if (!input.value) input.value = message;
+            appendMessage(error instanceof TypeError ? 'Koneksi terputus. Periksa hasil sebelum mengirim ulang; pesan Anda tetap tersedia.' : error.message, 'assistant', true);
         } finally {
-            isLoading = false;
-            input.disabled = false;
-            document.getElementById('send-btn').disabled = false;
-            input.focus();
+            if (currentChatbotOperation(operation)) {
+                chatbotOperation = null;
+                setChatbotBusy(false);
+                input.focus();
+            }
         }
     }
 
@@ -410,6 +463,7 @@ Ada pertanyaan lain? 😊`,
     function appendMessage(text, sender, isError = false) {
         const container = document.getElementById('chatbot-msg-container');
         const div = document.createElement('div');
+        if (isError) div.setAttribute('role', 'alert');
         const time = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
         // Escape first, then apply only the formatting rules we support.
         const formatted = escapeHtml(String(text))
@@ -470,13 +524,29 @@ Ada pertanyaan lain? 😊`,
     // CLEAR CHAT
     // =====================================================
     function showClearConfirmation() {
+        if (isLoading) return;
         document.getElementById('clear-confirm-modal').style.display = 'flex';
     }
     function hideClearConfirmation() {
         document.getElementById('clear-confirm-modal').style.display = 'none';
     }
 
-    function confirmClearConversation() {
+    async function confirmClearConversation() {
+        if (isLoading) return;
+        const operation = beginChatbotOperation();
+        try {
+            if (isAuthenticated) await requestChatbot('/chatbot/clear', operation, null, 'DELETE');
+            if (!currentChatbotOperation(operation)) return;
+            resetChatbotConversation();
+        } catch (error) {
+            if (!currentChatbotOperation(operation)) return;
+            hideClearConfirmation();
+            appendMessage(error.message || 'Riwayat belum dapat dihapus. Coba lagi.', 'assistant', true);
+        } finally {
+            if (currentChatbotOperation(operation)) { chatbotOperation = null; setChatbotBusy(false); }
+        }
+    }
+    function resetChatbotConversation() {
         const container = document.getElementById('chatbot-msg-container');
         container.innerHTML = `
             <div style="display:flex; align-items:flex-start; gap:8px; animation:fadeIn 0.5s;">
@@ -501,7 +571,6 @@ Ada pertanyaan lain? 😊`,
         greetingLoaded = false;
         applyTimeGreeting();
 
-        fetch('/chatbot/clear', { method: 'DELETE' }).catch(() => { });
     }
 
     function escapeHtml(text) {
@@ -545,16 +614,15 @@ Ada pertanyaan lain? 😊`,
             widget.style.bottom = 'auto';
 
             // Simpan posisi aman ini
-            localStorage.setItem('chatbot_pos', JSON.stringify({
-                left: targetX,
-                top: targetY
-            }));
+            try {
+                localStorage.setItem('chatbot_pos', JSON.stringify({left: targetX, top: targetY}));
+            } catch (_) { /* The widget also works when browser storage is unavailable. */ }
         };
 
         // 1. Load posisi & Langsung Perbaiki jika di luar layar
-        const savedPos = localStorage.getItem('chatbot_pos');
-        if (savedPos) {
-            const pos = JSON.parse(savedPos);
+        let pos = null;
+        try { pos = JSON.parse(localStorage.getItem('chatbot_pos') || 'null'); } catch (_) { }
+        if (pos && Number.isFinite(pos.left) && Number.isFinite(pos.top)) {
             // Terapkan dulu posisi tersimpan
             widget.style.left = pos.left + 'px';
             widget.style.top = pos.top + 'px';
@@ -568,6 +636,8 @@ Ada pertanyaan lain? 😊`,
 
         const startDrag = (e) => {
             if (e.target.closest('#chatbot-notif-badge')) return;
+            // Prevent a touch from also generating a mouse toggle on mobile.
+            if (e.type === 'touchstart') e.preventDefault();
 
             const clientX = e.touches ? e.touches[0].clientX : e.clientX;
             const clientY = e.touches ? e.touches[0].clientY : e.clientY;

@@ -88,7 +88,7 @@ CHATBOT WIDGET PPBJ - MODERN VERSION WITH STARTER MESSAGES
                     💡 Pertanyaan yang sering ditanyakan:
                 </div>
                 @auth
-                    @if(auth()->user()->dept === 'umum')
+                    @if(auth()->user()->department === 'umum')
                         <button onclick="sendStarterMessage('cek PR')" class="starter-btn"
                             style="background: linear-gradient(90deg, #fef3c7, #fde68a); border-color: #fcd34d; color: #92400e;">
                             🔔 Cek PR Pending (Dept Umum)
@@ -117,7 +117,7 @@ CHATBOT WIDGET PPBJ - MODERN VERSION WITH STARTER MESSAGES
         <div id="chatbot-quick-replies"
             style="padding: 10px 16px; background: white; border-top: 1px solid #f3f4f6; display: flex; gap: 8px; overflow-x: auto; flex-shrink: 0; flex-wrap: wrap;">
             @auth
-                @if(auth()->user()->dept === 'umum')
+                @if(auth()->user()->department === 'umum')
                     <button onclick="sendQuickReply('cek PR')"
                         style="padding: 7px 13px; background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; border-radius: 20px; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap;">
                         🔔 Cek PR
@@ -126,7 +126,7 @@ CHATBOT WIDGET PPBJ - MODERN VERSION WITH STARTER MESSAGES
                         style="padding: 7px 13px; background: #eff6ff; color: #2563eb; border: 1px solid #bfdbfe; border-radius: 20px; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap;">
                         💬 Feedback
                     </button>
-                @elseif(auth()->user()->dept === 'operasional')
+                @elseif(auth()->user()->department === 'operasional')
                     <button onclick="sendQuickReply('cek PR')"
                         style="padding: 7px 13px; background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; border-radius: 20px; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap;">
                         📋 PR Saya
@@ -170,7 +170,7 @@ CHATBOT WIDGET PPBJ - MODERN VERSION WITH STARTER MESSAGES
         {{-- INPUT AREA --}}
         <div style="padding: 16px; background: white; border-top: 1px solid #e5e7eb; flex-shrink: 0;">
             <form id="chatbot-form" onsubmit="sendMessage(event)" style="display: flex; gap: 10px;">
-                <input id="chatbot-input" type="text" placeholder="Ketik pesan..." autocomplete="off" class="flex-1 px-4 py-3 border rounded-xl text-sm outline-none transition-all
+                <input id="chatbot-input" type="text" maxlength="{{ auth()->check() ? 2000 : 500 }}" placeholder="Ketik pesan..." autocomplete="off" class="flex-1 px-4 py-3 border rounded-xl text-sm outline-none transition-all
                 bg-gray-100 text-gray-900 placeholder-gray-500 
                 dark:bg-gray-700 dark:text-white dark:border-gray-600 dark:placeholder-gray-400
                 focus:ring-2 focus:ring-blue-500">
@@ -234,7 +234,7 @@ CHATBOT WIDGET PPBJ - MODERN VERSION WITH STARTER MESSAGES
 @php
     $chatbotConfig = [
         'authenticated' => auth()->check(),
-        'department' => auth()->user()?->dept ?? '',
+        'department' => auth()->user()?->department ?? '',
         'firstName' => explode(' ', auth()->user()?->name ?? 'Kawan')[0],
     ];
 @endphp

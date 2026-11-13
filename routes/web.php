@@ -638,8 +638,9 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
         });
 
         Route::get('/document-previews/{token}/file', [DocumentPreviewController::class, 'file'])
+            ->whereUuid('token')
             ->name('document-previews.file')
-            ->middleware(['auth', 'signed', 'throttle:120,1']);
+            ->middleware(['auth', 'signed', 'throttle:120,1,print-preview-read:']);
     });
 
     // ========================
@@ -744,42 +745,43 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
         // Chat endpoint (available for both authenticated and guest)
         Route::post('/chat', [App\Http\Controllers\WebChatbotController::class, 'chat'])
             ->name('chatbot.web.chat')
-            ->middleware('throttle:5,1')
+            ->middleware('throttle:5,1,chatbot-conversation:')
             ->withoutMiddleware(['auth']); // Allow guest access
 
         Route::get('/quick-replies', [App\Http\Controllers\WebChatbotController::class, 'quickReplies'])
             ->name('chatbot.web.quick')
-            ->middleware('throttle:60,1');
+            ->middleware('throttle:60,1,chatbot-quick-replies:');
 
         Route::delete('/clear', [App\Http\Controllers\WebChatbotController::class, 'clearHistory'])
             ->name('chatbot.web.clear')
-            ->middleware('throttle:20,1');
+            ->middleware('throttle:20,1,chatbot-clear:');
 
         Route::get('/greeting', [App\Http\Controllers\WebChatbotController::class, 'getGreeting'])
             ->name('chatbot.greeting')
-            ->middleware('throttle:60,1');
+            ->middleware('throttle:60,1,chatbot-greeting:');
 
         Route::post('/feedback', [App\Http\Controllers\FeedbackController::class, 'store'])
             ->name('chatbot.feedback')
-            ->middleware('throttle:10,1');
+            ->middleware('throttle:10,1,chatbot-feedback:');
 
         // ==== PR NOTIFICATIONS (Super Admin Only) ====
         Route::get('/notifications/count', [App\Http\Controllers\WebChatbotController::class, 'getNotificationCount'])
             ->middleware(\App\Http\Middleware\DisableLoggingForPolling::class)
+            ->middleware('throttle:60,1,chatbot-notifications:')
             ->name('chatbot.notifications.count');
 
         Route::post('/notifications/sync', [App\Http\Controllers\WebChatbotController::class, 'syncNotifications'])
             ->middleware('dept:umum')
-            ->middleware('throttle:5,1')
+            ->middleware('throttle:5,1,chatbot-notification-sync:')
             ->name('chatbot.notifications.sync');
 
         // ==== ARTISAN COMMANDS (Super Admin Only) ====
         Route::post('/artisan/execute', [App\Http\Controllers\ArtisanCommandController::class, 'executeCommand'])
-            ->middleware(['auth', 'dept:umum', 'throttle:5,1'])
+            ->middleware(['auth', 'dept:umum', 'throttle:5,1,chatbot-artisan-execute:'])
             ->name('chatbot.artisan.execute');
 
         Route::get('/artisan/list', [App\Http\Controllers\ArtisanCommandController::class, 'listCommands'])
-            ->middleware(['auth', 'dept:umum', 'throttle:10,1'])
+            ->middleware(['auth', 'dept:umum', 'throttle:10,1,chatbot-artisan-list:'])
             ->name('chatbot.artisan.list');
 
     });

@@ -567,7 +567,21 @@ class WebChatbotController extends Controller
     }
 
     /**
-     * ✅ GET GREETING berdasarkan waktu
+     * Suggested actions for the current department, without document queries.
+     */
+    public function quickReplies(Request $request)
+    {
+        $replies = match ($request->user()?->department) {
+            'umum' => [['label' => 'Cek PR', 'message' => 'cek PR'], ['label' => 'Feedback', 'message' => 'feedback']],
+            'operasional' => [['label' => 'PR saya', 'message' => 'cek PR'], ['label' => 'Kirim email', 'message' => 'kirim email'], ['label' => 'Feedback', 'message' => 'feedback']],
+            default => [['label' => 'Cara pakai', 'message' => 'Bagaimana cara menggunakan sistem PPBJ?']],
+        };
+
+        return response()->json(['success' => true, 'replies' => $replies])->header('Cache-Control', 'private, no-store');
+    }
+
+    /**
+     * Greeting based on the current time.
      */
     public function getGreeting(Request $request)
     {
@@ -691,7 +705,7 @@ class WebChatbotController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Gagal menghapus riwayat.',
-            ]);
+            ], 500);
         }
     }
 

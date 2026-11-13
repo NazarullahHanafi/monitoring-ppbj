@@ -14,17 +14,16 @@ class DocumentPreviewController extends Controller
         $filename = $preview['filename'] ?? basename($path);
         $mime = mime_content_type($path) ?: 'application/octet-stream';
 
-        if ($request->boolean('download')) {
-            return response()->download($path, $filename, [
-                'Content-Type' => $mime,
-                'Cache-Control' => 'private, max-age=1800',
-            ]);
-        }
-
-        return response()->file($path, [
+        $response = response()->file($path, [
             'Content-Type' => $mime,
-            'Content-Disposition' => 'inline; filename="'.addcslashes($filename, '"\\').'"',
-            'Cache-Control' => 'private, max-age=1800',
+            'Cache-Control' => 'private, no-cache, max-age=0, must-revalidate',
         ]);
+        $response->setPrivate();
+        $response->setContentDisposition($request->boolean('download') ? 'attachment' : 'inline', $filename);
+        $response->setEtag($preview['sha256'] ?? hash_file('sha256', $path));
+        // Resolve ownership and expiry before honoring a conditional browser read.
+        $response->isNotModified($request);
+
+        return $response;
     }
 }

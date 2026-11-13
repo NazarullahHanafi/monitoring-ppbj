@@ -332,7 +332,9 @@ Jika user menanyakan hal di luar topik sistem PPBJ, arahkan kembali dengan sopan
 
             $history[] = [
                 'timestamp' => now()->toIso8601String(),
-                'messages' => $messages,
+                // Each entry already records its answer. Retaining the whole
+                // rolling context here duplicated previous turns up to 50 times.
+                'messages' => array_slice($messages, -1),
                 'response' => $response,
             ];
 
