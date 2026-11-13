@@ -123,17 +123,20 @@ class ProcurementLocalFiles
         }
         $foreignKey = $kind.'_id';
         $linked = DB::table($kind.'_ppbj as links')->join('ppbj as linked_pr', 'linked_pr.id', '=', 'links.ppbj_id')
+            ->join('ppbj as matched_pr', 'matched_pr.ppbj_no', '=', 'linked_pr.ppbj_no')
             ->whereIn('links.'.$foreignKey, $documents->keys()->all())
-            ->select(['links.'.$foreignKey.' as document_id', 'linked_pr.ppbj_no as pr_number']);
-        $manual = DB::table($kind === 'sp' ? 'sps' : 'spphs')
-            ->whereIn('id', $documents->filter(fn ($document) => (bool) $document->nomor_pr)->keys()->all())
-            ->select(['id as document_id', 'nomor_pr as pr_number']);
+            ->select(['links.'.$foreignKey.' as document_id', 'matched_pr.id']);
+        foreach ($documents as $document) {
+            if ($document->nomor_pr) {
+                $linked->unionAll(DB::table('ppbj')->selectRaw('? as document_id, id', [$document->id])
+                    ->where('ppbj_no', $document->nomor_pr));
+            }
+        }
 
-        // Keep equality in SQL so MySQL collation and duplicate legacy PR
-        // numbers behave exactly like the former per-file WHERE IN lookup.
-        return DB::query()->fromSub($linked->unionAll($manual), 'document_numbers')
-            ->join('ppbj', 'ppbj.ppbj_no', '=', 'document_numbers.pr_number')
-            ->distinct()->get(['document_numbers.document_id', 'ppbj.id'])
+        // UNION only numeric IDs. Comparing the PR column to bound text uses
+        // that column's collation, even when SP/SPPH columns have another one.
+        return DB::query()->fromSub($linked, 'document_prs')
+            ->distinct()->get(['document_prs.document_id', 'document_prs.id'])
             ->groupBy('document_id')->map(fn ($rows) => $rows->pluck('id')->map(fn ($id) => (int) $id)->sort()->values()->all());
     }
 }
