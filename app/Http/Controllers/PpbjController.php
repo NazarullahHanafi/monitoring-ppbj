@@ -754,8 +754,11 @@ class PpbjController extends Controller
 
         try {
             $data = $request->only(Ppbj::manualFields());
-            DB::transaction(function () use ($id, $data): void {
+            $previousNumber = null;
+            DB::transaction(function () use ($id, $data, &$previousNumber): void {
                 $record = Ppbj::whereKey($id)->lockForUpdate()->firstOrFail();
+                $previousNumber = (string) $record->ppbj_no;
+                $previousReferences = $record->only(['awarding_sp', 'spph_rfq_1']);
                 // Dokumen pengadaan menjadi sumber vendor; form lama tidak boleh
                 // mengosongkan vendor yang baru disinkronkan oleh SP/SPPH.
                 $vendor = filled($record->awarding_sp)
@@ -769,6 +772,7 @@ class PpbjController extends Controller
                     $data['penyedia_eksternal'] = $vendor;
                 }
                 $record->update($data);
+                app(\App\Services\PpbjDocumentNumberSync::class)->sync($record, $previousNumber, $previousReferences);
             }, 3);
         } catch (QueryException $e) {
             return response()->json([
@@ -776,6 +780,15 @@ class PpbjController extends Controller
             ], 422);
         }
 
+        if ($previousNumber !== (string) ($data['ppbj_no'] ?? $previousNumber)) {
+            foreach ([$previousNumber, $data['ppbj_no']] as $number) {
+                $this->clearProcurementTrackingCache($number);
+            }
+            foreach (Torpr::whereIn('nomor_pr', [$previousNumber, $data['ppbj_no']])->pluck('id') as $torprId) {
+                Cache::forget('torpr_json_'.$torprId);
+                Cache::forget('torpr_json_'.$torprId.'_v2');
+            }
+        }
         DashboardController::clearCache();
 
         return response()->json([

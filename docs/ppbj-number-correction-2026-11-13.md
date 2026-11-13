@@ -1,0 +1,9 @@
+# Koreksi nomor PPBJ dan referensi SP/SPPH — 13 November 2026
+
+Kasus produksi: PPBJ 88 milik Yoga dikoreksi dari `PKB/PR-26/CON/0799` menjadi `PKB/PR-25/CON/0799`. SP 122 (`122/PKU-III/SP/2026`, pengadaan kasur Rp6.000.000) terhubung ke PPBJ tersebut melalui `sp_ppbj`, tetapi kolom `sps.nomor_pr` masih memakai nomor lama. Pemeriksaan duplikat approval PR baru tetap menemukan SP itu. SPPH 31 sudah memakai PR-25.
+
+Sebelumnya edit Management PPBJ hanya memperbarui baris PPBJ. Sekarang perubahan nomor memperbarui referensi `nomor_pr` SP/SPPH di transaksi yang sama, hanya bila dokumen terhubung melalui pivot atau nomor SP/SPPH yang sebelumnya tercatat pada PPBJ itu. Dokumen dengan nomor sama tetapi tanpa hubungan eksplisit tidak diubah. Primary PR lain pada dokumen gabungan tetap dipertahankan; pivot, alokasi, nomor SP/SPPH, nilai, dan isi berkas tidak diubah. Kegagalan pada salah satu dokumen membatalkan seluruh transaksi. Perubahan dicatat pada audit dan cache pelacakan nomor lama/baru serta detail TOR terkait dihapus setelah transaksi berhasil. Edit yang tidak mengganti nomor tidak menjalankan pencarian dokumen tambahan.
+
+Koreksi data produksi dibatasi ke referensi PR pada SP 122 yang sudah dibuktikan milik PPBJ 88. Snapshot sebelum perubahan disimpan secara privat, fingerprint data bisnis lain dibandingkan dalam transaksi, dan approval 563 tetap pending. Tidak ada persetujuan approval otomatis atau penggantian isi berkas arsip.
+
+Validasi: 39 tes / 391 assertions lulus, mencakup reproduksi kasus ini, referensi legacy, batas dokumen terkait, PR gabungan dan alokasinya, rollback kegagalan dokumen, cache, hak akses, approval duplikat, serta alur SP/SPPH lain. Tidak ada migrasi, perubahan aset browser, atau dependency. Perubahan preview cetak yang masih dikerjakan terpisah tidak termasuk pembaruan ini.
