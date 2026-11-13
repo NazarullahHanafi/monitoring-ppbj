@@ -41,8 +41,10 @@ class MasterDataController extends Controller
     public function index(string $type)
     {
         $model = $this->modelByType($type);
-        $items = $model::orderBy('nama')->get(['id', 'nama']);
-        return response()->json($items);
+        $items = Cache::remember('master:dropdown:v1:'.$type, 300,
+            fn () => $model::orderBy('nama')->orderBy('id')->get(['id', 'nama']));
+
+        return response()->json($items)->header('Cache-Control', 'private, no-store');
     }
 
     // Fungsi untuk menambah data master

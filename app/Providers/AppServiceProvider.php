@@ -104,6 +104,22 @@ class AppServiceProvider extends ServiceProvider
         });
 
         Satuan::observe(SatuanObserver::class);
+
+        foreach ([
+            \App\Models\MasterBuyer::class => ['buyer', 'master_buyers', 'master_buyers_for_user_mapping'],
+            \App\Models\MasterPortofolio::class => ['portofolio', 'master_portofolios'],
+            \App\Models\MasterMetodePengadaan::class => ['metode_pengadaan', 'master_metode_pengadaan'],
+            \App\Models\MasterPenyediaEksternal::class => ['penyedia_eksternal', 'master_penyedia_eksternal'],
+        ] as $model => $keys) {
+            $forget = static function () use ($keys): void {
+                Cache::forget('master:dropdown:v1:'.$keys[0]);
+                foreach (array_slice($keys, 1) as $key) {
+                    Cache::forget($key);
+                }
+            };
+            $model::saved($forget);
+            $model::deleted($forget);
+        }
     }
 
     public static function homeFor(?\App\Models\User $user): string

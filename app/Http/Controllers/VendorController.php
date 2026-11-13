@@ -18,6 +18,7 @@ class VendorController extends Controller
     {
         $validated = $request->validate(['search' => 'nullable|string|max:160']);
         $search = trim($validated['search'] ?? '');
+        $pattern = '%'.str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $search).'%';
 
         $vendors = Vendor::select([
             'id',
@@ -30,27 +31,26 @@ class VendorController extends Controller
             'direktur',
             'jabatan',
             'is_active',
-        ])->when($search !== '', fn ($q) => $q->where(function ($sub) use ($search) {
-            $sub->where('nama_vendor', 'like', "%{$search}%")
-                ->orWhere('alamat', 'like', "%{$search}%")
-                ->orWhere('telepon', 'like', "%{$search}%")
-                ->orWhere('fax', 'like', "%{$search}%")
-                ->orWhere('email', 'like', "%{$search}%")
-                ->orWhere('npwp', 'like', "%{$search}%")
-                ->orWhere('direktur', 'like', "%{$search}%")
-                ->orWhere('jabatan', 'like', "%{$search}%")
-                ->orWhereHas('documents', fn ($docs) => $docs->where('status', 'ready')->search($search));
+        ])->when($search !== '', fn ($q) => $q->where(function ($sub) use ($search, $pattern) {
+            foreach (['nama_vendor', 'alamat', 'telepon', 'fax', 'email', 'npwp', 'direktur', 'jabatan'] as $column) {
+                $sub->orWhereRaw($column." LIKE ? ESCAPE '!'", [$pattern]);
+            }
+            $sub->orWhereHas('documents', fn ($docs) => $docs->where('status', 'ready')->search($search));
         }))
             ->withCount(['documents as documents_count' => fn ($docs) => $docs->where('status', 'ready')])
-            ->orderBy('nama_vendor')
+            ->orderBy('nama_vendor')->orderBy('id')
             ->paginate(10)
             ->withQueryString();
 
-        $stats = Cache::remember('vendor:stats', 300, function () {
+        $stats = Cache::remember('vendor:stats', self::CACHE_STATS, function () {
+            $counts = Vendor::query()->selectRaw('COUNT(*) as total,
+                COALESCE(SUM(CASE WHEN is_active = 1 THEN 1 ELSE 0 END), 0) as active,
+                COALESCE(SUM(CASE WHEN is_active = 0 THEN 1 ELSE 0 END), 0) as inactive')->first();
+
             return [
-                'total' => Vendor::count(),
-                'active' => Vendor::where('is_active', true)->count(),
-                'inactive' => Vendor::where('is_active', false)->count(),
+                'total' => (int) $counts->total,
+                'active' => (int) $counts->active,
+                'inactive' => (int) $counts->inactive,
                 'dengan_sp' => Sp::distinct()->count('nama_vendor'),
             ];
         });
@@ -119,9 +119,9 @@ class VendorController extends Controller
             'is_active' => 'boolean',
         ], self::VALIDATION_MESSAGES, ['nama_vendor' => 'Nama vendor', 'email' => 'Email perusahaan']);
 
-        $oldName = $vendor->nama_vendor;
-
-        DB::transaction(function () use ($request, $vendor) {
+        $vendor = DB::transaction(function () use ($request, $vendor) {
+            $vendor = Vendor::whereKey($vendor->id)->lockForUpdate()->firstOrFail();
+            $oldName = $vendor->nama_vendor;
             $vendor->update([
                 'nama_vendor' => trim($request->nama_vendor),
                 'alamat' => $request->alamat ?: null,
@@ -133,13 +133,13 @@ class VendorController extends Controller
                 'jabatan' => $request->jabatan ?: null,
                 'is_active' => $request->boolean('is_active', true),
             ]);
-        });
+            if ($oldName !== $vendor->nama_vendor) {
+                DB::table('sps')->where('nama_vendor', $oldName)
+                    ->update(['nama_vendor' => $vendor->nama_vendor]);
+            }
 
-        if ($oldName !== $vendor->nama_vendor) {
-            DB::table('sps')
-                ->where('nama_vendor', $oldName)
-                ->update(['nama_vendor' => $vendor->nama_vendor]);
-        }
+            return $vendor;
+        });
 
         Cache::forget('vendor:stats');
 
@@ -188,9 +188,11 @@ class VendorController extends Controller
 
     public function search(Request $request)
     {
-        $q = $request->get('q', '');
+        $validated = $request->validate(['q' => ['nullable', 'string', 'max:160']]);
+        $q = trim($validated['q'] ?? '');
+        $pattern = '%'.str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $q).'%';
 
-        $vendors = Vendor::select([
+        $load = fn () => Vendor::select([
             'id',
             'nama_vendor',
             'alamat',
@@ -202,11 +204,14 @@ class VendorController extends Controller
             'jabatan',
         ])
             ->where('is_active', true)
-            ->when($q, fn ($query) => $query->where('nama_vendor', 'like', "%{$q}%"))
-            ->orderBy('nama_vendor')
+            ->when($q !== '', fn ($query) => $query->whereRaw("nama_vendor LIKE ? ESCAPE '!'", [$pattern]))
+            ->orderBy('nama_vendor')->orderBy('id')
             ->limit(20)
             ->get();
 
-        return response()->json($vendors);
+        // Cache only the default dropdown, not an unbounded key for every term.
+        $vendors = $q === '' ? Cache::remember('vendors:lookup:default:v1', 60, $load) : $load();
+
+        return response()->json($vendors)->header('Cache-Control', 'private, no-store');
     }
 }

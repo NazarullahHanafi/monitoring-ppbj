@@ -82,17 +82,20 @@ class SpSpphFormStateTest extends TestCase
     {
         foreach (['sp.destroy', 'spph.destroy'] as $routeName) {
             $middleware = app('router')->getRoutes()->getByName($routeName)?->gatherMiddleware() ?? [];
-            $this->assertContains('throttle:10,1', $middleware, $routeName);
+            $kind = str_starts_with($routeName, 'spph.') ? 'spph' : 'sp';
+            $this->assertContains('throttle:10,1,'.$kind.'-delete-'.$kind.':', $middleware, $routeName);
         }
 
         foreach (['sp.restore', 'spph.restore'] as $routeName) {
             $middleware = app('router')->getRoutes()->getByName($routeName)?->gatherMiddleware() ?? [];
-            $this->assertContains('throttle:20,1', $middleware, $routeName);
+            $kind = str_starts_with($routeName, 'spph.') ? 'spph' : 'sp';
+            $this->assertContains('throttle:20,1,'.$kind.'-post-trash-id-restore:', $middleware, $routeName);
         }
 
         foreach (['sp.force-destroy', 'spph.force-destroy'] as $routeName) {
             $middleware = app('router')->getRoutes()->getByName($routeName)?->gatherMiddleware() ?? [];
-            $this->assertContains('throttle:5,1', $middleware, $routeName);
+            $kind = str_starts_with($routeName, 'spph.') ? 'spph' : 'sp';
+            $this->assertContains('throttle:5,1,'.$kind.'-delete-trash-id-force:', $middleware, $routeName);
         }
     }
 }

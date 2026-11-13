@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\User;
 use App\Models\MasterBuyer;
+use App\Support\UserDirectoryQuery;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
@@ -23,9 +24,10 @@ class UserController extends Controller
     {
         // ✅ Security check (only superadmin umum)
         $this->authorize('viewAny', User::class);
+        $filters = UserDirectoryQuery::filters($request);
 
         // ✅ Query Builder untuk performa lebih baik
-        $query = DB::table('users')
+        $query = UserDirectoryQuery::apply($filters)
             ->select([
                 'id',
                 'name',
@@ -41,39 +43,11 @@ class UserController extends Controller
                 'updated_at'
             ]);
 
-        // ✅ SEARCH filter
-        if ($request->filled('search')) {
-            $search = trim($request->search);
-            $query->where(function ($q) use ($search) {
-                $q->where('name', 'like', '%' . $search . '%')
-                    ->orWhere('email', 'like', '%' . $search . '%');
-            });
-        }
-
-        // ✅ DEPARTMENT filter
-        if ($request->filled('department')) {
-            $query->where('department', $request->department);
-        }
-
-        // ✅ ROLE filter
-        if ($request->filled('role')) {
-            $query->where('role', $request->role);
-        }
-
         // ✅ SORTING
-        $sortBy = $request->get('sort', 'department');
-        $sortDir = $request->get('direction', 'asc');
-
-        $allowedSorts = ['name', 'email', 'department', 'role', 'created_at'];
-        if (in_array($sortBy, $allowedSorts)) {
-            $query->orderBy($sortBy, $sortDir);
-        } else {
-            $query->orderBy('department')->orderBy('name');
-        }
+        $query->orderBy($filters['sort'] ?? 'department', $filters['direction'] ?? 'asc')->orderBy('id');
 
         // ✅ PAGINATION
-        $perPage = (int) $request->get('per_page', 25);
-        $perPage = in_array($perPage, [10, 25, 50, 100]) ? $perPage : 25;
+        $perPage = $filters['per_page'] ?? 25;
 
         $users = $query->paginate($perPage)->withQueryString();
 
@@ -492,9 +466,15 @@ class UserController extends Controller
         // ✅ Security check
         $this->checkSuperadminUmum();
 
+        $filters = UserDirectoryQuery::filters($request);
+        $query = UserDirectoryQuery::apply($filters)
+            ->select(['id', 'name', 'email', 'role', 'department', 'gender', 'buyer_name', 'last_seen_at', 'last_login_ip', 'last_seen_ip', 'created_at']);
+        $maximumId = (clone $query)->max('id') ?? 0;
+        $query->where('id', '<=', $maximumId);
+
         $filename = 'users_export_' . now()->format('Ymd_His') . '.csv';
 
-        return response()->streamDownload(function () use ($request) {
+        return response()->streamDownload(function () use ($query) {
             $out = fopen('php://output', 'w');
 
             // UTF-8 BOM
@@ -503,21 +483,8 @@ class UserController extends Controller
             // Header
             fputcsv($out, ['ID', 'Nama', 'Email', 'Role', 'Department', 'Gender', 'Buyer Terkait', 'Terakhir Online', 'IP Login Terakhir', 'IP Aktif Terakhir', 'Created At']);
 
-            // Query
-            $query = DB::table('users')
-                ->select(['id', 'name', 'email', 'role', 'department', 'gender', 'buyer_name', 'last_seen_at', 'last_login_ip', 'last_seen_ip', 'created_at']);
-
-            // Apply filters
-            if ($request->filled('department')) {
-                $query->where('department', $request->department);
-            }
-
-            if ($request->filled('role')) {
-                $query->where('role', $request->role);
-            }
-
             // Chunk for memory efficiency
-            $query->orderBy('id')->chunk(500, function ($users) use ($out) {
+            $query->chunkById(500, function ($users) use ($out) {
                 foreach ($users as $user) {
                     fputcsv($out, \App\Support\Csv::row([
                         $user->id,

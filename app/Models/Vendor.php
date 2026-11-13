@@ -36,6 +36,7 @@ class Vendor extends Model
             \App\Support\PpbjVendorFilter::forget();
             Cache::forget('vendors:active');
             Cache::forget('vendor:stats');
+            Cache::forget('vendors:lookup:default:v1');
         };
 
         static::saved($forget);

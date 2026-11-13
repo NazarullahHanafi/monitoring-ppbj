@@ -292,9 +292,9 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
             ->whereIn('kind', ['sp', 'spph'])->whereNumber('id')->middleware('throttle:30,1')->name('procurement.review');
         Route::get('/sp/value-approvals', [\App\Http\Controllers\ProcurementReviewController::class, 'index'])->name('sp.value-approvals');
         Route::post('/sp/value-approvals/request/{id?}', [\App\Http\Controllers\ProcurementReviewController::class, 'requestApproval'])
-            ->whereNumber('id')->middleware('throttle:10,1')->name('sp.value-approvals.request');
+            ->whereNumber('id')->middleware('throttle:10,1,sp-value-approval-request:')->name('sp.value-approvals.request');
         Route::post('/sp/value-approvals/{approval}/decision', [\App\Http\Controllers\ProcurementReviewController::class, 'decide'])
-            ->whereNumber('approval')->middleware('throttle:20,1')->name('sp.value-approvals.decide');
+            ->whereNumber('approval')->middleware('throttle:20,1,sp-value-approval-decide:')->name('sp.value-approvals.decide');
 
         Route::prefix('satuan')->name('satuan.')->group(function () {
             Route::get('/', [SatuanController::class, 'index'])->name('index');
@@ -404,7 +404,7 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
             ->name('approval.pr.pendingCount');
 
         // Gunakan /vendors agar tidak bentrok dengan folder asset public/vendor milik file preview.
-        Route::get('/vendors/search', [VendorController::class, 'search'])->name('vendor.search')->middleware('throttle:60,1');
+        Route::get('/vendors/search', [VendorController::class, 'search'])->name('vendor.search')->middleware('throttle:60,1,vendor-lookup:');
         Route::prefix('vendors/{vendor}/documents')->name('vendor.documents.')->controller(\App\Http\Controllers\VendorDocumentController::class)->group(function () {
             Route::get('/', 'index')->middleware('throttle:60,1,vendor-doc-list:')->name('index');
             Route::post('/', 'store')->middleware('throttle:10,1,vendor-doc-upload:')->name('store');
@@ -429,10 +429,10 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
         Route::resource('sp-master-options', SpMasterOptionController::class)
             ->except(['show', 'create', 'edit']);
         Route::get('/spph/print-masters', [SpMasterOptionController::class, 'printOptions'])
-            ->middleware('throttle:60,1')->name('spph.print-masters');
-        Route::get('/sp/portfolio-mappings', [\App\Http\Controllers\SpPortfolioFieldMapController::class, 'index'])->middleware('throttle:60,1')->name('sp.portfolio-mappings');
-        Route::post('/sp/portfolio-mappings', [\App\Http\Controllers\SpPortfolioFieldMapController::class, 'save'])->middleware('throttle:20,1')->name('sp.portfolio-mappings.store');
-        Route::put('/sp/portfolio-mappings/{id}', [\App\Http\Controllers\SpPortfolioFieldMapController::class, 'save'])->whereNumber('id')->middleware('throttle:20,1')->name('sp.portfolio-mappings.update');
+            ->middleware('throttle:60,1,spph-print-masters:')->name('spph.print-masters');
+        Route::get('/sp/portfolio-mappings', [\App\Http\Controllers\SpPortfolioFieldMapController::class, 'index'])->middleware('throttle:60,1,sp-portfolio-list:')->name('sp.portfolio-mappings');
+        Route::post('/sp/portfolio-mappings', [\App\Http\Controllers\SpPortfolioFieldMapController::class, 'save'])->middleware('throttle:20,1,sp-portfolio-create:')->name('sp.portfolio-mappings.store');
+        Route::put('/sp/portfolio-mappings/{id}', [\App\Http\Controllers\SpPortfolioFieldMapController::class, 'save'])->whereNumber('id')->middleware('throttle:20,1,sp-portfolio-update:')->name('sp.portfolio-mappings.update');
 
         Route::prefix('spph')->name('spph.')->middleware(['auth', \App\Http\Middleware\PreserveOfficeHologramContext::class])->group(function () {
 
@@ -440,11 +440,11 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
             Route::get('/', [SpphController::class, 'index'])->name('index');
             Route::post('/', [SpphController::class, 'store'])->name('store');
             Route::get('/trash', [SpphController::class, 'trash'])->name('trash');
-            Route::post('/trash/{id}/restore', [SpphController::class, 'restore'])->whereNumber('id')->middleware('throttle:20,1')->name('restore');
-            Route::delete('/trash/{id}/force', [SpphController::class, 'forceDestroy'])->whereNumber('id')->middleware('throttle:5,1')->name('force-destroy');
+            Route::post('/trash/{id}/restore', [SpphController::class, 'restore'])->whereNumber('id')->middleware('throttle:20,1,spph-post-trash-id-restore:')->name('restore');
+            Route::delete('/trash/{id}/force', [SpphController::class, 'forceDestroy'])->whereNumber('id')->middleware('throttle:5,1,spph-delete-trash-id-force:')->name('force-destroy');
 
             // ── Export ──
-            Route::get('/export', [SpphController::class, 'export'])->name('export')->middleware('throttle:10,1');
+            Route::get('/export', [SpphController::class, 'export'])->name('export')->middleware('throttle:10,1,spph-get-export:');
 
             // ── Real-time (tanpa logging) ──
             Route::get('/poll', [SpphController::class, 'poll'])
@@ -457,15 +457,15 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
             Route::post('/presence/stop', [SpphController::class, 'stopPresence'])->name('presence.stop');
 
             // ── Validasi Nomor ──
-            Route::get('/check-nomor', [SpphController::class, 'checkNomor'])->name('check-nomor')->middleware('throttle:60,1');
-            Route::get('/suggest-nomor', [SpphController::class, 'suggestNomor'])->name('suggest-nomor')->middleware('throttle:60,1');
+            Route::get('/check-nomor', [SpphController::class, 'checkNomor'])->name('check-nomor')->middleware('throttle:60,1,spph-get-check-nomor:');
+            Route::get('/suggest-nomor', [SpphController::class, 'suggestNomor'])->name('suggest-nomor')->middleware('throttle:60,1,spph-get-suggest-nomor:');
 
             // ── PPBJ Dropdown ──
-            Route::get('/ppbj-options', [SpphController::class, 'getPpbjOptions'])->name('ppbj-options')->middleware('throttle:60,1');
-            Route::get('/check-ppbj', [SpphController::class, 'checkPpbjStatus'])->name('check-ppbj')->middleware('throttle:60,1');
+            Route::get('/ppbj-options', [SpphController::class, 'getPpbjOptions'])->name('ppbj-options')->middleware('throttle:60,1,spph-get-ppbj-options:');
+            Route::get('/check-ppbj', [SpphController::class, 'checkPpbjStatus'])->name('check-ppbj')->middleware('throttle:60,1,spph-get-check-ppbj:');
             Route::get('/vendor-usage-stats', [SpphController::class, 'vendorUsageStatsJson'])
                 ->name('vendor-usage-stats')
-                ->middleware('throttle:30,1');
+                ->middleware('throttle:30,1,spph-get-vendor-usage-stats:');
 
             // ── Onboarding Tutorial ──
             Route::get('/onboarding-status', function () {
@@ -528,19 +528,19 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
         // ── Resource Route (✅ Pisah agar parameter tidak bentrok) ──
         Route::prefix('spph')->name('spph.')->middleware(['auth', \App\Http\Middleware\PreserveOfficeHologramContext::class])->group(function () {
             Route::put('/{spph}', [SpphController::class, 'update'])->name('update');
-            Route::delete('/{spph}', [SpphController::class, 'destroy'])->middleware('throttle:10,1')->name('destroy');
+            Route::delete('/{spph}', [SpphController::class, 'destroy'])->middleware('throttle:10,1,spph-delete-spph:')->name('destroy');
             Route::post('/{spph}/archive-attachment', [ArchiveAttachmentController::class, 'storeSpph'])
                 ->name('archive-attachment')
-                ->middleware('throttle:10,1');
+                ->middleware('throttle:10,1,spph-post-spph-archive-attachment:');
             Route::get('/{spph}/archive', [ArchiveAttachmentController::class, 'showSpph'])
                 ->name('archive')
-                ->middleware('throttle:30,1');
-            Route::get('/{spph}/cetak-preview', [SpphController::class, 'previewCetak'])->name('cetak.preview')->middleware('throttle:30,1');
-            Route::get('/{spph}/print-context', [SpphController::class, 'printContext'])->name('print-context')->middleware('throttle:40,1');
-            Route::get('/{spph}/cetak', [SpphController::class, 'cetakSpph'])->name('cetak')->middleware('throttle:30,1');
-            Route::get('/{spph}/cetak-semua-vendor-preview', [SpphController::class, 'previewCetakSemuaVendor'])->name('cetak-semua-vendor.preview')->middleware('throttle:30,1');
-            Route::get('/{spph}/cetak-semua-vendor', [SpphController::class, 'cetakSemuaVendor'])->name('cetak-semua-vendor')->middleware('throttle:30,1');
-            Route::get('/{spph}/items', [SpphController::class, 'getItems'])->name('items')->middleware('throttle:60,1');
+                ->middleware('throttle:30,1,spph-get-spph-archive:');
+            Route::get('/{spph}/cetak-preview', [SpphController::class, 'previewCetak'])->name('cetak.preview')->middleware('throttle:30,1,spph-get-spph-cetak-preview:');
+            Route::get('/{spph}/print-context', [SpphController::class, 'printContext'])->name('print-context')->middleware('throttle:40,1,spph-get-spph-print-context:');
+            Route::get('/{spph}/cetak', [SpphController::class, 'cetakSpph'])->name('cetak')->middleware('throttle:30,1,spph-get-spph-cetak:');
+            Route::get('/{spph}/cetak-semua-vendor-preview', [SpphController::class, 'previewCetakSemuaVendor'])->name('cetak-semua-vendor.preview')->middleware('throttle:30,1,spph-get-spph-cetak-semua-vendor-preview:');
+            Route::get('/{spph}/cetak-semua-vendor', [SpphController::class, 'cetakSemuaVendor'])->name('cetak-semua-vendor')->middleware('throttle:30,1,spph-get-spph-cetak-semua-vendor:');
+            Route::get('/{spph}/items', [SpphController::class, 'getItems'])->name('items')->middleware('throttle:60,1,spph-get-spph-items:');
         });
 
         // ---- SP ----
@@ -548,32 +548,32 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
             Route::get('/', [SpController::class, 'index'])->name('index');
             Route::post('/', [SpController::class, 'store'])->name('store');
             Route::get('/trash', [SpController::class, 'trash'])->name('trash');
-            Route::post('/trash/{id}/restore', [SpController::class, 'restore'])->whereNumber('id')->middleware('throttle:20,1')->name('restore');
-            Route::delete('/trash/{id}/force', [SpController::class, 'forceDestroy'])->whereNumber('id')->middleware('throttle:5,1')->name('force-destroy');
+            Route::post('/trash/{id}/restore', [SpController::class, 'restore'])->whereNumber('id')->middleware('throttle:20,1,sp-post-trash-id-restore:')->name('restore');
+            Route::delete('/trash/{id}/force', [SpController::class, 'forceDestroy'])->whereNumber('id')->middleware('throttle:5,1,sp-delete-trash-id-force:')->name('force-destroy');
             Route::put('/{sp}', [SpController::class, 'update'])->name('update');
-            Route::delete('/{sp}', [SpController::class, 'destroy'])->middleware('throttle:10,1')->name('destroy');
+            Route::delete('/{sp}', [SpController::class, 'destroy'])->middleware('throttle:10,1,sp-delete-sp:')->name('destroy');
             Route::post('/{sp}/archive-attachment', [ArchiveAttachmentController::class, 'storeSp'])
                 ->name('archive-attachment')
-                ->middleware('throttle:10,1');
+                ->middleware('throttle:10,1,sp-post-sp-archive-attachment:');
             Route::get('/{sp}/archive', [ArchiveAttachmentController::class, 'showSp'])
                 ->name('archive')
-                ->middleware('throttle:30,1');
-            Route::get('/{sp}/items', [SpController::class, 'getItems'])->name('items')->middleware('throttle:60,1');
+                ->middleware('throttle:30,1,sp-get-sp-archive:');
+            Route::get('/{sp}/items', [SpController::class, 'getItems'])->name('items')->middleware('throttle:60,1,sp-get-sp-items:');
 
             // Cetak SP
-            Route::get('/{sp}/print-context', [\App\Http\Controllers\SpPrintController::class, 'context'])->name('print-context')->middleware('throttle:40,1');
-            Route::post('/{sp}/print-selection', [\App\Http\Controllers\SpPrintController::class, 'confirm'])->name('print-selection')->middleware('throttle:20,1');
-            Route::get('/{sp}/cetak-preview', [\App\Http\Controllers\SpPrintController::class, 'preview'])->name('cetak.preview')->middleware('throttle:30,1');
-            Route::get('/{sp}/cetak', [\App\Http\Controllers\SpPrintController::class, 'download'])->name('cetak')->middleware('throttle:30,1');
+            Route::get('/{sp}/print-context', [\App\Http\Controllers\SpPrintController::class, 'context'])->name('print-context')->middleware('throttle:40,1,sp-get-sp-print-context:');
+            Route::post('/{sp}/print-selection', [\App\Http\Controllers\SpPrintController::class, 'confirm'])->name('print-selection')->middleware('throttle:20,1,sp-post-sp-print-selection:');
+            Route::get('/{sp}/cetak-preview', [\App\Http\Controllers\SpPrintController::class, 'preview'])->name('cetak.preview')->middleware('throttle:30,1,sp-get-sp-cetak-preview:');
+            Route::get('/{sp}/cetak', [\App\Http\Controllers\SpPrintController::class, 'download'])->name('cetak')->middleware('throttle:30,1,sp-get-sp-cetak:');
 
             // Utilities
             Route::get('/poll', [SpController::class, 'poll'])
                 ->middleware(\App\Http\Middleware\DisableLoggingForPolling::class)
                 ->name('poll');
-            Route::get('/check-nomor', [SpController::class, 'checkNomor'])->name('check-nomor')->middleware('throttle:60,1');
-            Route::get('/suggest-nomor', [SpController::class, 'suggestNomor'])->name('suggest-nomor')->middleware('throttle:60,1');
-            Route::get('/ppbj-options', [SpController::class, 'getPpbjOptions'])->name('ppbj-options')->middleware('throttle:60,1');
-            Route::get('/check-ppbj', [SpController::class, 'checkPpbjStatus'])->name('check-ppbj')->middleware('throttle:60,1');
+            Route::get('/check-nomor', [SpController::class, 'checkNomor'])->name('check-nomor')->middleware('throttle:60,1,sp-get-check-nomor:');
+            Route::get('/suggest-nomor', [SpController::class, 'suggestNomor'])->name('suggest-nomor')->middleware('throttle:60,1,sp-get-suggest-nomor:');
+            Route::get('/ppbj-options', [SpController::class, 'getPpbjOptions'])->name('ppbj-options')->middleware('throttle:60,1,sp-get-ppbj-options:');
+            Route::get('/check-ppbj', [SpController::class, 'checkPpbjStatus'])->name('check-ppbj')->middleware('throttle:60,1,sp-get-check-ppbj:');
 
             Route::get('/onboarding-status', function () {
                 $id = auth()->id();
@@ -627,7 +627,7 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
                 return response()->json(['status' => 'ok', 'left' => $next]);
             })->name('onboarding.view');
 
-            Route::get('/export', [SpController::class, 'export'])->name('export')->middleware('throttle:10,1');
+            Route::get('/export', [SpController::class, 'export'])->name('export')->middleware('throttle:10,1,sp-get-export:');
 
             // Presence
             Route::post('/presence/start', [SpController::class, 'startPresence'])->name('presence.start');

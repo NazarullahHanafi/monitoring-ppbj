@@ -294,7 +294,7 @@
                         class="font-bold text-gray-900 dark:text-white">{{ $users->total() }}</span> users
                 </div>
                 <form method="GET" action="{{ route('users.index') }}" class="flex items-center gap-2">
-                    @foreach(request()->except('per_page') as $key => $value)
+                    @foreach(request()->only(['search', 'department', 'role', 'sort', 'direction']) as $key => $value)
                         <input type="hidden" name="{{ $key }}" value="{{ $value }}">
                     @endforeach
 

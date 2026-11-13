@@ -58,10 +58,15 @@ class Sp extends Model
         static::saved(function (Sp $sp) {
             if ($sp->wasRecentlyCreated || $sp->wasChanged('nama_vendor')) {
                 \App\Support\PpbjVendorFilter::forget();
+                \Illuminate\Support\Facades\Cache::forget('vendor:stats');
             }
         });
-        static::deleted(fn () => \App\Support\PpbjVendorFilter::forget());
-        static::restored(fn () => \App\Support\PpbjVendorFilter::forget());
+        $forgetVendor = static function (): void {
+            \App\Support\PpbjVendorFilter::forget();
+            \Illuminate\Support\Facades\Cache::forget('vendor:stats');
+        };
+        static::deleted($forgetVendor);
+        static::restored($forgetVendor);
         static::saving(function (Sp $sp) {
             $nilaiSp = (float) ($sp->nilai_sp ?? 0);
 

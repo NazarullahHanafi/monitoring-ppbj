@@ -92,6 +92,8 @@ class SatuanController extends Controller
     // API untuk dropdown di form SPPH
     public function list()
     {
-        return response()->json(Satuan::orderBy('nama_satuan')->pluck('nama_satuan'));
+        return response()->json(Cache::remember('satuans:all', 3600,
+            fn () => Satuan::orderBy('nama_satuan')->pluck('nama_satuan')->toArray()))
+            ->header('Cache-Control', 'private, no-store');
     }
 }
