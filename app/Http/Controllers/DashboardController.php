@@ -2,11 +2,13 @@
 
 namespace App\Http\Controllers;
 
-use Carbon\Carbon;
+use App\Support\DashboardWorkloadFilters;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 
 class DashboardController extends Controller
 {
@@ -20,88 +22,26 @@ class DashboardController extends Controller
 
     private const CACHE_WORKLOAD = 60;    // 1 menit — pendek karena filter ad-hoc
 
-    public function index()
+    public function index(Request $request)
     {
+        $filters = DashboardWorkloadFilters::fromRequest($request);
         $cacheVersion = config('app.cache_version', 'v1');
+        $generation = Cache::get('dashboard_buyer_workload_generation', 'initial');
+        $identity = hash('sha256', json_encode([$cacheVersion, $generation, $filters]));
 
-        // ── FIX #1: cache key workload DINAMIS berdasarkan filter params ──
-        $bwFilterKey = md5(json_encode(
-            request()->only(['bw_filter', 'bw_bulan', 'bw_tahun', 'bw_tgl_dari', 'bw_tgl_sampai'])
-        ));
-        $workloadCacheKey = "dashboard_buyer_workload_{$bwFilterKey}";
-
-        // ── FIX #2: Daftarkan key ke registry agar bisa di-clear nanti ──
-        $this->registerWorkloadCacheKey($workloadCacheKey);
-
-        $data = [
-            'stats' => Cache::remember(
-                "dashboard_stats_{$cacheVersion}",
-                self::CACHE_STATS,
-                fn () => $this->getStats()
-            ),
-            'slaDistribution' => Cache::remember(
-                "dashboard_sla_{$cacheVersion}",
-                self::CACHE_CHARTS,
-                fn () => $this->getSlaDistribution()
-            ),
-            'topBuyers' => Cache::remember(
-                "dashboard_top_buyers_{$cacheVersion}",
-                self::CACHE_TOP_DATA,
-                fn () => $this->getTopBuyers()
-            ),
-            'topPortofolios' => Cache::remember(
-                "dashboard_top_portfolios_{$cacheVersion}",
-                self::CACHE_TOP_DATA,
-                fn () => $this->getTopPortofolios()
-            ),
-            'topPenyedias' => Cache::remember(
-                "dashboard_top_penyedias_{$cacheVersion}",
-                self::CACHE_TOP_DATA,
-                fn () => $this->getTopPenyedia()
-            ),
-            'recentActivities' => Cache::remember(
-                "dashboard_recent_activities_{$cacheVersion}",
-                self::CACHE_ACTIVITIES,
-                fn () => $this->getRecentActivities()
-            ),
-            'monthlyDistribution' => Cache::remember(
-                "dashboard_monthly_{$cacheVersion}",
-                self::CACHE_CHARTS,
-                fn () => $this->getMonthlyDistribution()
-            ),
-            // ── Key dinamis, TTL pendek ──
-            'buyerWorkload' => Cache::remember(
-                $workloadCacheKey,
-                self::CACHE_WORKLOAD,
-                fn () => $this->getBuyerWorkload()
-            ),
-        ];
-
-        return view('dashboard.indexumum', $data);
+        return view('dashboard.indexumum', [
+            'stats' => $this->cachedSegment('stats'),
+            'slaDistribution' => $this->cachedSegment('sla'),
+            'topBuyers' => $this->cachedSegment('buyers'),
+            'topPortofolios' => $this->cachedSegment('portfolios'),
+            'topPenyedias' => $this->cachedSegment('penyedias'),
+            'recentActivities' => $this->cachedSegment('activities'),
+            'monthlyDistribution' => $this->cachedSegment('monthly'),
+            'buyerWorkload' => Cache::remember("dashboard_buyer_workload_v2_{$identity}", self::CACHE_WORKLOAD,
+                fn () => $this->getBuyerWorkload($filters)),
+        ]);
     }
 
-    // ===================================================
-    // REGISTER WORKLOAD CACHE KEY
-    // Simpan daftar semua key workload yang pernah dibuat
-    // agar clearCache() bisa membersihkan semuanya
-    // ===================================================
-    private function registerWorkloadCacheKey(string $key): void
-    {
-        try {
-            $registry = Cache::get('dashboard_buyer_workload_keys', []);
-            if (! in_array($key, $registry)) {
-                $registry[] = $key;
-                // Simpan registry selama 24 jam
-                Cache::put('dashboard_buyer_workload_keys', $registry, 86400);
-            }
-        } catch (\Exception $e) {
-            Log::warning('registerWorkloadCacheKey failed: '.$e->getMessage());
-        }
-    }
-
-    // ===================================================
-    // STATS — single query, semua agregasi sekaligus
-    // ===================================================
     private function getStats(): array
     {
         try {
@@ -175,36 +115,10 @@ class DashboardController extends Controller
     // ===================================================
     // BUYER WORKLOAD — dengan filter periode
     // ===================================================
-    private function getBuyerWorkload(): array
+    private function getBuyerWorkload(array $filters): array
     {
         try {
-            // ── Baca parameter filter dari request ──────────────────
-            $filterMode = request('bw_filter', 'all');
-            $bulan = (int) request('bw_bulan', now()->month);
-            $tahun = (int) request('bw_tahun', now()->year);
-            $tglDari = request('bw_tgl_dari');
-            $tglSampai = request('bw_tgl_sampai');
-
-            // ── Tentukan range tanggal berdasarkan mode ─────────────
-            [$dateFrom, $dateTo] = match ($filterMode) {
-                'today' => [now()->copy()->startOfDay(),   now()->copy()->endOfDay()],
-                'week' => [now()->copy()->startOfWeek(),  now()->copy()->endOfWeek()],
-                'month' => [
-                    Carbon::create($tahun, $bulan, 1)->startOfMonth(),
-                    Carbon::create($tahun, $bulan, 1)->endOfMonth(),
-                ],
-                'year' => [
-                    Carbon::create($tahun, 1, 1)->startOfYear(),
-                    Carbon::create($tahun, 12, 31)->endOfYear(),
-                ],
-                'custom' => [
-                    $tglDari ? Carbon::parse($tglDari)->startOfDay() : null,
-                    $tglSampai ? Carbon::parse($tglSampai)->endOfDay() : null,
-                ],
-                default => [null, null],
-            };
-
-            // ── Query utama ─────────────────────────────────────────
+            $filterMode = $filters['mode'];
             $query = DB::table('ppbj')
                 ->selectRaw("
                     buyer,
@@ -261,15 +175,11 @@ class DashboardController extends Controller
                 ->where('buyer', '!=', '');
 
             // ── Terapkan filter tanggal pada tgl_ppbj ───────────────
-            if ($dateFrom && $dateTo) {
-                $query->whereBetween('tgl_ppbj', [
-                    $dateFrom->format('Y-m-d H:i:s'),
-                    $dateTo->format('Y-m-d H:i:s'),
-                ]);
-            } elseif ($dateFrom) {
-                $query->where('tgl_ppbj', '>=', $dateFrom->format('Y-m-d H:i:s'));
-            } elseif ($dateTo) {
-                $query->where('tgl_ppbj', '<=', $dateTo->format('Y-m-d H:i:s'));
+            if ($filters['from'] !== null) {
+                $query->where('tgl_ppbj', '>=', $filters['from']);
+            }
+            if ($filters['until'] !== null) {
+                $query->where('tgl_ppbj', '<', $filters['until']);
             }
 
             $rows = $query
@@ -511,11 +421,17 @@ class DashboardController extends Controller
     private function getMonthlyDistribution(): array
     {
         try {
-            $sixMonthsAgo = now()->subMonths(5)->startOfMonth();
+            // Anchor at day one before subtracting months (e.g. March 31 -> February).
+            $currentMonth = now()->startOfMonth();
+            $sixMonthsAgo = $currentMonth->copy()->subMonths(5);
+            $monthExpression = DB::connection()->getDriverName() === 'sqlite'
+                ? "strftime('%Y-%m', created_at)"
+                : "DATE_FORMAT(created_at, '%Y-%m')";
 
             $data = DB::table('ppbj')
-                ->selectRaw("DATE_FORMAT(created_at, '%Y-%m') as month, COUNT(*) as count")
-                ->where('created_at', '>=', $sixMonthsAgo)
+                ->selectRaw($monthExpression.' as month, COUNT(*) as count')
+                ->where('created_at', '>=', $sixMonthsAgo->toDateString())
+                ->where('created_at', '<', $currentMonth->copy()->addMonth()->toDateString())
                 ->where(fn ($q) => $q->where('status', '!=', 'CANCELLED')->orWhereNull('status'))
                 ->groupBy('month')
                 ->orderBy('month')
@@ -526,7 +442,7 @@ class DashboardController extends Controller
             $counts = [];
 
             for ($i = 5; $i >= 0; $i--) {
-                $date = now()->subMonths($i);
+                $date = $currentMonth->copy()->subMonths($i);
                 $monthKey = $date->format('Y-m');
                 $months[] = $date->locale('id')->translatedFormat('M Y');
                 $counts[] = (int) ($data->get($monthKey)->count ?? 0);
@@ -575,16 +491,8 @@ class DashboardController extends Controller
             Cache::forget($key);
         }
 
-        // ── FIX #2: Clear semua workload keys dari registry ────
-        try {
-            $workloadKeys = Cache::get('dashboard_buyer_workload_keys', []);
-            foreach ($workloadKeys as $wKey) {
-                Cache::forget($wKey);
-            }
-            Cache::forget('dashboard_buyer_workload_keys');
-        } catch (\Exception $e) {
-            Log::warning('clearCache workload registry failed: '.$e->getMessage());
-        }
+        // One write invalidates all filters; old entries expire in 60 seconds.
+        Cache::forever('dashboard_buyer_workload_generation', (string) Str::uuid());
 
         Log::info('Dashboard & master cache cleared');
     }
@@ -625,25 +533,30 @@ class DashboardController extends Controller
     // ===================================================
     public function getData(Request $request)
     {
-        $type = $request->get('type', 'stats');
+        $validated = $request->validate([
+            'type' => ['sometimes', 'required', 'string', Rule::in(['stats', 'sla', 'buyers', 'portfolios', 'penyedias', 'activities', 'monthly'])],
+        ]);
 
-        $data = match ($type) {
-            'stats' => $this->getStats(),
-            'sla' => $this->getSlaDistribution(),
-            'buyers' => $this->getTopBuyers(),
-            'portfolios' => $this->getTopPortofolios(),
-            'penyedias' => $this->getTopPenyedia(),
-            'activities' => $this->getRecentActivities(),
-            'monthly' => $this->getMonthlyDistribution(),
-            default => ['error' => 'Invalid type'],
-        };
-
-        return response()->json($data);
+        return response()->json($this->cachedSegment($validated['type'] ?? 'stats'))
+            ->header('Cache-Control', 'private, no-store');
     }
 
-    // ===================================================
-    // FALLBACK EMPTY STATS
-    // ===================================================
+    private function cachedSegment(string $type): mixed
+    {
+        [$segment, $ttl, $loader] = match ($type) {
+            'stats' => ['stats', self::CACHE_STATS, fn () => $this->getStats()],
+            'sla' => ['sla', self::CACHE_CHARTS, fn () => $this->getSlaDistribution()],
+            'buyers' => ['top_buyers', self::CACHE_TOP_DATA, fn () => $this->getTopBuyers()],
+            'portfolios' => ['top_portfolios', self::CACHE_TOP_DATA, fn () => $this->getTopPortofolios()],
+            'penyedias' => ['top_penyedias', self::CACHE_TOP_DATA, fn () => $this->getTopPenyedia()],
+            'activities' => ['recent_activities', self::CACHE_ACTIVITIES, fn () => $this->getRecentActivities()],
+            'monthly' => ['monthly', self::CACHE_CHARTS, fn () => $this->getMonthlyDistribution()],
+        };
+        $version = config('app.cache_version', 'v1');
+
+        return Cache::remember("dashboard_{$segment}_{$version}", $ttl, $loader);
+    }
+
     private function getEmptyStats(): array
     {
         return [

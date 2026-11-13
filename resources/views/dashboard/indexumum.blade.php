@@ -22,11 +22,14 @@
                     class="dashboard-command-button hidden sm:inline-flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-semibold rounded-xl shadow-lg shadow-indigo-500/20 transition-all duration-200 hover:-translate-y-0.5">
                     <span>✦ Command Center 360°</span>
                 </a>
-                <button onclick="refreshDashboard()"
+                @if(auth()->user()->role === 'superadmin')
+                <button id="dashboardRefreshButton" type="button" onclick="refreshDashboard()"
+                    data-url="{{ route('dashboard.refresh') }}"
                     class="hidden sm:inline-flex items-center gap-2 px-3 py-2.5 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 font-semibold rounded-xl shadow-sm transition-all duration-200 active:scale-95 text-sm border border-gray-200 dark:border-gray-600">
                     <span id="refreshIcon">🔄</span>
                     <span>Refresh</span>
                 </button>
+                @endif
                 <a href="{{ route('ppbj.index') }}"
                     class="hidden sm:inline-flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl shadow-sm transition-all duration-200 hover:shadow-md active:scale-95">
                     <span>Ke Management PPBJ</span>
@@ -1035,25 +1038,8 @@
     }
 
     // ── Refresh Dashboard ──────────────────────────────────
-    window.refreshDashboard = async function () {
-        const icon = document.getElementById('refreshIcon');
-        if (icon) icon.textContent = '⏳';
-        try {
-            const res = await fetch('{{ route("dashboard.refresh") }}', {
-                method  : 'POST',
-                headers : {
-                    'X-CSRF-TOKEN'    : '{{ csrf_token() }}',
-                    'X-Requested-With': 'XMLHttpRequest',
-                },
-            });
-            if (res.ok) {
-                setTimeout(() => window.location.reload(), 300);
-            }
-        } catch (e) {
-            if (icon) icon.textContent = '🔄';
-            console.error('Refresh failed:', e);
-        }
-    };
+
 })();
 </script>
+<script src="{{ asset('assets/app/dashboard-actions.js') }}?v={{ filemtime(public_path('assets/app/dashboard-actions.js')) }}" defer></script>
 @endpush

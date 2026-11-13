@@ -163,7 +163,7 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
         ->middleware([\App\Http\Middleware\DisableLoggingForPolling::class, 'throttle:60,1']);
 
     Route::get('/account', [AccountController::class, 'edit'])->name('account.edit');
-    Route::post('/account/password', [AccountController::class, 'updatePassword'])->name('account.password');
+    Route::post('/account/password', [AccountController::class, 'updatePassword'])->middleware('throttle:5,1,account-password:')->name('account.password');
     Route::post('/presence/heartbeat', [App\Http\Controllers\PresenceController::class, 'heartbeat'])
         ->name('presence.heartbeat')
         ->middleware('auth');
@@ -350,10 +350,11 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
             ->name('dashboard.indexumum');
 
         Route::get('/dashboard/data', [DashboardController::class, 'getData'])
+            ->middleware('throttle:60,1,dashboard-data:')
             ->name('dashboard.data');
 
         Route::post('/dashboard/refresh-cache', [DashboardController::class, 'refreshCache'])
-            ->middleware('throttle:5,1')
+            ->middleware('throttle:5,1,dashboard-refresh:')
             ->name('dashboard.refresh');
 
         Route::prefix('command-center')->name('command-center.')->group(function () {
