@@ -312,9 +312,12 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
         Route::post('/ppbj/preflight', [PpbjController::class, 'preflight'])->name('ppbj.preflight')->middleware('throttle:60,1');
         Route::get('/ppbj/export', [PpbjController::class, 'export'])->name('ppbj.export')->middleware('throttle:10,1');
         Route::get('/ppbj/template', [PpbjController::class, 'downloadTemplate'])->name('ppbj.template');
-        Route::get('/ppbj/report', [PpbjController::class, 'reportIndex'])->name('ppbj.report');
-        Route::get('/ppbj/report/data', [PpbjController::class, 'reportData'])->name('ppbj.report.data')->middleware('throttle:60,1');
-        Route::get('/ppbj/report/export', [PpbjController::class, 'reportExport'])->name('ppbj.report.export')->middleware('throttle:10,1');
+        Route::get('/ppbj/report', [\App\Http\Controllers\PpbjReportController::class, 'index'])
+            ->name('ppbj.report')->middleware('throttle:60,1,ppbj-report-index:');
+        Route::get('/ppbj/report/data', [\App\Http\Controllers\PpbjReportController::class, 'data'])
+            ->name('ppbj.report.data')->middleware('throttle:60,1,ppbj-report-data:');
+        Route::get('/ppbj/report/export', [\App\Http\Controllers\PpbjReportController::class, 'export'])
+            ->name('ppbj.report.export')->middleware('throttle:10,1,ppbj-report-export:');
 
         Route::post('/ppbj/import/preview', [PpbjController::class, 'previewImport'])->name('ppbj.import.preview')->middleware('throttle:5,1');
         Route::post('/ppbj/import/process', [PpbjController::class, 'processImport'])->name('ppbj.import.process')->middleware('throttle:3,1');

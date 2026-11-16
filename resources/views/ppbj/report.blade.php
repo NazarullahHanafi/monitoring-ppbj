@@ -3,6 +3,7 @@
 @section('title', 'Laporan PPBJ')
 
 @section('content')
+<div id="ppbjReport" data-read-url="{{ route('ppbj.report.data') }}" data-export-url="{{ route('ppbj.report.export') }}" data-timezone="{{ config('app.timezone') }}">
     <div class="mb-6 animate-fade-in">
         <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-300 text-xs font-bold uppercase tracking-wider mb-3">
             <span>Audit Report</span>
@@ -13,20 +14,20 @@
         </p>
     </div>
 
-    <div class="bg-white dark:bg-gray-800 p-5 md:p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 mb-6 animate-slide-up">
+    <form id="reportFilters" method="get" action="{{ route('ppbj.report') }}" novalidate class="bg-white dark:bg-gray-800 p-5 md:p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 mb-6 animate-slide-up">
         <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 mb-5">
             <div>
                 <h3 class="font-bold text-lg text-gray-900 dark:text-white">Filter Laporan</h3>
                 <p class="text-xs text-gray-500 dark:text-gray-400">Portofolio dan vendor bisa dipilih lebih dari satu.</p>
             </div>
             <div class="flex flex-wrap gap-2">
-                <button type="button" onclick="loadReport()" class="px-4 py-2 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition-all shadow-sm shadow-blue-500/20">
+                <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition-all shadow-sm shadow-blue-500/20">
                     Tampilkan
                 </button>
-                <button type="button" onclick="resetReportFilter()" class="px-4 py-2 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200 rounded-xl font-semibold border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all">
+                <button type="button" data-report-reset class="px-4 py-2 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200 rounded-xl font-semibold border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all">
                     Reset
                 </button>
-                <button type="button" onclick="exportReport()" class="px-4 py-2 bg-emerald-600 text-white rounded-xl font-semibold hover:bg-emerald-700 transition-all shadow-sm shadow-emerald-500/20">
+                <button type="button" data-report-export class="px-4 py-2 bg-emerald-600 text-white rounded-xl font-semibold hover:bg-emerald-700 transition-all shadow-sm shadow-emerald-500/20">
                     Export CSV
                 </button>
             </div>
@@ -34,8 +35,8 @@
 
         <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-4">
             <div>
-                <label class="report-label">Tipe Periode</label>
-                <select id="periodType" class="report-input">
+                <label for="periodType" class="report-label">Tipe Periode</label>
+                <select name="period" id="periodType" class="report-input">
                     <option value="daily">Harian</option>
                     <option value="monthly" selected>Bulanan</option>
                     <option value="yearly">Tahunan</option>
@@ -44,18 +45,18 @@
             </div>
 
             <div id="startDateWrapper">
-                <label class="report-label"><span id="startDateLabel">Bulan</span></label>
-                <input type="month" id="startDate" value="{{ date('Y-m') }}" class="report-input">
+                <label for="startDate" class="report-label"><span id="startDateLabel">Bulan</span></label>
+                <input type="month" name="start_date" id="startDate" required value="{{ date('Y-m') }}" class="report-input">
             </div>
 
             <div id="endDateWrapper" class="hidden">
-                <label class="report-label">Tanggal Akhir</label>
-                <input type="date" id="endDate" class="report-input">
+                <label for="endDate" class="report-label">Tanggal Akhir</label>
+                <input type="date" name="end_date" id="endDate" class="report-input">
             </div>
 
             <div class="xl:col-span-2">
-                <label class="report-label">Portofolio</label>
-                <select id="portofolioFilter" multiple class="report-input min-h-[92px]">
+                <label for="portofolioFilter" class="report-label">Portofolio</label>
+                <select name="portofolio[]" id="portofolioFilter" multiple class="report-input min-h-[92px]">
                     @foreach (($portofolios ?? collect()) as $portofolio)
                         <option value="{{ $portofolio }}">{{ $portofolio }}</option>
                     @endforeach
@@ -64,8 +65,8 @@
             </div>
 
             <div class="xl:col-span-2">
-                <label class="report-label">Vendor / Penyedia</label>
-                <select id="vendorFilter" multiple class="report-input min-h-[92px]">
+                <label for="vendorFilter" class="report-label">Vendor / Penyedia</label>
+                <select name="vendor[]" id="vendorFilter" multiple class="report-input min-h-[92px]">
                     @foreach (($vendors ?? collect()) as $vendor)
                         <option value="{{ $vendor }}">{{ $vendor }}</option>
                     @endforeach
@@ -73,7 +74,8 @@
                 <p class="text-[11px] text-gray-400 mt-1">Bisa dipilih satu atau banyak vendor.</p>
             </div>
         </div>
-    </div>
+    </form>
+    <p id="reportStatus" role="status" aria-live="polite" class="mb-4 text-sm font-semibold text-gray-700 dark:text-gray-200" hidden></p>
 
     <div id="statsSection" class="hidden mb-6">
         <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
@@ -165,7 +167,7 @@
         <div class="p-4 border-b border-gray-200 dark:border-gray-700 flex flex-col md:flex-row md:items-center md:justify-between gap-2">
             <div>
                 <h3 class="font-bold text-lg text-gray-900 dark:text-white">Data Laporan</h3>
-                <p class="text-xs text-gray-500 dark:text-gray-400">Maksimal 1.000 baris ditampilkan. Export CSV untuk data lengkap.</p>
+                <p class="text-xs text-gray-500 dark:text-gray-400">Data ditampilkan per halaman. Ringkasan menghitung semua hasil; Export CSV mengunduh data lengkap.</p>
             </div>
             <span id="tableLimitInfo" class="text-xs px-3 py-1 rounded-full bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-300"></span>
         </div>
@@ -190,6 +192,16 @@
                 <tbody id="dataTableBody" class="divide-y divide-gray-200 dark:divide-gray-700"></tbody>
             </table>
         </div>
+        <nav class="p-4 flex flex-wrap items-center justify-between gap-3" aria-label="Halaman laporan">
+            <label for="reportPerPage" class="text-sm">Baris per halaman
+                <select id="reportPerPage" class="report-input" disabled><option value="25">25</option><option value="50" selected>50</option><option value="100">100</option></select>
+            </label>
+            <div class="flex flex-wrap items-center gap-3">
+                <button type="button" data-report-previous class="px-4 py-2 rounded-xl border border-gray-300 dark:border-gray-600" disabled>Sebelumnya</button>
+                <span id="reportPageInfo" class="text-sm"></span>
+                <button type="button" data-report-next class="px-4 py-2 rounded-xl border border-gray-300 dark:border-gray-600" disabled>Berikutnya</button>
+            </div>
+        </nav>
     </div>
 
     <div id="loadingState" class="hidden text-center py-12">
@@ -202,255 +214,11 @@
         <p class="font-semibold text-gray-700 dark:text-gray-200">Tidak ada data untuk filter yang dipilih.</p>
         <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Coba longgarkan filter portofolio, vendor, atau periode.</p>
     </div>
+</div>
 @endsection
 
 @push('scripts')
-<script>
-(function() {
-    const periodType = document.getElementById('periodType');
-    const startDate = document.getElementById('startDate');
-    const endDate = document.getElementById('endDate');
-    const endDateWrapper = document.getElementById('endDateWrapper');
-    const startDateLabel = document.getElementById('startDateLabel');
-
-    periodType.addEventListener('change', function() {
-        const type = this.value;
-
-        if (type === 'daily') {
-            startDate.type = 'date';
-            startDate.value = today();
-            startDateLabel.textContent = 'Tanggal';
-            endDateWrapper.classList.add('hidden');
-        } else if (type === 'monthly') {
-            startDate.type = 'month';
-            startDate.value = today().slice(0, 7);
-            startDateLabel.textContent = 'Bulan';
-            endDateWrapper.classList.add('hidden');
-        } else if (type === 'yearly') {
-            startDate.type = 'number';
-            startDate.value = new Date().getFullYear();
-            startDate.min = 2020;
-            startDate.max = 2100;
-            startDateLabel.textContent = 'Tahun';
-            endDateWrapper.classList.add('hidden');
-        } else {
-            startDate.type = 'date';
-            startDate.value = today();
-            startDateLabel.textContent = 'Tanggal Mulai';
-            endDateWrapper.classList.remove('hidden');
-            endDate.value = today();
-        }
-    });
-
-    window.loadReport = async function() {
-        const params = reportParams();
-
-        hideReportSections();
-        document.getElementById('loadingState').classList.remove('hidden');
-
-        try {
-            const response = await fetch(`{{ route('ppbj.report.data') }}?${params}`, {
-                headers: {
-                    'X-Requested-With': 'XMLHttpRequest',
-                    'Accept': 'application/json'
-                }
-            });
-
-            if (!response.ok) {
-                throw new Error('Gagal memuat data laporan');
-            }
-
-            const result = await response.json();
-            document.getElementById('loadingState').classList.add('hidden');
-
-            if (!result.data || result.data.length === 0) {
-                document.getElementById('emptyState').classList.remove('hidden');
-                return;
-            }
-
-            renderStats(result.stats || {});
-            renderBreakdown(result.breakdown || {});
-            renderTable(result.data || [], result.stats || {});
-
-            document.getElementById('statsSection').classList.remove('hidden');
-            document.getElementById('breakdownSection').classList.remove('hidden');
-            document.getElementById('dataSection').classList.remove('hidden');
-        } catch (error) {
-            document.getElementById('loadingState').classList.add('hidden');
-            Swal.fire({
-                icon: 'error',
-                title: 'Laporan gagal dimuat',
-                text: error.message || 'Terjadi kesalahan saat memuat laporan.'
-            });
-        }
-    };
-
-    window.exportReport = function() {
-        window.location.href = `{{ route('ppbj.report.export') }}?${reportParams()}`;
-    };
-
-    window.resetReportFilter = function() {
-        periodType.value = 'monthly';
-        periodType.dispatchEvent(new Event('change'));
-        clearMultiSelect('portofolioFilter');
-        clearMultiSelect('vendorFilter');
-        loadReport();
-    };
-
-    function reportParams() {
-        const period = periodType.value;
-        let start = startDate.value;
-
-        if (period === 'yearly' && start) {
-            start = `${start}-01-01`;
-        }
-
-        const params = new URLSearchParams({
-            period: period,
-            start_date: start || '',
-            end_date: endDate.value || ''
-        });
-
-        appendMulti(params, 'portofolio[]', selectedValues('portofolioFilter'));
-        appendMulti(params, 'vendor[]', selectedValues('vendorFilter'));
-
-        return params;
-    }
-
-    function hideReportSections() {
-        ['statsSection', 'breakdownSection', 'dataSection', 'emptyState'].forEach(id => {
-            document.getElementById(id).classList.add('hidden');
-        });
-    }
-
-    function renderStats(stats) {
-        setText('statTotal', stats.total || 0);
-        setText('statOnTrack', stats.on_track || 0);
-        setText('statWarning', stats.warning || 0);
-        setText('statOverdue', stats.overdue || 0);
-        setText('statTotalValue', formatRupiah(stats.total_value));
-        setText('statTotalSpValue', formatRupiah(stats.total_sp_value));
-        setText('statTotalBpgValue', formatRupiah(stats.total_bpg_value));
-        setText('statTotalPortofolio', stats.total_portofolio || 0);
-        setText('statTotalVendor', stats.total_vendor || 0);
-    }
-
-    function renderBreakdown(breakdown) {
-        renderBreakdownTable('breakdownPortofolioBody', breakdown.portofolio || [], 'Belum ada portofolio');
-        renderBreakdownTable('breakdownVendorBody', breakdown.vendor || [], 'Belum ada vendor');
-    }
-
-    function renderBreakdownTable(bodyId, rows, emptyLabel) {
-        const tbody = document.getElementById(bodyId);
-        tbody.innerHTML = '';
-
-        if (!rows.length) {
-            tbody.innerHTML = `<tr><td colspan="4" class="px-4 py-6 text-center text-gray-500 dark:text-gray-400">${emptyLabel}</td></tr>`;
-            return;
-        }
-
-        rows.forEach(row => {
-            const tr = document.createElement('tr');
-            tr.className = 'hover:bg-gray-50 dark:hover:bg-gray-700/60 transition-colors';
-            tr.innerHTML = `
-                <td class="px-4 py-3 font-semibold text-gray-900 dark:text-white">${escapeHtml(row.label || '-')}</td>
-                <td class="px-4 py-3 text-center text-gray-600 dark:text-gray-300">${Number(row.total || 0).toLocaleString('id-ID')}</td>
-                <td class="px-4 py-3 text-right font-semibold text-gray-900 dark:text-white">${formatRupiah(row.total_value)}</td>
-                <td class="px-4 py-3 text-right text-gray-600 dark:text-gray-300">${formatRupiah(row.total_sp_value)}</td>
-            `;
-            tbody.appendChild(tr);
-        });
-    }
-
-    function renderTable(data, stats) {
-        const tbody = document.getElementById('dataTableBody');
-        tbody.innerHTML = '';
-        setText('tableLimitInfo', `${data.length.toLocaleString('id-ID')} dari ${Number(stats.total || data.length).toLocaleString('id-ID')} data`);
-
-        data.forEach((row, index) => {
-            const statusColor = {
-                'ON TRACK': 'bg-emerald-600',
-                'WARNING': 'bg-amber-500',
-                'OVERDUE': 'bg-red-600',
-                'CANCELLED': 'bg-gray-600'
-            }[row.status_sla] || 'bg-gray-500';
-
-            const progress = Math.max(0, Math.min(100, Number(row.progres || 0)));
-            const tr = document.createElement('tr');
-            tr.className = 'hover:bg-gray-50 dark:hover:bg-gray-700/60 transition-colors animate-fade-in';
-            tr.style.animationDelay = `${Math.min(index, 12) * 0.03}s`;
-            tr.innerHTML = `
-                <td class="px-4 py-3 font-bold text-gray-900 dark:text-white whitespace-nowrap">${escapeHtml(row.ppbj_no || '-')}</td>
-                <td class="px-4 py-3 text-gray-600 dark:text-gray-300 whitespace-nowrap">${formatDate(row.created_at)}</td>
-                <td class="px-4 py-3 text-gray-900 dark:text-white">${escapeHtml(row.uraian || '-')}</td>
-                <td class="px-4 py-3 text-gray-600 dark:text-gray-300">${escapeHtml(row.portofolio || '-')}</td>
-                <td class="px-4 py-3 text-gray-600 dark:text-gray-300">${escapeHtml(row.buyer || '-')}</td>
-                <td class="px-4 py-3 text-gray-600 dark:text-gray-300">${escapeHtml(row.penyedia_eksternal || '-')}</td>
-                <td class="px-4 py-3 text-center">
-                    <span class="inline-flex items-center justify-center px-2.5 py-1 rounded-lg text-xs font-bold text-white ${statusColor}">
-                        ${escapeHtml(row.status_sla || '-')}
-                    </span>
-                </td>
-                <td class="px-4 py-3 text-center">
-                    <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 overflow-hidden">
-                        <div class="h-2 rounded-full bg-blue-600 transition-all duration-500" style="width: ${progress}%"></div>
-                    </div>
-                    <small class="text-gray-600 dark:text-gray-400">${progress}%</small>
-                </td>
-                <td class="px-4 py-3 text-right font-semibold text-gray-900 dark:text-white whitespace-nowrap">${formatRupiah(row.total_sebelum_ppn)}</td>
-                <td class="px-4 py-3 text-right text-gray-600 dark:text-gray-300 whitespace-nowrap">${formatRupiah(row.nilai_sp_spk)}</td>
-                <td class="px-4 py-3 text-right text-gray-600 dark:text-gray-300 whitespace-nowrap">${formatRupiah(row.nilai_bpg)}</td>
-            `;
-            tbody.appendChild(tr);
-        });
-    }
-
-    function selectedValues(id) {
-        return Array.from(document.getElementById(id).selectedOptions).map(option => option.value).filter(Boolean);
-    }
-
-    function appendMulti(params, key, values) {
-        values.forEach(value => params.append(key, value));
-    }
-
-    function clearMultiSelect(id) {
-        Array.from(document.getElementById(id).options).forEach(option => option.selected = false);
-    }
-
-    function setText(id, value) {
-        document.getElementById(id).textContent = value;
-    }
-
-    function formatRupiah(value) {
-        return 'Rp ' + Number(value || 0).toLocaleString('id-ID');
-    }
-
-    function formatDate(dateString) {
-        if (!dateString) return '-';
-        return new Date(dateString).toLocaleDateString('id-ID', {
-            day: '2-digit',
-            month: 'short',
-            year: 'numeric'
-        });
-    }
-
-    function today() {
-        return new Date().toISOString().split('T')[0];
-    }
-
-    function escapeHtml(value) {
-        return String(value ?? '').replace(/[&<>"']/g, char => ({
-            '&': '&amp;',
-            '<': '&lt;',
-            '>': '&gt;',
-            '"': '&quot;',
-            "'": '&#039;'
-        }[char]));
-    }
-
-    loadReport();
-})();
-</script>
+<script src="{{ asset('assets/app/ppbj-report.js') }}?v={{ filemtime(public_path('assets/app/ppbj-report.js')) }}" defer></script>
 
 <style>
 .report-label {
