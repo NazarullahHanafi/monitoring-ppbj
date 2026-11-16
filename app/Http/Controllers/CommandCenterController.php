@@ -14,6 +14,7 @@ use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\View\View;
+use PhpOffice\PhpSpreadsheet\Cell\DataType;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Border;
@@ -114,7 +115,7 @@ class CommandCenterController extends Controller
             self::clearCache();
         }
 
-        return response()->json($this->overviewData());
+        return response()->json($this->overviewData())->header('Cache-Control', 'private, no-store');
     }
 
     public function search(Request $request): JsonResponse
@@ -137,7 +138,7 @@ class CommandCenterController extends Controller
                 ->all(),
             'count' => $rows->count(),
             'results' => $rows,
-        ]);
+        ])->header('Cache-Control', 'private, no-store');
     }
 
     public function ask(Request $request): JsonResponse
@@ -163,12 +164,12 @@ class CommandCenterController extends Controller
             $filters[] = 'terlambat';
         }
 
-        if (str_contains($lower, 'belum sp') || str_contains($lower, 'tanpa sp') || str_contains($lower, 'belum kontrak')) {
+        if (preg_match('/\b(?:belum|tanpa)\s+(?:sp|kontrak)\b/u', $lower)) {
             $query->where(fn (Builder $q) => $q->whereNull('awarding_sp')->orWhere('awarding_sp', ''));
             $filters[] = 'belum memiliki SP/Kontrak';
         }
 
-        if (str_contains($lower, 'belum spph') || str_contains($lower, 'tanpa spph')) {
+        if (preg_match('/\b(?:belum|tanpa)\s+spph\b/u', $lower)) {
             $query->where(fn (Builder $q) => $q->whereNull('spph_rfq_1')->orWhere('spph_rfq_1', ''));
             $filters[] = 'belum memiliki SPPH';
         }
@@ -194,20 +195,20 @@ class CommandCenterController extends Controller
         if ($filters === []) {
             $like = '%'.$this->escapeLike($question).'%';
             $query->where(function (Builder $builder) use ($like) {
-                $builder->where('ppbj_no', 'like', $like)
-                    ->orWhere('uraian', 'like', $like)
-                    ->orWhere('penyedia_eksternal', 'like', $like)
-                    ->orWhere('buyer', 'like', $like)
-                    ->orWhere('awarding_sp', 'like', $like)
-                    ->orWhere('general_registration_number', 'like', $like);
+                $builder->whereRaw("ppbj_no LIKE ? ESCAPE '!'", [$like])
+                    ->orWhereRaw("uraian LIKE ? ESCAPE '!'", [$like])
+                    ->orWhereRaw("penyedia_eksternal LIKE ? ESCAPE '!'", [$like])
+                    ->orWhereRaw("buyer LIKE ? ESCAPE '!'", [$like])
+                    ->orWhereRaw("awarding_sp LIKE ? ESCAPE '!'", [$like])
+                    ->orWhereRaw("general_registration_number LIKE ? ESCAPE '!'", [$like]);
             });
             $filters[] = 'pencarian kata kunci';
         }
 
         if (($moneyCriteria['mode'] ?? null) === 'rank') {
-            $query->orderBy($this->moneyFieldColumns($moneyCriteria['field'])[0], $moneyCriteria['sort']);
+            $query->orderBy($this->moneyFieldColumns($moneyCriteria['field'])[0], $moneyCriteria['sort'])->orderByDesc('id');
         } else {
-            $query->orderByDesc('updated_at');
+            $query->orderByDesc('updated_at')->orderByDesc('id');
         }
 
         $rows = $query
@@ -222,7 +223,7 @@ class CommandCenterController extends Controller
             'filters' => $filters,
             'count' => $rows->count(),
             'results' => $rows,
-        ]);
+        ])->header('Cache-Control', 'private, no-store');
     }
 
     public function reconciliation(Request $request): JsonResponse
@@ -235,7 +236,7 @@ class CommandCenterController extends Controller
             self::RECONCILIATION_CACHE_KEY,
             self::RECONCILIATION_TTL,
             fn () => $this->buildReconciliation()
-        ));
+        ))->header('Cache-Control', 'private, no-store');
     }
 
     public function journey(Ppbj $ppbj): JsonResponse
@@ -252,10 +253,12 @@ class CommandCenterController extends Controller
             $ppbj->loadExists($missing);
         }
         $ppbj->load([
-            'realTrackings' => fn ($q) => $q->latest('event_date')->latest('id')->limit(50),
+            'realTrackings' => fn ($q) => $q->select(['id', 'ppbj_id', 'title', 'description', 'event_date', 'reminder_date', 'created_at'])
+                ->latest('event_date')->latest('id')->limit(50),
         ]);
 
         $audits = ActivityLog::query()
+            ->select(['id', 'user_id', 'description', 'action', 'created_at'])
             ->with('user:id,name')
             ->where('model_type', Ppbj::class)
             ->where('model_id', $ppbj->id)
@@ -281,7 +284,7 @@ class CommandCenterController extends Controller
             'archive_url' => route('ppbj.archive', $ppbj->id),
             'tracking_url' => route('landing.track.token', ['token' => $this->trackingToken($ppbj->ppbj_no)]),
             'qr_url' => route('command-center.passport.qr', $ppbj),
-        ]);
+        ])->header('Cache-Control', 'private, no-store');
     }
 
     public function passportQr(Ppbj $ppbj)
@@ -323,16 +326,14 @@ class CommandCenterController extends Controller
 
         $row = 9;
         foreach ($data['risks'] as $index => $risk) {
-            $sheet->fromArray([
-                $index + 1,
-                $risk['ppbj_no'],
-                $risk['uraian'],
-                $risk['buyer'],
-                $risk['vendor'],
-                $risk['nilai_pr'],
-                $risk['nilai_sp'],
-                $risk['score'].' — '.implode('; ', $risk['reasons']),
-            ], null, 'A'.$row++);
+            foreach (['A' => $index + 1, 'F' => $risk['nilai_pr'], 'G' => $risk['nilai_sp']] as $column => $value) {
+                $sheet->setCellValueExplicit($column.$row, $value, DataType::TYPE_NUMERIC);
+            }
+            foreach (['B' => $risk['ppbj_no'], 'C' => $risk['uraian'], 'D' => $risk['buyer'], 'E' => $risk['vendor'],
+                'H' => $risk['score'].' — '.implode('; ', $risk['reasons'])] as $column => $value) {
+                $sheet->setCellValueExplicit($column.$row, (string) $value, DataType::TYPE_STRING);
+            }
+            $row++;
         }
 
         $sheet->getStyle('A1:H1')->getFont()->setBold(true)->setSize(16)->getColor()->setARGB('FFFFFFFF');
@@ -604,12 +605,12 @@ class CommandCenterController extends Controller
         $like = '%'.$this->escapeLike($query).'%';
 
         if (($moneyCriteria['mode'] ?? null) === 'rank') {
-            $builder->orderBy($this->moneyFieldColumns($moneyCriteria['field'])[0], $moneyCriteria['sort']);
+            $builder->orderBy($this->moneyFieldColumns($moneyCriteria['field'])[0], $moneyCriteria['sort'])->orderByDesc('id');
         } else {
             $builder->orderByRaw(
-                'CASE WHEN ppbj_no = ? THEN 0 WHEN ppbj_no LIKE ? THEN 1 WHEN general_registration_number LIKE ? THEN 2 ELSE 3 END',
+                "CASE WHEN ppbj_no = ? THEN 0 WHEN ppbj_no LIKE ? ESCAPE '!' THEN 1 WHEN general_registration_number LIKE ? ESCAPE '!' THEN 2 ELSE 3 END",
                 [$query, $like, $like]
-            )->orderByDesc('updated_at');
+            )->orderByDesc('updated_at')->orderByDesc('id');
         }
 
         return $builder
@@ -642,8 +643,9 @@ class CommandCenterController extends Controller
         $builder->where(function (Builder $match) use ($like, $normalizedDate, $plainNumber) {
             $first = true;
             foreach (array_keys(self::SEARCH_TEXT_FIELDS + self::SEARCH_DATE_FIELDS) as $column) {
-                $method = $first ? 'where' : 'orWhere';
-                $match->{$method}($column, 'like', $like);
+                $method = $first ? 'whereRaw' : 'orWhereRaw';
+                $wrapped = $match->getQuery()->getGrammar()->wrap($column);
+                $match->{$method}("{$wrapped} LIKE ? ESCAPE '!'", [$like]);
                 $first = false;
             }
 
@@ -1306,7 +1308,7 @@ class CommandCenterController extends Controller
 
     private function escapeLike(string $value): string
     {
-        return addcslashes($value, '%_\\');
+        return str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $value);
     }
 
     private function rupiah(float $value): string

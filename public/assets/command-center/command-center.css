@@ -17,6 +17,8 @@
     background: var(--cc-bg);
     border-radius: 22px;
 }
+.cc-request-status { margin: 12px 0; padding: 12px 16px; border-radius: 12px; background: #fff1f2; color: #9f1239; font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; }
+.dark .cc-request-status { background: #421c30; color: #fecdd3; }
 
 .dark .cc-shell {
     --cc-bg: #0b1220;

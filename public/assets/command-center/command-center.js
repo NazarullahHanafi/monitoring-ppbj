@@ -12,9 +12,11 @@
         reconciliation: root.dataset.reconciliationUrl,
         journey: root.dataset.journeyUrl
     };
-    var overviewCacheKey = 'simonpr.command-center.overview.v2';
+    var overviewCacheKey = 'simonpr.command-center.overview.v3.' + root.dataset.cacheScope;
     var overviewCacheLifetime = 120000;
     var archiveCache = Object.create(null);
+    var operations = Object.create(null), pageActive = true, fullscreenPending = false, journeyEpoch = 0;
+    try { sessionStorage.removeItem('simonpr.command-center.overview.v2'); } catch (_) { /* Optional browser cache. */ }
     var compactMoney = new Intl.NumberFormat('id-ID', {
         style: 'currency', currency: 'IDR', notation: 'compact', maximumFractionDigits: 1
     });
@@ -25,28 +27,60 @@
         });
     }
 
-    function fetchJson(url, options) {
-        var controller = new AbortController();
-        var timer = setTimeout(function () { controller.abort(); }, 12000);
-        var request = Object.assign({}, options || {});
-        request.signal = controller.signal;
-        request.headers = Object.assign({
-            'Accept': 'application/json',
-            'X-CSRF-TOKEN': csrf
-        }, request.headers || {});
+    async function fetchJson(url, options, controller) {
+        controller = controller || new AbortController();
+        var target = new URL(url, window.location.href);
+        if (target.origin !== window.location.origin) throw new Error('Tujuan permintaan belum valid. Muat ulang halaman.');
+        var timer, abort;
+        try {
+            var aborted = new Promise(function (_, reject) {
+                abort = function () { reject(new DOMException('Aborted', 'AbortError')); };
+                controller.signal.addEventListener('abort', abort, {once: true});
+                if (controller.signal.aborted) abort();
+            });
+            var deadline = new Promise(function (_, reject) {
+                timer = setTimeout(function () { reject(new Error('Respons terlalu lama. Silakan coba kembali.')); controller.abort(); }, 12000);
+            });
+            return await Promise.race([aborted, deadline, (async function () {
+                var request = Object.assign({credentials: 'same-origin', cache: 'no-store'}, options || {}, {signal: controller.signal});
+                request.headers = Object.assign({'Accept': 'application/json', 'X-CSRF-TOKEN': csrf}, request.headers || {});
+                var response = await fetch(target.href, request);
+                if (response.redirected || !response.headers.get('content-type')?.includes('application/json')) throw new Error('Respons belum dapat diverifikasi. Muat ulang halaman.');
+                var data = await response.json().catch(function () { return null; });
+                if (!response.ok) {
+                    var messages = {401: 'Sesi berakhir. Masuk kembali.', 403: 'Anda tidak memiliki izin untuk fitur ini.', 419: 'Sesi formulir berakhir. Muat ulang halaman.', 429: 'Terlalu banyak permintaan. Tunggu sebentar.'};
+                    throw new Error(messages[response.status] || (response.status === 422 && (Object.values(data?.errors || {}).flat()[0] || data?.message)) || 'Permintaan belum berhasil. Silakan coba kembali.');
+                }
+                if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('Respons belum lengkap. Silakan coba kembali.');
+                return data;
+            }())]);
+        } finally { clearTimeout(timer); controller.signal.removeEventListener('abort', abort); }
+    }
 
-        return fetch(url, request)
-            .then(function (response) {
-                return response.json().catch(function () { return {}; }).then(function (data) {
-                    if (!response.ok) throw new Error(data.message || 'Permintaan gagal');
-                    return data;
-                });
-            })
-            .catch(function (error) {
-                if (error.name === 'AbortError') throw new Error('Respons terlalu lama. Silakan coba kembali.');
-                throw error;
-            })
-            .finally(function () { clearTimeout(timer); });
+    function cancelOperation(channel) {
+        var operation = operations[channel];
+        if (!operation) return;
+        delete operations[channel]; operation.controller.abort();
+        operation.buttons.forEach(function (button) {setLoading(button, false);});
+    }
+    function beginOperation(channel, key, buttons) {
+        if (!pageActive || document.hidden || operations[channel]?.key === key) return null;
+        cancelOperation(channel);
+        var operation = {key: key, controller: new AbortController(), buttons: buttons || []};
+        operations[channel] = operation;
+        operation.buttons.forEach(function (button) {setLoading(button, true);});
+        return operation;
+    }
+    function current(channel, operation) {return pageActive && operations[channel] === operation;}
+    function finishOperation(channel, operation) {if (current(channel, operation)) {delete operations[channel]; operation.buttons.forEach(function (button) {setLoading(button, false);});}}
+    function validRows(rows, maximum) {
+        return Array.isArray(rows) && rows.length <= maximum && rows.every(function (row) {return row && Number.isSafeInteger(row.id) && row.id > 0;});
+    }
+    function validOverview(data) {
+        return data && typeof data.generated_at === 'string' && data.stats && typeof data.stats === 'object' && !Array.isArray(data.stats)
+            && Number.isFinite(data.stats.total) && Array.isArray(data.flow) && data.flow.length <= 5 && data.flow.every(function (row) {return row && typeof row === 'object';})
+            && validRows(data.risks, 12) && validRows(data.contracts, 10) && Array.isArray(data.monthly) && data.monthly.length <= 12
+            && data.monthly.every(function (row) {return row && typeof row === 'object';});
     }
 
     function setLoading(button, active) {
@@ -57,11 +91,9 @@
     }
 
     function showError(message) {
-        if (window.Swal) {
-            window.Swal.fire({ icon: 'error', title: 'Belum berhasil', text: message, timer: 4500 });
-        } else {
-            window.alert(message);
-        }
+        var notice = document.getElementById('ccRequestStatus');
+        if (!notice) {notice = document.createElement('p'); notice.id = 'ccRequestStatus'; notice.className = 'cc-request-status'; notice.setAttribute('role', 'alert'); root.prepend(notice);}
+        notice.textContent = message;
     }
 
     function openModal(id) {
@@ -73,6 +105,8 @@
     }
 
     function closeModals() {
+        journeyEpoch++;
+        ['results', 'journey', 'archive'].forEach(cancelOperation);
         document.querySelectorAll('.cc-modal.open').forEach(function (modal) {
             modal.classList.remove('open');
             modal.setAttribute('aria-hidden', 'true');
@@ -149,15 +183,18 @@
     }
 
     function readOverviewCache() {
+        if (!root.dataset.cacheScope) return null;
         try {
             var cached = JSON.parse(sessionStorage.getItem(overviewCacheKey) || 'null');
-            return cached && Date.now() - cached.savedAt < overviewCacheLifetime ? cached.data : null;
+            var age = Date.now() - cached?.savedAt;
+            return cached && age >= 0 && age < overviewCacheLifetime && validOverview(cached.data) ? cached.data : null;
         } catch (error) {
             return null;
         }
     }
 
     function writeOverviewCache(data) {
+        if (!root.dataset.cacheScope) return;
         try {
             sessionStorage.setItem(overviewCacheKey, JSON.stringify({ savedAt: Date.now(), data: data }));
         } catch (error) {
@@ -167,6 +204,7 @@
 
     function loadOverview(force) {
         var refreshButton = document.getElementById('ccRefresh');
+        if (operations.overview) return Promise.resolve();
         if (!force) {
             var cached = readOverviewCache();
             if (cached) {
@@ -175,15 +213,18 @@
             }
         }
 
-        setLoading(refreshButton, true);
-        return fetchJson(urls.overview + (force ? '?refresh=1' : ''))
+        var operation = beginOperation('overview', 'overview', [refreshButton]);
+        if (!operation) return Promise.resolve();
+        return fetchJson(urls.overview + (force ? '?refresh=1' : ''), {}, operation.controller)
             .then(function (data) {
+                if (!current('overview', operation)) return;
+                if (!validOverview(data)) throw new Error('Ringkasan belum lengkap. Silakan tekan Refresh kembali.');
                 renderOverview(data);
                 writeOverviewCache(data);
                 return data;
             })
-            .catch(function (error) { showError(error.message); })
-            .finally(function () { setLoading(refreshButton, false); });
+            .catch(function (error) { if (current('overview', operation) && error.name !== 'AbortError') showError(error.message); })
+            .finally(function () { finishOperation('overview', operation); });
     }
 
     function resultDetailsHtml(details) {
@@ -216,8 +257,8 @@
             { key: 'ppbj', label: 'PPBJ', title: 'Buka data ini di Management PPBJ' },
             { key: 'spph', label: 'SPPH', title: 'Buka data ini di Penomoran SPPH' },
             { key: 'sp', label: 'SP', title: 'Buka data ini di Penomoran SP' }
-        ].filter(function (action) { return urls[action.key]; }).map(function (action) {
-            return '<a class="cc-direct-action is-' + action.key + '" href="' + esc(urls[action.key]) +
+        ].filter(function (action) { return internalUrl(urls[action.key]); }).map(function (action) {
+            return '<a class="cc-direct-action is-' + action.key + '" href="' + esc(internalUrl(urls[action.key])) +
                 '" title="' + esc(action.title) + '">' + esc(action.label) + '</a>';
         }).join('');
 
@@ -237,6 +278,7 @@
     }
 
     function showResults(title, summary, rows) {
+        closeModals();
         document.getElementById('ccResultsTitle').textContent = title;
         document.getElementById('ccResultsSummary').textContent = summary || '';
         document.getElementById('ccResults').innerHTML = rows && rows.length
@@ -249,10 +291,13 @@
         var input = document.getElementById('ccSearchInput');
         var query = input.value.trim();
         var button = document.getElementById('ccSearchButton');
-        if (!query) return input.focus();
-        setLoading(button, true);
-        fetchJson(urls.search + '?q=' + encodeURIComponent(query))
+        if (!query || query.length > 120) return input.focus();
+        var operation = beginOperation('results', 'search:' + query, [button]);
+        if (!operation) return;
+        fetchJson(urls.search + '?q=' + encodeURIComponent(query), {}, operation.controller)
             .then(function (data) {
+                if (!current('results', operation)) return;
+                if (!validRows(data.results, 50)) throw new Error('Hasil pencarian belum lengkap. Silakan coba kembali.');
                 var summary = data.money_query && data.money_query.label
                     ? data.money_query.label + ' · ' + data.count + ' data ditemukan'
                     : data.detected_value_label
@@ -260,34 +305,40 @@
                     : data.count + ' data ditemukan';
                 showResults('Hasil untuk “' + query + '”', summary, data.results);
             })
-            .catch(function (error) { showError(error.message); })
-            .finally(function () { setLoading(button, false); });
+            .catch(function (error) { if (current('results', operation) && error.name !== 'AbortError') showError(error.message); })
+            .finally(function () { finishOperation('results', operation); });
     }
 
     function doAsk(question) {
         var input = document.getElementById('ccAskInput');
         var query = (question || input.value).trim();
         var button = document.getElementById('ccAskButton');
-        if (!query) return input.focus();
+        if (query.length < 3 || query.length > 220) return input.focus();
         input.value = query;
-        setLoading(button, true);
+        var operation = beginOperation('results', 'ask:' + query, [button]);
+        if (!operation) return;
         fetchJson(urls.ask, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ question: query })
-        }).then(function (data) {
+        }, operation.controller).then(function (data) {
+            if (!current('results', operation)) return;
+            if (!validRows(data.results, 50) || typeof data.answer !== 'string') throw new Error('Jawaban belum lengkap. Silakan coba kembali.');
             showResults('Jawaban SIMONPR', data.answer, data.results);
         }).catch(function (error) {
-            showError(error.message);
+            if (current('results', operation) && error.name !== 'AbortError') showError(error.message);
         }).finally(function () {
-            setLoading(button, false);
+            finishOperation('results', operation);
         });
     }
 
     function doReconciliation() {
         var button = document.getElementById('ccReconciliationButton');
-        setLoading(button, true);
-        fetchJson(urls.reconciliation).then(function (data) {
+        var operation = beginOperation('results', 'reconciliation', [button]);
+        if (!operation) return;
+        fetchJson(urls.reconciliation, {}, operation.controller).then(function (data) {
+            if (!current('results', operation)) return;
+            if (!validRows(data.results, 20) || !data.summary || typeof data.summary !== 'object') throw new Error('Rekonsiliasi belum lengkap. Silakan coba kembali.');
             var summary = data.summary || {};
             var text = (summary.critical || 0) + ' perlu koreksi · ' + (summary.warning || 0) +
                 ' perlu dilengkapi · ' + (summary.ready || 0) + ' sesuai · gap kumulatif ' +
@@ -295,9 +346,9 @@
             if (summary.limited) text += ' · menampilkan ' + (summary.shown || 0) + ' prioritas teratas';
             showResults('Rekonsiliasi PR–SP–DO–BPG–Invoice', text, data.results || []);
         }).catch(function (error) {
-            showError(error.message);
+            if (current('results', operation) && error.name !== 'AbortError') showError(error.message);
         }).finally(function () {
-            setLoading(button, false);
+            finishOperation('results', operation);
         });
     }
 
@@ -319,10 +370,15 @@
 
         try {
             var url = new URL(String(value), window.location.origin);
-            return url.protocol === 'http:' || url.protocol === 'https:' ? url.href : '';
+            return (url.protocol === 'http:' || url.protocol === 'https:') && !url.username && !url.password ? url.href : '';
         } catch (error) {
             return '';
         }
+    }
+
+    function internalUrl(value) {
+        var safe = safeUrl(value);
+        return safe && new URL(safe).origin === window.location.origin ? safe : '';
     }
 
     function archiveDocumentHtml(document, index) {
@@ -384,20 +440,28 @@
     }
 
     function openJourney(id) {
+        if (!/^[1-9]\d*$/.test(String(id)) || !Number.isSafeInteger(Number(id)) || operations.journey?.key === String(id)) return;
         closeModals();
+        var epoch = journeyEpoch;
+        var operation = beginOperation('journey', String(id));
+        if (!operation) return;
         openModal('ccJourneyModal');
         var host = document.getElementById('ccJourney');
         host.innerHTML = '<div class="cc-empty">Menyiapkan digital passport…</div>';
 
-        fetchJson(urls.journey + '/' + encodeURIComponent(id)).then(function (data) {
+        fetchJson(urls.journey + '/' + encodeURIComponent(id), {}, operation.controller).then(function (data) {
+            if (!current('journey', operation)) return;
+            if (!data.record || Number(data.record.id) !== Number(id) || !Array.isArray(data.stages) || data.stages.length > 12
+                || !Array.isArray(data.real_tracking) || data.real_tracking.length > 50 || !Array.isArray(data.audit) || data.audit.length > 30) throw new Error('Digital passport belum lengkap. Silakan coba kembali.');
             var record = data.record;
+            var trackingUrl = internalUrl(data.tracking_url), qrUrl = internalUrl(data.qr_url), archiveUrl = internalUrl(data.archive_url);
             host.innerHTML = '<div class="cc-journey-head"><div><span class="cc-eyebrow">DIGITAL PASSPORT PENGADAAN</span>' +
                 '<h2>' + esc(record.ppbj_no) + '</h2><p>' + esc(record.uraian) + '</p><div class="cc-result-values">' +
                 '<span class="cc-pill">' + esc(record.registration) + '</span><span class="cc-pill">' + esc(record.vendor) + '</span>' +
                 '<span class="cc-pill">' + esc(record.nilai_sp_label) + '</span></div><div style="margin-top:10px;display:flex;gap:7px;flex-wrap:wrap">' +
-                '<a class="cc-button cc-button-light" href="' + esc(data.tracking_url) + '" target="_blank">Tracking Publik</a>' +
+                (trackingUrl ? '<a class="cc-button cc-button-light" href="' + esc(trackingUrl) + '" target="_blank" rel="noopener noreferrer">Tracking Publik</a>' : '') +
                 '<button class="cc-button cc-button-ghost" id="ccArchiveButton" aria-controls="ccArchivePanel">Cek Arsip</button></div></div>' +
-                '<img class="cc-qr" src="' + esc(data.qr_url) + '" alt="QR Digital Passport"></div>' +
+                (qrUrl ? '<img class="cc-qr" src="' + esc(qrUrl) + '" alt="QR Digital Passport">' : '') + '</div>' +
                 '<div class="cc-stage-track">' + (data.stages || []).map(stageHtml).join('') + '</div>' +
                 '<section class="cc-archive-panel" id="ccArchivePanel" aria-live="polite" hidden></section>' +
                 '<div class="cc-journey-grid"><section><span class="cc-eyebrow">TRACKING REAL</span><div class="cc-timeline">' +
@@ -406,43 +470,53 @@
 
             var archiveButton = document.getElementById('ccArchiveButton');
             if (archiveButton) archiveButton.addEventListener('click', function () {
+                if (!pageActive || epoch !== journeyEpoch || operations.archive) return;
                 var archivePanel = document.getElementById('ccArchivePanel');
                 if (!archivePanel) return;
+                if (!archiveUrl) {showError('Tautan arsip belum valid. Buka ulang digital passport.'); return;}
 
-                if (archiveCache[data.archive_url]) {
-                    renderArchivePanel(archivePanel, archiveCache[data.archive_url], record);
+                var cached = archiveCache[archiveUrl];
+                if (cached && Date.now() - cached.savedAt >= 0 && Date.now() - cached.savedAt < 60000) {
+                    renderArchivePanel(archivePanel, cached.data, record);
                     return;
                 }
 
+                var archiveOperation = beginOperation('archive', archiveUrl, [archiveButton]);
+                if (!archiveOperation) return;
                 renderArchiveLoading(archivePanel);
-                setLoading(archiveButton, true);
-                fetchJson(data.archive_url).then(function (archive) {
-                    if (archive.state === 'available' || archive.state === 'empty' || archive.state === 'unconfigured') {
-                        archiveCache[data.archive_url] = archive;
+                fetchJson(archiveUrl, {}, archiveOperation.controller).then(function (archive) {
+                    if (!current('archive', archiveOperation) || epoch !== journeyEpoch) return;
+                    if (!Array.isArray(archive.documents) || !archive.documents.every(function (document) {return document && typeof document === 'object';})) throw new Error('Daftar arsip belum lengkap. Silakan coba kembali.');
+                    if (archive.state === 'available' || archive.state === 'empty') {
+                        if (Object.keys(archiveCache).length >= 20) delete archiveCache[Object.keys(archiveCache)[0]];
+                        archiveCache[archiveUrl] = {savedAt: Date.now(), data: archive};
                     }
                     renderArchivePanel(archivePanel, archive, record);
                     var count = Number(archive.document_count) || (archive.documents || []).length;
                     archiveButton.dataset.label = count > 0 ? 'Arsip (' + count + ')' : 'Cek Arsip';
                 }).catch(function (error) {
+                    if (!current('archive', archiveOperation) || epoch !== journeyEpoch || error.name === 'AbortError') return;
                     renderArchivePanel(archivePanel, {
                         state: 'unavailable',
                         document_count: 0,
                         message: error.message
                     }, record);
                 }).finally(function () {
-                    setLoading(archiveButton, false);
+                    finishOperation('archive', archiveOperation);
                 });
             });
         }).catch(function (error) {
+            if (!current('journey', operation) || error.name === 'AbortError') return;
             host.innerHTML = '<div class="cc-empty">' + esc(error.message) + '</div>';
-        });
+        }).finally(function () {finishOperation('journey', operation);});
     }
 
     document.querySelectorAll('[data-close-modal]').forEach(function (element) { element.addEventListener('click', closeModals); });
     document.addEventListener('keydown', function (event) {
-        if (event.key !== 'Escape') return;
+        if (event.key !== 'Escape' || event.defaultPrevented) return;
+        var hadModal = Boolean(document.querySelector('.cc-modal.open'));
         closeModals();
-        if (!document.fullscreenElement && document.body.classList.contains('cc-fullscreen')) {
+        if (!hadModal && !document.fullscreenElement && document.body.classList.contains('cc-fullscreen')) {
             syncFullscreenUi(false);
         }
     });
@@ -452,8 +526,10 @@
     });
     document.getElementById('ccSearchButton').addEventListener('click', doSearch);
     document.getElementById('ccSearchInput').addEventListener('keydown', function (event) { if (event.key === 'Enter') doSearch(); });
+    document.getElementById('ccSearchInput').addEventListener('input', function () {if (operations.results?.key.startsWith('search:')) cancelOperation('results');});
     document.getElementById('ccAskButton').addEventListener('click', function () { doAsk(); });
     document.getElementById('ccAskInput').addEventListener('keydown', function (event) { if (event.key === 'Enter') doAsk(); });
+    document.getElementById('ccAskInput').addEventListener('input', function () {if (operations.results?.key.startsWith('ask:')) cancelOperation('results');});
     document.querySelectorAll('[data-question]').forEach(function (button) {
         button.addEventListener('click', function () { doAsk(button.dataset.question); });
     });
@@ -465,7 +541,9 @@
     });
     document.getElementById('ccReconciliationButton').addEventListener('click', doReconciliation);
     document.getElementById('ccRefresh').addEventListener('click', function () {
+        if (operations.overview) return;
         try { sessionStorage.removeItem(overviewCacheKey); } catch (error) { /* opsional */ }
+        archiveCache = Object.create(null);
         loadOverview(true);
     });
     var fullscreenButton = document.getElementById('ccFullscreen');
@@ -476,26 +554,34 @@
         fullscreenButton.textContent = active ? '↙ Keluar Layar Penuh' : '⛶ Layar Penuh';
     }
 
-    fullscreenButton.addEventListener('click', function () {
-        if (document.fullscreenElement) {
-            document.exitFullscreen().catch(function () { syncFullscreenUi(false); });
-            return;
-        }
-
-        if (document.documentElement.requestFullscreen) {
-            document.documentElement.requestFullscreen().catch(function () { syncFullscreenUi(false); });
-            return;
-        }
-
-        syncFullscreenUi(!document.body.classList.contains('cc-fullscreen'));
+    fullscreenButton.addEventListener('click', async function () {
+        if (fullscreenPending) return;
+        fullscreenPending = true; fullscreenButton.disabled = true;
+        var desired = !Boolean(document.fullscreenElement || document.body.classList.contains('cc-fullscreen'));
+        try {
+            if (document.fullscreenElement) await document.exitFullscreen();
+            else if (desired && document.documentElement.requestFullscreen) await document.documentElement.requestFullscreen();
+            else {syncFullscreenUi(desired); return;}
+            syncFullscreenUi(Boolean(document.fullscreenElement));
+        } catch (_) {syncFullscreenUi(Boolean(document.fullscreenElement) || desired);}
+        finally {fullscreenPending = false; fullscreenButton.disabled = false;}
     });
 
     document.addEventListener('fullscreenchange', function () {
         syncFullscreenUi(Boolean(document.fullscreenElement));
     });
     window.addEventListener('pageshow', function () {
+        pageActive = true;
         syncFullscreenUi(Boolean(document.fullscreenElement));
     });
+    document.addEventListener('visibilitychange', function () {
+        if (document.hidden) {
+            var pending = Object.keys(operations).length > 0;
+            closeModals(); cancelOperation('overview');
+            if (pending) showError('Pembacaan dihentikan saat halaman tidak aktif. Tekan kembali tombol yang diperlukan.');
+        }
+    });
+    window.addEventListener('pagehide', function () {pageActive = false; closeModals(); cancelOperation('overview'); archiveCache = Object.create(null);});
     syncFullscreenUi(Boolean(document.fullscreenElement));
 
     // Tidak ada polling otomatis. Data dimuat sekali dan dapat diperbarui manual.

@@ -8,6 +8,7 @@
 
 @section('content')
 <div id="commandCenter" class="cc-shell"
+    data-cache-scope="{{ hash('sha256', auth()->id().'|'.session()->getId()) }}"
     data-overview-url="{{ route('command-center.overview') }}"
     data-search-url="{{ route('command-center.search') }}"
     data-ask-url="{{ route('command-center.ask') }}"
@@ -32,12 +33,12 @@
     <section class="cc-intelligence">
         <div class="cc-search-block">
             <span class="cc-search-icon">⌕</span>
-            <input id="ccSearchInput" autocomplete="off" placeholder="Cari apa pun: nomor PR, catatan, vendor, dokumen, tanggal, status, atau nilai…">
+            <input id="ccSearchInput" maxlength="120" autocomplete="off" placeholder="Cari apa pun: nomor PR, catatan, vendor, dokumen, tanggal, status, atau nilai…">
             <button type="button" id="ccSearchButton">Temukan</button>
         </div>
         <div class="cc-ask-block">
             <span class="cc-ai-mark">✦</span>
-            <input id="ccAskInput" autocomplete="off" placeholder="Tanya SIMONPR: PR apa yang belum SP? Kontrak mana segera habis?">
+            <input id="ccAskInput" maxlength="220" autocomplete="off" placeholder="Tanya SIMONPR: PR apa yang belum SP? Kontrak mana segera habis?">
             <button type="button" id="ccAskButton">Analisis</button>
         </div>
         <div class="cc-chips">

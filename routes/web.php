@@ -360,15 +360,15 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
             ->name('dashboard.refresh');
 
         Route::prefix('command-center')->name('command-center.')->group(function () {
-            Route::get('/', [CommandCenterController::class, 'index'])->name('index');
-            Route::get('/overview', [CommandCenterController::class, 'overview'])->middleware('throttle:60,1')->name('overview');
-            Route::get('/search', [CommandCenterController::class, 'search'])->middleware('throttle:60,1')->name('search');
-            Route::post('/ask', [CommandCenterController::class, 'ask'])->middleware('throttle:30,1')->name('ask');
-            Route::get('/reconciliation', [CommandCenterController::class, 'reconciliation'])->middleware('throttle:30,1')->name('reconciliation');
-            Route::get('/journey/{ppbj}', [CommandCenterController::class, 'journey'])->middleware('throttle:60,1')->name('journey');
-            Route::get('/passport/{ppbj}/qr', [CommandCenterController::class, 'passportQr'])->middleware('throttle:60,1')->name('passport.qr');
-            Route::get('/meeting/pdf', [CommandCenterController::class, 'meetingPdf'])->middleware('throttle:10,1')->name('meeting.pdf');
-            Route::get('/meeting/excel', [CommandCenterController::class, 'meetingExcel'])->middleware('throttle:10,1')->name('meeting.excel');
+            Route::get('/', [CommandCenterController::class, 'index'])->middleware('throttle:60,1,command-index:')->name('index');
+            Route::get('/overview', [CommandCenterController::class, 'overview'])->middleware('throttle:60,1,command-overview:')->name('overview');
+            Route::get('/search', [CommandCenterController::class, 'search'])->middleware('throttle:60,1,command-search:')->name('search');
+            Route::post('/ask', [CommandCenterController::class, 'ask'])->middleware('throttle:30,1,command-ask:')->name('ask');
+            Route::get('/reconciliation', [CommandCenterController::class, 'reconciliation'])->middleware('throttle:30,1,command-reconciliation:')->name('reconciliation');
+            Route::get('/journey/{ppbj}', [CommandCenterController::class, 'journey'])->whereNumber('ppbj')->middleware('throttle:60,1,command-journey:')->name('journey');
+            Route::get('/passport/{ppbj}/qr', [CommandCenterController::class, 'passportQr'])->whereNumber('ppbj')->middleware('throttle:60,1,command-qr:')->name('passport.qr');
+            Route::get('/meeting/pdf', [CommandCenterController::class, 'meetingPdf'])->middleware('throttle:10,1,command-pdf:')->name('meeting.pdf');
+            Route::get('/meeting/excel', [CommandCenterController::class, 'meetingExcel'])->middleware('throttle:10,1,command-excel:')->name('meeting.excel');
         });
 
         Route::post('/master/{type}', [MasterDataController::class, 'addMaster'])->middleware('throttle:20,1,master-store:')->name('master-data.store');
