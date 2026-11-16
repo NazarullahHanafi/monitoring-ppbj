@@ -12,9 +12,9 @@ function setup(fields = [], confirmed = true) {
     const form = {action: 'https://example.test/sp/4', inert: false, dataset: {},
         querySelectorAll: () => inputs, querySelector: () => button};
     const window = {SP_PAGE_CONFIG: {today: '2026-11-11'}, SPPH_PAGE_CONFIG: {today: '2026-11-11'}, location: {href: '/sp'}};
-    const context = {window, URL, Intl, AbortController, setTimeout, clearTimeout, document: {querySelector: () => ({content: 'csrf'})},
+    const context = {window, URL, Intl, AbortController, DOMException, setTimeout, clearTimeout, document: {querySelector: () => ({content: 'csrf'})},
         FormData: class {set() {} delete() {}},
-        fetch: async (url, options) => {requests.push({url, options}); return {ok: true, headers: {get: () => 'application/json'}, json: async () => ({title: 'Pratinjau', summary: [], prs: []})};},
+        fetch: async (url, options) => {requests.push({url, options}); return {ok: true, headers: {get: () => 'application/json'}, json: async () => ({title: 'Pratinjau', summary: [], prs: [], requires_approval:false, approved:false, nilai_pr:0, nilai_sp:0, selisih:0})};},
         Swal: {fire: async options => {dialogs.push(options); return {isConfirmed: confirmed};}}};
     window.Swal = context.Swal;
     vm.createContext(context);

@@ -7,6 +7,7 @@ use App\Models\Sp;
 use App\Models\Spph;
 use App\Models\SpValueApproval;
 use App\Services\SpValueApprovalService;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
@@ -42,16 +43,19 @@ class ProcurementReviewController extends Controller
         abort_if($deleting && ! $document, 422);
         $column = $kind === 'sp' ? 'awarding_sp' : 'spph_rfq_1';
         $number = $document?->getAttribute($kind === 'sp' ? 'nomor_sp' : 'nomor_spph');
-        $old = $document ? Ppbj::query()->where($column, $number)->pluck('ppbj_no')->all() : [];
+        $oldQuery = $document ? Ppbj::query()->where($column, $number) : null;
         if ($deleting) {
+            $total = (clone $oldQuery)->count();
+            $old = (clone $oldQuery)->orderBy('id')->limit(20)->pluck('ppbj_no')->all();
+
             return response()->json([
                 'title' => 'Simulasi pemindahan ke Sampah', 'document' => $number,
                 'summary' => ['Dokumen dipindahkan ke Sampah, bukan dihapus permanen.',
                     'Referensi PR, nilai, vendor, dan dokumen lanjutan tetap dipertahankan.',
                     'Tetap memerlukan verifikasi kata sandi pembuat. Pemulihan tersedia di menu Sampah.'],
-                'prs' => array_map(fn ($pr) => ['nomor' => $pr], array_slice($old, 0, 20)),
-                'total_prs' => count($old),
-            ])->header('Cache-Control', 'no-store');
+                'prs' => array_map(fn ($pr) => ['nomor' => $pr], $old),
+                'total_prs' => $total, 'prs_truncated' => $total > count($old),
+            ])->header('Cache-Control', 'private, no-store');
         }
 
         if ($kind === 'sp') {
@@ -71,7 +75,7 @@ class ProcurementReviewController extends Controller
                 'previous_vendor' => $document?->nama_vendor,
                 'previous_value' => $document?->nilai_sp,
                 'summary' => $summary,
-                'prs' => $snapshot['prs'], 'removed_prs' => array_values(array_diff($old, $selected)),
+                'prs' => $snapshot['prs'], ...$this->removedPrs($oldQuery, $selected),
                 'nilai_pr' => $snapshot['nilai_pr'], 'nilai_sp' => $snapshot['nilai_sp'], 'selisih' => $snapshot['selisih'],
                 'requires_approval' => $snapshot['requires_approval'],
                 'approved' => (bool) $approved, 'approval_status' => $approval?->status,
@@ -84,7 +88,7 @@ class ProcurementReviewController extends Controller
                     'sph' => 'Nomor SPH', 'tgl_sph' => 'Tanggal SPH', 'rfq' => 'RFQ',
                     'penandatangan_sci' => 'Penandatangan SCI', 'jabatan_sci' => 'Jabatan SCI',
                 ]),
-            ])->header('Cache-Control', 'no-store');
+            ])->header('Cache-Control', 'private, no-store');
         }
 
         $request->validate([
@@ -110,9 +114,21 @@ class ProcurementReviewController extends Controller
                 'nomor' => $pr->ppbj_no, 'nilai_pr' => (float) $pr->total_sebelum_ppn,
                 'vendor_final' => $pr->awarding_sp ? $pr->penyedia_eksternal : null,
             ])->all(),
-            'removed_prs' => array_values(array_diff($old, $numbers)),
+            ...$this->removedPrs($oldQuery, $numbers),
             'changes' => $this->changes($request, $document, ['tanggal' => 'Tanggal SPPH', 'deskripsi_pengadaan' => 'Uraian', 'pic' => 'PIC']),
-        ])->header('Cache-Control', 'no-store');
+        ])->header('Cache-Control', 'private, no-store');
+    }
+
+    private function removedPrs(?Builder $query, array $selected): array
+    {
+        if (! $query) {
+            return ['removed_prs' => [], 'removed_prs_count' => 0, 'removed_prs_truncated' => false];
+        }
+        $remaining = (clone $query)->whereNotIn('ppbj_no', $selected);
+        $total = (clone $remaining)->count();
+        $sample = $remaining->orderBy('id')->limit(20)->pluck('ppbj_no')->all();
+
+        return ['removed_prs' => $sample, 'removed_prs_count' => $total, 'removed_prs_truncated' => $total > count($sample)];
     }
 
     private function changes(Request $request, Sp|Spph|null $document, array $fields): array
@@ -132,8 +148,8 @@ class ProcurementReviewController extends Controller
     public function index(Request $request)
     {
         abort_unless($request->user()?->department === 'umum', 403);
-        $request->validate(['status' => ['nullable', Rule::in(['pending', 'approved', 'rejected', 'consumed'])]]);
-        $status = $request->input('status', 'pending');
+        $validated = $request->validate(['status' => ['nullable', Rule::in(['pending', 'approved', 'rejected', 'consumed'])], 'page' => ['nullable', 'integer', 'min:1', 'max:1000000']]);
+        $status = $validated['status'] ?? 'pending';
         $approvals = SpValueApproval::query()->with(['requester:id,name', 'reviewer:id,name'])
             ->where('status', $status)->orderByDesc('id')->paginate(15)->withQueryString();
 
@@ -169,7 +185,7 @@ class ProcurementReviewController extends Controller
             return $row;
         }, 3);
 
-        return response()->json(['message' => 'Pengajuan #'.$approval->id.' tersedia di Persetujuan Selisih. Form SP belum disimpan. Setelah disetujui, simpan kembali rincian yang sama.', 'id' => $approval->id]);
+        return response()->json(['success' => true, 'message' => 'Pengajuan #'.$approval->id.' tersedia di Persetujuan Selisih. Form SP belum disimpan. Setelah disetujui, simpan kembali rincian yang sama.', 'id' => $approval->id])->header('Cache-Control', 'private, no-store');
     }
 
     public function decide(Request $request, SpValueApproval $approval)
@@ -178,16 +194,22 @@ class ProcurementReviewController extends Controller
         if (is_string($request->decision_note)) {
             $request->merge(['decision_note' => trim($request->decision_note)]);
         }
-        $request->validate(['decision' => ['required', Rule::in(['approved', 'rejected'])], 'decision_note' => 'required|string|min:5|max:2000']);
+        $request->validate(['decision' => ['required', Rule::in(['approved', 'rejected'])], 'decision_note' => 'required|string|min:5|max:2000', 'review_token' => ['nullable', 'string', 'size:64']]);
         DB::transaction(function () use ($request, $approval) {
             $row = SpValueApproval::whereKey($approval->id)->lockForUpdate()->firstOrFail();
             abort_if((int) $row->requester_id === (int) $request->user()->id, 403, 'Tidak dapat menyetujui pengajuan sendiri.');
             abort_unless($row->status === 'pending' && $row->expires_at->isFuture(), 409, 'Pengajuan telah diputuskan atau kedaluwarsa.');
+            abort_unless(hash_equals(app(SpValueApprovalService::class)->reviewToken($row), (string) $request->input('review_token')), 409, 'Isi pengajuan telah berubah atau halaman perlu diperbarui. Muat ulang dan periksa kembali sebelum memutuskan.');
             $row->update(['status' => $request->decision, 'reviewer_id' => $request->user()->id,
                 'decision_note' => $request->decision_note, 'decided_at' => now()]);
             app(SpValueApprovalService::class)->audit($request, $row, 'value_approval_decided', 'Keputusan persetujuan selisih SP.');
         }, 3);
 
-        return back()->with('success', 'Keputusan disimpan. Sistem tetap memeriksa ulang rincian saat SP disimpan.');
+        $message = 'Keputusan disimpan. Sistem tetap memeriksa ulang rincian saat SP disimpan.';
+        if ($request->expectsJson()) {
+            return response()->json(['success' => true, 'message' => $message])->header('Cache-Control', 'private, no-store');
+        }
+
+        return back()->with('success', $message);
     }
 }

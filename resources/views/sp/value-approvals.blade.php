@@ -4,7 +4,7 @@
 <link rel="stylesheet" href="{{ asset('assets/app/procurement-review.css') }}?v={{ filemtime(public_path('assets/app/procurement-review.css')) }}">
 @endpush
 @section('content')
-<div class="pr-review">
+<div class="pr-review" id="spValueApprovals">
     <header class="pr-hero">
         <h1>Persetujuan Selisih Nilai SP</h1>
         <p>Ditinjau akun Umum lain, sebelum SP disimpan. Persetujuan berlaku 7 hari untuk rincian yang sama dan hanya dapat digunakan sekali.</p>
@@ -47,8 +47,9 @@
                 @if((int)$approval->requester_id === (int)auth()->id())
                     <p class="pr-muted">Menunggu akun Umum lain. Pengaju tidak dapat menyetujui pengajuannya sendiri. Setelah disetujui, simpan kembali form SP dengan rincian yang sama.</p>
                 @else
-                    <form method="POST" action="{{ route('sp.value-approvals.decide', $approval) }}">
+                    <form method="POST" action="{{ route('sp.value-approvals.decide', $approval) }}" data-approval-decision novalidate>
                         @csrf
+                        <input type="hidden" name="review_token" value="{{ app(\App\Services\SpValueApprovalService::class)->reviewToken($approval) }}">
                         <label for="note-{{ $approval->id }}">Catatan keputusan (wajib)</label>
                         <textarea id="note-{{ $approval->id }}" name="decision_note" minlength="5" maxlength="2000" rows="2" required placeholder="Hasil pemeriksaan dan dasar keputusan"></textarea>
                         <div class="pr-actions">
@@ -65,3 +66,6 @@
     {{ $approvals->links() }}
 </div>
 @endsection
+@push('scripts')
+<script src="{{ asset('assets/app/value-approval-actions.js') }}?v={{ filemtime(public_path('assets/app/value-approval-actions.js')) }}" defer></script>
+@endpush

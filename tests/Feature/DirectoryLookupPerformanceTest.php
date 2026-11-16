@@ -223,6 +223,7 @@ class DirectoryLookupPerformanceTest extends TestCase
                 $prefixes[] = $prefix;
             }
         }
-        $this->assertCount(38, $prefixes);
+        // The approval list now has its own read budget alongside request/decision actions.
+        $this->assertCount(39, $prefixes);
     }
 }

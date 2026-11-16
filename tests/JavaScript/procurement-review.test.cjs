@@ -9,15 +9,16 @@ class FormDataStub {
     delete(key){ this.values.delete(key); }
 }
 function setup(data, confirmed = false) {
-    const requests = [], dialogs = [], window = {};
+    data = {title:'Simulasi', summary:[], prs:[], requires_approval:false, approved:false, nilai_pr:0, nilai_sp:0, selisih:0, ...data};
+    const events = new Map(), requests = [], dialogs = [], window = {addEventListener: (name, callback) => events.set(name, callback)};
     const form = {action:'https://example.com/sp/4', fields:{_method:'PUT', nama_vendor:'Vendor'}, inert:false, querySelectorAll:()=>[]};
-    const context = {window, FormData:FormDataStub, URL, Intl, AbortController, setTimeout, clearTimeout, location:{origin:'https://example.com'}, document:{querySelector:()=>({content:'csrf-test'})},
+    const context = {window, FormData:FormDataStub, URL, Intl, AbortController, DOMException, setTimeout, clearTimeout, location:{origin:'https://example.com'}, document:{querySelector:()=>({content:'csrf-test'})},
         fetch:async(url,options)=>{ requests.push({url,options}); return {ok:true,headers:{get:()=> 'application/json'},json:async()=>data}; },
         Swal:{fire:async options=>{dialogs.push(options); return {isConfirmed:confirmed};}, showValidationMessage(){}}};
     window.Swal = context.Swal;
     vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../../public/assets/app/procurement-date-warning.js'), 'utf8'), context);
     vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../../public/assets/app/procurement-review.js'), 'utf8'), context);
-    return {form,requests,dialogs,review:window.ProcurementReview,window,context};
+    return {form,requests,dialogs,review:window.ProcurementReview,window,context,events};
 }
 test('edit preview strips _method, escapes database text and cancellation never saves', async()=>{
     const h=setup({title:'Simulasi', document:'<img onerror=alert(1)>', vendor:'<script>x</script>', prs:[], summary:[]});
@@ -75,9 +76,67 @@ test('preview clears its timeout after a server rejection and preserves an alrea
     let cleared=0;
     h.context.setTimeout=()=>17;
     h.context.clearTimeout=id=>{assert.equal(id,17);cleared++;};
-    h.context.fetch=async()=>({ok:false,headers:{get:()=> 'application/json'},json:async()=>({message:'Akses ditolak'})});
+    h.context.fetch=async()=>({ok:false,status:403,headers:{get:()=> 'application/json'},json:async()=>({message:'Akses ditolak'})});
     h.form.inert=true;
     assert.equal(await h.review.confirm(h.form,'sp',true),false);
     assert.equal(h.form.inert,true);assert.equal(cleared,1);
-    assert.equal(h.dialogs[0].text,'Akses ditolak');
+    assert.equal(h.dialogs[0].text,'Anda tidak memiliki izin untuk tindakan ini.');
+});
+
+test('duplicate preview and delete calls share one pending review operation', async () => {
+    const h = setup({}, true); let finish;
+    h.context.fetch = async (url, options) => {h.requests.push({url, options}); return new Promise(resolve => {finish = resolve;});};
+    const pending = h.review.confirm(h.form, 'sp', true); await new Promise(resolve => setImmediate(resolve));
+    assert.equal(await h.review.confirm(h.form, 'sp', true), false); assert.equal(await h.review.confirmDelete('sp', '/sp/4'), false); assert.equal(h.requests.length, 1);
+    finish({ok:true, headers:{get:()=> 'application/json'}, json:async()=>({title:'Preview',summary:[],prs:[],requires_approval:false,approved:false,nilai_pr:0,nilai_sp:0,selisih:0})});
+    assert.equal(await pending, true); assert.equal(h.form.inert, false);
+});
+
+test('HTML redirects and incomplete SP review payloads cannot permit a save', async () => {
+    for (const response of [{ok:true,headers:{get:()=> 'text/html'},json:async()=>({})}, {ok:true,redirected:true,headers:{get:()=> 'application/json'},json:async()=>({})},
+        {ok:true,headers:{get:()=> 'application/json'},json:async()=>({title:'Preview',summary:[],prs:[]})}]) {
+        const h = setup({}, true); h.context.fetch = async () => response;
+        assert.equal(await h.review.confirm(h.form, 'sp', false), false); assert.equal(h.dialogs[0].title, 'Simulasi belum tersedia'); assert.equal(h.form.inert, false);
+    }
+});
+
+test('preview deadline releases a stalled JSON body even when fetch ignores cancellation', async () => {
+    const h = setup({}); let timeout;
+    h.context.setTimeout = callback => {timeout = callback; return 1;}; h.context.clearTimeout = () => {};
+    h.context.fetch = async () => ({ok:true,headers:{get:()=> 'application/json'},json:()=>new Promise(()=>{})});
+    const pending = h.review.confirm(h.form, 'sp', false); await new Promise(resolve => setImmediate(resolve)); timeout();
+    assert.equal(await pending, false); assert.equal(h.form.inert, false); assert.match(h.dialogs[0].text, /Isian form tetap ada/);
+});
+
+test('page exit cancels a preview and ignores its late success without opening a dialog', async () => {
+    const h = setup({}, true); let finish;
+    h.context.fetch = () => new Promise(resolve => {finish = resolve;});
+    const pending = h.review.confirm(h.form, 'sp', false); await new Promise(resolve => setImmediate(resolve)); h.events.get('pagehide')();
+    assert.equal(await pending, false); assert.equal(h.form.inert, false);
+    finish({ok:true,headers:{get:()=> 'application/json'},json:async()=>({})}); await new Promise(resolve => setImmediate(resolve)); assert.equal(h.dialogs.length, 0);
+});
+
+test('approval preConfirm cannot send the same request twice and reports only a verified acknowledgement', async () => {
+    const h = setup({requires_approval:true}); let popup, closePopup, finish, ready;
+    const shown = new Promise(resolve => {ready = resolve;});
+    h.context.Swal.fire = options => {h.dialogs.push(options); if (options.preConfirm) {popup = options; ready(); return new Promise(resolve => {closePopup = resolve;});} return Promise.resolve({isConfirmed:false});};
+    const original = h.context.fetch;
+    h.context.fetch = (url, options) => url.startsWith('/sp/value-approvals/') ? new Promise(resolve => {h.requests.push({url,options}); finish = resolve;}) : original(url,options);
+    const pending = h.review.confirm(h.form, 'sp', false); await shown;
+    const save = popup.preConfirm('Alasan lengkap untuk persetujuan.'); assert.equal(popup.allowEscapeKey(), false);
+    assert.equal(await popup.preConfirm('Alasan dikirim lagi.'), false); assert.equal(h.requests.length, 2);
+    finish({ok:true,headers:{get:()=> 'application/json'},json:async()=>({success:true,id:8,message:'Pengajuan tersedia.'})});
+    const result = await save; closePopup({isConfirmed:true,value:result}); assert.equal(await pending, false); assert.equal(h.requests.length, 2); assert.equal(h.form.inert, false);
+});
+
+test('an explicit retry after approval timeout uses a fresh request while the obsolete response stays ignored', async () => {
+    const h = setup({requires_approval:true}); let popup, closePopup, ready, firstFinish; const timers=[];
+    const shown=new Promise(resolve=>{ready=resolve;});h.context.setTimeout=callback=>{timers.push(callback);return timers.length;};h.context.clearTimeout=()=>{};
+    h.context.Swal.fire=options=>{if(options.preConfirm){popup=options;ready();return new Promise(resolve=>{closePopup=resolve;});}return Promise.resolve({isConfirmed:false});};
+    const original=h.context.fetch;let writes=0;
+    h.context.fetch=(url,options)=>!url.startsWith('/sp/value-approvals/')?original(url,options):++writes===1?new Promise(resolve=>{firstFinish=resolve;}):Promise.resolve({ok:true,headers:{get:()=> 'application/json'},json:async()=>({success:true,id:8,message:'Available'})});
+    const pending=h.review.confirm(h.form,'sp',false);await shown;
+    const first=popup.preConfirm('Alasan lengkap untuk persetujuan.');timers.at(-1)();assert.equal(await first,false);assert.equal(writes,1);
+    const result=await popup.preConfirm('Alasan lengkap untuk persetujuan.');assert.equal(result.id,8);assert.equal(writes,2);
+    firstFinish({ok:true,headers:{get:()=> 'application/json'},json:async()=>({success:true,id:99,message:'Obsolete'})});closePopup({isConfirmed:true,value:result});assert.equal(await pending,false);assert.equal(h.form.inert,false);
 });

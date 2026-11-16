@@ -289,8 +289,8 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
             ->whereIn('kind', ['ppbj', 'sp', 'spph'])->whereNumber('id')->middleware('throttle:40,1')->name('procurement.quick-detail');
 
         Route::post('/procurement-review/{kind}/{id?}', [\App\Http\Controllers\ProcurementReviewController::class, 'preview'])
-            ->whereIn('kind', ['sp', 'spph'])->whereNumber('id')->middleware('throttle:30,1')->name('procurement.review');
-        Route::get('/sp/value-approvals', [\App\Http\Controllers\ProcurementReviewController::class, 'index'])->name('sp.value-approvals');
+            ->whereIn('kind', ['sp', 'spph'])->whereNumber('id')->middleware('throttle:30,1,procurement-review-preview:')->name('procurement.review');
+        Route::get('/sp/value-approvals', [\App\Http\Controllers\ProcurementReviewController::class, 'index'])->middleware('throttle:60,1,sp-value-approval-index:')->name('sp.value-approvals');
         Route::post('/sp/value-approvals/request/{id?}', [\App\Http\Controllers\ProcurementReviewController::class, 'requestApproval'])
             ->whereNumber('id')->middleware('throttle:10,1,sp-value-approval-request:')->name('sp.value-approvals.request');
         Route::post('/sp/value-approvals/{approval}/decision', [\App\Http\Controllers\ProcurementReviewController::class, 'decide'])

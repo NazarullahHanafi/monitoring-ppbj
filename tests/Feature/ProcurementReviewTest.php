@@ -44,7 +44,7 @@ class ProcurementReviewTest extends TestCase
     private function approve(User $reviewer, SpValueApproval $approval): void
     {
         $this->actingAs($reviewer)->post(route('sp.value-approvals.decide', $approval),
-            ['decision' => 'approved', 'decision_note' => 'Dasar selisih dan alokasi telah diverifikasi.'])->assertRedirect();
+            ['decision' => 'approved', 'decision_note' => 'Dasar selisih dan alokasi telah diverifikasi.', 'review_token' => app(\App\Services\SpValueApprovalService::class)->reviewToken($approval->fresh())])->assertRedirect();
     }
 
     public function test_umum_non_admin_can_review_but_no_self_approval_and_approval_is_consumed_once(): void
@@ -121,7 +121,7 @@ class ProcurementReviewTest extends TestCase
         $approval = $this->requestApproval($user, $payload);
         $this->actingAs($user)->postJson(route('sp.store'), $payload + ['allocation_override_confirmed' => true])->assertStatus(422);
         $this->actingAs($reviewer)->post(route('sp.value-approvals.decide', $approval),
-            ['decision' => 'rejected', 'decision_note' => 'Perlu rincian tambahan'])->assertRedirect();
+            ['decision' => 'rejected', 'decision_note' => 'Perlu rincian tambahan', 'review_token' => app(\App\Services\SpValueApprovalService::class)->reviewToken($approval->fresh())])->assertRedirect();
         $this->actingAs($user)->postJson(route('sp.store'), $payload)->assertStatus(422);
         $approval = $this->requestApproval($user, $payload);
         $this->approve($reviewer, $approval);

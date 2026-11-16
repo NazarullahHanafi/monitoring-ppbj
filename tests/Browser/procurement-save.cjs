@@ -23,7 +23,7 @@ function readFunction(script, declaration, indent) {
             await page.route('**/*', async route => {
                 const request = route.request(), url = new URL(request.url());
                 assert.equal(url.origin, origin);
-                if (url.pathname.startsWith('/procurement-review/')) return route.fulfill({json: {title: 'Pratinjau', summary: [], prs: []}});
+                if (url.pathname.startsWith('/procurement-review/')) return route.fulfill({json: {title: 'Pratinjau', summary: [], prs: [], requires_approval:false, approved:false, nilai_pr:0, nilai_sp:0, selisih:0}});
                 if (request.method() === 'POST') {
                     count++; postBody = request.postData();
                     await new Promise(resolve => {release = resolve; received();});

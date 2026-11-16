@@ -10,6 +10,17 @@ use Illuminate\Http\Request;
 
 class SpValueApprovalService
 {
+    public function reviewToken(SpValueApproval $approval): string
+    {
+        $state = [];
+        foreach (['id', 'requester_id', 'reviewer_id', 'fingerprint', 'snapshot', 'status', 'reason', 'decision_note', 'expires_at', 'decided_at', 'consumed_at', 'updated_at'] as $field) {
+            $value = $approval->getRawOriginal($field);
+            $state[$field] = $value === null ? null : (string) $value;
+        }
+
+        return hash_hmac('sha256', json_encode($state, JSON_THROW_ON_ERROR), (string) config('app.key'));
+    }
+
     public function snapshot(Request $request, $records, mixed $value, array $plan, ?Sp $sp = null): array
     {
         $totalPr = $records->isNotEmpty()
@@ -60,7 +71,7 @@ class SpValueApprovalService
             ->where('fingerprint', $this->fingerprint($snapshot))
             ->lockForUpdate()->first();
 
-        if (! $approval || $approval->status !== 'approved' || $approval->expires_at->isPast()
+        if (! $approval || $approval->status !== 'approved' || ! $approval->expires_at->isFuture()
             || ! $approval->reviewer_id || $approval->reviewer_id === $approval->requester_id) {
             throw new HttpResponseException(response()->json([
                 'message' => 'Nilai SP melebihi PR/gabungan PR. Ajukan persetujuan kepada akun Umum lain. Jika rincian berubah, ajukan ulang.',
