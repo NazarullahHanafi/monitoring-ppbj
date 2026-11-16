@@ -6,6 +6,7 @@
     const theme = () => ({width:760,customClass:{popup:'spph-signing-popup'},background:document.documentElement.classList.contains('dark')?'#162034':'#fff',color:document.documentElement.classList.contains('dark')?'#edf3ff':'#18253d'});
     const canLearn = data => Boolean(data.owner_can_learn && data.can_manage);
     let serial=0, pending;
+    window.addEventListener('pagehide',()=>{serial++;pending?.abort();});
     async function readResponse(response) {
         const data=await response.json();
         if(!response.ok){

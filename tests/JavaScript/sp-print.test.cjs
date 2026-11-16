@@ -12,11 +12,11 @@ function data(overrides={}){
         selection:{signing_mode:'auto',field_id:5,penandatangan:'Harits Jansen',jabatan:'Kepala Bidang Dukungan Bisnis',print_basis:'basis-1'},...overrides};
 }
 function runtime(){
-    const requests=[],dialogs=[],navigations=[],updates=[],messages=[],nodes={},events={};
-    const Swal={fire:options=>new Promise(resolve=>dialogs.push({options,resolve})),showLoading(){},isLoading:()=>false,isVisible:()=>true,showValidationMessage:m=>messages.push(m),update:o=>updates.push(o),getHtmlContainer:()=>({addEventListener:(type,fn)=>events[type]=fn})};
-    const window={location:{assign:u=>navigations.push(u)},alert(){},SPPHPrintMasters:{choices:async()=>({names:[{id:1,nama:'Harits Jansen'},{id:3,nama:'Pejabat Pengganti'}],titles:[{id:2,nama:'Kabid'},{id:4,nama:'Jabatan Pengganti'}],fields:[{id:5,nama:'LAB'},{id:6,nama:'Bidang lain'}]})}};
+    const requests=[],dialogs=[],navigations=[],updates=[],messages=[],nodes={},events={},windowEvents={};
+    const Swal={close(){},fire:options=>new Promise(resolve=>dialogs.push({options,resolve})),showLoading(){},isLoading:()=>false,isVisible:()=>true,showValidationMessage:m=>messages.push(m),update:o=>updates.push(o),getHtmlContainer:()=>({addEventListener:(type,fn)=>events[type]=fn})};
+    const window={addEventListener:(type,handler)=>windowEvents[type]=handler,location:{assign:u=>navigations.push(u)},alert(){},SPPHPrintMasters:{choices:async()=>({names:[{id:1,nama:'Harits Jansen'},{id:3,nama:'Pejabat Pengganti'}],titles:[{id:2,nama:'Kabid'},{id:4,nama:'Jabatan Pengganti'}],fields:[{id:5,nama:'LAB'},{id:6,nama:'Bidang lain'}]})}};
     vm.runInNewContext(source,{window,Swal,URL,URLSearchParams,Intl,AbortController,location:{origin:'https://simon.example'},document:{documentElement:{classList:{contains:()=>false}},getElementById:id=>nodes[id],querySelector:()=>({content:'test-csrf'})},fetch:(url,options)=>new Promise(resolve=>requests.push({url,options,resolve}))});
-    return {window,requests,dialogs,navigations,updates,messages,nodes,events,respond:(i,d,status=200)=>requests[i].resolve({ok:status===200,status,json:async()=>d})};
+    return {window,windowEvents,requests,dialogs,navigations,updates,messages,nodes,events,respond:(i,d,status=200)=>requests[i].resolve({ok:status===200,status,json:async()=>d})};
 }
 test('SP popup is on demand, escapes data and does not substitute total PR as signing amount',async()=>{
     const h=runtime();assert.equal(h.requests.length,0);const task=h.window.openSpPrintPreview('/sp/12/cetak-preview');
@@ -73,4 +73,17 @@ test('stale POST refreshes the read-only context and requires another explicit c
     const confirm=d.options.preConfirm();h.respond(1,{errors:{print_basis:['Data berubah. Periksa lagi.']}},422);await tick();
     assert.equal(h.requests[2].url,'/sp/12/print-context');h.respond(2,data({fingerprint:'fresh'}));assert.equal(await confirm,false);assert.match(h.messages.at(-1),/Data berubah/);
     d.resolve({isDismissed:true});await task;assert.equal(h.navigations.length,0);
+});
+
+test('leaving the page cancels context and suppresses late preview dialogs',async()=>{
+    const h=runtime();const task=h.window.openSpPrintPreview('/sp/12/cetak-preview');h.windowEvents.pagehide();
+    assert.equal(h.requests[0].options.signal.aborted,true);h.respond(0,data());await task;
+    assert.equal(h.dialogs.length,1);assert.equal(h.navigations.length,0);
+});
+
+test('closing a mapping dialog during pagehide cannot reopen its parent preview',async()=>{
+    const h=runtime();let finish;h.window.SPPortfolioMaps={open:()=>new Promise(resolve=>finish=resolve)};
+    const task=h.window.openSpPrintPreview('/sp/12/cetak-preview');h.respond(0,data());await tick();const d=h.dialogs[1];d.options.didOpen();
+    const managing=h.events.click({target:{closest:()=>({dataset:{spPrint:'maps'}})}});h.windowEvents.pagehide();finish();await managing;
+    assert.equal(h.requests.length,1);d.resolve({isDismissed:true});await task;assert.equal(h.navigations.length,0);
 });
