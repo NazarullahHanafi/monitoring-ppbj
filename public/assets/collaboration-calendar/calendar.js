@@ -22,6 +22,7 @@
         selectedPpbj: null,
         linkedPpbj: null,
         prFinderMode: 'browse',
+        mutating: false,
     };
 
     const els = {
@@ -229,7 +230,78 @@
         $('#statCritical').textContent = meta.critical ?? state.events.filter((event) => event.priority === 'critical').length;
     }
 
+    // Cache entries expire even when a tab stays open for a long time.
+    function cached(map, key) {
+        const entry = map.get(key);
+        if (entry && entry.expires > Date.now()) return entry.data;
+        map.delete(key);
+        return null;
+    }
+
+    function remember(map, key, data, limit) {
+        map.delete(key);
+        map.set(key, { data, expires: Date.now() + 60000 });
+        while (map.size > limit) map.delete(map.keys().next().value);
+    }
+
+    function cancelRead(name) {
+        state[name]?.abort();
+        state[name] = null;
+    }
+
+    async function requestJson(url, options = {}, controller = new AbortController()) {
+        let timedOut = false;
+        const aborted = () => timedOut
+            ? new Error('Koneksi lambat. Coba muat ulang data.')
+            : new DOMException('Permintaan dibatalkan.', 'AbortError');
+        let onAbort;
+        const cancellation = new Promise((_, reject) => {
+            onAbort = () => reject(aborted());
+            controller.signal.addEventListener('abort', onAbort, { once: true });
+            if (controller.signal.aborted) onAbort();
+        });
+        const timer = window.setTimeout(() => { timedOut = true; controller.abort(); }, 30000);
+        try {
+            return await Promise.race([cancellation, (async () => {
+                const response = await fetch(url, {
+                    credentials: 'same-origin', cache: 'no-store', ...options,
+                    headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest', ...options.headers },
+                    signal: controller.signal,
+                });
+                const data = await response.json().catch(() => null);
+                if (!response.ok) {
+                    const messages = {
+                        401: 'Sesi berakhir. Silakan masuk kembali.',
+                        419: 'Sesi formulir berakhir. Muat ulang halaman sebelum mencoba lagi.',
+                        403: 'Anda tidak memiliki akses untuk tindakan ini.',
+                        429: 'Permintaan terlalu cepat. Tunggu sebentar lalu coba lagi.',
+                    };
+                    const error = new Error(messages[response.status] || Object.values(data?.errors || {}).flat()[0] || data?.message || 'Permintaan tidak dapat diproses.');
+                    error.status = response.status;
+                    throw error;
+                }
+                if (!data || typeof data !== 'object') throw new Error('Respons server belum lengkap. Coba muat ulang data.');
+                return data;
+            })()]);
+        } finally {
+            window.clearTimeout(timer);
+            controller.signal.removeEventListener('abort', onAbort);
+        }
+    }
+
+    function mutationBusy(busy) {
+        state.mutating = busy;
+        const controls = $$('#calendarSave, #calendarAdd, #calendarEdit, #calendarDelete, [data-status], [data-close-modal], [data-close-detail]');
+        controls.forEach((control) => {
+            if (busy) { control.dataset.wasDisabled = String(control.disabled); control.disabled = true; }
+            else { control.disabled = control.dataset.wasDisabled === 'true'; delete control.dataset.wasDisabled; }
+        });
+        els.form.setAttribute('aria-busy', String(busy));
+    }
+
     async function loadEvents(force = false) {
+        cancelRead('controller');
+        els.loading.hidden = true;
         const range = gridRange();
         const params = new URLSearchParams({
             start: dateKey(range.start),
@@ -238,33 +310,27 @@
             source: els.source.value,
         });
         const key = params.toString();
-        if (!force && state.cache.has(key)) {
-            const cached = state.cache.get(key);
-            state.events = cached.events;
-            renderAll(cached.meta);
+        const hit = !force && cached(state.cache, key);
+        if (hit) {
+            state.events = hit.events;
+            renderAll(hit.meta);
             return;
         }
 
-        state.controller?.abort();
-        state.controller = new AbortController();
+        const controller = state.controller = new AbortController();
         els.loading.hidden = false;
 
         try {
-            const response = await fetch(`${root.dataset.eventsUrl}?${params}`, {
-                headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
-                credentials: 'same-origin',
-                signal: state.controller.signal,
-            });
-            const data = await response.json();
-            if (!response.ok) throw new Error(data.message || 'Kalender gagal dimuat.');
+            const data = await requestJson(`${root.dataset.eventsUrl}?${params}`, {}, controller);
+            if (state.controller !== controller) return;
+            if (!Array.isArray(data.events)) throw new Error('Data kalender belum lengkap. Coba muat ulang halaman.');
             state.events = Array.isArray(data.events) ? data.events : [];
-            state.cache.set(key, { events: state.events, meta: data.meta || {} });
-            if (state.cache.size > 8) state.cache.delete(state.cache.keys().next().value);
+            remember(state.cache, key, { events: state.events, meta: data.meta || {} }, 8);
             renderAll(data.meta || {});
         } catch (error) {
-            if (error.name !== 'AbortError') notify(error.message, 'error');
+            if (state.controller === controller && error.name !== 'AbortError') notify(error.message, 'error');
         } finally {
-            els.loading.hidden = true;
+            if (state.controller === controller) { state.controller = null; els.loading.hidden = true; }
         }
     }
 
@@ -276,10 +342,13 @@
 
     function clearCacheAndReload() {
         state.cache.clear();
+        state.journeyCache.clear();
+        state.prSearchCache.clear();
         return loadEvents(true);
     }
 
     function openForm(event = null, selectedDate = state.selected, linkedRecord = null) {
+        if (state.mutating) return;
         state.currentEvent = event;
         els.form.reset();
         els.formError.hidden = true;
@@ -307,8 +376,9 @@
         setTimeout(() => els.form.elements.title.focus(), 0);
     }
 
-    function closeForm() {
-        state.prSearchController?.abort();
+    function closeForm(force = false) {
+        if (state.mutating && force !== true) return;
+        cancelRead('prSearchController');
         window.clearTimeout(state.prSearchTimer);
         els.formModal.hidden = true;
         restoreBodyScroll();
@@ -332,6 +402,9 @@
     }
 
     function openPrFinder(mode = 'browse') {
+        if (state.mutating) return;
+        cancelRead('prSearchController');
+        window.clearTimeout(state.prSearchTimer);
         state.prFinderMode = mode;
         resetPrPicker();
         $('#calendarPrFinderTitle').textContent = mode === 'attach' ? 'Pilih PR untuk Agenda' : 'Cari & Telusuri PR';
@@ -344,7 +417,7 @@
     }
 
     function closePrFinder() {
-        state.prSearchController?.abort();
+        cancelRead('prSearchController');
         window.clearTimeout(state.prSearchTimer);
         els.prFinderModal.hidden = true;
         restoreBodyScroll();
@@ -362,6 +435,7 @@
 
     function schedulePrSearch(immediate = false) {
         window.clearTimeout(state.prSearchTimer);
+        cancelRead('prSearchController');
         const hasQuery = els.prQuery.value.trim().length >= 2;
         const hasFilter = Boolean(els.prPortfolio.value || els.prReceiver.value || els.prDateFrom.value || els.prDateTo.value);
         $('#calendarPrClear').hidden = !els.prQuery.value && !hasFilter && !state.selectedPpbj;
@@ -389,26 +463,24 @@
         els.prState.textContent = 'Mencari PR yang paling relevan…';
         els.prResults.replaceChildren();
 
-        if (state.prSearchCache.has(cacheKey)) {
-            renderPrResults(state.prSearchCache.get(cacheKey));
+        cancelRead('prSearchController');
+        const hit = cached(state.prSearchCache, cacheKey);
+        if (hit) {
+            renderPrResults(hit);
             return;
         }
 
-        state.prSearchController?.abort();
-        state.prSearchController = new AbortController();
+        const controller = state.prSearchController = new AbortController();
         try {
-            const response = await fetch(`${root.dataset.prSearchUrl}?${params}`, {
-                headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
-                credentials: 'same-origin',
-                signal: state.prSearchController.signal,
-            });
-            const data = await response.json().catch(() => ({}));
-            if (!response.ok) throw new Error(Object.values(data.errors || {}).flat()[0] || data.message || 'Pencarian PR gagal.');
-            state.prSearchCache.set(cacheKey, data);
-            if (state.prSearchCache.size > 20) state.prSearchCache.delete(state.prSearchCache.keys().next().value);
+            const data = await requestJson(`${root.dataset.prSearchUrl}?${params}`, {}, controller);
+            if (state.prSearchController !== controller) return;
+            if (!Array.isArray(data.results)) throw new Error('Hasil pencarian belum lengkap. Coba lagi.');
+            remember(state.prSearchCache, cacheKey, data, 20);
             renderPrResults(data);
         } catch (error) {
-            if (error.name !== 'AbortError') els.prState.textContent = error.message;
+            if (state.prSearchController === controller && error.name !== 'AbortError') els.prState.textContent = error.message;
+        } finally {
+            if (state.prSearchController === controller) state.prSearchController = null;
         }
     }
 
@@ -611,26 +683,29 @@
 
     async function saveEvent(submitEvent) {
         submitEvent.preventDefault();
+        if (state.mutating) return;
         const payload = formPayload();
         const id = $('#eventId').value;
         const url = id ? routeTemplate(root.dataset.updateTemplate, id) : root.dataset.storeUrl;
         const method = id ? 'PATCH' : 'POST';
-        els.save.disabled = true;
+        mutationBusy(true);
         els.formError.hidden = true;
 
         try {
             const data = await api(url, method, payload);
-            closeForm();
+            closeForm(true);
             await clearCacheAndReload();
             notify(data.message || 'Agenda berhasil disimpan.', 'success');
         } catch (error) {
             showError(els.formError, error.message);
         } finally {
-            els.save.disabled = false;
+            mutationBusy(false);
         }
     }
 
     function openDetail(event) {
+        if (state.mutating) return;
+        cancelRead('journeyController');
         state.currentEvent = event;
         resetJourney();
         $('#detailSource').textContent = sourceLabels[event.source] || 'AGENDA';
@@ -676,14 +751,16 @@
         document.body.style.overflow = 'hidden';
     }
 
-    function closeDetail() {
-        state.journeyController?.abort();
+    function closeDetail(force = false) {
+        if (state.mutating && force !== true) return;
+        cancelRead('journeyController');
         resetJourney();
         els.detailModal.hidden = true;
         restoreBodyScroll();
     }
 
     function resetJourney() {
+        cancelRead('journeyController');
         els.journey.hidden = true;
         els.journeyLoading.hidden = true;
         els.journeyContent.replaceChildren();
@@ -693,6 +770,8 @@
     async function loadJourney() {
         const ppbjId = state.currentEvent?.ppbj?.id;
         if (!ppbjId) return;
+        cancelRead('journeyController');
+        els.journeyLoading.hidden = true;
 
         const button = $('#calendarJourneyButton');
         els.journey.hidden = false;
@@ -700,39 +779,33 @@
         button.disabled = true;
         button.textContent = 'Memuat perjalanan…';
 
-        const cached = state.journeyCache.get(String(ppbjId));
-        if (cached) {
-            renderJourney(cached);
+        const hit = cached(state.journeyCache, String(ppbjId));
+        if (hit) {
+            renderJourney(hit);
             button.textContent = '✓ Perjalanan PR Terbuka';
             return;
         }
 
-        state.journeyController?.abort();
-        state.journeyController = new AbortController();
+        const controller = state.journeyController = new AbortController();
         els.journeyLoading.hidden = false;
         els.journeyContent.replaceChildren();
 
         try {
             const url = routeTemplate(root.dataset.journeyTemplate, ppbjId, '__PPBJ__');
-            const response = await fetch(url, {
-                credentials: 'same-origin',
-                headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
-                signal: state.journeyController.signal,
-            });
-            const data = await response.json().catch(() => ({}));
-            if (!response.ok) throw new Error(data.message || 'Perjalanan PR tidak dapat dimuat.');
-            state.journeyCache.set(String(ppbjId), data);
-            if (state.journeyCache.size > 12) state.journeyCache.delete(state.journeyCache.keys().next().value);
+            const data = await requestJson(url, {}, controller);
+            if (state.journeyController !== controller) return;
+            if (!data.record || typeof data.record !== 'object') throw new Error('Perjalanan PR belum lengkap. Coba lagi.');
+            remember(state.journeyCache, String(ppbjId), data, 12);
             renderJourney(data);
             button.textContent = '✓ Perjalanan PR Terbuka';
         } catch (error) {
-            if (error.name !== 'AbortError') {
+            if (state.journeyController === controller && error.name !== 'AbortError') {
                 showError(els.detailError, error.message);
                 button.disabled = false;
                 button.textContent = 'Coba Lagi Perjalanan PR';
             }
         } finally {
-            els.journeyLoading.hidden = true;
+            if (state.journeyController === controller) { state.journeyController = null; els.journeyLoading.hidden = true; }
         }
     }
 
@@ -851,56 +924,57 @@
 
     async function updateStatus(status) {
         const event = state.currentEvent;
-        if (!event?.can_status) return;
+        if (!event?.can_status || state.mutating) return;
+        mutationBusy(true);
         try {
             const url = routeTemplate(root.dataset.statusTemplate, event.id);
             const data = await api(url, 'PATCH', { status, version: event.version });
             state.currentEvent = data.event;
-            closeDetail();
+            closeDetail(true);
             await clearCacheAndReload();
             notify(data.message, 'success');
         } catch (error) {
             showError(els.detailError, error.message);
+        } finally {
+            mutationBusy(false);
         }
     }
 
     async function deleteEvent() {
         const event = state.currentEvent;
-        if (!event?.can_delete) return;
-        const confirmed = window.Swal
-            ? (await window.Swal.fire({ title: 'Hapus agenda?', text: 'Riwayat penghapusan tetap dicatat di audit log.', icon: 'warning', showCancelButton: true, confirmButtonText: 'Ya, hapus', cancelButtonText: 'Batal', confirmButtonColor: '#dc2626' })).isConfirmed
-            : window.confirm('Hapus agenda ini? Riwayatnya tetap dicatat di audit log.');
-        if (!confirmed) return;
-
+        if (!event?.can_delete || state.mutating) return;
+        mutationBusy(true);
         try {
+            const confirmed = window.Swal
+                ? (await window.Swal.fire({ title: 'Hapus agenda?', text: 'Riwayat penghapusan tetap dicatat di audit log.', icon: 'warning', showCancelButton: true, confirmButtonText: 'Ya, hapus', cancelButtonText: 'Batal', confirmButtonColor: '#dc2626' })).isConfirmed
+                : window.confirm('Hapus agenda ini? Riwayatnya tetap dicatat di audit log.');
+            if (!confirmed) return;
+
             const url = routeTemplate(root.dataset.updateTemplate, event.id);
             const data = await api(url, 'DELETE', { version: event.version });
-            closeDetail();
+            closeDetail(true);
             await clearCacheAndReload();
             notify(data.message, 'success');
         } catch (error) {
             showError(els.detailError, error.message);
+        } finally {
+            mutationBusy(false);
         }
     }
 
     async function api(url, method, payload) {
-        const response = await fetch(url, {
-            method,
-            credentials: 'same-origin',
-            headers: {
-                Accept: 'application/json',
-                'Content-Type': 'application/json',
-                'X-CSRF-TOKEN': csrf,
-                'X-Requested-With': 'XMLHttpRequest',
-            },
-            body: JSON.stringify(payload),
-        });
-        const data = await response.json().catch(() => ({}));
-        if (!response.ok) {
-            const validation = data.errors ? Object.values(data.errors).flat()[0] : null;
-            throw new Error(validation || data.message || 'Permintaan tidak dapat diproses.');
+        try {
+            return await requestJson(url, {
+                method,
+                headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrf },
+                body: JSON.stringify(payload),
+            });
+        } catch (error) {
+            if (!error.status || error.status >= 500) {
+                error.message = 'Perubahan belum terkonfirmasi. Muat ulang kalender dan periksa agenda sebelum mengirim ulang. ' + error.message;
+            }
+            throw error;
         }
-        return data;
     }
 
     function routeTemplate(template, id, placeholder = '__EVENT__') {
@@ -994,6 +1068,21 @@
             document.body.classList.remove('calendar-fullscreen-fallback');
             restoreBodyScroll();
             syncFullscreenLabel();
+        }
+    });
+
+    window.addEventListener('pagehide', () => {
+        ['controller', 'journeyController', 'prSearchController'].forEach(cancelRead);
+        window.clearTimeout(state.prSearchTimer);
+    });
+    window.addEventListener('pageshow', (event) => {
+        if (event.persisted) {
+            state.journeyCache.clear();
+            state.prSearchCache.clear();
+            state.cache.clear();
+            loadEvents(true);
+            if (!els.prFinderModal.hidden) schedulePrSearch(true);
+            if (!els.journey.hidden) loadJourney();
         }
     });
 

@@ -59,11 +59,12 @@ class CollaborationCalendarController extends Controller
             'portfolio' => ['nullable', 'string', 'max:100'],
             'receiver_id' => ['nullable', 'integer', Rule::exists('users', 'id')->where('is_active', true)],
             'date_from' => ['nullable', 'date_format:Y-m-d'],
-            'date_to' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:date_from'],
+            'date_to' => ['nullable', 'date_format:Y-m-d', Rule::when($request->filled('date_from'), 'after_or_equal:date_from')],
         ]);
 
         $term = trim((string) ($validated['q'] ?? ''));
         abort_if($term !== '' && mb_strlen($term) < 2, 422, 'Ketik minimal 2 karakter untuk mencari PR.');
+        $literal = str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $term);
 
         $rows = Ppbj::query()
             ->select([
@@ -76,17 +77,14 @@ class CollaborationCalendarController extends Controller
                 'createdBy:id,name,department',
                 'generalRegisteredBy:id,name,department',
             ])
-            ->when($term !== '', function (Builder $query) use ($term) {
-                $like = '%'.addcslashes($term, '%_\\').'%';
+            ->when($term !== '', function (Builder $query) use ($literal) {
+                $like = '%'.$literal.'%';
 
                 $query->where(function (Builder $search) use ($like) {
-                    $search->where('ppbj_no', 'like', $like)
-                        ->orWhere('uraian', 'like', $like)
-                        ->orWhere('buyer', 'like', $like)
-                        ->orWhere('penyedia_eksternal', 'like', $like)
-                        ->orWhere('pemenang', 'like', $like)
-                        ->orWhere('general_registration_number', 'like', $like)
-                        ->orWhereHas('generalRegisteredBy', fn (Builder $receiver) => $receiver->where('name', 'like', $like));
+                    foreach (['ppbj_no', 'uraian', 'buyer', 'penyedia_eksternal', 'pemenang', 'general_registration_number'] as $column) {
+                        $search->orWhereRaw($column." LIKE ? ESCAPE '!'", [$like]);
+                    }
+                    $search->orWhereHas('generalRegisteredBy', fn (Builder $receiver) => $receiver->whereRaw("name LIKE ? ESCAPE '!'", [$like]));
                 });
             })
             ->when(filled($validated['portfolio'] ?? null), fn (Builder $query) => $query->where('portofolio', $validated['portfolio']))
@@ -96,10 +94,10 @@ class CollaborationCalendarController extends Controller
             ->when(
                 $term !== '',
                 fn (Builder $query) => $query
-                    ->orderByRaw('CASE WHEN ppbj_no = ? THEN 0 WHEN ppbj_no LIKE ? THEN 1 WHEN uraian LIKE ? THEN 2 ELSE 3 END', [
+                    ->orderByRaw("CASE WHEN ppbj_no = ? THEN 0 WHEN ppbj_no LIKE ? ESCAPE '!' THEN 1 WHEN uraian LIKE ? ESCAPE '!' THEN 2 ELSE 3 END", [
                         $term,
-                        addcslashes($term, '%_\\').'%',
-                        addcslashes($term, '%_\\').'%',
+                        $literal.'%',
+                        $literal.'%',
                     ])
                     ->latest('id'),
                 fn (Builder $query) => $query->latest('tgl_ppbj')->latest('id')
@@ -132,7 +130,7 @@ class CollaborationCalendarController extends Controller
                 'has_filters' => $term !== '' || filled($validated['portfolio'] ?? null) || filled($validated['receiver_id'] ?? null)
                     || filled($validated['date_from'] ?? null) || filled($validated['date_to'] ?? null),
             ],
-        ]);
+        ])->header('Cache-Control', 'private, no-store');
     }
 
     public function events(Request $request): JsonResponse
@@ -195,7 +193,7 @@ class CollaborationCalendarController extends Controller
                 'critical' => $events->where('priority', 'critical')->count(),
                 'generated_at' => now()->toIso8601String(),
             ],
-        ]);
+        ])->header('Cache-Control', 'private, no-store');
     }
 
     public function journey(Request $request, Ppbj $ppbj): JsonResponse
@@ -268,7 +266,7 @@ class CollaborationCalendarController extends Controller
             ])->values(),
             'audit' => $audits,
             'management_url' => $this->ppbjUrl($ppbj, $request->user()),
-        ]);
+        ])->header('Cache-Control', 'private, no-store');
     }
 
     public function store(Request $request): JsonResponse

@@ -221,26 +221,26 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
     Route::prefix('collaboration-calendar')->name('collaboration-calendar.')->group(function () {
         Route::get('/', [CollaborationCalendarController::class, 'index'])->name('index');
         Route::get('/events', [CollaborationCalendarController::class, 'events'])
-            ->middleware('throttle:90,1')
+            ->middleware('throttle:90,1,calendar-events:')
             ->name('events');
         Route::get('/ppbj-search', [CollaborationCalendarController::class, 'searchPpbj'])
-            ->middleware('throttle:60,1')
+            ->middleware('throttle:60,1,calendar-search:')
             ->name('ppbj-search');
         Route::get('/journey/{ppbj}', [CollaborationCalendarController::class, 'journey'])
             ->whereNumber('ppbj')
-            ->middleware('throttle:60,1')
+            ->middleware('throttle:60,1,calendar-journey:')
             ->name('journey');
         Route::post('/events', [CollaborationCalendarController::class, 'store'])
-            ->middleware('throttle:20,1')
+            ->middleware('throttle:20,1,calendar-store:')
             ->name('store');
         Route::patch('/events/{event}', [CollaborationCalendarController::class, 'update'])
-            ->middleware('throttle:30,1')
+            ->middleware('throttle:30,1,calendar-update:')
             ->name('update');
         Route::patch('/events/{event}/status', [CollaborationCalendarController::class, 'updateStatus'])
-            ->middleware('throttle:40,1')
+            ->middleware('throttle:40,1,calendar-status:')
             ->name('status');
         Route::delete('/events/{event}', [CollaborationCalendarController::class, 'destroy'])
-            ->middleware('throttle:20,1')
+            ->middleware('throttle:20,1,calendar-delete:')
             ->name('destroy');
     });
 
