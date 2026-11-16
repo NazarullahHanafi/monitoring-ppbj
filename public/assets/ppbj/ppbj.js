@@ -862,12 +862,6 @@
             const errPpbjNo = document.getElementById('err_ppbj_no');
             const hintPpbjNo = document.getElementById('hint_ppbj_no');
 
-            // master modal
-            const masterModal = document.getElementById('masterModal');
-            const masterTitle = document.getElementById('masterTitle');
-            const masterInput = document.getElementById('masterInput');
-            const masterList = document.getElementById('masterList');
-
             // data server
             window.ppbjData = ppbjPageConfig.ppbjData || {};
             let uploadArchiveAfterSave = false;
@@ -951,16 +945,6 @@
                 const id = Number(ppbjIdInput?.value || 0);
                 if (id) await window.openPpbjArchiveList(window.ppbjData?.[id]);
                 return false;
-            };
-
-            // ===== MASTER CONFIG =====
-            let currentMasterType = null;
-
-            const masterLabel = {
-                buyer: 'Buyer',
-                portofolio: 'Portofolio',
-                metode_pengadaan: 'Metode Pengadaan',
-                penyedia_eksternal: 'Penyedia Eksternal',
             };
 
             // ===== UTILITY FUNCTIONS =====
@@ -2348,183 +2332,7 @@
                 }
             };
 
-            // =========================
-            // MASTER CRUD
-            // =========================
-            window.openMaster = function (type) {
-                currentMasterType = type;
-                masterTitle.innerText = `Kelola Master ${masterLabel[type] ?? type}`;
-                masterInput.value = '';
-                masterModal.classList.remove('hidden');
-                masterModal.classList.add('flex');
-                loadMaster();
-            };
-
-            window.closeMaster = function () {
-                if (masterModal) {
-                    masterModal.classList.add('hidden');
-                    masterModal.classList.remove('flex');
-                }
-            };
-
-            function loadMaster() {
-                fetch(`/master/${currentMasterType}`, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
-                    .then(r => r.json())
-                    .then(items => {
-                        masterList.innerHTML = items.map(i => `
-                                                                                    <div class="flex items-center gap-2 border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 rounded-xl p-2">
-                                                                                        <input class="border border-gray-300 dark:border-gray-600 rounded-lg px-2 py-1.5 w-full bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-200"
-                                                                                            value="${escapeHtml(i.nama)}"
-                                                                                            onkeydown="if(event.key==='Enter'){event.preventDefault();updateMaster(${i.id}, this.value)}">
-                                                                                        <button type="button"
-                                                                                            class="bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-sm font-semibold hover:bg-emerald-700 transition"
-                                                                                            onclick="updateMaster(${i.id}, this.previousElementSibling.value)">Simpan</button>
-                                                                                        <button type="button"
-                                                                                            class="bg-red-600 text-white px-3 py-1.5 rounded-lg text-sm font-semibold hover:bg-red-700 transition"
-                                                                                            onclick="deleteMaster(${i.id})">Hapus</button>
-                                                                                    </div>
-                                                                                `).join('');
-                    });
-            }
-
-            window.addMaster = function () {
-                const nama = masterInput.value.trim();
-                if (!nama) return;
-
-                fetch(`/master/${currentMasterType}`, {
-                    method: 'POST',
-                    headers: {
-                        'X-CSRF-TOKEN': ppbjCsrfToken,
-                        'Content-Type': 'application/json',
-                        'X-Requested-With': 'XMLHttpRequest'
-                    },
-                    body: JSON.stringify({ nama })
-                })
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.message === 'Berhasil ditambahkan') {
-                            const select = document.getElementById(currentMasterType);
-                            const newOption = document.createElement("option");
-                            newOption.value = escapeHtml(data.item.nama);
-                            newOption.textContent = escapeHtml(data.item.nama);
-                            select.appendChild(newOption);
-                            select.value = newOption.value;
-
-                            toastErr('Sukses', 'Data berhasil ditambahkan');
-                            closeMaster();
-                        } else {
-                            toastErr('Gagal', 'Data tidak berhasil ditambahkan');
-                        }
-                    })
-                    .catch(() => toastErr('Error', 'Terjadi kesalahan saat mengirim data'));
-            };
-
-            window.updateMaster = function (id, nama) {
-                if (!nama || nama.trim() === '') {
-                    toastErr('Gagal', 'Nama tidak boleh kosong');
-                    return;
-                }
-
-                fetch(`/master/${currentMasterType}/${id}`, {
-                    method: 'PUT',
-                    headers: {
-                        'X-CSRF-TOKEN': ppbjCsrfToken,
-                        'Content-Type': 'application/json',
-                        'X-Requested-With': 'XMLHttpRequest'
-                    },
-                    body: JSON.stringify({ nama: nama.trim() })
-                })
-                    .then(response => {
-                        if (!response.ok) {
-                            return response.json().then(err => Promise.reject(err));
-                        }
-                        return response.json();
-                    })
-                    .then(data => {
-                        if (data.message) {
-                            toastErr('Sukses', data.message);
-                            refreshDropdown(currentMasterType);
-                            closeMaster();
-                        } else {
-                            toastErr('Gagal', data.message || 'Data tidak berhasil diperbarui');
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Error:', error);
-                        let message = 'Terjadi kesalahan saat mengupdate data';
-                        if (error.errors) {
-                            message = Object.values(error.errors).flat().join(', ');
-                        } else if (error.message) {
-                            message = error.message;
-                        }
-                        toastErr('Error', message);
-                    });
-            };
-
-            window.deleteMaster = function (id) {
-                Swal.fire({
-                    title: 'Apakah Anda yakin?',
-                    text: "Data yang dihapus tidak bisa dipulihkan!",
-                    icon: 'warning',
-                    showCancelButton: true,
-                    confirmButtonColor: '#3085d6',
-                    cancelButtonColor: '#d33',
-                    confirmButtonText: 'Ya, hapus!',
-                    cancelButtonText: 'Batal',
-                }).then((result) => {
-                    if (result.isConfirmed) {
-                        fetch(`/master/${currentMasterType}/${id}`, {
-                            method: 'DELETE',
-                            headers: {
-                                'X-CSRF-TOKEN': ppbjCsrfToken,
-                                'X-Requested-With': 'XMLHttpRequest'
-                            }
-                        })
-                            .then(response => {
-                                if (!response.ok) {
-                                    return response.json().then(err => Promise.reject(err));
-                                }
-                                return response.json();
-                            })
-                            .then(data => {
-                                if (data.message) {
-                                    toastErr('Sukses', data.message);
-                                    closeMaster();
-                                    refreshDropdown(currentMasterType);
-                                } else {
-                                    toastErr('Gagal', data.message || 'Terjadi kesalahan saat menghapus data');
-                                }
-                            })
-                            .catch(error => {
-                                console.error('Error:', error);
-                                const message = error.message || 'Terjadi kesalahan saat menghapus data';
-                                toastErr('Error', message);
-                            });
-                    }
-                });
-            };
-
-            function refreshDropdown(type) {
-                fetch(`/master/${type}`, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
-                    .then(r => r.json())
-                    .then(items => {
-                        const select = document.getElementById(type);
-                        if (!select) return;
-
-                        const currentValue = select.value;
-                        select.innerHTML = `<option value="">-- pilih --</option>` +
-                            items.map(i => `<option value="${escapeHtml(i.nama)}">${escapeHtml(i.nama)}</option>`).join('');
-                        select.value = currentValue;
-
-                        setTimeout(() => {
-                            initSelect2Modal();
-                            if (window.jQuery) $(`#${type}`).val(currentValue).trigger('change');
-                        }, 100);
-                    })
-                    .catch(err => {
-                        console.error('Error refreshing dropdown:', err);
-                    });
-            }
+            // Master modal actions are loaded from master-data.js.
 
         })();
 

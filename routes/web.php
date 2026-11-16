@@ -369,10 +369,10 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
             Route::get('/meeting/excel', [CommandCenterController::class, 'meetingExcel'])->middleware('throttle:10,1')->name('meeting.excel');
         });
 
-        Route::post('/master/{type}', [MasterDataController::class, 'addMaster'])->middleware('throttle:20,1');
-        Route::get('/master/{type}', [MasterDataController::class, 'index']);
-        Route::put('/master/{type}/{id}', [MasterDataController::class, 'update'])->middleware('throttle:20,1');
-        Route::delete('/master/{type}/{id}', [MasterDataController::class, 'destroy'])->middleware('throttle:10,1');
+        Route::post('/master/{type}', [MasterDataController::class, 'addMaster'])->middleware('throttle:20,1,master-store:')->name('master-data.store');
+        Route::get('/master/{type}', [MasterDataController::class, 'index'])->middleware('throttle:60,1,master-read:')->name('master-data.index');
+        Route::put('/master/{type}/{id}', [MasterDataController::class, 'update'])->whereNumber('id')->middleware('throttle:20,1,master-update:')->name('master-data.update');
+        Route::delete('/master/{type}/{id}', [MasterDataController::class, 'destroy'])->whereNumber('id')->middleware('throttle:10,1,master-delete:')->name('master-data.destroy');
 
         // ==== Approval PR Receipt ====
         Route::get('/approval/pr-receipts', [PrReceiptApprovalController::class, 'index'])

@@ -931,6 +931,7 @@
                     onclick="addMaster()">Tambah</button>
             </div>
 
+            <p id="masterStatus" role="status" aria-live="polite"></p>
             <div id="masterList" class="space-y-2 overflow-y-auto" style="max-height: 60vh;"></div>
         </div>
     </div>
@@ -1137,6 +1138,8 @@
             'preflightUrl' => route('ppbj.preflight'),
             'collaborationBaseUrl' => url('/ppbj-collaboration'),
             'currentUserId' => auth()->id(),
+            'masterBaseUrl' => url('/master'),
+            'masterNameLimits' => \App\Http\Controllers\MasterDataController::NAME_LIMITS,
             // Internal presentation keys are not document fields for the detail/edit popup.
             'ppbjData' => $ppbjJsonData->map(fn (array $data) => \Illuminate\Support\Arr::except($data, [
                 'sla_outcome_tone', 'status_tone', 'contract_status_tone', 'contract_end_short_label',
@@ -1174,6 +1177,7 @@
         };
     </script>
     <script src="{{ asset('assets/ppbj/ppbj.js') }}?v={{ filemtime(public_path('assets/ppbj/ppbj.js')) }}" defer></script>
+    <script src="{{ asset('assets/ppbj/master-data.js') }}?v={{ filemtime(public_path('assets/ppbj/master-data.js')) }}" defer></script>
 
 @endpush
 
