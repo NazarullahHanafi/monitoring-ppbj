@@ -5,9 +5,10 @@ namespace App\Http\Controllers;
 use App\Models\Ppbj;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 class PpbjCollaborationController extends Controller
 {
@@ -34,26 +35,28 @@ class PpbjCollaborationController extends Controller
             ->values()
             ->map(fn ($note) => $this->presentNote($note, $userId, (string) $request->user()->role));
 
-        $users = Cache::remember('ppbj_collaboration:mention_users:v1', 300, fn () =>
-            DB::table('users')
-                ->where('is_active', true)
-                ->orderBy('department')
-                ->orderBy('name')
-                ->get(['id', 'name', 'department', 'role'])
-                ->map(fn ($user) => [
-                    'id' => (int) $user->id,
-                    'name' => $user->name,
-                    'department' => ucfirst((string) ($user->department ?: '-')),
-                    'role' => ucfirst((string) ($user->role ?: '-')),
-                ])
-                ->all()
+        $users = Cache::remember('ppbj_collaboration:mention_users:v1', 300, fn () => DB::table('users')
+            ->where('is_active', true)
+            ->orderBy('department')
+            ->orderBy('name')
+            ->get(['id', 'name', 'department', 'role'])
+            ->map(fn ($user) => [
+                'id' => (int) $user->id,
+                'name' => $user->name,
+                'department' => ucfirst((string) ($user->department ?: '-')),
+                'role' => ucfirst((string) ($user->role ?: '-')),
+            ])
+            ->all()
         );
+
+        $totalNotes = $notes->count() < 50 ? $notes->count() : DB::table('ppbj_collaboration_notes')->where('ppbj_id', $ppbj->id)->count();
 
         return response()->json([
             'ppbj' => ['id' => $ppbj->id, 'number' => $ppbj->ppbj_no, 'description' => $ppbj->uraian],
             'notes' => $notes,
             'users' => $users,
-        ]);
+            'total_notes' => $totalNotes,
+        ])->header('Cache-Control', 'private, no-store');
     }
 
     public function store(Request $request, Ppbj $ppbj): JsonResponse
@@ -61,18 +64,12 @@ class PpbjCollaborationController extends Controller
         $validated = $request->validate([
             'body' => ['required', 'string', 'min:2', 'max:2000'],
             'mentions' => ['nullable', 'array', 'max:20'],
-            'mentions.*' => ['integer', 'distinct', Rule::exists('users', 'id')->where(fn ($query) => $query->where('is_active', true))],
+            'mentions.*' => ['required', 'integer', 'distinct'],
         ]);
 
         $actor = $request->user();
-        $mentionIds = collect($validated['mentions'] ?? [])
-            ->map(fn ($id) => (int) $id)
-            ->reject(fn ($id) => $id === (int) $actor->id)
-            ->unique()
-            ->values();
-        $mentionUsers = $mentionIds->isEmpty()
-            ? collect()
-            : DB::table('users')->whereIn('id', $mentionIds)->get(['id', 'name']);
+        $mentionUsers = $this->resolveMentionUsers($validated['mentions'] ?? [], (int) $actor->id);
+        $mentionIds = $mentionUsers->pluck('id')->map(fn ($id) => (int) $id)->values();
         $mentions = $mentionUsers->map(fn ($user) => ['id' => (int) $user->id, 'name' => $user->name])->values()->all();
 
         $noteId = DB::transaction(function () use ($ppbj, $actor, $validated, $mentionIds, $mentions) {
@@ -111,7 +108,7 @@ class PpbjCollaborationController extends Controller
                 'notes.author_department as department', 'notes.author_role as role',
             ]);
 
-        return response()->json(['message' => 'Catatan kolaborasi ditambahkan.', 'note' => $this->presentNote($note, (int) $actor->id, (string) $actor->role)], 201);
+        return response()->json(['message' => 'Catatan kolaborasi ditambahkan.', 'note' => $this->presentNote($note, (int) $actor->id, (string) $actor->role)], 201)->header('Cache-Control', 'private, no-store');
     }
 
     public function update(Request $request, int $note): JsonResponse
@@ -127,7 +124,7 @@ class PpbjCollaborationController extends Controller
             'updated_at' => now(),
         ]);
 
-        return response()->json(['message' => 'Catatan diperbarui.']);
+        return response()->json(['message' => 'Catatan diperbarui.'])->header('Cache-Control', 'private, no-store');
     }
 
     public function destroy(Request $request, int $note): JsonResponse
@@ -137,7 +134,7 @@ class PpbjCollaborationController extends Controller
         $this->authorizeMutation($request, (int) $row->user_id);
         DB::table('ppbj_collaboration_notes')->where('id', $note)->delete();
 
-        return response()->json(['message' => 'Catatan dihapus.']);
+        return response()->json(['message' => 'Catatan dihapus.'])->header('Cache-Control', 'private, no-store');
     }
 
     public function mentions(Request $request): JsonResponse
@@ -154,13 +151,26 @@ class PpbjCollaborationController extends Controller
                 'ppbj.ppbj_no', 'ppbj.uraian', 'note.author_name as user_name',
             ]);
 
-        return response()->json(['count' => $rows->count(), 'mentions' => $rows]);
+        return response()->json(['count' => $rows->count(), 'mentions' => $rows])->header('Cache-Control', 'private, no-store');
     }
 
     private function authorizeMutation(Request $request, int $authorId): void
     {
         $user = $request->user();
         abort_unless((int) $user->id === $authorId || strtolower((string) $user->role) === 'superadmin', 403);
+    }
+
+    private function resolveMentionUsers(array $ids, int $actorId): Collection
+    {
+        $requestedIds = collect($ids)->map(fn ($id) => (int) $id)->unique()->values();
+        $activeUsers = $requestedIds->isEmpty()
+            ? collect()
+            : DB::table('users')->where('is_active', true)->whereIn('id', $requestedIds)->get(['id', 'name']);
+        if ($activeUsers->count() !== $requestedIds->count()) {
+            throw ValidationException::withMessages(['mentions' => 'Ada user mention yang tidak tersedia atau sudah nonaktif. Muat ulang daftar user.']);
+        }
+
+        return $activeUsers->reject(fn ($user) => (int) $user->id === $actorId)->values();
     }
 
     private function presentNote(object $note, int $viewerId, string $viewerRole = ''): array

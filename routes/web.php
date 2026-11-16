@@ -258,15 +258,15 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
     // sehingga tidak menambah polling maupun beban pada halaman utama.
     Route::prefix('ppbj-collaboration')->name('ppbj-collaboration.')->group(function () {
         Route::get('/mentions', [PpbjCollaborationController::class, 'mentions'])
-            ->middleware('throttle:60,1')->name('mentions');
+            ->middleware('throttle:60,1,ppbj-notes-mentions:')->name('mentions');
         Route::get('/{ppbj}', [PpbjCollaborationController::class, 'index'])
-            ->whereNumber('ppbj')->middleware('throttle:60,1')->name('index');
+            ->whereNumber('ppbj')->middleware('throttle:60,1,ppbj-notes-read:')->name('index');
         Route::post('/{ppbj}', [PpbjCollaborationController::class, 'store'])
-            ->whereNumber('ppbj')->middleware('throttle:30,1')->name('store');
+            ->whereNumber('ppbj')->middleware('throttle:30,1,ppbj-notes-store:')->name('store');
         Route::patch('/notes/{note}', [PpbjCollaborationController::class, 'update'])
-            ->whereNumber('note')->middleware('throttle:30,1')->name('update');
+            ->whereNumber('note')->middleware('throttle:30,1,ppbj-notes-update:')->name('update');
         Route::delete('/notes/{note}', [PpbjCollaborationController::class, 'destroy'])
-            ->whereNumber('note')->middleware('throttle:20,1')->name('destroy');
+            ->whereNumber('note')->middleware('throttle:20,1,ppbj-notes-delete:')->name('destroy');
     });
 
     Route::middleware('owner')->group(function () {

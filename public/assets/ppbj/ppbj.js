@@ -2549,6 +2549,65 @@
             let activePpbjId = null;
             let availableUsers = [];
             let selectedMentions = new Map();
+            let notesController = null, inboxController = null;
+            let notesLoaded = false, noteMutation = false;
+            let currentNotes = [], totalNotes = 0;
+            const drafts = new Map();
+
+            async function collaborationRequest(url, options = {}, controller = new AbortController()) {
+                let timedOut = false, onAbort;
+                const cancellation = new Promise((_, reject) => {
+                    onAbort = () => reject(timedOut ? new Error('Koneksi lambat. Silakan coba muat ulang daftar.') : new DOMException('Dibatalkan', 'AbortError'));
+                    controller.signal.addEventListener('abort', onAbort, { once: true });
+                    if (controller.signal.aborted) onAbort();
+                });
+                const timer = setTimeout(() => { timedOut = true; controller.abort(); }, 30000);
+                try {
+                    return await Promise.race([cancellation, (async () => {
+                        const response = await fetch(url, {
+                            credentials: 'same-origin', cache: 'no-store', ...options,
+                            headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest', ...options.headers },
+                            signal: controller.signal,
+                        });
+                        const data = await response.json().catch(() => null);
+                        if (!response.ok) {
+                            const messages = {401: 'Sesi berakhir. Silakan masuk kembali.', 419: 'Sesi formulir berakhir. Muat ulang halaman.', 403: 'Anda tidak memiliki izin untuk tindakan ini.', 429: 'Permintaan terlalu cepat. Tunggu sebentar lalu coba lagi.'};
+                            const error = new Error(messages[response.status] || Object.values(data?.errors || {}).flat()[0] || data?.message || 'Permintaan tidak dapat diproses.');
+                            error.status = response.status;
+                            throw error;
+                        }
+                        if (!data || typeof data !== 'object') throw new Error('Respons server belum lengkap.');
+                        return data;
+                    })()]);
+                } catch (error) {
+                    if (options.method && (!error.status || error.status >= 500)) {
+                        error.message = 'Perubahan belum terkonfirmasi. Periksa catatan sebelum mengirim ulang. ' + error.message;
+                    }
+                    throw error;
+                } finally {
+                    clearTimeout(timer);
+                    controller.signal.removeEventListener('abort', onAbort);
+                }
+            }
+
+            function rememberDraft() {
+                if (!activePpbjId || !noteBody) return;
+                drafts.delete(activePpbjId);
+                if (noteBody.value || selectedMentions.size) drafts.set(activePpbjId, { body: noteBody.value, mentions: new Map(selectedMentions) });
+                while (drafts.size > 20) drafts.delete(drafts.keys().next().value);
+            }
+
+            function mutationBusy(busy) {
+                noteMutation = busy;
+                notesModal?.querySelectorAll('button, textarea, input').forEach(control => { control.disabled = busy; });
+                if (noteSubmit) noteSubmit.disabled = busy || !notesLoaded;
+                notesForm?.setAttribute('aria-busy', String(busy));
+            }
+
+            function updateNoteCount(id) {
+                const count = document.getElementById(`ppbjNoteCount_${id}`);
+                if (count) count.textContent = totalNotes;
+            }
 
             const escape = (value) => String(value ?? '')
                 .replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
@@ -2696,110 +2755,168 @@
             }
 
             window.openPpbjNotes = async function (ppbjId) {
+                if (noteMutation || !Number.isSafeInteger(Number(ppbjId)) || Number(ppbjId) < 1) return;
+                rememberDraft();
+                notesController?.abort(); notesController = null;
                 activePpbjId = Number(ppbjId);
-                selectedMentions.clear();
+                const draft = drafts.get(activePpbjId);
+                noteBody.value = draft?.body || '';
+                selectedMentions = new Map(draft?.mentions || []);
+                mentionSearch.value = '';
+                mentionPicker?.classList.add('hidden');
+                document.getElementById('ppbjNoteCounter').textContent = `${noteBody.value.length}/2000`;
+                renderMentionChips();
                 notesModal.classList.remove('hidden'); notesModal.classList.add('flex');
-                notesContent.classList.add('hidden'); notesContent.classList.remove('flex'); notesLoading.classList.remove('hidden');
                 document.body.style.overflow = 'hidden';
-                try {
-                    const response = await fetch(`${config.collaborationBaseUrl}/${activePpbjId}`, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
-                    if (!response.ok) throw new Error('Catatan tidak dapat dimuat.');
-                    const data = await response.json();
-                    availableUsers = data.users || [];
-                    document.getElementById('ppbjNotesTitle').textContent = data.ppbj?.number || 'Catatan & Mention';
-                    document.getElementById('ppbjNotesSubtitle').textContent = data.ppbj?.description || 'Kolaborasi lintas role';
-                    renderNotes(data.notes || []); renderMentionUsers(); renderMentionChips();
-                    notesLoading.classList.add('hidden'); notesContent.classList.remove('hidden'); notesContent.classList.add('flex');
-                    document.getElementById(`ppbjNoteUnread_${activePpbjId}`)?.remove();
-                    const badge = document.getElementById('ppbjMentionHeaderBadge');
-                    if (badge) {
-                        const reduced = Math.max(0, Number(badge.textContent || 0) - Number(window.ppbjData?.[activePpbjId]?.collaboration_unread_count || 0));
-                        badge.textContent = reduced; badge.classList.toggle('hidden', reduced === 0);
-                    }
-                } catch (error) {
-                    notesLoading.textContent = error.message;
-                }
+                await loadNotes(activePpbjId);
             };
 
+            async function loadNotes(id) {
+                notesController?.abort();
+                const controller = notesController = new AbortController();
+                notesLoaded = false; mutationBusy(noteMutation);
+                notesContent.classList.add('hidden'); notesContent.classList.remove('flex'); notesLoading.classList.remove('hidden');
+                notesLoading.textContent = 'Memuat percakapan...';
+                try {
+                    const data = await collaborationRequest(`${config.collaborationBaseUrl}/${id}`, {}, controller);
+                    if (notesController !== controller || activePpbjId !== id) return;
+                    if (Number(data.ppbj?.id) !== id || !Array.isArray(data.notes) || !Array.isArray(data.users)) throw new Error('Data catatan belum lengkap. Buka kembali panel ini.');
+                    availableUsers = data.users;
+                    currentNotes = data.notes;
+                    totalNotes = Number.isSafeInteger(data.total_notes) ? data.total_notes : data.notes.length;
+                    document.getElementById('ppbjNotesTitle').textContent = data.ppbj?.number || 'Catatan & Mention';
+                    document.getElementById('ppbjNotesSubtitle').textContent = data.ppbj?.description || 'Kolaborasi lintas role';
+                    renderNotes(currentNotes); renderMentionUsers(); renderMentionChips();
+                    notesLoading.classList.add('hidden'); notesContent.classList.remove('hidden'); notesContent.classList.add('flex');
+                    notesLoaded = true; updateNoteCount(id); mutationBusy(noteMutation);
+                    document.getElementById(`ppbjNoteUnread_${id}`)?.remove();
+                    const badge = document.getElementById('ppbjMentionHeaderBadge');
+                    if (badge) {
+                        const row = window.ppbjData?.[id];
+                        const reduced = Math.max(0, Number(badge.textContent || 0) - Number(row?.collaboration_unread_count || 0));
+                        badge.textContent = reduced; badge.classList.toggle('hidden', reduced === 0);
+                        if (row) row.collaboration_unread_count = 0;
+                    }
+                } catch (error) {
+                    if (notesController === controller && activePpbjId === id && error.name !== 'AbortError') notesLoading.textContent = error.message;
+                } finally {
+                    if (notesController === controller) notesController = null;
+                }
+            }
+
             window.closePpbjNotes = function () {
+                if (noteMutation) return;
+                rememberDraft();
+                notesController?.abort(); notesController = null;
+                activePpbjId = null; notesLoaded = false;
                 notesModal.classList.add('hidden'); notesModal.classList.remove('flex');
                 mentionPicker?.classList.add('hidden'); document.body.style.overflow = '';
             };
 
             async function refreshActiveNotes() {
                 if (!activePpbjId) return;
-                const response = await fetch(`${config.collaborationBaseUrl}/${activePpbjId}`, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
-                const data = await response.json(); renderNotes(data.notes || []);
-                const count = data.notes?.length || 0;
-                const el = document.getElementById(`ppbjNoteCount_${activePpbjId}`); if (el) el.textContent = count;
+                await loadNotes(activePpbjId);
             }
 
             notesForm?.addEventListener('submit', async (event) => {
                 event.preventDefault();
+                if (noteMutation || !notesLoaded) return;
                 const body = noteBody.value.trim();
                 if (body.length < 2 || !activePpbjId) return;
-                noteSubmit.disabled = true; noteSubmit.textContent = 'Mengirim...';
+                const id = activePpbjId;
+                mutationBusy(true); noteSubmit.textContent = 'Mengirim...';
                 try {
-                    const response = await fetch(`${config.collaborationBaseUrl}/${activePpbjId}`, {
-                        method: 'POST', headers: { 'X-CSRF-TOKEN': csrf, 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                    const data = await collaborationRequest(`${config.collaborationBaseUrl}/${id}`, {
+                        method: 'POST', headers: { 'X-CSRF-TOKEN': csrf, 'Content-Type': 'application/json' },
                         body: JSON.stringify({ body, mentions: [...selectedMentions.keys()] }),
                     });
-                    const data = await response.json();
-                    if (!response.ok) throw new Error(data.message || 'Catatan gagal dikirim.');
+                    if (!Number.isSafeInteger(data.note?.id) || typeof data.note.body !== 'string') throw new Error('Catatan belum terkonfirmasi. Buka kembali panel sebelum mengirim ulang.');
+                    currentNotes = [...currentNotes, data.note].slice(-50);
+                    totalNotes++; renderNotes(currentNotes); updateNoteCount(id);
                     noteBody.value = ''; selectedMentions.clear(); renderMentionChips(); renderMentionUsers();
+                    drafts.delete(id);
                     document.getElementById('ppbjNoteCounter').textContent = '0/2000';
-                    await refreshActiveNotes();
                 } catch (error) { await toast('error', 'Gagal mengirim', error.message); }
-                finally { noteSubmit.disabled = false; noteSubmit.textContent = 'Kirim Catatan'; }
+                finally { mutationBusy(false); noteSubmit.textContent = 'Kirim Catatan'; }
             });
 
             noteBody?.addEventListener('input', () => { document.getElementById('ppbjNoteCounter').textContent = `${noteBody.value.length}/2000`; });
             document.getElementById('ppbjMentionToggle')?.addEventListener('click', () => mentionPicker.classList.toggle('hidden'));
             mentionSearch?.addEventListener('input', () => renderMentionUsers(mentionSearch.value));
             mentionUsers?.addEventListener('click', (event) => {
+                if (noteMutation) return;
                 const button = event.target.closest('[data-user-id]'); if (!button) return;
                 const id = Number(button.dataset.userId); const user = availableUsers.find((item) => Number(item.id) === id);
                 if (!user) return;
+                if (!selectedMentions.has(id) && selectedMentions.size >= 20) { toast('info', 'Maksimal 20 user', 'Hapus salah satu mention sebelum menambah user lain.'); return; }
                 selectedMentions.has(id) ? selectedMentions.delete(id) : selectedMentions.set(id, user);
                 renderMentionUsers(mentionSearch.value); renderMentionChips();
             });
             mentionChips?.addEventListener('click', (event) => {
+                if (noteMutation) return;
                 const button = event.target.closest('[data-remove-mention]'); if (!button) return;
                 selectedMentions.delete(Number(button.dataset.removeMention)); renderMentionChips(); renderMentionUsers(mentionSearch.value);
             });
 
             window.editPpbjNote = async function (noteId) {
+                if (noteMutation || !notesLoaded || !currentNotes.some(note => note.id === Number(noteId) && note.can_manage)) return;
                 const article = document.querySelector(`[data-note-id="${noteId}"]`);
                 const current = article?.querySelector('.ppbj-note__body')?.textContent || '';
                 if (!window.Swal) return;
-                const answer = await Swal.fire({ title: 'Edit catatan', input: 'textarea', inputValue: current, showCancelButton: true, confirmButtonText: 'Simpan', inputAttributes: { maxlength: 2000 } });
-                if (!answer.isConfirmed || String(answer.value || '').trim().length < 2) return;
-                const response = await fetch(`${config.collaborationBaseUrl}/notes/${noteId}`, { method: 'PATCH', headers: { 'X-CSRF-TOKEN': csrf, 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }, body: JSON.stringify({ body: String(answer.value).trim() }) });
-                if (response.ok) await refreshActiveNotes(); else await toast('error', 'Gagal', 'Catatan tidak dapat diperbarui.');
+                mutationBusy(true);
+                try {
+                    const answer = await Swal.fire({ title: 'Edit catatan', input: 'textarea', inputValue: current, showCancelButton: true, confirmButtonText: 'Simpan', inputAttributes: { maxlength: 2000 } });
+                    if (!answer.isConfirmed || String(answer.value || '').trim().length < 2) return;
+                    await collaborationRequest(`${config.collaborationBaseUrl}/notes/${noteId}`, { method: 'PATCH', headers: { 'X-CSRF-TOKEN': csrf, 'Content-Type': 'application/json' }, body: JSON.stringify({ body: String(answer.value).trim() }) });
+                    await refreshActiveNotes();
+                } catch (error) { await toast('error', 'Catatan belum diperbarui', error.message); }
+                finally { mutationBusy(false); }
             };
 
             window.deletePpbjNote = async function (noteId) {
-                const answer = window.Swal ? await Swal.fire({ icon: 'warning', title: 'Hapus catatan?', text: 'Catatan dan status mention terkait akan dihapus.', showCancelButton: true, confirmButtonText: 'Hapus', confirmButtonColor: '#dc2626' }) : { isConfirmed: window.confirm('Hapus catatan?') };
-                if (!answer.isConfirmed) return;
-                const response = await fetch(`${config.collaborationBaseUrl}/notes/${noteId}`, { method: 'DELETE', headers: { 'X-CSRF-TOKEN': csrf, 'X-Requested-With': 'XMLHttpRequest' } });
-                if (response.ok) await refreshActiveNotes(); else await toast('error', 'Gagal', 'Catatan tidak dapat dihapus.');
+                if (noteMutation || !notesLoaded || !currentNotes.some(note => note.id === Number(noteId) && note.can_manage)) return;
+                mutationBusy(true);
+                try {
+                    const answer = window.Swal ? await Swal.fire({ icon: 'warning', title: 'Hapus catatan?', text: 'Catatan dan status mention terkait akan dihapus.', showCancelButton: true, confirmButtonText: 'Hapus', confirmButtonColor: '#dc2626' }) : { isConfirmed: false };
+                    if (!answer.isConfirmed) return;
+                    await collaborationRequest(`${config.collaborationBaseUrl}/notes/${noteId}`, { method: 'DELETE', headers: { 'X-CSRF-TOKEN': csrf } });
+                    await refreshActiveNotes();
+                } catch (error) { await toast('error', 'Catatan belum dihapus', error.message); }
+                finally { mutationBusy(false); }
             };
 
             window.openPpbjMentionInbox = async function () {
+                if (noteMutation) return;
+                inboxController?.abort();
+                const controller = inboxController = new AbortController();
                 mentionInboxModal.classList.remove('hidden'); mentionInboxModal.classList.add('flex'); document.body.style.overflow = 'hidden';
                 const list = document.getElementById('ppbjMentionInboxList');
                 list.innerHTML = '<div class="ppbj-notes-state">Memuat mention...</div>';
                 try {
-                    const response = await fetch(`${config.collaborationBaseUrl}/mentions`, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
-                    const data = await response.json();
+                    const data = await collaborationRequest(`${config.collaborationBaseUrl}/mentions`, {}, controller);
+                    if (inboxController !== controller) return;
+                    if (!Array.isArray(data.mentions)) throw new Error('Daftar mention belum lengkap.');
                     list.innerHTML = data.mentions?.length ? data.mentions.map((item) => `<button type="button" class="ppbj-inbox-item" data-open-ppbj-note="${item.ppbj_id}"><strong>${escape(item.ppbj_no)} · ${escape(item.user_name)}</strong><p>${escape(item.body)}</p><small>${escape(relativeDate(item.created_at))} · Buka percakapan</small></button>`).join('') : '<div class="ppbj-notes-state">Tidak ada mention baru. Semua sudah ditinjau.</div>';
-                } catch { list.innerHTML = '<div class="ppbj-notes-state">Mention tidak dapat dimuat.</div>'; }
+                } catch (error) {
+                    if (inboxController === controller && error.name !== 'AbortError') { list.replaceChildren(); const notice = document.createElement('div'); notice.className = 'ppbj-notes-state'; notice.textContent = error.message; list.append(notice); }
+                } finally { if (inboxController === controller) inboxController = null; }
             };
-            window.closePpbjMentionInbox = function () { mentionInboxModal.classList.add('hidden'); mentionInboxModal.classList.remove('flex'); document.body.style.overflow = ''; };
+            window.closePpbjMentionInbox = function () { inboxController?.abort(); inboxController = null; mentionInboxModal.classList.add('hidden'); mentionInboxModal.classList.remove('flex'); if (!activePpbjId) document.body.style.overflow = ''; };
             document.getElementById('ppbjMentionInboxList')?.addEventListener('click', (event) => {
                 const button = event.target.closest('[data-open-ppbj-note]'); if (!button) return;
                 closePpbjMentionInbox(); openPpbjNotes(Number(button.dataset.openPpbjNote));
             });
             notesModal?.addEventListener('click', window.closePpbjNotes);
             mentionInboxModal?.addEventListener('click', window.closePpbjMentionInbox);
+            window.addEventListener('pagehide', () => {
+                rememberDraft();
+                notesController?.abort(); notesController = null;
+                inboxController?.abort(); inboxController = null;
+            });
+            window.addEventListener('pageshow', event => {
+                if (event.persisted && !noteMutation) {
+                    if (activePpbjId) loadNotes(activePpbjId);
+                    if (mentionInboxModal && !mentionInboxModal.classList.contains('hidden')) window.openPpbjMentionInbox();
+                }
+            });
         })();

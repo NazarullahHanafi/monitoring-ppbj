@@ -62,11 +62,13 @@ class AppServiceProvider extends ServiceProvider
         User::saved(function (): void {
             Cache::forget(\App\Services\VirtualOfficePresence::DIRECTORY_KEY);
             Cache::forget('chat:mention_users:v2');
+            Cache::forget('ppbj_collaboration:mention_users:v1');
         });
         User::deleted(function (): void {
             Cache::forget(\App\Services\VirtualOfficePresence::DIRECTORY_KEY);
             Cache::forget(\App\Services\VirtualOfficeHomes::KEY);
             Cache::forget('chat:mention_users:v2');
+            Cache::forget('ppbj_collaboration:mention_users:v1');
         });
         User::created(function (): void {
             Cache::forget(\App\Services\VirtualOfficeHomes::KEY);
