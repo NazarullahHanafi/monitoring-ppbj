@@ -73,6 +73,13 @@ class AppServiceProvider extends ServiceProvider
         User::created(function (): void {
             Cache::forget(\App\Services\VirtualOfficeHomes::KEY);
         });
+        $forgetInboxAssignees = static function (User $user): void {
+            $user->getConnection()->afterCommit(static function (): void {
+                Cache::forget(\App\Services\CollaborationActionInboxService::ASSIGNEES_KEY);
+            });
+        };
+        User::saved($forgetInboxAssignees);
+        User::deleted($forgetInboxAssignees);
         // ✅ Hapus presence saat user logout
         \Event::listen(Logout::class, function (Logout $event) {
             if ($event->user && isset($event->user->id)) {

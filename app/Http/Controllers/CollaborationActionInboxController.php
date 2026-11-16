@@ -9,6 +9,7 @@ use App\Models\Torpr;
 use App\Models\User;
 use App\Services\CollaborationActionInboxService;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -32,14 +33,17 @@ class CollaborationActionInboxController extends Controller
             'direction' => ['nullable', Rule::in(['inbox', 'outbox', 'mine', 'all'])],
             'status' => ['nullable', Rule::in(array_merge(['open'], self::STATUSES))],
             'priority' => ['nullable', Rule::in(self::PRIORITIES)],
+            'page' => ['nullable', 'integer', 'min:1', 'max:1000000'],
         ]);
 
         $department = strtolower((string) $user->department);
         $query = CollaborationHandover::query()
             ->visibleTo($user)
+            ->select(['id', 'public_id', 'ppbj_id', 'title', 'description', 'from_department', 'to_department',
+                'priority', 'status', 'due_at', 'checklist', 'last_note', 'version', 'created_by_user_id',
+                'assigned_to_user_id', 'created_at', 'updated_at'])
             ->with([
                 'creator:id,name,department', 'assignee:id,name,department',
-                'acknowledgedBy:id,name', 'completedBy:id,name',
                 'ppbj:id,ppbj_no,uraian,portofolio,buyer,total_sebelum_ppn,status_sla',
             ]);
 
@@ -49,6 +53,7 @@ class CollaborationActionInboxController extends Controller
             ->orderByRaw("CASE WHEN due_at IS NOT NULL AND due_at < ? AND status IN ('sent','acknowledged','in_progress','returned') THEN 0 ELSE 1 END", [now()])
             ->orderByRaw("CASE priority WHEN 'critical' THEN 0 WHEN 'high' THEN 1 ELSE 2 END")
             ->latest('updated_at')
+            ->orderByDesc('id')
             ->paginate(12)
             ->withQueryString();
 
@@ -61,12 +66,7 @@ class CollaborationActionInboxController extends Controller
             [$department, $user->id, now(), now()->subDays(30)]
         )->first();
 
-        $users = User::query()
-            ->where('is_active', true)
-            ->whereIn('department', self::DEPARTMENTS)
-            ->orderBy('department')
-            ->orderBy('name')
-            ->get(['id', 'name', 'department', 'role']);
+        $users = $radar->assignees();
 
         $workload = DB::table('collaboration_handovers as handovers')
             ->join('users', 'users.id', '=', 'handovers.assigned_to_user_id')
@@ -88,7 +88,7 @@ class CollaborationActionInboxController extends Controller
         ]);
     }
 
-    public function store(Request $request): RedirectResponse
+    public function store(Request $request): RedirectResponse|JsonResponse
     {
         $user = $this->authorizedUser($request);
         $from = strtolower((string) $user->department);
@@ -115,7 +115,7 @@ class CollaborationActionInboxController extends Controller
 
         $checklist = collect($validated['checklist_items'] ?? [])
             ->map(fn ($label) => trim((string) $label))
-            ->filter()
+            ->filter(fn ($label) => $label !== '')
             ->unique()
             ->values()
             ->map(fn ($label, $index) => ['key' => $index + 1, 'label' => $label, 'checked' => false])
@@ -125,6 +125,9 @@ class CollaborationActionInboxController extends Controller
             // Mengunci baris PR membuat pemeriksaan duplikat tetap aman saat dua
             // user mengirim serah terima yang sama hampir bersamaan.
             $ppbj = Ppbj::query()->lockForUpdate()->findOrFail($validated['ppbj_id']);
+            if (filled($validated['ppbj_no'] ?? null) && $validated['ppbj_no'] !== $ppbj->ppbj_no) {
+                throw ValidationException::withMessages(['ppbj_no' => 'Nomor dan referensi PR tidak cocok. Pilih ulang PR dari hasil pencarian.']);
+            }
             $duplicate = CollaborationHandover::query()
                 ->where('ppbj_id', $ppbj->id)
                 ->where('to_department', $to)
@@ -161,11 +164,10 @@ class CollaborationActionInboxController extends Controller
             return $handover;
         });
 
-        return redirect()->route('collaboration-inbox.index', ['direction' => 'outbox'])
-            ->with('success', "Serah terima {$handover->title} berhasil dikirim ke ".ucfirst($to).'.');
+        return $this->respond($request, "Serah terima {$handover->title} berhasil dikirim ke ".ucfirst($to).'.', ['direction' => 'outbox'], 201);
     }
 
-    public function updateStatus(Request $request, CollaborationHandover $handover): RedirectResponse
+    public function updateStatus(Request $request, CollaborationHandover $handover): RedirectResponse|JsonResponse
     {
         $user = $this->authorizedUser($request);
         $validated = $request->validate([
@@ -212,38 +214,48 @@ class CollaborationActionInboxController extends Controller
             $this->audit($current, $user, 'handover_'.$action, $this->actionDescription($action), ['note' => $note]);
         });
 
-        return back()->with('success', $this->actionDescription($action));
+        return $this->respond($request, $this->actionDescription($action));
     }
 
-    public function updateChecklist(Request $request, CollaborationHandover $handover): RedirectResponse
+    public function updateChecklist(Request $request, CollaborationHandover $handover): RedirectResponse|JsonResponse
     {
         $user = $this->authorizedUser($request);
         $validated = $request->validate([
             'version' => ['required', 'integer', 'min:1'],
-            'checked' => ['nullable', 'array'],
-            'checked.*' => ['integer', 'min:1'],
+            'checked' => ['nullable', 'array', 'max:8'],
+            'checked.*' => ['integer', 'min:1', 'distinct'],
         ]);
 
-        DB::transaction(function () use ($handover, $user, $validated) {
+        $changed = DB::transaction(function () use ($handover, $user, $validated) {
             $current = CollaborationHandover::query()->lockForUpdate()->findOrFail($handover->id);
+            $this->guardReceiver($current, $user);
             abort_unless((int) $current->version === (int) $validated['version'], 409, 'Checklist sudah diperbarui user lain. Muat ulang halaman.');
-            abort_unless($this->isReceiver($current, $user), 403);
             abort_if(in_array($current->status, ['completed', 'cancelled'], true), 422, 'Checklist tugas yang sudah ditutup tidak dapat diubah.');
 
             $checked = collect($validated['checked'] ?? [])->map(fn ($value) => (int) $value)->all();
-            $current->checklist = collect($current->checklist ?? [])->map(function ($item) use ($checked) {
+            $keys = collect($current->checklist ?? [])->pluck('key')->map(fn ($value) => (int) $value)->all();
+            if (array_diff($checked, $keys)) {
+                throw ValidationException::withMessages(['checked' => 'Checklist tidak dikenali. Muat ulang tugas sebelum menyimpan.']);
+            }
+            $next = collect($current->checklist ?? [])->map(function ($item) use ($checked) {
                 $item['checked'] = in_array((int) ($item['key'] ?? 0), $checked, true);
 
                 return $item;
             })->all();
+            if ($next === ($current->checklist ?? [])) {
+                return false;
+            }
+            $current->checklist = $next;
             $current->version++;
             $current->save();
             $this->audit($current, $user, 'handover_checklist_updated', 'Checklist serah terima diperbarui.', [
                 'progress' => $current->checklistProgress(),
             ]);
+
+            return true;
         });
 
-        return back()->with('success', 'Checklist serah terima berhasil diperbarui.');
+        return $this->respond($request, $changed ? 'Checklist serah terima berhasil diperbarui.' : 'Checklist tidak berubah.');
     }
 
     private function applyFilters(Builder $query, array $filters, User $user): void
@@ -269,11 +281,11 @@ class CollaborationActionInboxController extends Controller
         }
 
         if ($term !== '') {
-            $like = '%'.addcslashes($term, '%_\\').'%';
+            $like = '%'.str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $term).'%';
             $query->where(function (Builder $search) use ($like) {
-                $search->where('title', 'like', $like)
-                    ->orWhere('description', 'like', $like)
-                    ->orWhereHas('ppbj', fn (Builder $ppbj) => $ppbj->where('ppbj_no', 'like', $like)->orWhere('uraian', 'like', $like));
+                $search->whereRaw("title LIKE ? ESCAPE '!'", [$like])
+                    ->orWhereRaw("description LIKE ? ESCAPE '!'", [$like])
+                    ->orWhereHas('ppbj', fn (Builder $ppbj) => $ppbj->whereRaw("ppbj_no LIKE ? ESCAPE '!'", [$like])->orWhereRaw("uraian LIKE ? ESCAPE '!'", [$like]));
             });
         }
     }
@@ -302,10 +314,25 @@ class CollaborationActionInboxController extends Controller
         }
 
         if (in_array($action, $receiverActions, true)) {
-            abort_unless($this->isReceiver($handover, $user), 403);
+            $this->guardReceiver($handover, $user);
+        }
+    }
+
+    private function guardReceiver(CollaborationHandover $handover, User $user): void
+    {
+        abort_unless($this->isReceiver($handover, $user), 403);
+        abort_if($handover->assigned_to_user_id && (int) $handover->assigned_to_user_id !== (int) $user->id
+            && strtolower((string) $user->role) !== 'superadmin', 403, 'Tugas ini sudah ditugaskan kepada user lain.');
+    }
+
+    private function respond(Request $request, string $message, ?array $parameters = null, int $status = 200): RedirectResponse|JsonResponse
+    {
+        if ($request->expectsJson()) {
+            return response()->json(['success' => true, 'message' => $message,
+                'redirect_url' => route('collaboration-inbox.index', $parameters ?? [])], $status)->header('Cache-Control', 'private, no-store');
         }
 
-        abort_if($handover->assigned_to_user_id && $handover->assigned_to_user_id !== $user->id && strtolower((string) $user->role) !== 'superadmin' && in_array($action, $receiverActions, true), 403, 'Tugas ini sudah ditugaskan kepada user lain.');
+        return ($parameters === null ? back() : redirect()->route('collaboration-inbox.index', $parameters))->with('success', $message);
     }
 
     private function isReceiver(CollaborationHandover $handover, User $user): bool

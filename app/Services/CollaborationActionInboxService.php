@@ -10,7 +10,16 @@ use Illuminate\Support\Facades\Cache;
 
 class CollaborationActionInboxService
 {
+    public const ASSIGNEES_KEY = 'collaboration_action_inbox:assignees:v1';
+
     private const CACHE_SECONDS = 45;
+
+    public function assignees(): Collection
+    {
+        return Cache::remember(self::ASSIGNEES_KEY, 300, fn () => User::query()->where('is_active', true)
+            ->whereIn('department', ['umum', 'operasional'])->orderBy('department')->orderBy('name')->orderBy('id')
+            ->get(['id', 'name', 'department', 'role']));
+    }
 
     public function smartActions(User $user): Collection
     {

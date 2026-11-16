@@ -17,6 +17,7 @@
 
     <div id="collaborationInbox" class="ci-shell"
         data-search-url="{{ route('collaboration-calendar.ppbj-search') }}"
+        data-index-url="{{ route('collaboration-inbox.index') }}"
         data-department="{{ $department }}">
         <section class="ci-hero">
             <div class="ci-hero__copy">
@@ -81,7 +82,7 @@
                             $isReceiver = $handover->to_department === $department;
                             $isCreatorSide = (int) $handover->created_by_user_id === (int) auth()->id()
                                 || ($handover->from_department === $department && strtolower((string) auth()->user()->role) === 'superadmin');
-                            $isAssignedToOther = $handover->assigned_to_user_id && $handover->assigned_to_user_id !== auth()->id() && auth()->user()->role !== 'superadmin';
+                            $isAssignedToOther = $handover->assigned_to_user_id && (int) $handover->assigned_to_user_id !== (int) auth()->id() && strtolower((string) auth()->user()->role) !== 'superadmin';
                             $canWork = $isReceiver && !$isAssignedToOther && in_array($handover->status, $openStatuses, true);
                             $recordUrl = $department === 'umum'
                                 ? route('ppbj.index', ['search' => $handover->ppbj?->ppbj_no])
@@ -151,7 +152,7 @@
                                             <button type="button" class="ci-action ci-action--blue ci-note-action" data-action="resend" data-url="{{ route('collaboration-inbox.status', $handover) }}" data-version="{{ $handover->version }}">Kirim ulang</button>
                                         @endif
                                         @if($isCreatorSide && in_array($handover->status, ['sent','returned'], true))
-                                            <form method="POST" action="{{ route('collaboration-inbox.status', $handover) }}" onsubmit="return confirm('Batalkan serah terima ini?')">@csrf @method('PATCH')<input type="hidden" name="version" value="{{ $handover->version }}"><input type="hidden" name="action" value="cancel"><button class="ci-action ci-action--danger">Batalkan</button></form>
+                                            <form method="POST" action="{{ route('collaboration-inbox.status', $handover) }}" data-ci-confirm>@csrf @method('PATCH')<input type="hidden" name="version" value="{{ $handover->version }}"><input type="hidden" name="action" value="cancel"><button class="ci-action ci-action--danger">Batalkan</button></form>
                                         @endif
                                     </div>
                                 </footer>
@@ -197,14 +198,12 @@
                 </section>
             </aside>
         </div>
-    </div>
-
     <div id="ciCreateModal" class="ci-modal" hidden>
         <section class="ci-dialog" role="dialog" aria-modal="true" aria-labelledby="ciCreateTitle">
             <header><div><span>SERAH TERIMA LINTAS-ROLE</span><h2 id="ciCreateTitle">Kirim pekerjaan ke {{ ucfirst($targetDepartment) }}</h2><p>Pilih PR, jelaskan hasil yang diharapkan, lalu tetapkan bukti pemeriksaannya.</p></div><button type="button" id="ciCloseCreate" aria-label="Tutup">×</button></header>
             <form method="POST" action="{{ route('collaboration-inbox.store') }}" id="ciCreateForm">@csrf
                 <div class="ci-dialog__body">
-                    <div class="ci-field ci-field--wide"><label class="ci-field-label" for="ciPrSearch">Cari referensi PR</label><div class="ci-pr-search"><input id="ciPrSearch" autocomplete="off" placeholder="Nomor PR, uraian, buyer, vendor..."><i>⌕</i></div><small id="ciPrSearchHint">Ketik minimal 2 karakter. Pencarian berjalan saat Anda berhenti mengetik.</small><div id="ciPrResults" class="ci-pr-results" hidden></div><input type="hidden" name="ppbj_id" id="ciPpbjId"><input type="hidden" name="ppbj_no" id="ciPpbjNo"></div>
+                    <div class="ci-field ci-field--wide"><label class="ci-field-label" for="ciPrSearch">Cari referensi PR</label><div class="ci-pr-search"><input id="ciPrSearch" maxlength="120" autocomplete="off" placeholder="Nomor PR, uraian, buyer, vendor..."><i>⌕</i></div><small id="ciPrSearchHint">Ketik minimal 2 karakter. Pencarian berjalan saat Anda berhenti mengetik.</small><div id="ciPrResults" class="ci-pr-results" hidden></div><input type="hidden" name="ppbj_id" id="ciPpbjId"><input type="hidden" name="ppbj_no" id="ciPpbjNo"></div>
                     <div id="ciSelectedPr" class="ci-selected-pr" hidden><span>PR TERPILIH</span><strong id="ciSelectedPrNumber"></strong><p id="ciSelectedPrDescription"></p></div>
                     <label class="ci-field ci-field--wide"><span>Judul serah terima</span><input name="title" id="ciTitle" maxlength="140" required placeholder="Contoh: Review kelengkapan dokumen kontrak"></label>
                     <label class="ci-field ci-field--wide"><span>Hasil yang diharapkan</span><textarea name="description" maxlength="2000" rows="4" required placeholder="Jelaskan apa yang sudah dikerjakan, apa yang harus diperiksa, dan keputusan apa yang dibutuhkan."></textarea></label>
@@ -224,6 +223,7 @@
 
     <div id="ciNoteModal" class="ci-modal" hidden>
         <section class="ci-dialog ci-dialog--small" role="dialog" aria-modal="true"><header><div><span>TINDAK LANJUT</span><h2 id="ciNoteTitle">Tambahkan catatan</h2><p>Catatan membantu departemen lain memahami keputusan Anda.</p></div><button type="button" id="ciCloseNote">×</button></header><form method="POST" id="ciNoteForm">@csrf @method('PATCH')<input type="hidden" name="version" id="ciNoteVersion"><input type="hidden" name="action" id="ciNoteAction"><div class="ci-dialog__body"><label class="ci-field ci-field--wide"><span>Catatan</span><textarea name="note" rows="5" maxlength="1200" required placeholder="Jelaskan bagian yang perlu ditindaklanjuti..."></textarea></label></div><footer><button type="button" class="ci-button ci-button--ghost" id="ciCancelNote">Batal</button><button class="ci-button ci-button--primary" type="submit">Simpan keputusan</button></footer></form></section>
+    </div>
     </div>
 @endsection
 

@@ -245,13 +245,13 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
     });
 
     Route::prefix('collaboration-inbox')->name('collaboration-inbox.')->group(function () {
-        Route::get('/', [CollaborationActionInboxController::class, 'index'])->name('index');
+        Route::get('/', [CollaborationActionInboxController::class, 'index'])->middleware('throttle:60,1,action-inbox-index:')->name('index');
         Route::post('/handovers', [CollaborationActionInboxController::class, 'store'])
-            ->middleware('throttle:20,1')->name('store');
+            ->middleware('throttle:20,1,action-inbox-store:')->name('store');
         Route::patch('/handovers/{handover}/status', [CollaborationActionInboxController::class, 'updateStatus'])
-            ->middleware('throttle:30,1')->name('status');
+            ->whereUuid('handover')->middleware('throttle:30,1,action-inbox-status:')->name('status');
         Route::patch('/handovers/{handover}/checklist', [CollaborationActionInboxController::class, 'updateChecklist'])
-            ->middleware('throttle:30,1')->name('checklist');
+            ->whereUuid('handover')->middleware('throttle:30,1,action-inbox-checklist:')->name('checklist');
     });
 
     // Catatan PPBJ bersifat lintas departemen. Isi dimuat hanya ketika panel dibuka,
