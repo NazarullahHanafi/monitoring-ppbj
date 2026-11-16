@@ -776,23 +776,9 @@ class WebChatbotController extends Controller
 
     protected function isArtisanCommand(string $message): bool
     {
-        $msg = strtolower(trim($message));
-        $patterns = [
-            '/php\s+artisan/',
-            '/artisan\s+[a-z:]+/',
-            '/cache:clear/',
-            '/config:clear/',
-            '/view:clear/',
-            '/route:clear/',
-            '/optimize/',
-        ];
-        foreach ($patterns as $p) {
-            if (preg_match($p, $msg)) {
-                return true;
-            }
-        }
-
-        return false;
+        // Mentions receive a local response; only the execution controller may
+        // authorize and parse a complete command. Include all nine allowed commands.
+        return (bool) preg_match('/\bartisan\b|(?<![a-z0-9_:])(?:cache:clear|config:(?:clear|cache)|view:(?:clear|cache)|route:(?:clear|cache)|optimize(?::clear)?)(?![a-z0-9_:])/i', $message);
     }
 
     protected function isListCommandsRequest(string $message): bool
