@@ -1003,6 +1003,7 @@
     <script src="{{ asset('assets/app/procurement-date-warning.js') }}?v={{ filemtime(public_path('assets/app/procurement-date-warning.js')) }}" defer></script>
     <script src="{{ asset('assets/app/procurement-review.js') }}?v={{ filemtime(public_path('assets/app/procurement-review.js')) }}" defer></script>
     <script src="{{ asset('assets/app/procurement-filters.js') }}?v={{ filemtime(public_path('assets/app/procurement-filters.js')) }}" defer></script>
+    <script src="{{ asset('assets/app/satuan.js') }}?v={{ filemtime(public_path('assets/app/satuan.js')) }}" defer></script>
     <script src="{{ asset('assets/spph/spph.js') }}?v={{ filemtime(public_path('assets/spph/spph.js')) }}" defer></script>
     <script src="{{ asset('assets/spph/spph-print.js') }}?v={{ filemtime(public_path('assets/spph/spph-print.js')) }}" defer></script>
     <script src="{{ asset('assets/spph/spph-print-master.js') }}?v={{ filemtime(public_path('assets/spph/spph-print-master.js')) }}" defer></script>

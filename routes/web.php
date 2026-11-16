@@ -297,11 +297,11 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
             ->whereNumber('approval')->middleware('throttle:20,1,sp-value-approval-decide:')->name('sp.value-approvals.decide');
 
         Route::prefix('satuan')->name('satuan.')->group(function () {
-            Route::get('/', [SatuanController::class, 'index'])->name('index');
-            Route::post('/', [SatuanController::class, 'store'])->name('store');
-            Route::put('/{satuan}', [SatuanController::class, 'update'])->name('update');
-            Route::delete('/{satuan}', [SatuanController::class, 'destroy'])->name('destroy');
-            Route::get('/list', [SatuanController::class, 'list'])->name('list');
+            Route::get('/', [SatuanController::class, 'index'])->middleware('throttle:60,1,satuan-index:')->name('index');
+            Route::post('/', [SatuanController::class, 'store'])->middleware('throttle:30,1,satuan-store:')->name('store');
+            Route::put('/{satuan}', [SatuanController::class, 'update'])->whereNumber('satuan')->middleware('throttle:30,1,satuan-update:')->name('update');
+            Route::delete('/{satuan}', [SatuanController::class, 'destroy'])->whereNumber('satuan')->middleware('throttle:20,1,satuan-destroy:')->name('destroy');
+            Route::get('/list', [SatuanController::class, 'list'])->middleware('throttle:90,1,satuan-list:')->name('list');
         });
 
         // ==== PPBJ ====

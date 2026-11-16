@@ -3,9 +3,11 @@
 namespace App\Http\Controllers;
 
 use App\Models\Satuan;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 class SatuanController extends Controller
 {
@@ -14,7 +16,7 @@ class SatuanController extends Controller
         $satuans = Cache::remember(
             'satuans:index',
             3600,
-            fn () => Satuan::orderBy('nama_satuan')->get()
+            fn () => Satuan::orderBy('nama_satuan')->orderBy('id')->get(['id', 'nama_satuan', 'keterangan'])
         );
 
         return view('satuan.index', compact('satuans'));
@@ -22,18 +24,12 @@ class SatuanController extends Controller
 
     public function store(Request $request)
     {
-        $request->validate([
-            'nama_satuan' => ['required', 'string', 'max:100', Rule::unique('satuans', 'nama_satuan')],
-            'keterangan' => 'nullable|string|max:255',
-        ]);
-
-        $satuan = Satuan::create([
-            'nama_satuan' => trim($request->nama_satuan),
-            'keterangan' => $request->keterangan ? trim($request->keterangan) : null,
-        ]);
-
-        Cache::forget('satuans:all');
-        Cache::forget('satuans:index');
+        $data = $this->validatedData($request);
+        try {
+            $satuan = Satuan::create($data);
+        } catch (UniqueConstraintViolationException) {
+            throw ValidationException::withMessages(['nama_satuan' => 'Satuan ini sudah ada. Pilih nama lain atau gunakan satuan yang tersedia.']);
+        }
 
         if ($request->expectsJson()) {
             return response()->json([
@@ -44,7 +40,7 @@ class SatuanController extends Controller
                     'nama_satuan' => $satuan->nama_satuan,
                     'keterangan' => $satuan->keterangan,
                 ],
-            ], 201);
+            ], 201)->header('Cache-Control', 'private, no-store');
         }
 
         return redirect()->route('satuan.index')->with('success', 'Satuan berhasil ditambahkan!');
@@ -52,18 +48,12 @@ class SatuanController extends Controller
 
     public function update(Request $request, Satuan $satuan)
     {
-        $request->validate([
-            'nama_satuan' => ['required', 'string', 'max:100', Rule::unique('satuans', 'nama_satuan')->ignore($satuan->id)],
-            'keterangan' => 'nullable|string|max:255',
-        ]);
-
-        $satuan->update([
-            'nama_satuan' => trim($request->nama_satuan),
-            'keterangan' => $request->keterangan ? trim($request->keterangan) : null,
-        ]);
-
-        Cache::forget('satuans:all');
-        Cache::forget('satuans:index');
+        $data = $this->validatedData($request, $satuan);
+        try {
+            $satuan->update($data);
+        } catch (UniqueConstraintViolationException) {
+            throw ValidationException::withMessages(['nama_satuan' => 'Satuan ini sudah ada. Pilih nama lain atau gunakan satuan yang tersedia.']);
+        }
 
         if ($request->expectsJson()) {
             return response()->json([
@@ -74,19 +64,39 @@ class SatuanController extends Controller
                     'nama_satuan' => $satuan->nama_satuan,
                     'keterangan' => $satuan->keterangan,
                 ],
-            ]);
+            ])->header('Cache-Control', 'private, no-store');
         }
 
         return redirect()->route('satuan.index')->with('success', 'Satuan berhasil diperbarui!');
     }
 
-    public function destroy(Satuan $satuan)
+    public function destroy(Request $request, Satuan $satuan)
     {
         $satuan->delete();
-        Cache::forget('satuans:all');
-        Cache::forget('satuans:index');
+
+        if ($request->expectsJson()) {
+            return response()->json(['success' => true, 'message' => 'Satuan berhasil dihapus!'])
+                ->header('Cache-Control', 'private, no-store');
+        }
 
         return redirect()->route('satuan.index')->with('success', 'Satuan berhasil dihapus!');
+    }
+
+    private function validatedData(Request $request, ?Satuan $satuan = null): array
+    {
+        foreach (['nama_satuan', 'keterangan'] as $field) {
+            if (is_string($request->input($field))) {
+                $request->merge([$field => trim($request->input($field))]);
+            }
+        }
+
+        $data = $request->validate([
+            'nama_satuan' => ['required', 'string', 'max:100', Rule::unique('satuans', 'nama_satuan')->ignore($satuan?->id)],
+            'keterangan' => ['nullable', 'string', 'max:255'],
+        ]);
+        $data['keterangan'] = ($data['keterangan'] ?? '') === '' ? null : $data['keterangan'];
+
+        return $data;
     }
 
     // API untuk dropdown di form SPPH

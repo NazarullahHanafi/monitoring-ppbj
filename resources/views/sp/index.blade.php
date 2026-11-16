@@ -1489,6 +1489,7 @@
     <script src="{{ asset('assets/spph/spph-print-master.js') }}?v={{ filemtime(public_path('assets/spph/spph-print-master.js')) }}" defer></script>
     <script src="{{ asset('assets/sp/sp-portfolio-maps.js') }}?v={{ filemtime(public_path('assets/sp/sp-portfolio-maps.js')) }}" defer></script>
     <script src="{{ asset('assets/sp/sp-print.js') }}?v={{ filemtime(public_path('assets/sp/sp-print.js')) }}" defer></script>
+    <script src="{{ asset('assets/app/satuan.js') }}?v={{ filemtime(public_path('assets/app/satuan.js')) }}" defer></script>
     <script src="{{ asset('assets/sp/sp.js') }}?v={{ filemtime(public_path('assets/sp/sp.js')) }}" defer></script>
 @endpush
 

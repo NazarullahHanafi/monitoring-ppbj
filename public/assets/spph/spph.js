@@ -770,76 +770,11 @@
 
         function buildSatOpts(s) {
             const options = SATUANS.map(v => `<option value="${escapedHtml(v)}"${v === s ? ' selected' : ''}>${escapedHtml(v)}</option>`).join('');
-            return `${options}<option value="${ADD_SATUAN_VALUE}">+ Tambah satuan baru...</option>`;
+            const legacy = s && !SATUANS.includes(s) && s !== ADD_SATUAN_VALUE ? `<option value="${escapedHtml(s)}" selected>${escapedHtml(s)}</option>` : '';
+            return `${options}${legacy}<option value="${ADD_SATUAN_VALUE}">+ Tambah satuan baru...</option>`;
         }
 
-        function normalizeSatuanName(value) {
-            return String(value || '').trim().replace(/\s+/g, ' ');
-        }
-
-        function refreshSatuanSelects(targetSelect = null, selectedValue = '') {
-            document.querySelectorAll('select[name$="[satuan]"]').forEach(select => {
-                const keep = select === targetSelect ? selectedValue : select.value;
-                select.innerHTML = `<option value="">-- Pilih --</option>${buildSatOpts(keep)}`;
-                if (keep && keep !== ADD_SATUAN_VALUE) select.value = keep;
-            });
-        }
-
-        async function quickAddSatuan(selectEl) {
-            const previousValue = selectEl.dataset.previousValue || '';
-            const result = await Swal.fire({
-                title: 'Tambah satuan baru',
-                html: '<div class="text-sm text-slate-600 dark:text-slate-300">Masukkan satuan yang belum ada, misalnya <b>Roll</b>, <b>Lot</b>, atau <b>Dus</b>.</div>',
-                input: 'text',
-                inputPlaceholder: 'Contoh: Roll',
-                showCancelButton: true,
-                confirmButtonText: 'Simpan Satuan',
-                cancelButtonText: 'Batal',
-                customClass: { popup: 'rounded-2xl' },
-                inputValidator: value => {
-                    const name = normalizeSatuanName(value);
-                    if (!name) return 'Nama satuan wajib diisi.';
-                    if (name.length > 100) return 'Nama satuan maksimal 100 karakter.';
-                    if (SATUANS.some(v => normalizeSatuanName(v).toLowerCase() === name.toLowerCase())) return 'Satuan ini sudah ada.';
-                    return null;
-                }
-            });
-
-            if (!result.isConfirmed) {
-                selectEl.value = previousValue;
-                return;
-            }
-
-            const satuanName = normalizeSatuanName(result.value);
-
-            try {
-                const response = await fetch(SATUAN_STORE_URL, {
-                    method: 'POST',
-                    headers: {
-                        'Accept': 'application/json',
-                        'X-Requested-With': 'XMLHttpRequest',
-                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || SPPH_PAGE_CONFIG.csrfToken || ''
-                    },
-                    body: new URLSearchParams({ nama_satuan: satuanName })
-                });
-
-                if (!response.ok) {
-                    const error = await response.json().catch(() => ({}));
-                    throw new Error(error?.message || error?.errors?.nama_satuan?.[0] || 'Satuan gagal disimpan.');
-                }
-
-                if (!SATUANS.some(v => normalizeSatuanName(v).toLowerCase() === satuanName.toLowerCase())) {
-                    SATUANS.push(satuanName);
-                    SATUANS.sort((a, b) => String(a).localeCompare(String(b), 'id', { sensitivity: 'base' }));
-                }
-
-                refreshSatuanSelects(selectEl, satuanName);
-                Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: `Satuan "${satuanName}" ditambahkan`, showConfirmButton: false, timer: 2200 });
-            } catch (error) {
-                selectEl.value = previousValue;
-                Swal.fire('Gagal menambah satuan', error.message || 'Silakan coba lagi.', 'error');
-            }
-        }
+        const quickAddSatuan = window.SatuanUI.createQuick({names: SATUANS, url: SATUAN_STORE_URL, csrfToken: SPPH_PAGE_CONFIG.csrfToken, sentinel: ADD_SATUAN_VALUE});
 
         function getDefaultFulfillmentDate(mode) {
             const first = document.querySelector(`#${mode === 'add' ? 'addRows' : 'editRows'} input[name$="[tgl_pemenuhan]"]`);
