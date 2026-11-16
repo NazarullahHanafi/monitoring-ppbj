@@ -383,7 +383,8 @@
         
         <div class="flex gap-2">
             {{-- Refresh Cache Button --}}
-            <button type="button" onclick="refreshCache()" id="refreshBtn"
+            @if(auth()->user()->role === 'superadmin')
+            <button type="button" id="refreshBtn"
                     class="inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 font-semibold text-gray-700 dark:text-gray-300 
                            bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 
                            hover:bg-gray-50 dark:hover:bg-gray-700 transition-all shadow-sm"
@@ -393,6 +394,7 @@
                 </svg>
                 <span class="hidden sm:inline">Refresh</span>
             </button>
+            @endif
 
             {{-- Go to TORPR Button --}}
             <a href="{{ route('torpr.index') }}"
@@ -404,6 +406,8 @@
                 Ke TORPR
             </a>
         </div>
+    <p id="opsDashboardStatus" role="status" aria-live="polite" class="mb-4 text-sm text-slate-700 dark:text-slate-200"></p>
+
     </div>
 
     {{-- KPI Cards --}}
@@ -1105,22 +1109,11 @@
     })();
 
     // ================= AJAX AUTO-REFRESH =================
-    let refreshInterval = null;
-
-    async function refreshDashboardData() {
-        try {
-            const response = await fetch('{{ route("ops.dashboard.data") }}', {
-                headers: { 'Accept': 'application/json' }
-            });
-            
-            if (!response.ok) {
-                console.warn('Failed to fetch dashboard data');
-                return;
-            }
-            
-            const { data } = await response.json();
-            
-            // Update stats with animation
+    window.OPERATIONAL_DASHBOARD_CONFIG = {
+        dataUrl: @json(route('ops.dashboard.data')),
+        refreshUrl: @json(route('ops.dashboard.refresh')),
+        csrf: @json(csrf_token()),
+        onData(data) {
             updateStatCard('stat-total', data.stats.total);
             updateStatCard('stat-draft', data.stats.draft);
             updateStatCard('stat-pending', data.stats.pending);
@@ -1159,11 +1152,8 @@
             
             // Update timestamp
             document.getElementById('lastUpdated').textContent = new Date().toLocaleTimeString('id-ID');
-            
-        } catch (error) {
-            console.warn('Auto-refresh error:', error);
         }
-    }
+    };
 
     function updateStatCard(id, newValue) {
         const el = document.getElementById(id);
@@ -1196,7 +1186,8 @@
 
     function updateTopPortofolios(rows) {
         const wrapper = document.getElementById('top-portofolio-list');
-        if (!wrapper || !rows || !rows.length) return;
+        if (!wrapper) return;
+        if (!rows.length) { wrapper.innerHTML = '<p class="p-4 text-sm text-gray-500 dark:text-gray-300">Belum ada data portofolio.</p>'; return; }
 
         const maxPr = Math.max(...rows.map(row => Number(row.total_pr || 0)), 1);
         const styles = [
@@ -1226,8 +1217,8 @@
 
                             <div class="min-w-0 flex-1">
                                 <div class="flex items-center gap-2">
-                                    <h4 class="font-bold text-gray-900 dark:text-white truncate" title="${row.portofolio || '-'}">
-                                        ${row.portofolio || '-'}
+                                    <h4 class="font-bold text-gray-900 dark:text-white truncate" title="${OperationalDashboard.escapeText(row.portofolio || '-')}">
+                                        ${OperationalDashboard.escapeText(row.portofolio || '-')}
                                     </h4>
                                     ${idx === 0 ? '<span class="shrink-0 inline-flex items-center rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-200 px-2 py-0.5 text-[10px] font-bold">🏆 Teratas</span>' : ''}
                                 </div>
@@ -1264,7 +1255,8 @@
 
     function updateLatestRows(rows) {
         const tbody = document.getElementById('latest-rows-tbody');
-        if (!tbody || !rows || rows.length === 0) return;
+        if (!tbody) return;
+        if (!rows.length) { tbody.innerHTML = '<tr><td colspan="6" class="px-6 py-4 text-gray-500 dark:text-gray-300">Belum ada data TORPR.</td></tr>'; return; }
         
         const statusConfig = {
             'APPROVED': { bg: 'bg-green-100 dark:bg-green-900/30', text: 'text-green-700 dark:text-green-400', icon: '✅' },
@@ -1282,14 +1274,14 @@
                 <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
                     <td class="px-6 py-4 text-gray-600 dark:text-gray-400">${idx + 1}</td>
                     <td class="px-6 py-4">
-                        <span class="font-semibold text-gray-900 dark:text-white">${row.nomor_pr || '—'}</span>
+                        <span class="font-semibold text-gray-900 dark:text-white">${OperationalDashboard.escapeText(row.nomor_pr || '—')}</span>
                     </td>
-                    <td class="px-6 py-4 text-gray-600 dark:text-gray-400">${limitedTujuan}</td>
-                    <td class="px-6 py-4 text-gray-600 dark:text-gray-400 tabular-nums">${row.tanggal_pr || '—'}</td>
+                    <td class="px-6 py-4 text-gray-600 dark:text-gray-400">${OperationalDashboard.escapeText(limitedTujuan)}</td>
+                    <td class="px-6 py-4 text-gray-600 dark:text-gray-400 tabular-nums">${OperationalDashboard.escapeText(row.tanggal_pr || '—')}</td>
                     <td class="px-6 py-4 text-center">
                         <span class="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold ${config.bg} ${config.text} border border-gray-200 dark:border-gray-600">
                             <span>${config.icon}</span>
-                            ${row.status}
+                            ${OperationalDashboard.escapeText(row.status)}
                         </span>
                     </td>
                     <td class="px-6 py-4 text-right">
@@ -1308,67 +1300,6 @@
     }
 
     // ================= MANUAL CACHE REFRESH =================
-    async function refreshCache() {
-        const btn = document.getElementById('refreshBtn');
-        const icon = document.getElementById('refreshIcon');
-        
-        if (!btn || !icon) return;
-        
-        btn.disabled = true;
-        icon.classList.add('refresh-spin');
-        
-        try {
-            const response = await fetch('{{ route("ops.dashboard.refresh") }}', {
-                method: 'POST',
-                headers: {
-                    'X-CSRF-TOKEN': '{{ csrf_token() }}',
-                    'Accept': 'application/json'
-                }
-            });
-            
-            const data = await response.json();
-            
-            if (data.success) {
-                Swal.fire({
-                    icon: 'success',
-                    title: 'Cache Refreshed!',
-                    text: 'Dashboard Telah di Update',
-                    timer: 2000,
-                    showConfirmButton: false
-                }).then(() => {
-                    window.location.reload();
-                });
-            } else {
-                throw new Error('Failed to refresh');
-            }
-        } catch (error) {
-            Swal.fire({
-                icon: 'error',
-                title: 'Error',
-                text: 'Failed to refresh cache',
-                confirmButtonColor: '#3B82F6'
-            });
-        } finally {
-            setTimeout(() => {
-                btn.disabled = false;
-                icon.classList.remove('refresh-spin');
-            }, 1000);
-        }
-    }
-
-    // ================= START AUTO-REFRESH =================
-    document.addEventListener('DOMContentLoaded', function() {
-        // Start interval
-        refreshInterval = setInterval(refreshDashboardData, 60000); // 60 seconds
-        
-        // Pause when page hidden
-        document.addEventListener('visibilitychange', function() {
-            if (document.hidden) {
-                clearInterval(refreshInterval);
-            } else {
-                refreshInterval = setInterval(refreshDashboardData, 60000);
-            }
-        });
-    });
 </script>
+<script src="{{ asset('assets/app/operasional-dashboard.js') }}?v={{ filemtime(public_path('assets/app/operasional-dashboard.js')) }}" defer></script>
 @endpush

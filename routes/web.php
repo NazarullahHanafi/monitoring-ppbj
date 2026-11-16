@@ -709,15 +709,15 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
             ->name('ops.dashboard');
         Route::get('/ops/dashboard/data', [OperasionalDashboardController::class, 'getData'])
             ->name('ops.dashboard.data')
-            ->middleware('throttle:60,1');
+            ->middleware('throttle:60,1,ops-dashboard-data:');
 
         Route::post('/ops/dashboard/refresh-cache', [OperasionalDashboardController::class, 'refreshCache'])
             ->name('ops.dashboard.refresh')
-            ->middleware('throttle:5,1');
+            ->middleware('throttle:5,1,ops-dashboard-refresh:');
 
         Route::delete('/ops/dashboard/clear-cache', [OperasionalDashboardController::class, 'clearCache'])
             ->name('ops.dashboard.clear')
-            ->middleware('throttle:5,1');
+            ->middleware('throttle:5,1,ops-dashboard-clear:');
 
         Route::get('/torpr/template', [TorprController::class, 'downloadTemplate'])->name('torpr.template');
         Route::post('/torpr/import/preview', [TorprController::class, 'previewImport'])->name('torpr.import.preview')->middleware('throttle:5,1');
