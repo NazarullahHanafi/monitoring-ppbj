@@ -237,13 +237,14 @@
         ];
     @endphp
 
-    <div class="space-y-6">
+    <div class="space-y-6" data-sp-master-page data-index-url="{{ route('sp-master-options.index') }}">
+        <p id="masterStatus" role="status" aria-live="polite"></p>
         <div class="master-sp-hero rounded-2xl p-6 shadow-xl bg-gradient-to-r from-slate-800 via-blue-800 to-indigo-800 relative overflow-hidden">
             <div class="absolute -top-12 -right-12 w-44 h-44 bg-white/10 rounded-full blur-2xl"></div>
             <div class="relative flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                 <div>
                     <div class="flex items-center gap-3">
-                        <span class="text-3xl">⚙️</span>
+                        <span aria-hidden="true"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7h6m6 0h6M3 17h10m4 0h4"/><circle cx="12" cy="7" r="3"/><circle cx="15" cy="17" r="2"/></svg></span>
                         <h1 class="text-2xl font-extrabold tracking-tight">Master Kontrak SP</h1>
                     </div>
                     <p class="text-sm mt-1">
@@ -299,10 +300,10 @@
         </div>
 
         <div class="rounded-2xl bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 p-4 shadow-sm">
-            <form method="GET" action="{{ route('sp-master-options.index') }}" class="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <form id="masterFilter" method="GET" action="{{ route('sp-master-options.index') }}" class="grid grid-cols-1 md:grid-cols-4 gap-3">
                 <div class="md:col-span-2">
                     <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase mb-1">Cari Master</label>
-                    <input type="text" name="search" value="{{ $search }}" placeholder="Cari nama master..."
+                    <input type="text" name="search" maxlength="150" value="{{ $search }}" placeholder="Cari nama master..."
                         class="w-full rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 px-4 py-2.5 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500">
                 </div>
 
@@ -360,13 +361,13 @@
                                 <td class="px-4 py-3">
                                     <div class="flex justify-center gap-2">
                                         <button type="button"
-                                            onclick="openEditModal({{ $opt->id }}, @js($opt->type), @js($opt->nama), {{ $opt->is_active ? 1 : 0 }})"
+                                            onclick="openEditModal({{ $opt->id }}, @js($opt->type), @js($opt->nama), {{ $opt->is_active ? 1 : 0 }}, @js(\App\Support\SpMasterOptionVersion::of($opt)), @js(route('sp-master-options.update', $opt)))"
                                             class="rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-bold text-white hover:bg-amber-600 transition">
                                             Edit
                                         </button>
 
                                         <button type="button"
-                                            onclick="deleteMasterOption(@js($opt->nama), @js($types[$opt->type] ?? $opt->type), @js(route('sp-master-options.destroy', $opt)))"
+                                            onclick="deleteMasterOption(@js($opt->nama), @js($types[$opt->type] ?? $opt->type), @js(route('sp-master-options.destroy', $opt)), @js(\App\Support\SpMasterOptionVersion::of($opt)))"
                                             class="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-red-700 transition">
                                             Hapus
                                         </button>
@@ -388,14 +389,16 @@
         </div>
     </div>
 
-    <div id="addModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/60 p-4">
-        <div class="w-full max-w-md rounded-2xl bg-white dark:bg-gray-800 shadow-2xl overflow-hidden">
+    <div id="addModal" role="dialog" aria-modal="true" aria-label="Tambah master kontrak" aria-hidden="true" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/60 p-4">
+        <div class="w-full max-w-md max-h-[90vh] overflow-y-auto rounded-2xl bg-white dark:bg-gray-800 shadow-2xl overflow-hidden">
             <div class="bg-gradient-to-r from-blue-600 to-indigo-600 px-5 py-4 text-white">
                 <h2 class="font-bold">Tambah Master Kontrak</h2>
             </div>
 
-            <form action="{{ route('sp-master-options.store') }}" method="POST" class="p-5 space-y-4">
+            <form id="addForm" novalidate action="{{ route('sp-master-options.store') }}" method="POST" class="p-5 space-y-4">
                 @csrf
+                <p data-master-notice role="status" aria-live="polite"></p>
+                <input type="hidden" name="is_active" value="0">
                 <div>
                     <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Jenis Master</label>
                     <select name="type" required class="w-full rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2.5 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500">
@@ -408,7 +411,7 @@
 
                 <div>
                     <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Nama</label>
-                    <input type="text" name="nama" required placeholder="Masukkan nama master..." class="w-full rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2.5 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <input type="text" name="nama" maxlength="255" required placeholder="Masukkan nama master..." class="w-full rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2.5 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500">
                 </div>
 
                 <label class="flex items-center gap-2 text-sm font-semibold text-gray-700 dark:text-gray-300">
@@ -424,15 +427,18 @@
         </div>
     </div>
 
-    <div id="editModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/60 p-4">
-        <div class="w-full max-w-md rounded-2xl bg-white dark:bg-gray-800 shadow-2xl overflow-hidden">
+    <div id="editModal" role="dialog" aria-modal="true" aria-label="Edit master kontrak" aria-hidden="true" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/60 p-4">
+        <div class="w-full max-w-md max-h-[90vh] overflow-y-auto rounded-2xl bg-white dark:bg-gray-800 shadow-2xl overflow-hidden">
             <div class="bg-gradient-to-r from-amber-500 to-orange-600 px-5 py-4 text-white">
                 <h2 class="font-bold">Edit Master Kontrak</h2>
             </div>
 
-            <form id="editForm" method="POST" class="p-5 space-y-4">
+            <form id="editForm" novalidate method="POST" class="p-5 space-y-4">
                 @csrf
+                <p data-master-notice role="status" aria-live="polite"></p>
+                <input type="hidden" name="is_active" value="0">
                 @method('PUT')
+                <input type="hidden" name="version" value="">
 
                 <div>
                     <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Jenis Master</label>
@@ -446,7 +452,7 @@
 
                 <div>
                     <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Nama</label>
-                    <input type="text" name="nama" id="editNama" required class="w-full rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2.5 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-amber-500">
+                    <input type="text" name="nama" maxlength="255" id="editNama" required class="w-full rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2.5 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-amber-500">
                 </div>
 
                 <label class="flex items-center gap-2 text-sm font-semibold text-gray-700 dark:text-gray-300">
@@ -463,219 +469,6 @@
     </div>
 
     @push('scripts')
-        <script>
-            function masterDeletePad(value) {
-                return String(Math.max(0, Math.floor(Number(value) || 0))).padStart(2, '0');
-            }
-
-            function masterDeleteFormatDuration(seconds) {
-                const safe = Math.max(0, Math.ceil(Number(seconds) || 0));
-                return `${masterDeletePad(safe / 3600)}:${masterDeletePad((safe % 3600) / 60)}:${masterDeletePad(safe % 60)}`;
-            }
-
-            function masterDeleteFormatDateTime(date) {
-                return new Intl.DateTimeFormat('id-ID', {
-                    weekday: 'long',
-                    day: '2-digit',
-                    month: 'long',
-                    year: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    second: '2-digit',
-                    hour12: false,
-                    timeZone: 'Asia/Jakarta'
-                }).format(date).replace(/\./g, ':');
-            }
-
-            function masterDeleteEscapeHtml(value) {
-                return String(value ?? '')
-                    .replace(/&/g, '&amp;')
-                    .replace(/</g, '&lt;')
-                    .replace(/>/g, '&gt;')
-                    .replace(/"/g, '&quot;')
-                    .replace(/'/g, '&#039;');
-            }
-
-            function showMasterDeleteLockCountdown(message, retryAfter, lockedUntil = null) {
-                const targetTime = lockedUntil ? new Date(lockedUntil).getTime() : Date.now() + (Number(retryAfter || 900) * 1000);
-
-                Swal.fire({
-                    icon: 'error',
-                    title: 'Aksi dikunci sementara',
-                    html: `
-                        <p class="text-sm leading-relaxed mb-4">${masterDeleteEscapeHtml(message || 'Terlalu banyak percobaan password salah.')}</p>
-                        <div id="masterDeleteCountdown" class="master-delete-countdown">00:15:00</div>
-                        <p class="mt-3 text-xs font-semibold opacity-90">Waktu tersisa sebelum hapus master bisa dicoba lagi.</p>
-                        <div id="masterDeleteUnlockAt" class="master-delete-time-pill mt-3"></div>
-                    `,
-                    confirmButtonText: 'Saya mengerti',
-                    confirmButtonColor: '#ef4444',
-                    customClass: { popup: 'master-secure-popup' },
-                    didOpen: () => {
-                        const countdown = document.getElementById('masterDeleteCountdown');
-                        const unlockAt = document.getElementById('masterDeleteUnlockAt');
-                        const render = () => {
-                            const remaining = Math.max(0, Math.ceil((targetTime - Date.now()) / 1000));
-                            if (countdown) countdown.textContent = masterDeleteFormatDuration(remaining);
-                            if (unlockAt) unlockAt.textContent = `Bisa dicoba lagi: ${masterDeleteFormatDateTime(new Date(targetTime))} WIB`;
-                        };
-                        render();
-                        const timer = setInterval(render, 1000);
-                        Swal.getPopup().dataset.masterDeleteTimer = timer;
-                    },
-                    willClose: () => {
-                        const timer = Swal.getPopup()?.dataset?.masterDeleteTimer;
-                        if (timer) clearInterval(Number(timer));
-                    }
-                });
-            }
-
-            async function deleteMasterOption(nama, jenis, url) {
-                const csrf = document.querySelector('meta[name="csrf-token"]')?.content || '{{ csrf_token() }}';
-
-                const result = await Swal.fire({
-                    icon: 'warning',
-                    title: 'Hapus Master Kontrak?',
-                    html: `
-                        <div class="master-delete-stack">
-                            <div class="master-delete-danger">
-                                <div class="master-delete-title">⚠️ Data master</div>
-                                <div><strong>${masterDeleteEscapeHtml(jenis)}</strong></div>
-                                <div>${masterDeleteEscapeHtml(nama)}</div>
-                                <p class="mt-2">Data master akan dihapus permanen dan tidak muncul lagi di dropdown Penomoran SP.</p>
-                            </div>
-                            <div class="master-delete-warning">
-                                <div class="master-delete-title">🔐 Verifikasi superadmin umum</div>
-                                <p>Hapus master hanya bisa memakai password akun <strong>superadmin umum</strong> atau <strong>superadmin@sucofindo.com</strong>.</p>
-                            </div>
-                            <div class="master-delete-input-wrap">
-                                <label for="masterDeletePassword">Password superadmin umum</label>
-                                <div class="master-delete-password-field">
-                                    <input id="masterDeletePassword" type="password" class="swal2-input" placeholder="Masukkan password superadmin umum">
-                                    <button type="button" id="masterDeleteToggle" class="master-delete-toggle">Lihat</button>
-                                </div>
-                            </div>
-                            <div class="master-delete-lock-preview">
-                                <p>Jika salah 3 kali, aksi hapus dikunci 15 menit untuk menjaga data master tetap aman.</p>
-                            </div>
-                        </div>
-                    `,
-                    showCancelButton: true,
-                    confirmButtonText: 'Ya, Hapus Master',
-                    cancelButtonText: 'Batal',
-                    confirmButtonColor: '#ef4444',
-                    cancelButtonColor: '#64748b',
-                    focusConfirm: false,
-                    customClass: { popup: 'master-secure-popup' },
-                    didOpen: () => {
-                        const input = document.getElementById('masterDeletePassword');
-                        const toggle = document.getElementById('masterDeleteToggle');
-                        input?.focus();
-                        toggle?.addEventListener('click', () => {
-                            input.type = input.type === 'password' ? 'text' : 'password';
-                            toggle.textContent = input.type === 'password' ? 'Lihat' : 'Sembunyikan';
-                        });
-                    },
-                    preConfirm: async () => {
-                        const password = document.getElementById('masterDeletePassword')?.value || '';
-                        if (!password.trim()) {
-                            Swal.showValidationMessage('Password superadmin umum wajib diisi.');
-                            return false;
-                        }
-
-                        try {
-                            const response = await fetch(url, {
-                                method: 'DELETE',
-                                headers: {
-                                    'X-CSRF-TOKEN': csrf,
-                                    'Accept': 'application/json',
-                                    'Content-Type': 'application/json'
-                                },
-                                body: JSON.stringify({ admin_password: password })
-                            });
-                            const data = await response.json().catch(() => ({}));
-
-                            if (response.status === 429 && data.locked) {
-                                return { locked: true, data };
-                            }
-
-                            if (!response.ok) {
-                                Swal.showValidationMessage(data.message || 'Gagal menghapus master kontrak.');
-                                return false;
-                            }
-
-                            return { ok: true, data };
-                        } catch (error) {
-                            Swal.showValidationMessage('Gagal menghapus master kontrak. Periksa koneksi lalu coba lagi.');
-                            return false;
-                        }
-                    },
-                    allowOutsideClick: () => !Swal.isLoading()
-                });
-
-                if (!result.isConfirmed || !result.value) return;
-
-                if (result.value.locked) {
-                    showMasterDeleteLockCountdown(result.value.data.message, result.value.data.retry_after, result.value.data.locked_until);
-                    return;
-                }
-
-                await Swal.fire({
-                    icon: 'success',
-                    title: 'Master dihapus',
-                    text: result.value.data?.message || 'Master kontrak berhasil dihapus.',
-                    timer: 1400,
-                    showConfirmButton: false,
-                    customClass: { popup: 'master-secure-popup' }
-                });
-
-                window.location.href = result.value.data?.redirect || window.location.href;
-            }
-
-            function openAddModal() {
-                const modal = document.getElementById('addModal');
-                modal.classList.remove('hidden');
-                modal.classList.add('flex');
-            }
-
-            function closeAddModal() {
-                const modal = document.getElementById('addModal');
-                modal.classList.add('hidden');
-                modal.classList.remove('flex');
-            }
-
-            function openEditModal(id, type, nama, isActive) {
-                const form = document.getElementById('editForm');
-                form.action = `/sp-master-options/${id}`;
-                document.getElementById('editType').value = type || '';
-                document.getElementById('editNama').value = nama || '';
-                document.getElementById('editActive').checked = Number(isActive) === 1;
-
-                const modal = document.getElementById('editModal');
-                modal.classList.remove('hidden');
-                modal.classList.add('flex');
-            }
-
-            function closeEditModal() {
-                const modal = document.getElementById('editModal');
-                modal.classList.add('hidden');
-                modal.classList.remove('flex');
-            }
-
-            document.addEventListener('keydown', function (e) {
-                if (e.key === 'Escape') {
-                    closeAddModal();
-                    closeEditModal();
-                }
-            });
-
-            document.getElementById('addModal')?.addEventListener('click', function(e) {
-                if (e.target === this) closeAddModal();
-            });
-
-            document.getElementById('editModal')?.addEventListener('click', function(e) {
-                if (e.target === this) closeEditModal();
-            });
-        </script>
+        <script src="{{ asset('assets/app/sp-master-options.js') }}?v={{ filemtime(public_path('assets/app/sp-master-options.js')) }}" defer></script>
     @endpush
 @endsection

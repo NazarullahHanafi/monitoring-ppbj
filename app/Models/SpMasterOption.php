@@ -20,10 +20,16 @@ class SpMasterOption extends Model
     protected static function booted(): void
     {
         $forget = function (SpMasterOption $option) {
-            Cache::forget("sp_master_options:{$option->type}:active_names");
+            $types = array_unique(array_filter([$option->type, $option->getRawOriginal('type')]));
+            $option->getConnection()->afterCommit(function () use ($types) {
+                foreach ($types as $type) {
+                    Cache::forget("sp_master_options:{$type}:active_names");
+                }
+            });
         };
 
-        static::saved($forget);
+        static::created($forget);
+        static::updated($forget);
         static::deleted($forget);
     }
 

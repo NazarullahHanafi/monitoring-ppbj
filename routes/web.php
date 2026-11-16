@@ -436,7 +436,12 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
 
         // ==== Master Kontrak SP ====
         Route::resource('sp-master-options', SpMasterOptionController::class)
-            ->except(['show', 'create', 'edit']);
+            ->except(['show', 'create', 'edit'])
+            ->where(['sp_master_option' => '[0-9]+'])
+            ->middlewareFor('index', 'throttle:60,1,sp-master-index:')
+            ->middlewareFor('store', 'throttle:20,1,sp-master-store:')
+            ->middlewareFor('update', 'throttle:30,1,sp-master-update:')
+            ->middlewareFor('destroy', 'throttle:10,1,sp-master-delete:');
         Route::get('/spph/print-masters', [SpMasterOptionController::class, 'printOptions'])
             ->middleware('throttle:60,1,spph-print-masters:')->name('spph.print-masters');
         Route::get('/sp/portfolio-mappings', [\App\Http\Controllers\SpPortfolioFieldMapController::class, 'index'])->middleware('throttle:60,1,sp-portfolio-list:')->name('sp.portfolio-mappings');
