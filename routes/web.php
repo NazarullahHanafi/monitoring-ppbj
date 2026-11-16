@@ -66,7 +66,7 @@ Route::post('/track', [TrackingPrController::class, 'secureLanding'])
     ->middleware('throttle:20,1');
 Route::post('/contact', [ContactMessageController::class, 'store'])
     ->name('landing.contact.store')
-    ->middleware('throttle:5,1');
+    ->middleware('throttle:5,1,landing-contact:');
 Route::get('/track/suggest', [TrackingPrController::class, 'suggest'])
     ->name('landing.track.suggest')
     ->middleware('throttle:60,1');
@@ -342,9 +342,9 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
         Route::delete('/users/{id}', [UserController::class, 'destroy'])->name('users.destroy');
         Route::get('/users/export', [UserController::class, 'export'])->name('users.export');
 
-        Route::get('/contact-messages', [ContactMessageController::class, 'index'])->name('contact-messages.index');
-        Route::put('/contact-messages/{contactMessage}/read', [ContactMessageController::class, 'toggleRead'])->name('contact-messages.read');
-        Route::delete('/contact-messages/{contactMessage}', [ContactMessageController::class, 'destroy'])->name('contact-messages.destroy');
+        Route::get('/contact-messages', [ContactMessageController::class, 'index'])->middleware('throttle:60,1,contact-inbox:')->name('contact-messages.index');
+        Route::put('/contact-messages/{contactMessage}/read', [ContactMessageController::class, 'toggleRead'])->middleware('throttle:30,1,contact-status:')->name('contact-messages.read');
+        Route::delete('/contact-messages/{contactMessage}', [ContactMessageController::class, 'destroy'])->middleware('throttle:20,1,contact-delete:')->name('contact-messages.destroy');
 
         Route::get('/dashboard', [App\Http\Controllers\DashboardController::class, 'index'])
             ->name('dashboard.indexumum');

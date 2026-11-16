@@ -187,6 +187,16 @@
             background: rgba(6, 78, 59, .22);
             color: #86efac;
         }
+        .cm-alert[data-tone="error"] {
+            border-color: #fecaca;
+            background: #fef2f2;
+            color: #991b1b;
+        }
+        .dark .cm-alert[data-tone="error"] {
+            border-color: #7f1d1d;
+            background: #450a0a;
+            color: #fecaca;
+        }
 
         .cm-panel,
         .cm-message {
@@ -618,10 +628,17 @@
             @if(session('success'))
                 <div class="cm-alert">{{ session('success') }}</div>
             @endif
+            @if(session('error'))
+                <div class="cm-alert" data-tone="error" role="alert">{{ session('error') }}</div>
+            @endif
+            @if($errors->any())
+                <div class="cm-alert" data-tone="error" role="alert">{{ $errors->first() }}</div>
+            @endif
+            <div id="cmActionFeedback" class="cm-alert" role="status" aria-live="polite" hidden></div>
 
             <section class="cm-panel">
-                <form method="GET" action="{{ route('contact-messages.index') }}" class="cm-filter">
-                    <input id="search" name="search" value="{{ request('search') }}" class="cm-input"
+                <form method="GET" action="{{ route('contact-messages.index') }}" class="cm-filter" novalidate>
+                    <input id="search" name="search" value="{{ request('search') }}" class="cm-input" maxlength="160" aria-label="Pencarian pesan"
                         placeholder="Cari nama, email, subjek, atau isi pesan...">
 
                     <select name="status" class="cm-select">
@@ -676,9 +693,10 @@
                             </div>
 
                             <div class="cm-actions">
-                                <form method="POST" action="{{ route('contact-messages.read', $message) }}">
+                                <form method="POST" action="{{ route('contact-messages.read', $message) }}" class="cm-read-form">
                                     @csrf
                                     @method('PUT')
+                                    <input type="hidden" name="read" value="{{ $message->read_at ? '0' : '1' }}">
                                     <button type="submit" class="cm-btn secondary">
                                         {{ $message->read_at ? 'Tandai Belum Dibaca' : 'Tandai Dibaca' }}
                                     </button>
@@ -717,67 +735,5 @@
 @endsection
 
 @push('scripts')
-    <script>
-        document.addEventListener('DOMContentLoaded', function () {
-            function escapeHtml(value) {
-                return String(value || '')
-                    .replace(/&/g, '&amp;')
-                    .replace(/</g, '&lt;')
-                    .replace(/>/g, '&gt;')
-                    .replace(/"/g, '&quot;')
-                    .replace(/'/g, '&#039;');
-            }
-
-            document.querySelectorAll('.cm-delete-form').forEach(function (form) {
-                form.addEventListener('submit', function (event) {
-                    event.preventDefault();
-
-                    const sender = form.dataset.sender || 'Pengirim';
-                    const email = form.dataset.email || '-';
-                    const subject = form.dataset.subject || '-';
-                    const darkMode = document.documentElement.classList.contains('dark');
-
-                    if (typeof Swal === 'undefined') {
-                        if (confirm('Yakin hapus pesan contact ini? Data yang dihapus tidak bisa dikembalikan.')) {
-                            form.submit();
-                        }
-                        return;
-                    }
-
-                    Swal.fire({
-                        title: 'Hapus pesan contact?',
-                        html: `
-                            <div style="font-size:.9rem;line-height:1.6">
-                                Pesan ini akan dihapus permanen dari inbox admin.
-                            </div>
-                            <div class="cm-delete-preview">
-                                <strong>${escapeHtml(subject)}</strong>
-                                <div>Dari: <span>${escapeHtml(sender)}</span></div>
-                                <div>Email: <span>${escapeHtml(email)}</span></div>
-                            </div>
-                        `,
-                        icon: 'warning',
-                        showCancelButton: true,
-                        confirmButtonText: 'Ya, hapus pesan',
-                        cancelButtonText: 'Batal',
-                        confirmButtonColor: '#ef4444',
-                        cancelButtonColor: '#64748b',
-                        reverseButtons: true,
-                        focusCancel: true,
-                        background: darkMode ? '#111827' : '#ffffff',
-                        color: darkMode ? '#f9fafb' : '#111827',
-                        customClass: {
-                            popup: 'rounded-2xl shadow-2xl',
-                            confirmButton: 'font-bold',
-                            cancelButton: 'font-bold'
-                        }
-                    }).then(function (result) {
-                        if (result.isConfirmed) {
-                            form.submit();
-                        }
-                    });
-                });
-            });
-        });
-    </script>
+    <script src="{{ asset('assets/app/contact-messages.js') }}?v={{ filemtime(public_path('assets/app/contact-messages.js')) }}" defer></script>
 @endpush
