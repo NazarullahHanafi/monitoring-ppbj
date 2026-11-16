@@ -2,32 +2,33 @@
 
 namespace App\Http\Controllers;
 
+use App\Rules\PasswordStorageLimits;
+use App\Services\AccountPasswordUpdater;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Hash;
+use Illuminate\View\View;
 
 class AccountController extends Controller
 {
-    public function edit()
+    public function edit(): View
     {
         return view('account.edit');
     }
 
-    public function updatePassword(Request $request)
+    public function updatePassword(Request $request, AccountPasswordUpdater $updater): RedirectResponse|JsonResponse
     {
-        $request->validate([
-            'current_password' => ['bail', 'required', 'string', 'max:1024', 'current_password'],
+        $validated = $request->validate([
+            'current_password' => ['bail', 'required', 'string', 'max:1024', 'not_regex:/\x00/', 'current_password'],
             'password' => [
                 'bail',
                 'required',
                 'string',
+                'max:255',
                 'min:8',
                 'confirmed',
                 'regex:/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$/',
-                function (string $attribute, mixed $value, \Closure $fail): void {
-                    if (config('hashing.driver') === 'bcrypt' && strlen($value) > 72) {
-                        $fail('Password maksimal 72 byte. Kurangi panjang password Anda.');
-                    }
-                },
+                new PasswordStorageLimits,
             ],
         ], [
             'current_password.current_password' => 'Password lama salah.',
@@ -36,10 +37,10 @@ class AccountController extends Controller
             'password.regex' => 'Password harus mengandung minimal 1 huruf besar, 1 huruf kecil, dan 1 angka.',
         ]);
 
-        $user = $request->user();
-
-        $user->password = Hash::make($request->password);
-        $user->save();
+        $updater->update($request->user(), $validated['password']);
+        if ($request->expectsJson()) {
+            return response()->json(['success' => true, 'message' => 'Password berhasil diperbarui.'])->header('Cache-Control', 'private, no-store');
+        }
 
         return back()->with('status', 'Password berhasil diperbarui.');
     }

@@ -12,6 +12,11 @@
             overflow: hidden;
             margin-top: 8px;
         }
+        .account-request-status { padding: 12px 14px; border-radius: 12px; background: #eff6ff; color: #1e40af; font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; }
+        .account-request-status:empty { display: none; }
+        .account-request-status[data-error="true"] { background: #fff1f2; color: #9f1239; }
+        .dark .account-request-status { background: #172d48; color: #bfdbfe; }
+        .dark .account-request-status[data-error="true"] { background: #421c30; color: #fecdd3; }
 
         .password-strength-bar {
             height: 100%;
@@ -172,7 +177,9 @@
                 </p>
             </div>
 
-            <form method="POST" action="{{ route('account.password') }}" id="changePasswordForm" class="space-y-5">
+            <form method="POST" action="{{ route('account.password') }}" id="changePasswordForm" class="space-y-5" novalidate
+                data-max-password-bytes="{{ config('hashing.driver') === 'bcrypt' ? 72 : 0 }}"
+                data-error-field="{{ $errors->has('current_password') ? 'currentPassword' : ($errors->has('password') ? 'newPassword' : '') }}">
                 @csrf
 
                 {{-- Password Lama --}}
@@ -185,7 +192,7 @@
                         Password Lama <span class="text-red-500">*</span>
                     </label>
                     <div class="relative">
-                        <input type="password" name="current_password" id="currentPassword" required class="w-full rounded-xl border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white 
+                        <input type="password" name="current_password" id="currentPassword" required maxlength="1024" autocomplete="current-password" aria-label="Password lama" class="w-full rounded-xl border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white
                                    shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all pr-10
                                    @error('current_password') border-red-500 @enderror"
                             placeholder="Masukkan password lama">
@@ -220,7 +227,7 @@
                         Password Baru <span class="text-red-500">*</span>
                     </label>
                     <div class="relative">
-                        <input type="password" name="password" id="newPassword" required minlength="8"
+                        <input type="password" name="password" id="newPassword" required minlength="8" maxlength="255" autocomplete="new-password" aria-label="Password baru"
                             oninput="checkPasswordStrength('newPassword', 'newPasswordStrength')" class="w-full rounded-xl border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white 
                                    shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all pr-10
                                    @error('password') border-red-500 @enderror" placeholder="Minimal 8 karakter">
@@ -274,7 +281,7 @@
                         Konfirmasi Password Baru <span class="text-red-500">*</span>
                     </label>
                     <div class="relative">
-                        <input type="password" name="password_confirmation" id="confirmPassword" required minlength="8"
+                        <input type="password" name="password_confirmation" id="confirmPassword" required minlength="8" maxlength="255" autocomplete="new-password" aria-label="Konfirmasi password baru"
                             oninput="checkPasswordMatch()"
                             class="w-full rounded-xl border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white 
                                    shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all pr-10"
@@ -380,206 +387,5 @@
 @endsection
 
 @push('scripts')
-    <script>
-        // ================= PASSWORD STRENGTH CHECKER =================
-        function checkPasswordStrength(inputId, strengthId) {
-            const password = document.getElementById(inputId).value;
-            const strengthBar = document.getElementById(strengthId);
-            const textElement = document.getElementById(inputId + 'Text');
-
-            let strength = 0;
-            let feedback = [];
-
-            // Length check
-            if (password.length >= 8) strength++;
-            else feedback.push('minimal 8 karakter');
-
-            // Uppercase check
-            if (/[A-Z]/.test(password)) strength++;
-            else feedback.push('huruf besar');
-
-            // Lowercase check
-            if (/[a-z]/.test(password)) strength++;
-            else feedback.push('huruf kecil');
-
-            // Number check
-            if (/[0-9]/.test(password)) strength++;
-            else feedback.push('angka');
-
-            // Special character check (bonus)
-            if (/[!@#$%^&*(),.?":{}|<>]/.test(password)) strength++;
-
-            // Update UI
-            strengthBar.className = 'password-strength-bar';
-
-            if (strength === 0) {
-                strengthBar.classList.add('strength-weak');
-                strengthBar.style.width = '0%';
-                if (textElement) {
-                    textElement.innerHTML = '<span class="text-gray-500">Mulai ketik password...</span>';
-                }
-            } else if (strength <= 2) {
-                strengthBar.classList.add('strength-weak');
-                if (textElement) {
-                    textElement.innerHTML = `<span class="text-red-500 flex items-center gap-1">
-                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                        </svg>
-                        Lemah - Tambahkan: ${feedback.join(', ')}
-                    </span>`;
-                }
-            } else if (strength <= 3) {
-                strengthBar.classList.add('strength-medium');
-                if (textElement) {
-                    textElement.innerHTML = `<span class="text-orange-500 flex items-center gap-1">
-                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-                        </svg>
-                        Sedang - Tambahkan: ${feedback.join(', ')}
-                    </span>`;
-                }
-            } else {
-                strengthBar.classList.add('strength-strong');
-                if (textElement) {
-                    textElement.innerHTML = `<span class="text-green-500 flex items-center gap-1">
-                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                        </svg>
-                        Kuat - Password aman!
-                    </span>`;
-                }
-            }
-
-            // Check password match if confirmation exists
-            checkPasswordMatch();
-        }
-
-        // ================= CHECK PASSWORD MATCH =================
-        function checkPasswordMatch() {
-            const newPassword = document.getElementById('newPassword').value;
-            const confirmPassword = document.getElementById('confirmPassword').value;
-            const matchText = document.getElementById('passwordMatchText');
-
-            if (confirmPassword === '') {
-                matchText.innerHTML = '';
-                return;
-            }
-
-            if (newPassword === confirmPassword) {
-                matchText.innerHTML = `<span class="text-green-500 flex items-center gap-1">
-                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-                    </svg>
-                    Password cocok!
-                </span>`;
-            } else {
-                matchText.innerHTML = `<span class="text-red-500 flex items-center gap-1">
-                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                    Password tidak cocok
-                </span>`;
-            }
-        }
-
-        // ================= GENERATE SECURE PASSWORD =================
-        function generatePassword(inputId, strengthId) {
-            const length = 12;
-            const uppercase = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-            const lowercase = 'abcdefghijklmnopqrstuvwxyz';
-            const numbers = '0123456789';
-            const special = '!@#$%^&*';
-
-            let password = '';
-
-            // Ensure at least one of each type
-            password += uppercase[Math.floor(Math.random() * uppercase.length)];
-            password += lowercase[Math.floor(Math.random() * lowercase.length)];
-            password += numbers[Math.floor(Math.random() * numbers.length)];
-            password += special[Math.floor(Math.random() * special.length)];
-
-            // Fill the rest randomly
-            const allChars = uppercase + lowercase + numbers + special;
-            for (let i = password.length; i < length; i++) {
-                password += allChars[Math.floor(Math.random() * allChars.length)];
-            }
-
-            // Shuffle the password
-            password = password.split('').sort(() => Math.random() - 0.5).join('');
-
-            // Set to input and show
-            const input = document.getElementById(inputId);
-            input.type = 'text';
-            input.value = password;
-
-            // Set to confirmation too
-            const confirmInput = document.getElementById('confirmPassword');
-            if (confirmInput) {
-                confirmInput.type = 'text';
-                confirmInput.value = password;
-            }
-
-            // Check strength
-            checkPasswordStrength(inputId, strengthId);
-
-            // Copy to clipboard
-            navigator.clipboard.writeText(password).then(() => {
-                Swal.fire({
-                    icon: 'success',
-                    title: 'Password Generated!',
-                    html: `<code class="bg-gray-100 dark:bg-gray-700 px-3 py-2 rounded text-lg font-mono">${password}</code>
-                           <br><small class="text-gray-500 mt-2 block">✅ Sudah dicopy ke clipboard</small>
-                           <br><small class="text-amber-600 mt-1 block">⚠️ Pastikan Anda menyimpan password ini!</small>`,
-                    timer: 5000,
-                    showConfirmButton: true,
-                    confirmButtonText: 'OK, Saya Mengerti'
-                });
-            });
-        }
-
-        // ================= TOGGLE PASSWORD VISIBILITY =================
-        function togglePassword(inputId) {
-            const input = document.getElementById(inputId);
-            input.type = input.type === 'password' ? 'text' : 'password';
-        }
-
-        // ================= FORM VALIDATION =================
-        document.getElementById('changePasswordForm').addEventListener('submit', function (e) {
-            const newPassword = document.getElementById('newPassword').value;
-            const confirmPassword = document.getElementById('confirmPassword').value;
-
-            if (newPassword !== confirmPassword) {
-                e.preventDefault();
-                Swal.fire({
-                    icon: 'error',
-                    title: 'Password Tidak Cocok!',
-                    text: 'Password baru dan konfirmasi password tidak sama',
-                    confirmButtonColor: '#3B82F6'
-                });
-                return false;
-            }
-
-            // Check password strength
-            if (newPassword.length < 8 ||
-                !/[A-Z]/.test(newPassword) ||
-                !/[a-z]/.test(newPassword) ||
-                !/[0-9]/.test(newPassword)) {
-                e.preventDefault();
-                Swal.fire({
-                    icon: 'error',
-                    title: 'Password Tidak Memenuhi Syarat!',
-                    html: 'Password harus:<br>• Minimal 8 karakter<br>• Mengandung huruf besar<br>• Mengandung huruf kecil<br>• Mengandung angka',
-                    confirmButtonColor: '#3B82F6'
-                });
-                return false;
-            }
-        });
-
-        // ================= AUTO-FOCUS ON ERROR =================
-        @if($errors->has('current_password'))
-            document.getElementById('currentPassword').focus();
-        @elseif($errors->has('password'))
-            document.getElementById('newPassword').focus();
-        @endif
-    </script>
+    <script src="{{ asset('assets/app/account-password.js') }}?v={{ filemtime(public_path('assets/app/account-password.js')) }}" defer></script>
 @endpush
