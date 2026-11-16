@@ -25,10 +25,11 @@ function fixture() {
     });
     const context = vm.createContext({
         URL, URLSearchParams,
-        window: { location, VENDOR_PAGE_CONFIG: { indexUrl: location.origin + '/vendors' } },
+        window: { location, VENDOR_PAGE_CONFIG: { indexUrl: location.origin + '/vendors' }, addEventListener() {} },
         document: {
             getElementById: id => ({ searchInput: search, procurementFilters: root })[id],
             querySelector: () => addButton,
+            querySelectorAll: () => [],
             addEventListener: (name, callback) => { if (name === 'DOMContentLoaded') ready.push(callback); },
         },
         setTimeout() { assert.fail('Typing must not schedule automatic navigation'); },

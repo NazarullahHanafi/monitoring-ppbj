@@ -10,7 +10,7 @@
 @section('content')
     @php
         $previousUrl = url()->previous();
-        $safeBackUrl = $previousUrl && $previousUrl !== request()->fullUrl()
+        $safeBackUrl = $previousUrl && str_starts_with($previousUrl, request()->getSchemeAndHttpHost().'/') && $previousUrl !== request()->fullUrl()
             ? $previousUrl
             : route('dashboard');
     @endphp
@@ -23,6 +23,7 @@
     @endphp
 
     <div class="space-y-6">
+        <p id="vendorActionStatus" role="status" aria-live="polite" class="text-sm text-gray-700 dark:text-gray-200"></p>
 
         {{-- HEADER --}}
         <div
@@ -250,8 +251,9 @@
                                     <div class="flex items-center justify-center gap-1">
                                         {{-- TOGGLE --}}
                                         <form method="POST"
-                                            action="{{ route('vendor.toggle', $v) }}">
+                                            action="{{ route('vendor.toggle', $v) }}" data-vendor-action="status">
                                             @csrf
+                                            <input type="hidden" name="is_active" value="{{ $v->is_active ? 0 : 1 }}">
                                             <button type="submit"
                                                 class="p-1.5 rounded-lg {{ $v->is_active ? 'text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/30' : 'text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/30' }} transition-colors"
                                                 title="{{ $v->is_active ? 'Nonaktifkan' : 'Aktifkan' }}">
@@ -287,7 +289,7 @@
                                         {{-- HAPUS --}}
                                         <form method="POST"
                                             action="{{ route('vendor.destroy', $v) }}"
-                                            onsubmit="return confirmDelete(event)">
+                                            data-vendor-action="delete">
                                             @csrf @method('DELETE')
                                             <button type="submit"
                                                 class="p-1.5 rounded-lg text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors"

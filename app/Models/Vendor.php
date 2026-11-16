@@ -2,9 +2,9 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Cache;
 
 class Vendor extends Model
@@ -32,14 +32,17 @@ class Vendor extends Model
     // ===== CACHE INVALIDATION =====
     protected static function booted(): void
     {
-        $forget = function () {
-            \App\Support\PpbjVendorFilter::forget();
-            Cache::forget('vendors:active');
-            Cache::forget('vendor:stats');
-            Cache::forget('vendors:lookup:default:v1');
+        $forget = static function (Vendor $vendor): void {
+            $vendor->getConnection()->afterCommit(static function (): void {
+                \App\Support\PpbjVendorFilter::forget();
+                Cache::forget('vendors:active');
+                Cache::forget('vendor:stats');
+                Cache::forget('vendors:lookup:default:v1');
+            });
         };
 
-        static::saved($forget);
+        static::created($forget);
+        static::updated($forget);
         static::deleted($forget);
     }
 

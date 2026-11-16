@@ -420,11 +420,11 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
             Route::put('/{document}', 'update')->whereUuid('document')->middleware('throttle:20,1,vendor-doc-update:')->name('update');
             Route::delete('/{document}', 'destroy')->whereUuid('document')->middleware('throttle:10,1,vendor-doc-delete:')->name('destroy');
         });
-        Route::resource('vendors', VendorController::class)
-            ->names('vendor')
-            ->parameters(['vendors' => 'vendor'])
-            ->except(['show', 'create', 'edit']);
-        Route::post('vendors/{vendor}/toggle', [VendorController::class, 'toggleActive'])->name('vendor.toggle');
+        Route::get('vendors', [VendorController::class, 'index'])->middleware('throttle:60,1,vendor-index:')->name('vendor.index');
+        Route::post('vendors', [VendorController::class, 'store'])->middleware('throttle:20,1,vendor-store:')->name('vendor.store');
+        Route::match(['put', 'patch'], 'vendors/{vendor}', [VendorController::class, 'update'])->whereNumber('vendor')->middleware('throttle:30,1,vendor-update:')->name('vendor.update');
+        Route::delete('vendors/{vendor}', [VendorController::class, 'destroy'])->whereNumber('vendor')->middleware('throttle:10,1,vendor-destroy:')->name('vendor.destroy');
+        Route::post('vendors/{vendor}/toggle', [VendorController::class, 'toggleActive'])->whereNumber('vendor')->middleware('throttle:30,1,vendor-toggle:')->name('vendor.toggle');
 
         // ==== Master Kontrak SP ====
         Route::resource('sp-master-options', SpMasterOptionController::class)
