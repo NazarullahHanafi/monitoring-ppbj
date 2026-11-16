@@ -3,13 +3,14 @@
 namespace Tests\Feature;
 
 use App\Http\Middleware\TrackAuthenticatedDevice;
-use App\Models\SecurityHoneypotEvent;
 use App\Models\SecurityDeviceSession;
+use App\Models\SecurityHoneypotEvent;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Crypt;
+use Illuminate\Support\Facades\DB;
 use Symfony\Component\HttpFoundation\Response;
 use Tests\TestCase;
 
@@ -81,8 +82,12 @@ class OwnerSecurityCenterTest extends TestCase
 
     public function test_owner_can_revoke_another_device_session_without_exposing_session_id(): void
     {
+        config(['session.driver' => 'database']);
+        app('session')->forgetDrivers();
         $owner = $this->owner();
         $other = User::factory()->create();
+        DB::table('sessions')->insert(['id' => 'otherdevice123', 'user_id' => $other->id,
+            'payload' => base64_encode('synthetic session payload'), 'last_activity' => now()->getTimestamp()]);
         $token = hash_hmac('sha256', 'otherdevice123', (string) config('app.key'));
         SecurityDeviceSession::create([
             'session_hash' => $token,
@@ -103,6 +108,7 @@ class OwnerSecurityCenterTest extends TestCase
             ->assertRedirect();
 
         $this->assertDatabaseMissing('security_device_sessions', ['session_hash' => $token]);
+        $this->assertDatabaseMissing('sessions', ['id' => 'otherdevice123']);
         $this->assertDatabaseHas('activity_logs', ['action' => 'owner_session_revoked']);
 
     }
@@ -119,7 +125,7 @@ class OwnerSecurityCenterTest extends TestCase
         $request->setLaravelSession($session);
         $request->setUserResolver(fn () => $user);
 
-        app(TrackAuthenticatedDevice::class)->terminate($request, new Response());
+        app(TrackAuthenticatedDevice::class)->terminate($request, new Response);
 
         $device = SecurityDeviceSession::query()->sole();
         $this->assertSame($user->id, $device->user_id);

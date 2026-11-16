@@ -272,11 +272,14 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
     Route::middleware('owner')->group(function () {
         Route::get('/owner', [OwnerController::class, 'index'])->name('owner.index');
         Route::get('/owner/audit/export', [OwnerController::class, 'exportAudit'])->name('owner.audit.export');
-        Route::get('/owner/security', [OwnerSecurityController::class, 'index'])->name('owner.security.index');
+        Route::get('/owner/security', [OwnerSecurityController::class, 'index'])
+            ->middleware('throttle:60,1,owner-security-read:')->name('owner.security.index');
         Route::delete('/owner/security/sessions/{sessionToken}', [OwnerSecurityController::class, 'destroySession'])
             ->where('sessionToken', '[a-f0-9]{64}')
+            ->middleware('throttle:20,1,owner-security-revoke:')
             ->name('owner.security.sessions.destroy');
         Route::delete('/owner/security/sessions', [OwnerSecurityController::class, 'destroyOtherSessions'])
+            ->middleware('throttle:5,1,owner-security-revoke-batch:')
             ->name('owner.security.sessions.destroy-others');
     });
 

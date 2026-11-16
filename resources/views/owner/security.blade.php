@@ -3,10 +3,15 @@
 @section('title', 'Security Center Owner')
 
 @section('content')
-    <div class="mx-auto max-w-7xl space-y-6 text-slate-900 dark:text-slate-100">
+    <div id="ownerSecurity" class="mx-auto max-w-7xl space-y-6 text-slate-900 dark:text-slate-100">
         @if(session('success'))
             <div class="rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4 font-bold text-emerald-800 dark:border-emerald-400/30 dark:bg-emerald-400/10 dark:text-emerald-200">
                 {{ session('success') }}
+            </div>
+        @endif
+        @if(session('warning'))
+            <div role="status" class="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 font-bold text-amber-800 dark:border-amber-400/30 dark:bg-amber-400/10 dark:text-amber-200">
+                {{ session('warning') }}
             </div>
         @endif
         @if(session('error'))
@@ -135,14 +140,17 @@
                     <h2 class="mt-2 text-2xl font-black">Perangkat yang sedang login</h2>
                     <p class="mt-2 text-sm text-slate-600 dark:text-slate-300">Sesi aktif berdasarkan masa session {{ config('session.lifetime') }} menit. Pengakhiran sesi tercatat di audit log.</p>
                 </div>
-                @if($sessions->where('is_current', false)->isNotEmpty())
-                    <form method="POST" action="{{ route('owner.security.sessions.destroy-others') }}" onsubmit="return confirm('Akhiri seluruh sesi lain? Semua user selain sesi owner saat ini harus login kembali.')">
+                @if($sessionStats['others'] > 0)
+                    <form method="POST" action="{{ route('owner.security.sessions.destroy-others') }}" data-session-revoke data-confirm-title="Akhiri sesi perangkat lain?" data-confirm-text="Pengguna pada perangkat lain harus login kembali. Maksimal 100 sesi diproses sekali jalan; sesi yang Anda gunakan tetap aktif.">
                         @csrf
                         @method('DELETE')
-                        <button class="rounded-xl bg-red-600 px-4 py-3 text-sm font-black text-white shadow-sm transition hover:bg-red-700">Akhiri Semua Sesi Lain</button>
+                        <button class="rounded-xl bg-red-600 px-4 py-3 text-sm font-black text-white shadow-sm transition hover:bg-red-700">Akhiri Sesi Lain (maks. 100)</button>
                     </form>
                 @endif
             </div>
+
+            <p class="mt-4 text-sm text-slate-600 dark:text-slate-300">Menampilkan {{ $sessions->firstItem() ?? 0 }}–{{ $sessions->lastItem() ?? 0 }} dari {{ number_format($sessions->total()) }} sesi aktif. Sesi Anda ditampilkan paling awal.</p>
+            <p data-session-status role="status" aria-live="polite" hidden class="mt-4 text-sm font-bold text-slate-600 dark:text-slate-300"></p>
 
             <div class="mt-6 overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-700">
                 <table class="min-w-full divide-y divide-slate-200 text-left text-sm dark:divide-slate-700">
@@ -175,7 +183,7 @@
                                     @if($session->is_current)
                                         <span class="rounded-full bg-emerald-100 px-3 py-1 text-xs font-black text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-200">Sesi Ini</span>
                                     @else
-                                        <form method="POST" action="{{ route('owner.security.sessions.destroy', $session->session_token) }}" onsubmit="return confirm('Akhiri sesi perangkat ini?')">
+                                        <form method="POST" action="{{ route('owner.security.sessions.destroy', $session->session_token) }}" data-session-revoke data-confirm-title="Akhiri sesi perangkat ini?" data-confirm-text="Pengguna pada perangkat ini harus login kembali. Sesi yang Anda gunakan tetap aktif.">
                                             @csrf
                                             @method('DELETE')
                                             <button class="rounded-lg bg-red-50 px-3 py-2 text-xs font-black text-red-700 ring-1 ring-red-200 transition hover:bg-red-100 dark:bg-red-400/10 dark:text-red-200 dark:ring-red-400/30">Akhiri Sesi</button>
@@ -189,6 +197,10 @@
                     </tbody>
                 </table>
             </div>
+            <div class="mt-4">{{ $sessions->links() }}</div>
         </section>
     </div>
 @endsection
+@push('scripts')
+<script src="{{ asset('assets/app/owner-security.js') }}?v={{ filemtime(public_path('assets/app/owner-security.js')) }}" defer></script>
+@endpush
