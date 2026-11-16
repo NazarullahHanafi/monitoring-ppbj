@@ -73,7 +73,8 @@
 @endpush
 
 @section('content')
-    <div class="w-full px-4 sm:px-6 lg:px-8 py-6">
+    <div class="w-full px-4 sm:px-6 lg:px-8 py-6" data-user-directory>
+        <p id="userActionStatus" role="status" aria-live="polite" class="text-sm text-gray-700 dark:text-gray-200"></p>
         {{-- ================= HEADER ================= --}}
         <div class="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
             <div>
@@ -572,7 +573,7 @@
 
                                         {{-- Password Button --}}
                                         <button type="button"
-                                            onclick="openPasswordModal({{ $user->id }}, '{{ addslashes($user->name) }}')" class="inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold transition-all duration-200
+                                            onclick="openPasswordModal({{ $user->id }}, @js($user->name))" class="inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold transition-all duration-200
                                                                            bg-amber-500 hover:bg-amber-600 text-white border border-amber-600
                                                                            dark:bg-amber-600 dark:hover:bg-amber-700 dark:border-amber-500
                                                                            shadow-sm hover:shadow-md active:scale-95"
@@ -587,7 +588,7 @@
                                         {{-- Delete Button --}}
                                         @if($user->id !== auth()->id())
                                             <button type="button"
-                                                onclick="deleteUser({{ $user->id }}, '{{ addslashes($user->name) }}')" class="inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold transition-all duration-200
+                                                onclick="deleteUser({{ $user->id }}, @js($user->name))" class="inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold transition-all duration-200
                                                                                        bg-red-600 hover:bg-red-700 text-white border border-red-700
                                                                                        dark:bg-red-600 dark:hover:bg-red-700 dark:border-red-500
                                                                                        shadow-sm hover:shadow-md active:scale-95"
@@ -665,7 +666,7 @@
                 </button>
             </div>
 
-            <form id="addUserForm" onsubmit="handleAddUser(event)">
+            <form id="addUserForm" novalidate method="POST" action="{{ route('users.store') }}" onsubmit="handleAddUser(event)">
                 @csrf
                 <div class="space-y-4">
                     {{-- Name --}}
@@ -754,7 +755,7 @@
                             Password <span class="text-red-500">*</span>
                         </label>
                         <div class="relative">
-                            <input type="password" name="password" id="addPassword" required minlength="8"
+                            <input type="password" name="password" maxlength="255" id="addPassword" required minlength="8"
                                 oninput="checkPasswordStrength('addPassword', 'addPasswordStrength')"
                                 class="w-full rounded-lg border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 pr-10"
                                 placeholder="Min. 8 karakter">
@@ -827,7 +828,7 @@
                 </button>
             </div>
 
-            <form id="editUserForm" onsubmit="handleEditUser(event)">
+            <form id="editUserForm" novalidate method="POST" action="{{ route('users.index') }}" onsubmit="handleEditUser(event)">
                 @csrf
                 @method('PUT')
                 <input type="hidden" id="editUserId">
@@ -946,7 +947,7 @@
                 Untuk user: <span id="targetUserName" class="font-bold text-gray-900 dark:text-white"></span>
             </p>
 
-            <form id="passwordForm" onsubmit="handlePasswordChange(event)">
+            <form id="passwordForm" novalidate method="POST" action="{{ route('users.index') }}" onsubmit="handlePasswordChange(event)">
                 @csrf
                 @method('PUT')
                 <input type="hidden" id="passwordUserId">
@@ -956,7 +957,7 @@
                         Password Baru <span class="text-red-500">*</span>
                     </label>
                     <div class="relative">
-                        <input type="password" name="password" id="changePassword" required minlength="8"
+                        <input type="password" name="password" maxlength="255" id="changePassword" required minlength="8"
                             oninput="checkPasswordStrength('changePassword', 'changePasswordStrength')"
                             class="w-full rounded-lg border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 pr-10"
                             placeholder="Min. 8 karakter">
@@ -1007,391 +1008,8 @@
 
     @push('scripts')
         <script>
-            // ================= PASSWORD STRENGTH CHECKER =================
-            function checkPasswordStrength(inputId, strengthId) {
-                const password = document.getElementById(inputId).value;
-                const strengthBar = document.getElementById(strengthId);
-                const textId = inputId + 'Text';
-                const textElement = document.getElementById(textId);
-
-                let strength = 0;
-                let feedback = [];
-
-                // Length check
-                if (password.length >= 8) strength++;
-                else feedback.push('minimal 8 karakter');
-
-                // Uppercase check
-                if (/[A-Z]/.test(password)) strength++;
-                else feedback.push('huruf besar');
-
-                // Lowercase check
-                if (/[a-z]/.test(password)) strength++;
-                else feedback.push('huruf kecil');
-
-                // Number check
-                if (/[0-9]/.test(password)) strength++;
-                else feedback.push('angka');
-
-                // Special character check (bonus)
-                if (/[!@#$%^&*(),.?":{}|<>]/.test(password)) strength++;
-
-                // Update UI
-                strengthBar.className = 'password-strength-bar';
-
-                if (strength === 0) {
-                    strengthBar.classList.add('strength-weak');
-                    strengthBar.style.width = '0%';
-                    if (textElement) {
-                        textElement.innerHTML = '<span class="text-gray-500">Mulai ketik password...</span>';
-                    }
-                } else if (strength <= 2) {
-                    strengthBar.classList.add('strength-weak');
-                    if (textElement) {
-                        textElement.innerHTML = `<span class="text-red-500">⚠️ Lemah - Tambahkan: ${feedback.join(', ')}</span>`;
-                    }
-                } else if (strength <= 3) {
-                    strengthBar.classList.add('strength-medium');
-                    if (textElement) {
-                        textElement.innerHTML = `<span class="text-orange-500">⚡ Sedang - Tambahkan: ${feedback.join(', ')}</span>`;
-                    }
-                } else {
-                    strengthBar.classList.add('strength-strong');
-                    if (textElement) {
-                        textElement.innerHTML = '<span class="text-green-500">✅ Kuat - Password aman!</span>';
-                    }
-                }
-            }
-
-            // ================= GENERATE SECURE PASSWORD =================
-            function generatePassword(inputId, strengthId) {
-                const length = 12;
-                const uppercase = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-                const lowercase = 'abcdefghijklmnopqrstuvwxyz';
-                const numbers = '0123456789';
-                const special = '!@#$%^&*';
-
-                let password = '';
-
-                // Ensure at least one of each type
-                password += uppercase[Math.floor(Math.random() * uppercase.length)];
-                password += lowercase[Math.floor(Math.random() * lowercase.length)];
-                password += numbers[Math.floor(Math.random() * numbers.length)];
-                password += special[Math.floor(Math.random() * special.length)];
-
-                // Fill the rest randomly
-                const allChars = uppercase + lowercase + numbers + special;
-                for (let i = password.length; i < length; i++) {
-                    password += allChars[Math.floor(Math.random() * allChars.length)];
-                }
-
-                // Shuffle the password
-                password = password.split('').sort(() => Math.random() - 0.5).join('');
-
-                // Set to input and show
-                const input = document.getElementById(inputId);
-                input.type = 'text';
-                input.value = password;
-
-                // Check strength
-                checkPasswordStrength(inputId, strengthId);
-
-                // Copy to clipboard
-                navigator.clipboard.writeText(password).then(() => {
-                    Swal.fire({
-                        icon: 'success',
-                        title: 'Password Generated!',
-                        html: `<code class="bg-gray-100 dark:bg-gray-700 px-3 py-2 rounded text-lg font-mono">${password}</code><br><small class="text-gray-500 mt-2 block">✅ Sudah dicopy ke clipboard</small>`,
-                        timer: 3000,
-                        showConfirmButton: false
-                    });
-                });
-            }
-
-            // ================= TOGGLE PASSWORD VISIBILITY =================
-            function togglePassword(inputId) {
-                const input = document.getElementById(inputId);
-                input.type = input.type === 'password' ? 'text' : 'password';
-            }
-
-            // ================= MODAL FUNCTIONS =================
-            function openAddUserModal() {
-                document.getElementById('addUserModal').classList.remove('hidden');
-                document.getElementById('addUserModal').classList.add('flex');
-            }
-
-            function closeAddUserModal() {
-                document.getElementById('addUserModal').classList.add('hidden');
-                document.getElementById('addUserModal').classList.remove('flex');
-                document.getElementById('addUserForm').reset();
-                document.getElementById('addPasswordStrength').className = 'password-strength-bar';
-            }
-
-            function openEditModal(id, name, email, role, department, gender, buyerName) {
-                document.getElementById('editUserId').value = id;
-                document.getElementById('editName').value = name;
-                document.getElementById('editEmail').value = email;
-                document.getElementById('editRole').value = role;
-                document.getElementById('editDept').value = department;
-                document.getElementById('editGender').value = gender || '';
-                document.getElementById('editBuyerName').value = buyerName || '';
-
-                document.getElementById('editUserModal').classList.remove('hidden');
-                document.getElementById('editUserModal').classList.add('flex');
-            }
-
-            function closeEditUserModal() {
-                document.getElementById('editUserModal').classList.add('hidden');
-                document.getElementById('editUserModal').classList.remove('flex');
-            }
-
-            function openPasswordModal(id, name) {
-                document.getElementById('passwordUserId').value = id;
-                document.getElementById('targetUserName').innerText = name;
-
-                document.getElementById('passwordModal').classList.remove('hidden');
-                document.getElementById('passwordModal').classList.add('flex');
-            }
-
-            function closePasswordModal() {
-                document.getElementById('passwordModal').classList.add('hidden');
-                document.getElementById('passwordModal').classList.remove('flex');
-                document.getElementById('passwordForm').reset();
-                document.getElementById('changePasswordStrength').className = 'password-strength-bar';
-            }
-
-            // ================= AJAX FORM HANDLERS =================
-            async function handleAddUser(event) {
-                event.preventDefault();
-                const form = event.target;
-                const formData = new FormData(form);
-
-                try {
-                    const response = await fetch('{{ route("users.store") }}', {
-                        method: 'POST',
-                        headers: {
-                            'X-CSRF-TOKEN': '{{ csrf_token() }}',
-                            'Accept': 'application/json',
-                        },
-                        body: formData
-                    });
-
-                    const data = await response.json();
-
-                    if (data.success) {
-                        Swal.fire({
-                            icon: 'success',
-                            title: 'Berhasil!',
-                            text: data.message,
-                            timer: 2000,
-                            showConfirmButton: false
-                        }).then(() => {
-                            window.location.reload();
-                        });
-                    } else {
-                        // Show validation errors
-                        let errorMessage = data.message || 'Terjadi kesalahan';
-
-                        if (data.errors) {
-                            errorMessage = Object.values(data.errors).flat().join('<br>');
-                        }
-
-                        Swal.fire({
-                            icon: 'error',
-                            title: 'Validasi Gagal!',
-                            html: errorMessage,
-                            confirmButtonColor: '#3B82F6'
-                        });
-                    }
-                } catch (error) {
-                    console.error('Error:', error);
-                    Swal.fire({
-                        icon: 'error',
-                        title: 'Error!',
-                        text: 'Terjadi kesalahan saat menyimpan data',
-                        confirmButtonColor: '#3B82F6'
-                    });
-                }
-            }
-
-            async function handleEditUser(event) {
-                event.preventDefault();
-                const form = event.target;
-                const userId = document.getElementById('editUserId').value;
-                const formData = new FormData(form);
-
-                // ✅ CRITICAL FIX: Add _method for Laravel PUT request
-                formData.append('_method', 'PUT');
-
-                try {
-                    const response = await fetch(`/users/${userId}`, {
-                        method: 'POST',  // Laravel method spoofing requires POST
-                        headers: {
-                            'X-CSRF-TOKEN': '{{ csrf_token() }}',
-                            'Accept': 'application/json',
-                        },
-                        body: formData
-                    });
-
-                    const data = await response.json();
-
-                    if (data.success) {
-                        Swal.fire({
-                            icon: 'success',
-                            title: 'Berhasil!',
-                            text: data.message,
-                            timer: 2000,
-                            showConfirmButton: false
-                        }).then(() => {
-                            window.location.reload();
-                        });
-                    } else {
-                        let errorMessage = data.message || 'Terjadi kesalahan';
-
-                        if (data.errors) {
-                            errorMessage = Object.values(data.errors).flat().join('<br>');
-                        }
-
-                        Swal.fire({
-                            icon: 'error',
-                            title: 'Validasi Gagal!',
-                            html: errorMessage,
-                            confirmButtonColor: '#3B82F6'
-                        });
-                    }
-                } catch (error) {
-                    console.error('Error:', error);
-                    Swal.fire({
-                        icon: 'error',
-                        title: 'Error!',
-                        text: 'Terjadi kesalahan saat update data',
-                        confirmButtonColor: '#3B82F6'
-                    });
-                }
-            }
-
-            async function handlePasswordChange(event) {
-                event.preventDefault();
-                const form = event.target;
-                const userId = document.getElementById('passwordUserId').value;
-                const formData = new FormData(form);
-
-                try {
-                    const response = await fetch(`/users/${userId}/password`, {
-                        method: 'POST',
-                        headers: {
-                            'X-CSRF-TOKEN': '{{ csrf_token() }}',
-                            'Accept': 'application/json',
-                        },
-                        body: formData
-                    });
-
-                    const data = await response.json();
-
-                    if (data.success) {
-                        Swal.fire({
-                            icon: 'success',
-                            title: 'Berhasil!',
-                            text: data.message,
-                            timer: 2000,
-                            showConfirmButton: false
-                        }).then(() => {
-                            closePasswordModal();
-                        });
-                    } else {
-                        let errorMessage = data.message || 'Terjadi kesalahan';
-
-                        if (data.errors) {
-                            errorMessage = Object.values(data.errors).flat().join('<br>');
-                        }
-
-                        Swal.fire({
-                            icon: 'error',
-                            title: 'Validasi Gagal!',
-                            html: errorMessage,
-                            confirmButtonColor: '#3B82F6'
-                        });
-                    }
-                } catch (error) {
-                    console.error('Error:', error);
-                    Swal.fire({
-                        icon: 'error',
-                        title: 'Error!',
-                        text: 'Terjadi kesalahan saat mengubah password',
-                        confirmButtonColor: '#3B82F6'
-                    });
-                }
-            }
-
-            async function deleteUser(id, name) {
-                const result = await Swal.fire({
-                    title: 'Konfirmasi Hapus',
-                    html: `Apakah Anda yakin ingin menghapus user <strong>${name}</strong>?<br><small class="text-gray-500">Aksi ini tidak dapat dibatalkan</small>`,
-                    icon: 'warning',
-                    showCancelButton: true,
-                    confirmButtonColor: '#EF4444',
-                    cancelButtonColor: '#6B7280',
-                    confirmButtonText: 'Ya, Hapus!',
-                    cancelButtonText: 'Batal'
-                });
-
-                if (result.isConfirmed) {
-                    try {
-                        const response = await fetch(`/users/${id}`, {
-                            method: 'DELETE',
-                            headers: {
-                                'X-CSRF-TOKEN': '{{ csrf_token() }}',
-                                'Accept': 'application/json',
-                            }
-                        });
-
-                        const data = await response.json();
-
-                        if (data.success) {
-                            const row = document.getElementById(`user-row-${id}`);
-                            row.style.opacity = '0';
-                            row.style.transform = 'translateX(-100%)';
-                            row.style.transition = 'all 0.3s ease';
-
-                            setTimeout(() => {
-                                Swal.fire({
-                                    icon: 'success',
-                                    title: 'Terhapus!',
-                                    text: data.message,
-                                    timer: 2000,
-                                    showConfirmButton: false
-                                }).then(() => {
-                                    window.location.reload();
-                                });
-                            }, 300);
-                        } else {
-                            Swal.fire({
-                                icon: 'error',
-                                title: 'Gagal!',
-                                html: data.message,
-                                confirmButtonColor: '#3B82F6'
-                            });
-                        }
-                    } catch (error) {
-                        console.error('Error:', error);
-                        Swal.fire({
-                            icon: 'error',
-                            title: 'Error!',
-                            text: 'Terjadi kesalahan saat menghapus user',
-                            confirmButtonColor: '#3B82F6'
-                        });
-                    }
-                }
-            }
-
-            // ================= CLOSE MODAL ON ESC =================
-            document.addEventListener('keydown', function (event) {
-                if (event.key === 'Escape') {
-                    closeAddUserModal();
-                    closeEditUserModal();
-                    closePasswordModal();
-                }
-            });
+            window.USER_MANAGEMENT_CONFIG = @json(['baseUrl' => url('/users'), 'storeUrl' => route('users.store'), 'csrfToken' => csrf_token()]);
         </script>
+        <script src="{{ asset('assets/app/user-management.js') }}?v={{ filemtime(public_path('assets/app/user-management.js')) }}" defer></script>
     @endpush
 @endsection

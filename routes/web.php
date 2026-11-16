@@ -335,12 +335,14 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
         // ========================
         // SUPERADMIN MENU (Khusus Umum)
         // ========================
-        Route::get('/users', [UserController::class, 'index'])->name('users.index');
-        Route::post('/users', [UserController::class, 'store'])->name('users.store');
-        Route::put('/users/{id}', [UserController::class, 'update'])->name('users.update');
-        Route::put('/users/{id}/password', [UserController::class, 'updatePassword'])->name('users.password');
-        Route::delete('/users/{id}', [UserController::class, 'destroy'])->name('users.destroy');
-        Route::get('/users/export', [UserController::class, 'export'])->name('users.export');
+        Route::middleware('can:viewAny,'.\App\Models\User::class)->group(function () {
+            Route::get('/users', [UserController::class, 'index'])->middleware('throttle:60,1,users-index:')->name('users.index');
+            Route::post('/users', [UserController::class, 'store'])->middleware('throttle:10,1,users-store:')->name('users.store');
+            Route::put('/users/{id}', [UserController::class, 'update'])->whereNumber('id')->middleware('throttle:20,1,users-update:')->name('users.update');
+            Route::put('/users/{id}/password', [UserController::class, 'updatePassword'])->whereNumber('id')->middleware('throttle:10,1,users-password:')->name('users.password');
+            Route::delete('/users/{id}', [UserController::class, 'destroy'])->whereNumber('id')->middleware('throttle:10,1,users-destroy:')->name('users.destroy');
+            Route::get('/users/export', [UserController::class, 'export'])->middleware('throttle:10,1,users-export:')->name('users.export');
+        });
 
         Route::get('/contact-messages', [ContactMessageController::class, 'index'])->middleware('throttle:60,1,contact-inbox:')->name('contact-messages.index');
         Route::put('/contact-messages/{contactMessage}/read', [ContactMessageController::class, 'toggleRead'])->middleware('throttle:30,1,contact-status:')->name('contact-messages.read');

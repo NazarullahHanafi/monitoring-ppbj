@@ -2,20 +2,23 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\User;
 use App\Models\MasterBuyer;
+use App\Models\User;
 use App\Support\UserDirectoryQuery;
+use Illuminate\Database\UniqueConstraintViolationException;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
-use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
+use Illuminate\Validation\ValidationException;
 
 class UserController extends Controller
 {
     use AuthorizesRequests;
+
     /**
      * ✅ OPTIMIZED: Display all users with pagination
      * Support 10K+ users without lag
@@ -40,7 +43,7 @@ class UserController extends Controller
                 'last_login_ip',
                 'last_seen_ip',
                 'created_at',
-                'updated_at'
+                'updated_at',
             ]);
 
         // ✅ SORTING
@@ -67,309 +70,159 @@ class UserController extends Controller
         $masterBuyers = Cache::remember(
             'master_buyers_for_user_mapping',
             300,
-            fn() => MasterBuyer::orderBy('nama')->pluck('nama')->values()
+            fn () => MasterBuyer::orderBy('nama')->pluck('nama')->values()
         );
 
         return view('users.index', compact('users', 'stats', 'masterBuyers'));
     }
 
-    /**
-     * ✅ OPTIMIZED: Store new user with proper validation
-     */
     public function store(Request $request)
     {
-        // ✅ Security check
         $this->authorize('create', User::class);
-
-        // ✅ VALIDATION dengan custom messages
-        $validated = $request->validate([
-            'name' => [
-                'required',
-                'string',
-                'max:255',
-                'min:3',
-                'regex:/^[\pL\s\-]+$/u' // Only letters, spaces, hyphens
-            ],
-            'email' => [
-                'required',
-                'email:rfc,dns',
-                'max:255',
-                'unique:users,email'
-            ],
-            'password' => [
-                'required',
-                'string',
-                'min:8',
-                'regex:/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$/' // Min 1 uppercase, 1 lowercase, 1 number
-            ],
-            'role' => [
-                'required',
-                Rule::in(['user', 'superadmin', 'viewer'])
-            ],
-            'department' => [
-                'required',
-                Rule::in(['umum', 'operasional'])
-            ],
-            'buyer_name' => [
-                'nullable',
-                'string',
-                'max:50',
-                Rule::exists('master_buyer', 'nama')
-            ],
-            'gender' => [
-                'nullable',
-                Rule::in(['male', 'female'])
-            ],
-        ], [
-            'name.required' => 'Nama wajib diisi',
-            'name.min' => 'Nama minimal 3 karakter',
-            'name.regex' => 'Nama hanya boleh berisi huruf, spasi, dan tanda hubung',
-            'email.required' => 'Email wajib diisi',
-            'email.email' => 'Format email tidak valid',
-            'email.unique' => 'Email sudah terdaftar',
-            'password.required' => 'Password wajib diisi',
-            'password.min' => 'Password minimal 8 karakter',
-            'password.regex' => 'Password harus mengandung minimal 1 huruf besar, 1 huruf kecil, dan 1 angka',
-        ]);
-
+        $data = $this->validatedAccount($request);
         try {
-            // ✅ TRANSACTION untuk data integrity
-            DB::transaction(function () use ($validated) {
-                User::create([
-                    'name' => $validated['name'],
-                    'email' => strtolower($validated['email']), // ✅ Normalize email
-                    'password' => Hash::make($validated['password']),
-                    'role' => $validated['role'],
-                    'department' => $validated['department'],
-                    'gender' => $validated['gender'] ?? null,
-                    'buyer_name' => $validated['buyer_name'] ?? null,
-                ]);
-            });
-
-            // ✅ Clear cache
+            $data['password'] = Hash::make($data['password']);
+            $user = DB::transaction(fn () => User::create($data));
             Cache::forget('user_stats');
+            Log::info('New user created', ['user_id' => $user->id, 'created_by' => auth()->id()]);
 
-            // ✅ Log activity
-            Log::info('New user created', [
-                'email' => $validated['email'],
-                'created_by' => auth()->user()->email,
-            ]);
-
-            return response()->json([
-                'success' => true,
-                'message' => 'User berhasil ditambahkan'
-            ]);
-
-        } catch (\Exception $e) {
-            Log::error('Failed to create user: ' . $e->getMessage());
-
-            return response()->json([
-                'success' => false,
-                'message' => 'Gagal menambahkan user. Silakan coba lagi.'
-            ], 500);
+            return $this->success('User berhasil ditambahkan');
+        } catch (UniqueConstraintViolationException) {
+            throw ValidationException::withMessages(['email' => 'Email sudah digunakan pengguna lain. Muat ulang daftar untuk memeriksa.']);
+        } catch (\Exception $error) {
+            return $this->failure('Failed to create user', 'Gagal menambahkan user. Periksa daftar sebelum mencoba kembali.', $error);
         }
     }
 
-    /**
-     * ✅ OPTIMIZED: Update user data with proper validation
-     */
-    public function update(Request $request, $id)
+    public function update(Request $request, string $id)
     {
-        // ✅ Find user
-        $user = User::findOrFail($id);
-
-        // ✅ Security check
+        $user = $this->managedUser($id);
         $this->authorize('update', $user);
-
-        // ✅ Prevent self-demotion (superadmin tidak bisa demote diri sendiri)
-        if ($user->id === auth()->id() && $request->role !== 'superadmin') {
-            return response()->json([
-                'success' => false,
-                'message' => 'Anda tidak dapat mengubah role Anda sendiri'
-            ], 422);
-        }
-
-        // ✅ VALIDATION
-        $validated = $request->validate([
-            'name' => [
-                'required',
-                'string',
-                'max:255',
-                'min:3',
-                'regex:/^[\pL\s\-]+$/u'
-            ],
-            'email' => [
-                'required',
-                'email:rfc,dns',
-                'max:255',
-                Rule::unique('users')->ignore($user->id)
-            ],
-            'role' => [
-                'required',
-                Rule::in(['user', 'superadmin', 'viewer'])
-            ],
-            'department' => [
-                'required',
-                Rule::in(['umum', 'operasional'])
-            ],
-            'buyer_name' => [
-                'nullable',
-                'string',
-                'max:50',
-                Rule::exists('master_buyer', 'nama')
-            ],
-            'gender' => [
-                'nullable',
-                Rule::in(['male', 'female'])
-            ],
-        ], [
-            'name.required' => 'Nama wajib diisi',
-            'name.min' => 'Nama minimal 3 karakter',
-            'email.required' => 'Email wajib diisi',
-            'email.unique' => 'Email sudah digunakan user lain',
-        ]);
-
-        try {
-            DB::transaction(function () use ($user, $validated) {
-                $user->update([
-                    'name' => $validated['name'],
-                    'email' => strtolower($validated['email']),
-                    'role' => $validated['role'],
-                    'department' => $validated['department'],
-                    'gender' => $validated['gender'] ?? null,
-                    'buyer_name' => $validated['buyer_name'] ?? null,
-                ]);
-            });
-
-            // ✅ Clear cache
-            Cache::forget('user_stats');
-
-            // ✅ Log activity
-            Log::info('User updated', [
-                'user_id' => $user->id,
-                'updated_by' => auth()->user()->email,
-            ]);
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Data user berhasil diupdate'
-            ]);
-
-        } catch (\Exception $e) {
-            Log::error('Failed to update user: ' . $e->getMessage());
-
-            return response()->json([
-                'success' => false,
-                'message' => 'Gagal memperbarui user. Silakan coba lagi.'
-            ], 500);
-        }
-    }
-
-    /**
-     * ✅ OPTIMIZED: Update password with security checks
-     */
-    public function updatePassword(Request $request, $id)
-    {
-        // ✅ Find user
-        $user = User::findOrFail($id);
-
-        // ✅ Security check
-        $this->authorize('update', $user);
-
-        // ✅ VALIDATION (tanpa 'confirmed')
-        $validated = $request->validate([
-            'password' => [
-                'required',
-                'string',
-                'min:8',
-                // ❌ REMOVE: 'confirmed'  <-- Ini yang bikin error!
-                'regex:/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$/'
-            ],
-        ], [
-            'password.required' => 'Password wajib diisi',
-            'password.min' => 'Password minimal 8 karakter',
-            'password.regex' => 'Password harus mengandung minimal 1 huruf besar, 1 huruf kecil, dan 1 angka',
-        ]);
-
-        try {
-            DB::transaction(function () use ($user, $validated) {
-                $user->update([
-                    'password' => Hash::make($validated['password']),
-                ]);
-            });
-
-            // ✅ Log activity (JANGAN log password!)
-            Log::info('User password changed', [
-                'user_id' => $user->id,
-                'changed_by' => auth()->user()->email,
-            ]);
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Password berhasil diubah'
-            ]);
-
-        } catch (\Exception $e) {
-            Log::error('Failed to update password: ' . $e->getMessage());
-
-            return response()->json([
-                'success' => false,
-                'message' => 'Gagal mengubah password. Silakan coba lagi.'
-            ], 500);
-        }
-    }
-
-    /**
-     * ✅ NEW: Delete user (soft delete recommended)
-     */
-    public function destroy($id)
-    {
-        $user = User::findOrFail($id);
-        $this->authorize('delete', $user);
-
-        // Cegah hapus diri sendiri
         if ($user->id === auth()->id()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Anda tidak dapat menghapus akun Anda sendiri'
-            ], 422);
+            $errors = [];
+            if ($request->input('role') !== 'superadmin') {
+                $errors['role'] = 'Anda tidak dapat menurunkan role akun Anda sendiri.';
+            }
+            if ($request->input('department') !== 'umum') {
+                $errors['department'] = 'Akun Anda harus tetap di departemen Umum agar akses pengelolaan tidak terputus.';
+            }
+            if ($errors) {
+                throw ValidationException::withMessages($errors);
+            }
         }
-
+        $data = $this->validatedAccount($request, $user);
         try {
-            // ✅ LANGSUNG HAPUS DI DALAM TRANSACTION
-            DB::transaction(function () use ($user) {
-                $user->delete();
-            });
-
+            DB::transaction(fn () => $user->update($data));
             Cache::forget('user_stats');
-            Log::warning('User deleted', [
-                'user_id' => $user->id,
-                'deleted_by' => auth()->user()->email,
-            ]);
+            Log::info('User updated', ['user_id' => $user->id, 'updated_by' => auth()->id()]);
 
-            return response()->json([
-                'success' => true,
-                'message' => 'User berhasil dihapus'
-            ]);
+            return $this->success('Data user berhasil diupdate');
+        } catch (UniqueConstraintViolationException) {
+            throw ValidationException::withMessages(['email' => 'Email sudah digunakan pengguna lain. Muat ulang daftar sebelum menyimpan.']);
+        } catch (\Exception $error) {
+            return $this->failure('Failed to update user', 'Gagal memperbarui user. Periksa daftar sebelum mencoba kembali.', $error);
+        }
+    }
 
-        } catch (\Illuminate\Database\QueryException $e) {
-            // ✅ TANGKAP ERROR SPESIFIK DATABASE (SQLSTATE 23000 / Kode 1451)
-            // Kode 1451 = Tidak bisa hapus karena jadi Parent di tabel lain (Foreign Key)
-            if ($e->errorInfo[0] == '23000' && $e->errorInfo[1] == 1451) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'User tidak dapat dihapus karena masih memiliki data terkait di sistem lain (misal: TOR/PRS atau PPBJ).'
-                ], 422);
+    public function updatePassword(Request $request, string $id)
+    {
+        $user = $this->managedUser($id);
+        $this->authorize('update', $user);
+        $data = $request->validate(['password' => $this->passwordRules()], [
+            'password.required' => 'Password wajib diisi', 'password.min' => 'Password minimal 8 karakter',
+            'password.regex' => 'Password harus mengandung minimal 1 huruf besar, 1 huruf kecil, dan 1 angka',
+        ]);
+        try {
+            $hash = Hash::make($data['password']);
+            DB::transaction(fn () => $user->update(['password' => $hash]));
+            Log::info('User password changed', ['user_id' => $user->id, 'changed_by' => auth()->id()]);
+
+            return $this->success('Password berhasil diubah');
+        } catch (\Exception $error) {
+            return $this->failure('Failed to update password', 'Gagal mengubah password. Periksa hasil sebelum mencoba kembali.', $error);
+        }
+    }
+
+    public function destroy(string $id)
+    {
+        $user = $this->managedUser($id);
+        $this->authorize('delete', $user);
+        try {
+            DB::transaction(fn () => $user->delete());
+            Cache::forget('user_stats');
+            Log::warning('User deleted', ['user_id' => $user->id, 'deleted_by' => auth()->id()]);
+
+            return $this->success('User berhasil dihapus');
+        } catch (\Illuminate\Database\QueryException $error) {
+            if (($error->errorInfo[0] ?? '') === '23000' && in_array((int) ($error->errorInfo[1] ?? 0), [1451, 19], true)) {
+                return response()->json(['success' => false, 'message' => 'User tidak dapat dihapus karena masih memiliki data terkait.'], 422)
+                    ->header('Cache-Control', 'private, no-store');
             }
 
-            // Kalau error lain, log dan tampilkan pesan umum
-            Log::error('Failed to delete user: ' . $e->getMessage());
-
-            return response()->json([
-                'success' => false,
-                'message' => 'Terjadi kesalahan teknis saat menghapus data.'
-            ], 500);
+            return $this->failure('Failed to delete user', 'Gagal menghapus user. Periksa daftar sebelum mencoba kembali.', $error);
+        } catch (\Exception $error) {
+            return $this->failure('Failed to delete user', 'Gagal menghapus user. Periksa daftar sebelum mencoba kembali.', $error);
         }
+    }
+
+    private function managedUser(string $id): User
+    {
+        abort_unless(filter_var($id, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]) !== false, 404);
+
+        return User::findOrFail($id);
+    }
+
+    private function passwordRules(): array
+    {
+        return ['bail', 'required', 'string', 'min:8', 'max:255', 'regex:/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$/',
+            function (string $attribute, mixed $value, \Closure $fail): void {
+                if (str_contains($value, "\0")) {
+                    $fail('Password tidak boleh berisi karakter null.');
+                }
+                if (config('hashing.driver') === 'bcrypt' && strlen($value) > 72) {
+                    $fail('Password maksimal 72 byte. Kurangi panjang password Anda.');
+                }
+            }];
+    }
+
+    private function validatedAccount(Request $request, ?User $user = null): array
+    {
+        if (is_string($request->input('email'))) {
+            $request->merge(['email' => strtolower(trim($request->input('email')))]);
+        }
+        $rules = [
+            'name' => ['required', 'string', 'max:255', 'min:3', 'regex:/^[\pL\s\-]+$/u'],
+            'email' => ['required', 'email:rfc,dns', 'max:255', Rule::unique('users', 'email')->ignore($user?->id)],
+            'role' => ['required', Rule::in(['user', 'superadmin', 'viewer'])],
+            'department' => ['required', Rule::in(['umum', 'operasional'])],
+            'buyer_name' => ['nullable', 'string', 'max:50', Rule::exists('master_buyer', 'nama')],
+            'gender' => ['nullable', Rule::in(['male', 'female'])],
+        ];
+        if (! $user) {
+            $rules['password'] = $this->passwordRules();
+        }
+        $data = $request->validate($rules, [
+            'name.required' => 'Nama wajib diisi', 'name.min' => 'Nama minimal 3 karakter', 'name.regex' => 'Nama hanya boleh berisi huruf, spasi, dan tanda hubung',
+            'email.required' => 'Email wajib diisi', 'email.email' => 'Format atau domain email tidak valid', 'email.unique' => 'Email sudah digunakan pengguna lain',
+            'password.required' => 'Password wajib diisi', 'password.min' => 'Password minimal 8 karakter',
+            'password.regex' => 'Password harus mengandung minimal 1 huruf besar, 1 huruf kecil, dan 1 angka',
+        ]);
+        $data['gender'] = $data['gender'] ?? null;
+        $data['buyer_name'] = $data['buyer_name'] ?? null;
+
+        return $data;
+    }
+
+    private function success(string $message)
+    {
+        return response()->json(['success' => true, 'message' => $message])->header('Cache-Control', 'private, no-store');
+    }
+
+    private function failure(string $action, string $message, \Exception $error)
+    {
+        Log::error($action, ['exception_type' => get_class($error), 'code' => (string) $error->getCode()]);
+
+        return response()->json(['success' => false, 'message' => $message], 500)->header('Cache-Control', 'private, no-store');
     }
 
     /**
@@ -384,7 +237,7 @@ class UserController extends Controller
         if ($user->id === auth()->id()) {
             return response()->json([
                 'success' => false,
-                'message' => 'Anda tidak dapat menonaktifkan akun Anda sendiri'
+                'message' => 'Anda tidak dapat menonaktifkan akun Anda sendiri',
             ], 422);
         }
 
@@ -402,15 +255,15 @@ class UserController extends Controller
             return response()->json([
                 'success' => true,
                 'message' => $newStatus ? 'User berhasil diaktifkan' : 'User berhasil dinonaktifkan',
-                'is_active' => $newStatus
+                'is_active' => $newStatus,
             ]);
 
         } catch (\Exception $e) {
-            Log::error('Failed to toggle user status: ' . $e->getMessage());
+            Log::error('Failed to toggle user status: '.$e->getMessage());
 
             return response()->json([
                 'success' => false,
-                'message' => 'Gagal mengubah status user'
+                'message' => 'Gagal mengubah status user',
             ], 500);
         }
     }
@@ -431,7 +284,7 @@ class UserController extends Controller
         if (in_array(auth()->id(), $validated['ids'])) {
             return response()->json([
                 'success' => false,
-                'message' => 'Anda tidak dapat menghapus akun Anda sendiri'
+                'message' => 'Anda tidak dapat menghapus akun Anda sendiri',
             ], 422);
         }
 
@@ -449,18 +302,19 @@ class UserController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => "{$deleted} user berhasil dihapus"
+                'message' => "{$deleted} user berhasil dihapus",
             ]);
 
         } catch (\Exception $e) {
-            Log::error('Failed to bulk delete users: ' . $e->getMessage());
+            Log::error('Failed to bulk delete users: '.$e->getMessage());
 
             return response()->json([
                 'success' => false,
-                'message' => 'Gagal menghapus user. Silakan coba lagi.'
+                'message' => 'Gagal menghapus user. Silakan coba lagi.',
             ], 500);
         }
     }
+
     public function export(Request $request)
     {
         // ✅ Security check
@@ -472,13 +326,13 @@ class UserController extends Controller
         $maximumId = (clone $query)->max('id') ?? 0;
         $query->where('id', '<=', $maximumId);
 
-        $filename = 'users_export_' . now()->format('Ymd_His') . '.csv';
+        $filename = 'users_export_'.now()->format('Ymd_His').'.csv';
 
         return response()->streamDownload(function () use ($query) {
             $out = fopen('php://output', 'w');
 
             // UTF-8 BOM
-            fprintf($out, chr(0xEF) . chr(0xBB) . chr(0xBF));
+            fprintf($out, chr(0xEF).chr(0xBB).chr(0xBF));
 
             // Header
             fputcsv($out, ['ID', 'Nama', 'Email', 'Role', 'Department', 'Gender', 'Buyer Terkait', 'Terakhir Online', 'IP Login Terakhir', 'IP Aktif Terakhir', 'Created At']);
@@ -515,7 +369,7 @@ class UserController extends Controller
 
     private function checkSuperadminUmum()
     {
-        if (!auth()->check()) {
+        if (! auth()->check()) {
             abort(401, 'Unauthorized');
         }
 
