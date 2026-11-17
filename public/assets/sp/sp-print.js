@@ -48,14 +48,15 @@
         Swal.fire({title:'Memeriksa nilai SP dan portofolio',showConfirmButton:false,showCancelButton:true,...theme(),didOpen:()=>Swal.showLoading()}).then(r=>{if(r.isDismissed&&!loaded)controller.abort();});
         try{
             let data=await context(match[1],controller.signal);
+            if(current!==serial||controller.signal.aborted)return;
             const s=retained&&typeof retained==='object'?retained:{mode:'auto',signerId:data.name_id,titleId:data.title_id,reason:'',fieldId:data.owner_field_id,fieldReason:'',fieldManual:false};
             if(!s.fieldManual)s.fieldId=data.owner_field_id;
-            Object.assign(s,await window.SPPHPrintMasters.choices(s.signerId,s.titleId,s.fieldId,true));
+            Object.assign(s,await window.SPPHPrintMasters.choices(s.signerId,s.titleId,s.fieldId,true,controller.signal));
             if(current!==serial||controller.signal.aborted)return;loaded=true;
             let managing=false,confirmRequest;
             const capture=()=>{s.signerId=document.getElementById('spPrintSigner')?.value??s.signerId;s.titleId=document.getElementById('spPrintTitle')?.value??s.titleId;s.reason=document.getElementById('spPrintReason')?.value??s.reason;s.fieldId=document.getElementById('spPrintField')?.value??s.fieldId;s.fieldReason=document.getElementById('spPrintFieldReason')?.value??s.fieldReason;s.fieldManual=Number(s.fieldId)!==Number(data.owner_field_id);};
             const ready=()=>s.mode==='manual'?data.amount_valid:data.ready;
-            const result=await Swal.fire({title:'Siapkan cetak SP / Kontrak',html:render(data,s),...theme(),showCancelButton:true,cancelButtonText:'Batal',showConfirmButton:ready(),confirmButtonText:'Lanjut Preview',confirmButtonColor:'#3157d9',focusConfirm:false,showLoaderOnConfirm:true,allowOutsideClick:()=>!Swal.isLoading(),willClose:()=>confirmRequest?.abort(),
+            const result=await Swal.fire({title:'Siapkan cetak SP / Kontrak',html:render(data,s),...theme(),showCancelButton:true,cancelButtonText:'Batal',showConfirmButton:ready(),confirmButtonText:'Lanjut Preview',confirmButtonColor:'#3157d9',focusConfirm:false,showLoaderOnConfirm:true,allowOutsideClick:()=>!Swal.isLoading(),willClose:()=>{controller.abort();confirmRequest?.abort();},
                 didOpen:()=>Swal.getHtmlContainer().addEventListener('click',async event=>{
                     const button=event.target.closest('[data-sp-print]');if(!button||managing||Swal.isLoading())return;capture();
                     const action=button.dataset.spPrint;
@@ -67,7 +68,7 @@
                             const picked=await window.SPPHPrintMasters.open(data.can_manage,action==='fields'?'bidang_pr':'penandatangan_sci',action==='fields');
                             if(picked){if(picked.type==='bidang_pr'){s.fieldId=picked.id;s.fieldManual=true;}else{s.mode='manual';s[picked.type==='penandatangan_sci'?'signerId':'titleId']=picked.id;}}
                         }
-                    }catch(error){await Swal.fire({icon:'warning',text:error.message,...theme()});}
+                    }catch(error){if(current!==serial)return;await Swal.fire({icon:'warning',text:error.message,...theme()});}
                     if(current===serial)window.openSpPrintPreview(rawUrl,s);
                 }),
                 preConfirm:async()=>{
@@ -94,7 +95,7 @@
                                 Swal.update({html:render(data,s),showConfirmButton:ready()});
                             }catch(refreshError){if(refreshError.name==='AbortError')return false;}
                         }
-                        if(current===serial&&Swal.isVisible())Swal.showValidationMessage(error.message);return false;
+                        if(current===serial&&Swal.isVisible())Swal.showValidationMessage(escape(error.message));return false;
                     }
                 }});
             if(current===serial&&result.isConfirmed&&result.value)window.location.assign(result.value);

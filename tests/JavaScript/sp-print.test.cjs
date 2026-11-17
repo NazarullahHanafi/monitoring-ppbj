@@ -87,3 +87,18 @@ test('closing a mapping dialog during pagehide cannot reopen its parent preview'
     const managing=h.events.click({target:{closest:()=>({dataset:{spPrint:'maps'}})}});h.windowEvents.pagehide();finish();await managing;
     assert.equal(h.requests.length,1);d.resolve({isDismissed:true});await task;assert.equal(h.navigations.length,0);
 });
+
+test('SP cancelled initial checks do not start master option reads and pending choices receive the abort signal',async()=>{
+    const h=runtime();let calls=0,finish,signal;
+    h.window.SPPHPrintMasters.choices=(a,b,c,d,s)=>{calls++;signal=s;return new Promise(resolve=>finish=resolve);};
+    const task=h.window.openSpPrintPreview('/sp/12/cetak-preview');h.respond(0,data());await tick();
+    h.dialogs[0].resolve({isDismissed:true});await tick();assert.equal(signal.aborted,true);
+    finish({names:[],titles:[],fields:[]});await task;assert.equal(h.dialogs.length,1);
+    const next=h.window.openSpPrintPreview('/sp/13/cetak-preview');h.dialogs.at(-1).resolve({isDismissed:true});await tick();h.respond(1,data());await next;assert.equal(calls,1);
+});
+
+test('SP renders server validation text without interpreting markup',async()=>{
+    const h=runtime(),task=h.window.openSpPrintPreview('/sp/12/cetak-preview');h.respond(0,data());await tick();
+    const confirm=h.dialogs[1].options.preConfirm();h.respond(1,{errors:{field_id:['<img src=x onerror=bad()>']}},422);assert.equal(await confirm,false);
+    assert.match(h.messages.at(-1),/&lt;img/);assert.doesNotMatch(h.messages.at(-1),/<img/);h.dialogs[1].resolve({isDismissed:true});await task;
+});

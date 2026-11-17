@@ -3,6 +3,7 @@
     const escape = value => String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
     const money = value => new Intl.NumberFormat('id-ID', {style:'currency',currency:'IDR',maximumFractionDigits:2}).format(Number(value || 0));
     let serial = 0, pending;
+    window.addEventListener('pagehide',()=>{serial++;pending?.abort();});
     function safeUrl(value) {
         try { const url=new URL(value,location.origin);return typeof value==='string' && url.origin===location.origin && ['https:','http:'].includes(url.protocol)?url.href:null; } catch {return null;}
     }
@@ -49,16 +50,21 @@
         try {
             let context=await getContext(match[1],controller.signal);
             if(controller.signal.aborted || current!==serial) return;
-            loaded=true;
             const state=retained || {mode:'auto',names:[],titles:[],signerId:context.name_id,titleId:context.title_id,reason:''};
-            let confirmRequest,managing=false;
+            let confirmRequest,choiceRequest,managing=false;
             const capture=()=>{state.signerId=document.getElementById('sgSigner')?.value ?? state.signerId;state.titleId=document.getElementById('sgTitle')?.value ?? state.titleId;state.reason=document.getElementById('sgReason')?.value ?? state.reason;};
             const ready=()=>state.mode==='manual'?context.amount_valid:context.ready;
             const draw=()=>Swal.update({html:render(context,state),showConfirmButton:ready()});
             async function choices(){
-                const data=await window.SPPHPrintMasters.choices(state.signerId,state.titleId);
+                if(!choiceRequest)choiceRequest=window.SPPHPrintMasters.choices(state.signerId,state.titleId,null,false,controller.signal).finally(()=>{choiceRequest=null;});
+                const data=await choiceRequest;
                 state.names=data.names;state.titles=data.titles;
             }
+            if(state.mode==='manual'){
+                await choices();
+                if(current!==serial||controller.signal.aborted)return;
+            }
+            loaded=true;
             const result=await Swal.fire({title:'Siapkan penandatangan SPPH',html:render(context,state),...theme(),
                 didOpen:()=>{
                     const root=Swal.getHtmlContainer?.();if(!root)return;
@@ -71,17 +77,17 @@
                                 Swal.close();const picked=await window.SPPHPrintMasters.open(context.can_manage);
                                 if(current!==serial)return;
                                 if(picked){state.mode='manual';const key=picked.type==='penandatangan_sci'?'names':'titles';state[key]=state[key].filter(row=>row.id!==picked.id).concat(picked);state[picked.type==='penandatangan_sci'?'signerId':'titleId']=picked.id;}
-                                try{await choices();}catch(error){state.message=error.message;}window.openSpphPrint(rawUrl,state);return;
+                                window.openSpphPrint(rawUrl,state);return;
                             }
                             state.mode=button.dataset.sgMode;
                             if(state.mode==='manual')await choices();
-                            if(current===serial&&Swal.isVisible()&&!managing)draw();
-                        }catch(error){if(current===serial&&Swal.isVisible()&&!managing)Swal.showValidationMessage(error.message);}
+                            if(current===serial&&!controller.signal.aborted&&Swal.isVisible()&&!managing)draw();
+                        }catch(error){if(error.name!=='AbortError'&&current===serial&&!controller.signal.aborted&&Swal.isVisible()&&!managing)Swal.showValidationMessage(escape(error.message));}
                     });
                 },
                 showCancelButton:true,cancelButtonText:'Batal',showConfirmButton:ready(),
                 confirmButtonText:'Lanjut Preview',confirmButtonColor:'#3157d9',focusConfirm:false,showLoaderOnConfirm:true,
-                allowOutsideClick:()=>!Swal.isLoading(),willClose:()=>confirmRequest?.abort(),
+                allowOutsideClick:()=>!Swal.isLoading(),willClose:()=>{controller.abort();confirmRequest?.abort();},
                 preConfirm:async()=>{
                     capture();const params=new URLSearchParams({signing_mode:state.mode});
                     if(state.mode==='manual'){
@@ -102,7 +108,7 @@
                         for(const key of ['signing_mode','signer_id','title_id','manual_reason','penandatangan','jabatan','print_basis'])url.searchParams.delete(key);
                         for(const [key,value] of Object.entries(latest.selection))url.searchParams.set(key,value);
                         return url.href;
-                    } catch(error) { if(error.name!=='AbortError') Swal.showValidationMessage(error.message);return false; }
+                    } catch(error) { if(error.name!=='AbortError'&&current===serial&&Swal.isVisible()) Swal.showValidationMessage(escape(error.message));return false; }
                 }});
             if(current===serial && result.isConfirmed && result.value) window.location.assign(result.value);
         } catch(error) {

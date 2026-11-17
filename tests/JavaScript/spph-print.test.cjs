@@ -14,16 +14,16 @@ function context(overrides={}) {
     return data;
 }
 function runtime() {
-    const requests=[],dialogs=[],navigations=[],updates=[],messages=[],nodes={},events={};
+    const requests=[],dialogs=[],navigations=[],updates=[],messages=[],nodes={},events={},windowEvents={};
     let visible=true;
-    const Swal={fire:options=>new Promise(resolve=>dialogs.push({options,resolve})),showLoading(){},isLoading:()=>false,isVisible:()=>visible,
+    const Swal={close(){const d=dialogs.at(-1);d.options.willClose?.();d.resolve({isDismissed:true});},fire:options=>new Promise(resolve=>dialogs.push({options,resolve})),showLoading(){},isLoading:()=>false,isVisible:()=>visible,
         showValidationMessage:message=>messages.push(message),update:options=>updates.push(options),getHtmlContainer:()=>({addEventListener:(type,fn)=>events[type]=fn})};
-    const window={location:{assign:url=>navigations.push(url)},alert(){},SPPHPrintMasters:{choices:async()=>({names:[{id:1,nama:'Harits Jansen'},{id:3,nama:'Pejabat Pengganti'}],titles:[{id:2,nama:'Kepala Bidang Dukungan Bisnis'},{id:4,nama:'Jabatan Pengganti'}]})}};
+    const window={addEventListener:(type,handler)=>windowEvents[type]=handler,location:{assign:url=>navigations.push(url)},alert(){},SPPHPrintMasters:{choices:async()=>({names:[{id:1,nama:'Harits Jansen'},{id:3,nama:'Pejabat Pengganti'}],titles:[{id:2,nama:'Kepala Bidang Dukungan Bisnis'},{id:4,nama:'Jabatan Pengganti'}]})}};
     vm.runInNewContext(source,{window,Swal,URL,URLSearchParams,Intl,AbortController,location:{origin:'https://simon.example'},
         document:{documentElement:{classList:{contains:()=>false}},getElementById:id=>nodes[id]},
         fetch:(url,options)=>new Promise(resolve=>requests.push({url,options,resolve}))});
     const respond=(index,data,status=200)=>requests[index].resolve({ok:status===200,status,json:async()=>data});
-    return {window,requests,dialogs,navigations,updates,messages,respond,nodes,events,hide:()=>visible=false};
+    return {window,windowEvents,requests,dialogs,navigations,updates,messages,respond,nodes,events,hide:()=>visible=false};
 }
 const tick=()=>new Promise(setImmediate);
 
@@ -106,4 +106,50 @@ test('manual mode cannot continue without a sufficient reason and inactive-maste
     const confirm=dialog.options.preConfirm();h.respond(1,{errors:{penandatangan:['Master sudah tidak aktif']}},422);
     assert.equal(await confirm,false);assert.match(h.messages.at(-1),/tidak aktif/);assert.equal(h.navigations.length,0);
     dialog.resolve({isDismissed:true});await task;
+});
+
+test('SPPH leaving the page cancels checks and prevents a closed master manager reopening preview',async()=>{
+    const h=runtime();let calls=0,finish;
+    const task=h.window.openSpphPrint('/spph/12/cetak-preview');h.windowEvents.pagehide();h.respond(0,context());await task;assert.equal(h.dialogs.length,1);
+    h.window.SPPHPrintMasters.open=()=>new Promise(resolve=>finish=resolve);
+    h.window.SPPHPrintMasters.choices=async()=>{calls++;return {names:[],titles:[]};};
+    const next=h.window.openSpphPrint('/spph/13/cetak-preview');h.respond(1,context());await tick();
+    const d=h.dialogs.at(-1);d.options.didOpen();
+    const trigger=h.events.click({target:{closest:()=>({hasAttribute:()=>true})}});
+    await tick();
+    h.windowEvents.pagehide();finish(null);await next;await trigger;assert.equal(calls,0);
+});
+
+test('SPPH closing a preview aborts manual choices and ignores its late error',async()=>{
+    const h=runtime();let rejectChoice,signal;
+    h.window.SPPHPrintMasters.choices=(a,b,c,d,s)=>{signal=s;return new Promise((_,reject)=>rejectChoice=reject);};
+    const task=h.window.openSpphPrint('/spph/12/cetak-preview');h.respond(0,context());await tick();const d=h.dialogs[1];d.options.didOpen();
+    const click=h.events.click({target:{closest:()=>({dataset:{sgMode:'manual'},hasAttribute:()=>false})}});
+    d.options.willClose();d.resolve({isDismissed:true});await task;assert.equal(signal.aborted,true);
+    rejectChoice(new Error('late failure'));await click;assert.equal(h.messages.length,0);
+});
+
+test('SPPH server validation markup is escaped',async()=>{
+    const h=runtime(),task=h.window.openSpphPrint('/spph/12/cetak-preview');h.respond(0,context());await tick();
+    const confirm=h.dialogs[1].options.preConfirm();h.respond(1,{errors:{name:['<img src=x onerror=bad()>']}},422);await confirm;
+    assert.match(h.messages.at(-1),/&lt;img/);assert.doesNotMatch(h.messages.at(-1),/<img/);h.dialogs[1].resolve({isDismissed:true});await task;
+});
+
+test('SPPH returning from master refreshes both manual selectors with the new preview signal',async()=>{
+    const h=runtime();let calls=0,lastSignal;
+    h.window.SPPHPrintMasters.choices=async(a,b,c,d,signal)=>{calls++;lastSignal=signal;return {names:[{id:3,nama:'Pejabat Baru'}],titles:[{id:2,nama:'Jabatan Aktif'}]};};
+    h.window.SPPHPrintMasters.open=async()=>({id:3,type:'penandatangan_sci',nama:'Pejabat Baru'});
+    const task=h.window.openSpphPrint('/spph/12/cetak-preview');h.respond(0,context());await tick();h.dialogs[1].options.didOpen();
+    await h.events.click({target:{closest:()=>({hasAttribute:()=>true})}});await task;
+    assert.equal(h.requests.length,2);h.respond(1,context());await tick();
+    assert.equal(calls,1);assert.equal(lastSignal.aborted,false);assert.match(h.dialogs.at(-1).options.html,/Pejabat Baru/);assert.match(h.dialogs.at(-1).options.html,/Jabatan Aktif/);
+    h.dialogs.at(-1).options.willClose();h.dialogs.at(-1).resolve({isDismissed:true});await tick();
+});
+
+test('repeated SPPH manual-mode clicks share the same pending option lookup',async()=>{
+    const h=runtime();let calls=0,finish;
+    h.window.SPPHPrintMasters.choices=()=>{calls++;return new Promise(resolve=>finish=resolve);};
+    const task=h.window.openSpphPrint('/spph/12/cetak-preview');h.respond(0,context());await tick();const d=h.dialogs[1];d.options.didOpen();
+    const event={target:{closest:()=>({dataset:{sgMode:'manual'},hasAttribute:()=>false})}};
+    const first=h.events.click(event),second=h.events.click(event);assert.equal(calls,1);finish({names:[],titles:[]});await first;await second;d.resolve({isDismissed:true});await task;
 });
