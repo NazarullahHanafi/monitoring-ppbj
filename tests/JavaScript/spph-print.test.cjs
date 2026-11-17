@@ -8,7 +8,7 @@ function context(overrides={}) {
     const data={number:'SPPH/1',amount:'30000000.00',amount_valid:true,pr_count:2,threshold:50000000,name_id:1,title_id:2,
         basis:'Total sebelum PPN',rule:'Di bawah Rp50.000.000',name:'Harits Jansen',title:'Kepala Bidang Dukungan Bisnis',
         rules:[{label:'Di bawah',name:'Harits Jansen',title:'Kepala Bidang Dukungan Bisnis'},{label:'Mulai dari',name:'Bambang Harwanta',title:'Kepala Cabang'}],
-        ready:true,errors:[],fingerprint:'basis-1',prs:[{number:'PR/1',amount:10000000},{number:'PR/2',amount:20000000}],
+        can_manage:true,ready:true,errors:[],fingerprint:'basis-1',prs:[{number:'PR/1',amount:10000000},{number:'PR/2',amount:20000000}],
         checked_at:'02 Nov 2026',...overrides};
     data.selection=overrides.selection || {signing_mode:'auto',penandatangan:data.name,jabatan:data.title,print_basis:data.fingerprint};
     return data;

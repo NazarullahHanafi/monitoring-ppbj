@@ -2,12 +2,26 @@
     'use strict';
     const escape = value => String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
     const money = value => new Intl.NumberFormat('id-ID', {style:'currency',currency:'IDR',maximumFractionDigits:2}).format(Number(value || 0));
-    let serial = 0, pending;
-    window.addEventListener('pagehide',()=>{serial++;pending?.abort();});
+    let serial = 0, pending, activeConfirm;
+    window.addEventListener('pagehide',()=>{serial++;pending?.abort();activeConfirm?.abort();});
+    function checked(data, selection=false){
+        if(!data||typeof data.number!=='string'||typeof data.fingerprint!=='string'||!data.fingerprint||data.fingerprint.length>64
+            ||typeof data.ready!=='boolean'||typeof data.amount_valid!=='boolean'||typeof data.can_manage!=='boolean'
+            ||!Array.isArray(data.errors)||data.errors.length>30||!data.errors.every(x=>typeof x==='string')
+            ||!Array.isArray(data.prs)||data.prs.length>20||!data.prs.every(x=>x&&typeof x.number==='string')
+            ||!Array.isArray(data.rules)||data.rules.length>10||!data.rules.every(x=>x&&typeof x.label==='string'))throw new Error('Konfirmasi cetak belum lengkap. Buka ulang konfirmasi.');
+        if(selection){
+            const s=data.selection,allowed=['signing_mode','signer_id','title_id','manual_reason','penandatangan','jabatan','print_basis'];
+            if(!s||Array.isArray(s)||typeof s!=='object'||Object.keys(s).some(key=>!allowed.includes(key))||!['auto','manual'].includes(s.signing_mode)
+                ||s.print_basis!==data.fingerprint||typeof s.penandatangan!=='string'||typeof s.jabatan!=='string'
+                ||Object.values(s).some(value=>!['string','number'].includes(typeof value)))throw new Error('Pilihan cetak belum terkonfirmasi. Periksa kembali sebelum melanjutkan.');
+        }
+        return data;
+    }
     function safeUrl(value) {
         try { const url=new URL(value,location.origin);return typeof value==='string' && url.origin===location.origin && ['https:','http:'].includes(url.protocol)?url.href:null; } catch {return null;}
     }
-    const theme = () => ({customClass:{popup:'spph-signing-popup'},width:700,
+    const theme = () => ({customClass:{popup:'spph-signing-popup sg-preview-popup'},width:700,
         background:document.documentElement.classList.contains('dark')?'#162034':'#fff',
         color:document.documentElement.classList.contains('dark')?'#edf3ff':'#18253d'});
     function render(data,state={mode:'auto',names:[],titles:[]}) {
@@ -31,10 +45,12 @@
         return '<option value="">Pilih dari master aktif…</option>'+rows.map(row=>`<option value="${Number(row.id)}" ${Number(row.id)===Number(selected)?'selected':''}>${escape(row.nama)}</option>`).join('');
     }
     async function getContext(id, signal,query='') {
+        if(window.SPPHPrintMasters?.request)return checked(await window.SPPHPrintMasters.request(`/spph/${id}/print-context${query?'?'+query:''}`,{},signal),Boolean(query));
+        // Compatible with a page that loaded the older helper during publication.
         const response = await fetch(`/spph/${id}/print-context${query?'?'+query:''}`, {headers:{Accept:'application/json','X-Requested-With':'XMLHttpRequest'},cache:'no-store',signal});
         const data=await response.json();
         if(!response.ok) throw new Error(Object.values(data.errors || {}).flat().join(' ') || data.message || 'Pemeriksaan nilai belum berhasil. Silakan coba lagi.');
-        return data;
+        return checked(data,Boolean(query));
     }
     window.openSpphPrint = async function (rawUrl, retained=null) {
         if(typeof Swal==='undefined') { window.alert('Dialog cetak belum siap. Muat ulang halaman dan coba kembali.'); return; }
@@ -43,7 +59,7 @@
         const match=url.pathname.match(/^\/spph\/(\d+)\/(cetak-preview|cetak-semua-vendor-preview)$/);
         if(url.origin!==location.origin || !match) return;
         const current=++serial;
-        pending?.abort();pending=new AbortController();const controller=pending;
+        pending?.abort();activeConfirm?.abort();pending=new AbortController();const controller=pending;
         let loaded=false;
         Swal.fire({title:'Memeriksa nilai PR/PPBJ',text:'Sebentar, sistem memeriksa penandatangan yang sesuai.',showConfirmButton:false,showCancelButton:true,cancelButtonText:'Batal',...theme(),didOpen:()=>Swal.showLoading()})
             .then(result=>{if(result.isDismissed && !loaded) controller.abort();});
@@ -51,7 +67,7 @@
             let context=await getContext(match[1],controller.signal);
             if(controller.signal.aborted || current!==serial) return;
             const state=retained || {mode:'auto',names:[],titles:[],signerId:context.name_id,titleId:context.title_id,reason:''};
-            let confirmRequest,choiceRequest,managing=false;
+            let confirmRequest,choiceRequest,managing=false,submitting=false,closed=false;
             const capture=()=>{state.signerId=document.getElementById('sgSigner')?.value ?? state.signerId;state.titleId=document.getElementById('sgTitle')?.value ?? state.titleId;state.reason=document.getElementById('sgReason')?.value ?? state.reason;};
             const ready=()=>state.mode==='manual'?context.amount_valid:context.ready;
             const draw=()=>Swal.update({html:render(context,state),showConfirmButton:ready()});
@@ -69,7 +85,7 @@
                 didOpen:()=>{
                     const root=Swal.getHtmlContainer?.();if(!root)return;
                     root.addEventListener('click',async event=>{
-                        const button=event.target.closest('[data-sg-mode],[data-sg-manage]');if(!button || Swal.isLoading()||managing)return;
+                        const button=event.target.closest('[data-sg-mode],[data-sg-manage]');if(!button||closed||submitting||Swal.isLoading()||managing)return;
                         capture();
                         try{
                             if(button.hasAttribute('data-sg-manage')){
@@ -87,8 +103,9 @@
                 },
                 showCancelButton:true,cancelButtonText:'Batal',showConfirmButton:ready(),
                 confirmButtonText:'Lanjut Preview',confirmButtonColor:'#3157d9',focusConfirm:false,showLoaderOnConfirm:true,
-                allowOutsideClick:()=>!Swal.isLoading(),willClose:()=>{controller.abort();confirmRequest?.abort();},
+                allowOutsideClick:()=>!submitting&&!Swal.isLoading(),allowEscapeKey:()=>!submitting,willClose:()=>{closed=true;controller.abort();confirmRequest?.abort();},
                 preConfirm:async()=>{
+                    if(closed||submitting)return false;
                     capture();const params=new URLSearchParams({signing_mode:state.mode});
                     if(state.mode==='manual'){
                         const signer=state.names.find(row=>Number(row.id)===Number(state.signerId)),title=state.titles.find(row=>Number(row.id)===Number(state.titleId));
@@ -96,9 +113,9 @@
                         params.set('signer_id',signer.id);params.set('title_id',title.id);params.set('manual_reason',state.reason.trim());params.set('penandatangan',signer.nama);params.set('jabatan',title.nama);
                     }
                     try {
-                        confirmRequest=new AbortController();
+                        submitting=true;confirmRequest=new AbortController();activeConfirm=confirmRequest;
                         const latest=await getContext(match[1],confirmRequest.signal,params.toString());
-                        if(current!==serial || !Swal.isVisible()) return false;
+                        if(closed||current!==serial || !Swal.isVisible()) return false;
                         if(latest.fingerprint!==context.fingerprint) {
                             context=latest;
                             draw();
@@ -108,7 +125,8 @@
                         for(const key of ['signing_mode','signer_id','title_id','manual_reason','penandatangan','jabatan','print_basis'])url.searchParams.delete(key);
                         for(const [key,value] of Object.entries(latest.selection))url.searchParams.set(key,value);
                         return url.href;
-                    } catch(error) { if(error.name!=='AbortError'&&current===serial&&Swal.isVisible()) Swal.showValidationMessage(escape(error.message));return false; }
+                    } catch(error) { if(error.name!=='AbortError'&&!closed&&current===serial&&Swal.isVisible()) Swal.showValidationMessage(escape(error.message));return false; }
+                    finally{submitting=false;if(activeConfirm===confirmRequest)activeConfirm=null;}
                 }});
             if(current===serial && result.isConfirmed && result.value) window.location.assign(result.value);
         } catch(error) {

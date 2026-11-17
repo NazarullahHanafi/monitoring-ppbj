@@ -65,7 +65,8 @@
 .spph-signing-content .sg-master-form>label { margin-top:14px; }
 @media(max-width:540px) { .sg-search { grid-template-columns:1fr auto; } .sg-search select { grid-column:1/-1; } .sg-modes { grid-template-columns:1fr; } }
 /* Keep the master heading and return action visible while its forms/list scroll. */
-.spph-signing-popup.sg-master-popup { display:flex!important;flex-direction:column;max-height:calc(100dvh - 24px); }
-.sg-master-popup .swal2-title { flex:0 0 auto;font-size:clamp(20px,5vw,28px); }
-.sg-master-popup .swal2-html-container { flex:1 1 auto;min-height:0;max-height:none; }
-.sg-master-popup .swal2-actions { flex:0 0 auto;margin-top:16px; }
+.spph-signing-popup.sg-master-popup,.spph-signing-popup.sg-preview-popup { display:flex!important;flex-direction:column;max-height:calc(100dvh - 24px); }
+.sg-master-popup .swal2-title,.sg-preview-popup .swal2-title { flex:0 0 auto;font-size:clamp(20px,5vw,28px); }
+.sg-master-popup .swal2-html-container,.sg-preview-popup .swal2-html-container { flex:1 1 auto;min-height:0;max-height:none; }
+.sg-master-popup .swal2-actions,.sg-preview-popup .swal2-actions { flex:0 0 auto;margin-top:16px; }
+.sg-preview-popup .swal2-validation-message { flex:0 0 auto;max-height:20dvh;overflow:auto;font-size:13px; }

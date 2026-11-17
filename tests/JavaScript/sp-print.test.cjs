@@ -6,10 +6,11 @@ const path=require('node:path');
 const source=fs.readFileSync(path.join(__dirname,'../../public/assets/sp/sp-print.js'),'utf8');
 const tick=()=>new Promise(setImmediate);
 function data(overrides={}){
-    return {number:'SP/1',amount:'49999999.99',amount_valid:true,pr_count:1,threshold:50000000,name_id:1,title_id:2,
+    const result={number:'SP/1',amount:'49999999.99',amount_valid:true,pr_count:1,threshold:50000000,name_id:1,title_id:2,
         basis:'Nilai SP',rule:'Di bawah Rp50.000.000',name:'Harits Jansen',title:'Kepala Bidang Dukungan Bisnis',ready:true,errors:[],fingerprint:'basis-1',
         rules:[],prs:[{number:'PR/1',amount:999000000,portfolio:'PK - LAB'}],owner_field_id:5,owner_field_name:'LAB',owner_can_learn:false,owner_diagnostics:[],portfolios:['PK - LAB'],can_manage:true,
         selection:{signing_mode:'auto',field_id:5,penandatangan:'Harits Jansen',jabatan:'Kepala Bidang Dukungan Bisnis',print_basis:'basis-1'},...overrides};
+    if(!overrides.selection)result.selection.print_basis=result.fingerprint;return result;
 }
 function runtime(){
     const requests=[],dialogs=[],navigations=[],updates=[],messages=[],nodes={},events={},windowEvents={};
@@ -57,7 +58,7 @@ test('first portfolio choice is remembered only on explicit confirmation, withou
     assert.equal(await d.options.preConfirm(),false);assert.equal(h.requests.length,1);h.nodes.spPrintField={value:'6'};
     const confirm=d.options.preConfirm();const req=h.requests[1];const body=JSON.parse(req.options.body);
     assert.equal(body.learn_portfolio,'1');assert.equal(body.print_basis,'basis-1');assert.equal(req.options.headers['X-CSRF-TOKEN'],'test-csrf');
-    h.respond(1,data({fingerprint:'new-map-basis',mapping_saved:true,selection:{field_id:6,print_basis:'new-map-basis'}}));const url=await confirm;
+    h.respond(1,data({fingerprint:'new-map-basis',mapping_saved:true,selection:{signing_mode:'auto',penandatangan:'Harits Jansen',jabatan:'Kepala Bidang Dukungan Bisnis',field_id:6,print_basis:'new-map-basis'}}));const url=await confirm;
     assert.equal(new URL(url).searchParams.get('field_id'),'6');assert.equal(new URL(url).searchParams.has('learn_portfolio'),false);
     d.resolve({isConfirmed:true,value:url});await task;assert.equal(h.navigations.length,1);
     const cancel=runtime();const pending=cancel.window.openSpPrintPreview('/sp/12/cetak-preview');cancel.respond(0,data({owner_can_learn:true}));await tick();cancel.nodes.spPrintField={value:'6'};cancel.dialogs[1].resolve({isDismissed:true});await pending;assert.equal(cancel.requests.length,1);

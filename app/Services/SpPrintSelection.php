@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\ActivityLog;
 use App\Models\Sp;
 use App\Models\SpPortfolioFieldMap;
+use App\Support\PrintSelectionInput;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -14,7 +15,7 @@ class SpPrintSelection
     public function confirm(Request $request, Sp $sp): array
     {
         abort_unless($request->user()?->department === 'umum' && ! $request->user()->isReadOnly(), 403);
-        $request->validate(['print_basis' => ['required', 'string', 'size:64']]);
+        PrintSelectionInput::validate($request->all(), true, true);
 
         return DB::transaction(function () use ($request, $sp) {
             $locked = Sp::whereKey($sp->id)->lockForUpdate()->firstOrFail();

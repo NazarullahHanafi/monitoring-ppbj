@@ -30,18 +30,24 @@
                 if (!response.ok) {
                     const messages = {401: 'Sesi berakhir. Silakan masuk kembali.', 419: 'Sesi formulir berakhir. Muat ulang halaman.', 403: 'Anda tidak diizinkan mengubah master.', 429: 'Batas permintaan tercapai. Tunggu sebelum mencoba lagi.'};
                     const detail = [409, 422].includes(response.status) ? Object.values(data.errors || {}).flat().find(v => typeof v === 'string') || data.message : null;
-                    throw Object.assign(new Error(typeof detail === 'string' ? detail : messages[response.status] || 'Hasil belum terkonfirmasi. Muat ulang daftar sebelum mencoba lagi.'), {status: response.status, uncertain: writing && response.status >= 500});
+                    throw Object.assign(new Error(typeof detail === 'string' ? detail : messages[response.status] || 'Hasil belum terkonfirmasi. Muat ulang daftar sebelum mencoba lagi.'), {status: response.status, errors: data.errors && typeof data.errors === 'object' && !Array.isArray(data.errors) ? data.errors : {}, uncertain: writing && response.status >= 500});
                 }
                 return data;
             })()]);
         } catch (error) {
-            if (['SyntaxError', 'TypeError'].includes(error?.name)) throw Object.assign(new Error('Respons master belum dapat dibaca. Muat ulang daftar untuk memeriksa hasilnya.'), {uncertain: writing && sent});
+            if (['SyntaxError', 'TypeError'].includes(error?.name)) throw Object.assign(new Error('Respons server belum dapat dibaca. Muat ulang daftar untuk memeriksa hasilnya.'), {uncertain: writing && sent});
             throw error;
         } finally {clearTimeout(timer); signal.removeEventListener('abort', onAbort);}
     }
     function validRow(row, type) {
         return Number.isSafeInteger(row?.id) && row.id > 0 && row.type === type && typeof row.nama === 'string' && row.nama.trim() !== ''
             && [...row.nama].length <= 255 && typeof row.is_active === 'boolean' && /^[a-f0-9]{64}$/.test(row.version);
+    }
+    async function request(url, options = {}, signal) {
+        const controller = new AbortController(), cancel = () => controller.abort();
+        signal?.addEventListener('abort', cancel, {once: true}); if (signal?.aborted) cancel();
+        try {return await json(url, options, controller);}
+        finally {signal?.removeEventListener('abort', cancel); controller.abort();}
     }
     async function list(type, query = {}, controller) {
         const data = await json('/spph/print-masters?' + new URLSearchParams({type, ...query}), {}, controller);
@@ -155,7 +161,7 @@
         <div class="sg-master-list" aria-busy="${s.reading}">${s.rows.map(row => `<article class="sg-master-row"><div><strong>${escape(row.nama)}</strong><span class="sg-active" data-active="${row.is_active}">${row.is_active ? 'Aktif' : 'Nonaktif'}</span></div><div class="sg-inline-actions">${row.is_active ? `<button type="button" class="sg-soft-button" data-sgm="use" data-id="${row.id}" ${disabled}>Gunakan</button>` : ''}${canManage ? `<button type="button" class="sg-soft-button" data-sgm="edit" data-id="${row.id}" ${disabled}>Edit</button><button type="button" class="sg-soft-button" data-sgm="toggle" data-id="${row.id}" ${locked}>${!row.is_active ? 'Aktifkan' : s.deactivate === row.id ? 'Ya, nonaktifkan' : 'Nonaktifkan'}</button>` : ''}</div></article>`).join('') || `<p>${s.reading ? 'Memuat daftar...' : 'Tidak ada master yang cocok. Ubah pencarian atau muat ulang daftar.'}</p>`}</div>
         <div class="sg-pagination"><button type="button" class="sg-soft-button" data-sgm="prev" ${s.page <= 1 || s.reading || s.busy ? 'disabled' : ''}>Sebelumnya</button><span>Halaman ${s.page} / ${s.lastPage}</span><button type="button" class="sg-soft-button" data-sgm="next" ${s.page >= s.lastPage || s.reading || s.busy ? 'disabled' : ''}>Berikutnya</button></div></div>`;
     }
-    window.SPPHPrintMasters = {choices, open(canManage, initialType = 'penandatangan_sci', withFields = false) {
+    window.SPPHPrintMasters = {choices, request, open(canManage, initialType = 'penandatangan_sci', withFields = false) {
         if (activeRun) return activeRun.promise;
         const owner = {}; activeRun = owner;
         owner.promise = run(canManage === true, initialType, withFields, owner).finally(() => {if (activeRun === owner) activeRun = null;});

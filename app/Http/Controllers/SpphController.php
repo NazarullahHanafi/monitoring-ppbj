@@ -12,6 +12,7 @@ use App\Services\ProcurementJourneyService;
 use App\Services\SpphPrintPolicy;
 use App\Support\CacheBatch;
 use App\Support\PrintPreviewFile;
+use App\Support\PrintSelectionInput;
 use App\Support\ProcurementDocumentSearch;
 use App\Support\ProcurementExportRows;
 use App\Traits\HasPresence;
@@ -38,11 +39,13 @@ class SpphController extends Controller
 
     public function printContext(Request $request, Spph $spph)
     {
+        PrintSelectionInput::validate($request->query());
         $context = app(SpphPrintPolicy::class)->context($spph);
         $context['can_manage'] = ! $request->user()->isReadOnly();
         if ($request->query('signing_mode') !== null) {
             $context['selection'] = app(SpphPrintPolicy::class)->validate($request, $context)['query'];
         }
+
         return response()->json($context)
             ->header('Cache-Control', 'private, no-store');
     }
@@ -53,6 +56,7 @@ class SpphController extends Controller
         if ($selection = $request->attributes->get($key)) {
             return $selection;
         }
+        PrintSelectionInput::validate($request->query());
         $selection = app(SpphPrintPolicy::class)->validate($request, app(SpphPrintPolicy::class)->context($spph));
         $request->attributes->set($key, $selection);
         if ($selection['signing_mode'] === 'manual') {
@@ -62,6 +66,7 @@ class SpphController extends Controller
                 'changes' => ['number' => $spph->nomor_spph, 'name' => $selection['name'], 'title' => $selection['title'],
                     'reason' => $selection['manual_reason'], 'amount' => $selection['amount'], 'rule' => $selection['rule']]]);
         }
+
         return $selection;
     }
 
@@ -1035,8 +1040,8 @@ class SpphController extends Controller
     // =========================================================
     public function previewCetak(Request $request, Spph $spph)
     {
-        $vendorName = $this->resolvePrintVendorName($spph, $request->query('vendor'));
         $signer = $this->automaticPrintSigner($request, $spph);
+        $vendorName = $this->resolvePrintVendorName($spph, $request->query('vendor'));
         $downloadUrl = route('spph.cetak', [
             'spph' => $spph,
             'vendor' => $vendorName,
@@ -1080,8 +1085,8 @@ class SpphController extends Controller
 
     public function previewCetakSemuaVendor(Request $request, Spph $spph)
     {
-        $vendorCount = count($spph->print_vendor_names);
         $signer = $this->automaticPrintSigner($request, $spph);
+        $vendorCount = count($spph->print_vendor_names);
         $downloadUrl = route('spph.cetak-semua-vendor', [
             'spph' => $spph,
             ...$signer['query'],
@@ -1128,11 +1133,10 @@ class SpphController extends Controller
 
     public function cetakSpph(Request $request, Spph $spph)
     {
+        $signer = $this->automaticPrintSigner($request, $spph);
         Settings::setOutputEscapingEnabled(true);
         $spph->load('items');
         $printVendorName = $this->resolvePrintVendorName($spph, $request->query('vendor'));
-        $signer = $this->automaticPrintSigner($request, $spph);
-
         $phpWord = new PhpWord;
         $phpWord->setDefaultFontName('Arial');
         $phpWord->setDefaultFontSize(9);

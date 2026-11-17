@@ -3,10 +3,26 @@
     const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     const money = value => new Intl.NumberFormat('id-ID', {style:'currency',currency:'IDR',maximumFractionDigits:2}).format(Number(value || 0));
     const options = (rows, id) => '<option value="">Pilih master aktif…</option>' + rows.map(row => `<option value="${Number(row.id)}" ${Number(id)===Number(row.id)?'selected':''}>${escape(row.nama)}</option>`).join('');
-    const theme = () => ({width:760,customClass:{popup:'spph-signing-popup'},background:document.documentElement.classList.contains('dark')?'#162034':'#fff',color:document.documentElement.classList.contains('dark')?'#edf3ff':'#18253d'});
+    const theme = () => ({width:760,customClass:{popup:'spph-signing-popup sg-preview-popup'},background:document.documentElement.classList.contains('dark')?'#162034':'#fff',color:document.documentElement.classList.contains('dark')?'#edf3ff':'#18253d'});
     const canLearn = data => Boolean(data.owner_can_learn && data.can_manage);
-    let serial=0, pending;
-    window.addEventListener('pagehide',()=>{serial++;pending?.abort();});
+    let serial=0, pending, activeConfirm;
+    window.addEventListener('pagehide',()=>{serial++;pending?.abort();activeConfirm?.abort();});
+    function checked(data, selection = false) {
+        if(!data||typeof data.number!=='string'||typeof data.fingerprint!=='string'||!data.fingerprint||data.fingerprint.length>64
+            ||typeof data.ready!=='boolean'||typeof data.amount_valid!=='boolean'||typeof data.can_manage!=='boolean'
+            ||!Array.isArray(data.errors)||data.errors.length>30||!data.errors.every(x=>typeof x==='string')
+            ||!Array.isArray(data.prs)||data.prs.length>20||!data.prs.every(x=>x&&typeof x.number==='string')
+            ||!Array.isArray(data.rules)||data.rules.length>10||!data.rules.every(x=>x&&typeof x.label==='string')
+            ||!Array.isArray(data.portfolios)||data.portfolios.length>101||!data.portfolios.every(x=>typeof x==='string')
+            ||!Array.isArray(data.owner_diagnostics)||data.owner_diagnostics.length>105||!data.owner_diagnostics.every(x=>typeof x==='string'))throw new Error('Konfirmasi cetak belum lengkap. Buka ulang konfirmasi.');
+        if(selection){
+            const s=data.selection, allowed=['signing_mode','field_id','field_reason','signer_id','title_id','manual_reason','penandatangan','jabatan','print_basis'];
+            if(!s||Array.isArray(s)||typeof s!=='object'||Object.keys(s).some(key=>!allowed.includes(key))
+                ||!['auto','manual'].includes(s.signing_mode)||s.print_basis!==data.fingerprint||typeof s.penandatangan!=='string'||typeof s.jabatan!=='string'
+                ||!Number.isSafeInteger(Number(s.field_id))||Number(s.field_id)<1||Object.values(s).some(value=>!['string','number'].includes(typeof value)))throw new Error('Pilihan cetak belum terkonfirmasi. Periksa kembali sebelum melanjutkan.');
+        }
+        return data;
+    }
     async function readResponse(response) {
         const data=await response.json();
         if(!response.ok){
@@ -16,13 +32,16 @@
         return data;
     }
     async function context(id, signal, params='') {
+        if(window.SPPHPrintMasters?.request)return checked(await window.SPPHPrintMasters.request(`/sp/${id}/print-context${params?'?'+params:''}`,{},signal),Boolean(params));
+        // Compatible with a page that loaded the older helper during publication.
         const response=await fetch(`/sp/${id}/print-context${params?'?'+params:''}`,{cache:'no-store',signal,headers:{Accept:'application/json','X-Requested-With':'XMLHttpRequest'}});
-        return readResponse(response);
+        return checked(await readResponse(response),Boolean(params));
     }
     async function confirmSelection(id,signal,params) {
-        return readResponse(await fetch(`/sp/${id}/print-selection`,{method:'POST',cache:'no-store',signal,
+        if(window.SPPHPrintMasters?.request)return checked(await window.SPPHPrintMasters.request(`/sp/${id}/print-selection`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.fromEntries(params))},signal),true);
+        return checked(await readResponse(await fetch(`/sp/${id}/print-selection`,{method:'POST',cache:'no-store',signal,
             headers:{Accept:'application/json','Content-Type':'application/json','X-Requested-With':'XMLHttpRequest','X-CSRF-TOKEN':document.querySelector('meta[name="csrf-token"]')?.content||''},
-            body:JSON.stringify(Object.fromEntries(params))}));
+            body:JSON.stringify(Object.fromEntries(params))})),true);
     }
     function render(data,s) {
         return `<div class="spph-signing-content"><div class="spph-signing-intro"><span class="sg-eyebrow">SP / KONTRAK · KONFIRMASI CETAK</span>${escape(data.number)}<p>Periksa penandatangan SCI dan bidang pemilik PR sebelum membuat dokumen. Penandatangan vendor tetap mengikuti Master Vendor.</p></div>
@@ -43,7 +62,7 @@
         if(typeof Swal==='undefined'){window.alert('Dialog cetak belum siap. Muat ulang halaman.');return;}
         let url;try{url=new URL(rawUrl,location.origin);}catch{return;}
         const match=url.pathname.match(/^\/sp\/(\d+)\/cetak-preview$/);if(!match||url.origin!==location.origin)return;
-        const current=++serial;pending?.abort();pending=new AbortController();const controller=pending;
+        const current=++serial;pending?.abort();activeConfirm?.abort();pending=new AbortController();const controller=pending;
         let loaded=false;
         Swal.fire({title:'Memeriksa nilai SP dan portofolio',showConfirmButton:false,showCancelButton:true,...theme(),didOpen:()=>Swal.showLoading()}).then(r=>{if(r.isDismissed&&!loaded)controller.abort();});
         try{
@@ -53,12 +72,12 @@
             if(!s.fieldManual)s.fieldId=data.owner_field_id;
             Object.assign(s,await window.SPPHPrintMasters.choices(s.signerId,s.titleId,s.fieldId,true,controller.signal));
             if(current!==serial||controller.signal.aborted)return;loaded=true;
-            let managing=false,confirmRequest;
+            let managing=false,confirmRequest,submitting=false,closed=false;
             const capture=()=>{s.signerId=document.getElementById('spPrintSigner')?.value??s.signerId;s.titleId=document.getElementById('spPrintTitle')?.value??s.titleId;s.reason=document.getElementById('spPrintReason')?.value??s.reason;s.fieldId=document.getElementById('spPrintField')?.value??s.fieldId;s.fieldReason=document.getElementById('spPrintFieldReason')?.value??s.fieldReason;s.fieldManual=Number(s.fieldId)!==Number(data.owner_field_id);};
             const ready=()=>s.mode==='manual'?data.amount_valid:data.ready;
-            const result=await Swal.fire({title:'Siapkan cetak SP / Kontrak',html:render(data,s),...theme(),showCancelButton:true,cancelButtonText:'Batal',showConfirmButton:ready(),confirmButtonText:'Lanjut Preview',confirmButtonColor:'#3157d9',focusConfirm:false,showLoaderOnConfirm:true,allowOutsideClick:()=>!Swal.isLoading(),willClose:()=>{controller.abort();confirmRequest?.abort();},
+            const result=await Swal.fire({title:'Siapkan cetak SP / Kontrak',html:render(data,s),...theme(),showCancelButton:true,cancelButtonText:'Batal',showConfirmButton:ready(),confirmButtonText:'Lanjut Preview',confirmButtonColor:'#3157d9',focusConfirm:false,showLoaderOnConfirm:true,allowOutsideClick:()=>!submitting&&!Swal.isLoading(),allowEscapeKey:()=>!submitting,willClose:()=>{closed=true;controller.abort();confirmRequest?.abort();},
                 didOpen:()=>Swal.getHtmlContainer().addEventListener('click',async event=>{
-                    const button=event.target.closest('[data-sp-print]');if(!button||managing||Swal.isLoading())return;capture();
+                    const button=event.target.closest('[data-sp-print]');if(!button||closed||submitting||managing||Swal.isLoading())return;capture();
                     const action=button.dataset.spPrint;
                     if(['auto','manual'].includes(action)){s.mode=action;Swal.update({html:render(data,s),showConfirmButton:ready()});return;}
                     managing=true;Swal.close();
@@ -72,6 +91,7 @@
                     if(current===serial)window.openSpPrintPreview(rawUrl,s);
                 }),
                 preConfirm:async()=>{
+                    if(closed||submitting)return false;
                     capture();const params=new URLSearchParams({signing_mode:s.mode,field_id:s.fieldId||'',field_reason:s.fieldReason});
                     if(!s.fieldId){Swal.showValidationMessage('Pilih bidang pemilik PR terlebih dahulu.');return false;}
                     if(s.fieldManual&&!canLearn(data)&&s.fieldReason.trim().length<10){Swal.showValidationMessage('Tuliskan alasan pilihan bidang minimal 10 karakter.');return false;}
@@ -82,8 +102,9 @@
                         params.set('signer_id',s.signerId);params.set('title_id',s.titleId);params.set('manual_reason',s.reason.trim());
                     }
                     try{
-                        confirmRequest=new AbortController();const latest=data.can_manage?await confirmSelection(match[1],confirmRequest.signal,params):await context(match[1],confirmRequest.signal,params.toString());
-                        if(current!==serial||!Swal.isVisible())return false;
+                        submitting=true;confirmRequest=new AbortController();activeConfirm=confirmRequest;
+                        const latest=data.can_manage?await confirmSelection(match[1],confirmRequest.signal,params):await context(match[1],confirmRequest.signal,params.toString());
+                        if(closed||current!==serial||!Swal.isVisible())return false;
                         if(latest.fingerprint!==data.fingerprint&&!latest.mapping_saved){data=latest;Swal.update({html:render(data,s),showConfirmButton:ready()});Swal.showValidationMessage('Data berubah. Periksa rekomendasi terbaru sebelum melanjutkan.');return false;}
                         url.search='';for(const [key,value]of Object.entries(latest.selection))url.searchParams.set(key,value);return url.href;
                     }catch(error){
@@ -91,12 +112,12 @@
                         if(error.errors?.print_basis){
                             try{
                                 data=await context(match[1],confirmRequest.signal);
-                                if(current!==serial||!Swal.isVisible())return false;
+                                if(closed||current!==serial||!Swal.isVisible())return false;
                                 Swal.update({html:render(data,s),showConfirmButton:ready()});
                             }catch(refreshError){if(refreshError.name==='AbortError')return false;}
                         }
-                        if(current===serial&&Swal.isVisible())Swal.showValidationMessage(escape(error.message));return false;
-                    }
+                        if(!closed&&current===serial&&Swal.isVisible())Swal.showValidationMessage(escape(error.message));return false;
+                    }finally{submitting=false;if(activeConfirm===confirmRequest)activeConfirm=null;}
                 }});
             if(current===serial&&result.isConfirmed&&result.value)window.location.assign(result.value);
         }catch(error){if(error.name!=='AbortError'&&current===serial)Swal.fire({icon:'warning',title:'Cetak belum dapat dilanjutkan',text:error.message,...theme()});}

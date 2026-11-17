@@ -7,6 +7,7 @@ use App\Models\Sp;
 use App\Services\SpPrintPolicy;
 use App\Services\SpPrintSelection;
 use App\Support\PrintPreviewFile;
+use App\Support\PrintSelectionInput;
 use Illuminate\Http\Request;
 
 class SpPrintController extends Controller
@@ -21,6 +22,7 @@ class SpPrintController extends Controller
 
     public function context(Request $request, Sp $sp)
     {
+        PrintSelectionInput::validate($request->query(), true);
         $context = app(SpPrintPolicy::class)->context($sp);
         $context['can_manage'] = ! $request->user()->isReadOnly();
         if ($request->query('signing_mode') !== null) {
@@ -32,6 +34,7 @@ class SpPrintController extends Controller
 
     private function generate(Request $request, Sp $sp): array
     {
+        PrintSelectionInput::validate($request->query(), true);
         $selected = app(SpPrintPolicy::class)->validate($request, app(SpPrintPolicy::class)->context($sp));
         if ($selected['signing_mode'] === 'manual' || $selected['field_manual']) {
             ActivityLog::create(['user_id' => $request->user()->id, 'model_type' => Sp::class, 'model_id' => $sp->id,
