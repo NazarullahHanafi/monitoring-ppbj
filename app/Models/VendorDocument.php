@@ -45,11 +45,12 @@ class VendorDocument extends Model
 
     public function scopeSearch(Builder $query, string $search): void
     {
-        foreach (self::terms($search) as $term) {
+        $terms = self::terms($search);
+        foreach ($terms as $term) {
             $query->whereExists(fn ($q) => $q->selectRaw('1')->from('vendor_document_terms as vdt')
                 ->whereColumn('vdt.document_id', 'vendor_documents.id')->where('vdt.term', 'like', $term.'%'));
         }
-        if (self::terms($search) === [] && trim($search) !== '') {
+        if ($terms === [] && trim($search) !== '') {
             $query->whereRaw('1 = 0');
         }
     }

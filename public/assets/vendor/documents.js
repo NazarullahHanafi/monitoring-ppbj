@@ -13,8 +13,9 @@
     let vendorId, vendorName, base, busy = false, dirty = false, editDocument = null, uploadId = null;
     let page = 1, applied = { q: '', type: '', attention: '' }, sequence = 0, listAbort, readAbort, confirming = false;
     let lastAttempt = { page: 1, criteria: { q: '', type: '', attention: '' } };
-    let transferTimer, bundleTimer, watchDeadline = 0, activeTransfers = 0, bundleId = null;
-    function stopWatching() { clearTimeout(transferTimer); clearTimeout(bundleTimer); }
+    let transferTimer, bundleTimer, watchDeadline = 0, activeTransfers = 0, bundleId = null, watchEpoch = 0;
+    const watchRequests = new Set();
+    function stopWatching() { watchEpoch++; clearTimeout(transferTimer); clearTimeout(bundleTimer); watchRequests.forEach(controller => controller.abort()); watchRequests.clear(); }
     function transferInfo(count) {
         activeTransfers = count;
         const node = find('[data-vd-transfer-status]'); node.hidden = !count;
@@ -23,18 +24,21 @@
     function watchTransfers() {
         clearTimeout(transferTimer);
         if (!activeTransfers || !dialog.open || Date.now() > watchDeadline) return;
+        const epoch = watchEpoch;
         transferTimer = setTimeout(async () => {
+            if (epoch !== watchEpoch) return;
             if (!dialog.open || document.hidden || busy || !editor.hidden) { watchTransfers(); return; }
-            const scope = base;
+            const scope = base, controller = new AbortController(); watchRequests.add(controller);
             try {
-                const result = await request(`${scope}/transfers`);
-                if (scope !== base || !dialog.open) return;
+                const result = await request(`${scope}/transfers`, { signal: controller.signal });
+                if (epoch !== watchEpoch || scope !== base || !dialog.open) return;
                 if (!Number.isInteger(result.active_count) || result.active_count < 0) throw new Error('Status transfer belum tersedia.');
                 const changed = result.active_count !== activeTransfers;
                 transferInfo(result.active_count);
                 if (changed) await load(page, applied);
             } catch (_) { /* A visible manual refresh remains available. */ }
-            watchTransfers();
+            finally { watchRequests.delete(controller); }
+            if (epoch === watchEpoch) watchTransfers();
         }, 7000);
     }
 
@@ -51,13 +55,19 @@
         find('[data-vd-cancel-read]').disabled = !reading;
     }
     async function request(url, options = {}, asFile = false) {
-        const controller = new AbortController(); let timer;
+        const controller = new AbortController(); let timer, onAbort;
         const abort = () => controller.abort();
         if (options.signal?.aborted) controller.abort();
         options.signal?.addEventListener('abort', abort, { once: true });
         try {
             return await Promise.race([
+                new Promise((_, reject) => {
+                    onAbort = () => reject(new DOMException('Aborted', 'AbortError'));
+                    controller.signal.addEventListener('abort', onAbort, { once: true });
+                    if (controller.signal.aborted) onAbort();
+                }),
                 (async () => {
+                    if (controller.signal.aborted) throw new DOMException('Aborted', 'AbortError');
                     const response = await fetch(url, { ...options, credentials: 'same-origin', signal: controller.signal,
                         headers: { Accept: asFile ? 'application/octet-stream' : 'application/json', 'X-CSRF-TOKEN': config.csrf, ...(options.headers || {}) } });
                     if (response.redirected) throw new Error('Sesi berubah. Muat ulang halaman dan masuk kembali.');
@@ -75,10 +85,10 @@
                     }
                     return result;
                 })(),
-                new Promise((_, reject) => { timer = setTimeout(() => { controller.abort(); reject(new Error('Respons server terlalu lama. Muat ulang daftar; untuk unggahan, coba kembali dengan berkas yang sama.')); }, options.method || asFile ? 330000 : 30000); }),
+                new Promise((_, reject) => { timer = setTimeout(() => { reject(new Error('Respons server terlalu lama. Muat ulang daftar; untuk unggahan, coba kembali dengan berkas yang sama.')); controller.abort(); }, options.method || asFile ? 330000 : 30000); }),
             ]);
         } finally {
-            clearTimeout(timer); options.signal?.removeEventListener('abort', abort);
+            clearTimeout(timer); options.signal?.removeEventListener('abort', abort); controller.signal.removeEventListener('abort', onAbort);
         }
     }
     function validDocument(doc) {
@@ -185,6 +195,7 @@
         if (succeeded && await load(1)) status('Lampiran telah dihapus.');
     }
     document.querySelectorAll('[data-vd-open]').forEach(node => node.addEventListener('click', () => {
+        if (busy || dialog.open) return;
         stopWatching(); bundleId = null; watchDeadline = Date.now() + 10 * 60000;
         find('[data-vd-bundle-panel]').hidden = true; find('[data-vd-bundle-link]').hidden = true;
         vendorId = node.dataset.vendorId; vendorName = node.dataset.vendorName;
@@ -254,32 +265,41 @@
         let file = field('file').files[0];
         if (!file && !editDocument) { window.FormUX?.errors(editor, { file: 'Pilih dokumen atau gambar terlebih dahulu.' }); return; }
         if (file && (!file.size || file.size > maxBytes)) { status(`Berkas harus berukuran 1 byte hingga ${maxLabel}.`, true); return; }
-        readAbort = new AbortController(); freeze(true, true); let timer;
+        const controller = new AbortController(); readAbort = controller; freeze(true, true); let timer, onAbort;
+        const progress = message => { if (readAbort === controller && !controller.signal.aborted) status(message); };
         try {
-            if (!file) {
-                status('Mengambil berkas dari OneDrive untuk dibaca di perangkat…');
-                const blob = await request(`${base}/${editDocument.id}/download`, { signal: readAbort.signal }, true);
-                file = new File([blob], editDocument.original_name, { type: blob.type });
-            }
-            const reader = window.ProcurementDocumentReader;
-            const kind = fileFormat(file)?.reader;
-            const method = kind === 'pdf' ? 'readPdf' : kind === 'image' ? 'readImage' : null;
-            if (!method && !['office', 'text'].includes(kind)) throw new Error('Format ini bisa disimpan dan dicari melalui metadata. Lengkapi teks secara manual, atau gunakan salinan DOCX/XLSX/PDF untuk pembacaan otomatis.');
-            const read = () => {
-                if (method) return reader[method](file, message => status(message), readAbort.signal, config.readerUrl);
-                status('Membaca teks dan tabel dokumen di server sendiri…');
-                const body = new FormData(); body.set('file', file);
-                return request(`${base}/extract`, { method: 'POST', body, signal: readAbort.signal });
-            };
             const result = await Promise.race([
-                read(),
-                new Promise((_, reject) => { timer = setTimeout(() => { readAbort.abort(); reject(new Error('Pembacaan terlalu lama. Perkecil atau pisahkan berkas, atau lengkapi teks secara manual.')); }, 240000); }),
+                new Promise((_, reject) => {
+                    onAbort = () => reject(new DOMException('Aborted', 'AbortError'));
+                    controller.signal.addEventListener('abort', onAbort, { once: true });
+                }),
+                (async () => {
+                    if (!file) {
+                        progress('Mengambil berkas dari OneDrive untuk dibaca di perangkat...');
+                        const blob = await request(`${base}/${editDocument.id}/download`, { signal: controller.signal }, true);
+                        file = new File([blob], editDocument.original_name, { type: blob.type });
+                    }
+                    const reader = window.ProcurementDocumentReader, kind = fileFormat(file)?.reader;
+                    const method = kind === 'pdf' ? 'readPdf' : kind === 'image' ? 'readImage' : null;
+                    if (!method && !['office', 'text'].includes(kind)) throw new Error('Format ini bisa disimpan dan dicari melalui metadata. Lengkapi teks secara manual, atau gunakan salinan DOCX/XLSX/PDF untuk pembacaan otomatis.');
+                    if (method) return reader[method](file, progress, controller.signal, config.readerUrl);
+                    progress('Membaca teks dan tabel dokumen di server sendiri...');
+                    const body = new FormData(); body.set('file', file);
+                    return request(`${base}/extract`, { method: 'POST', body, signal: controller.signal });
+                })(),
+                new Promise((_, reject) => { timer = setTimeout(() => {
+                    reject(new Error('Pembacaan terlalu lama. Perkecil atau pisahkan berkas, atau lengkapi teks secara manual.')); controller.abort();
+                }, 240000); }),
             ]);
-            if (typeof result.text !== 'string' || result.text.length > 200000) throw new Error('Hasil pembacaan belum valid. Teks sebelumnya tetap tersedia.');
+            if (controller.signal.aborted || readAbort !== controller) return;
+            if (!result || typeof result.text !== 'string' || result.text.length > 200000) throw new Error('Hasil pembacaan belum valid. Teks sebelumnya tetap tersedia.');
             field('search_text').value = result.text; field('text_confirmed').checked = false; dirty = true;
             status(result.text.trim() ? 'Teks selesai dibaca. Periksa ejaan dan nomor, lalu centang konfirmasi sebelum menyimpan.' : 'Teks belum terbaca. Anda dapat mengetik teks pencarian secara manual.');
-        } catch (error) { status(readAbort.signal.aborted && error.name === 'AbortError' ? 'Pembacaan dibatalkan. Perubahan sebelumnya tetap tersedia.' : error.message, error.name !== 'AbortError'); }
-        finally { clearTimeout(timer); freeze(false); readAbort = null; }
+        } catch (error) { if (readAbort === controller) status(error.name === 'AbortError' ? 'Pembacaan dibatalkan. Perubahan sebelumnya tetap tersedia.' : error.message, error.name !== 'AbortError'); }
+        finally {
+            clearTimeout(timer); controller.signal.removeEventListener('abort', onAbort);
+            if (readAbort === controller) { freeze(false); readAbort = null; }
+        }
     });
     find('[data-vd-cancel-read]').addEventListener('click', () => readAbort?.abort());
     function showBundle(result) {
@@ -297,14 +317,17 @@
     function watchBundle() {
         clearTimeout(bundleTimer);
         if (!bundleId || !dialog.open || Date.now() > watchDeadline) return;
+        const epoch = watchEpoch;
         bundleTimer = setTimeout(async () => {
+            if (epoch !== watchEpoch) return;
             if (!dialog.open || document.hidden || busy) { watchBundle(); return; }
-            const scope = base, id = bundleId;
+            const scope = base, id = bundleId, controller = new AbortController(); watchRequests.add(controller);
             try {
-                const result = await request(`${scope}/bundle/${id}`);
-                if (scope !== base || id !== bundleId || !dialog.open) return;
+                const result = await request(`${scope}/bundle/${id}`, { signal: controller.signal });
+                if (epoch !== watchEpoch || scope !== base || id !== bundleId || !dialog.open) return;
                 if (showBundle(result)) watchBundle();
-            } catch (error) { find('[data-vd-bundle-status]').textContent = `${error.message} Tekan Unduh semua untuk memuat status kembali.`; }
+            } catch (error) { if (epoch === watchEpoch && scope === base && id === bundleId && dialog.open) find('[data-vd-bundle-status]').textContent = `${error.message} Tekan Unduh semua untuk memuat status kembali.`; }
+            finally { watchRequests.delete(controller); }
         }, 5000);
     }
     find('[data-vd-bundle]').addEventListener('click', async () => {
@@ -320,7 +343,7 @@
         } catch (error) { find('[data-vd-bundle-status]').textContent = error.message; }
         finally { freeze(false); }
     });
-    window.addEventListener('pagehide', stopWatching);
+    window.addEventListener('pagehide', () => { stopWatching(); sequence++; listAbort?.abort(); readAbort?.abort(); });
     find('[data-vd-refresh]').addEventListener('click', () => load(lastAttempt.page, lastAttempt.criteria));
     filter.addEventListener('submit', event => { event.preventDefault(); if (window.FormUX?.validate(filter)) load(1, { q: filter.elements.q.value.trim(), type: filter.elements.type.value, attention: filter.elements.attention.value }); });
     find('[data-vd-reset]').addEventListener('click', () => { filter.reset(); load(1, { q: '', type: '', attention: '' }); });

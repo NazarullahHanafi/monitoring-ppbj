@@ -26,7 +26,7 @@ class VendorDocumentController extends Controller
 
     public function index(Request $request, Vendor $vendor)
     {
-        $data = $request->validate(['q' => 'nullable|string|max:160', 'type' => ['nullable', Rule::in(array_keys(VendorDocument::TYPES))], 'attention' => 'nullable|in:metadata,expiring,unfinished', 'page' => 'nullable|integer|min:1|max:10000']);
+        $data = $request->validate(['q' => 'bail|nullable|string|max:160', 'type' => ['bail', 'nullable', 'string', Rule::in(array_keys(VendorDocument::TYPES))], 'attention' => 'bail|nullable|string|in:metadata,expiring,unfinished', 'page' => 'bail|nullable|integer|min:1|max:10000']);
         $scope = $vendor->documents()->when(! empty($data['type']), fn ($q) => $q->where('type', $data['type']))
             ->when(($data['attention'] ?? '') === 'metadata', fn ($q) => $q->where('status', 'ready')->where(fn ($q) => $q->whereNull('search_text')->orWhere('search_text', '')))
             ->when(($data['attention'] ?? '') === 'expiring', fn ($q) => $q->where('status', 'ready')->whereNotNull('expires_at')->where('expires_at', '<=', now()->addDays(30)->toDateString()))
@@ -43,9 +43,15 @@ class VendorDocumentController extends Controller
         if ($rows->isEmpty() && $rows->currentPage() === 1 && $terms !== []) {
             $matched = [];
             $missing = [];
-            foreach (array_slice($terms, 0, 8) as $term) {
-                $exists = (clone $scope)->where('status', 'ready')->search($term)->exists();
-                if ($exists) {
+            // One database round trip; each indexed probe stops at its first match.
+            $probes = DB::query();
+            $diagnosticTerms = array_slice($terms, 0, 8);
+            foreach ($diagnosticTerms as $index => $term) {
+                $probes->selectSub((clone $scope)->where('status', 'ready')->search($term)->selectRaw('1')->limit(1), 'term_'.$index);
+            }
+            $matches = $probes->first();
+            foreach ($diagnosticTerms as $index => $term) {
+                if ($matches->{'term_'.$index} !== null) {
                     $matched[] = $term;
                 } else {
                     $missing[] = $term;
@@ -160,22 +166,30 @@ class VendorDocumentController extends Controller
     public function update(Request $request, Vendor $vendor, VendorDocument $document)
     {
         $this->belongs($vendor, $document);
-        $data = $request->validate($this->rules() + ['version' => 'required|integer|min:1'], self::VALIDATION_MESSAGES, ['title' => 'Judul dokumen', 'type' => 'Jenis dokumen']);
+        $data = $request->validate($this->rules() + ['version' => 'bail|required|integer|min:1'], self::VALIDATION_MESSAGES, ['title' => 'Judul dokumen', 'type' => 'Jenis dokumen']);
         $lock = Cache::lock('vendor-document:'.$document->id, 900);
         abort_unless($lock->get(), 409, 'Lampiran sedang diproses. Coba lagi setelah proses selesai.');
         try {
-            DB::transaction(function () use ($document, $data, $request) {
+            [$saved, $changed] = DB::transaction(function () use ($vendor, $document, $data, $request) {
                 $fresh = VendorDocument::whereKey($document->id)->lockForUpdate()->firstOrFail();
+                $this->belongs($vendor, $fresh);
                 abort_unless($fresh->status === 'ready' && $fresh->version === (int) $data['version'], 409, 'Lampiran berubah. Buka ulang pemeriksaan untuk memuat versi terbaru.');
-                $fresh->forceFill($this->metadata($data) + ['version' => $fresh->version + 1])->save();
+                $fresh->forceFill($this->metadata($data));
+                if (! $fresh->isDirty()) {
+                    return [$fresh, false];
+                }
+                $fresh->version++;
+                $fresh->save();
                 $fresh->reindex();
                 $this->audit($request, $fresh, 'vendor_document_reviewed');
+
+                return [$fresh, true];
             });
         } finally {
             $lock->release();
         }
 
-        return response()->json(['document' => $this->present($document->fresh())]);
+        return response()->json(['document' => $this->present($saved), 'changed' => $changed])->header('Cache-Control', 'private, no-store');
     }
 
     public function extract(Request $request, Vendor $vendor, ProcurementUploadInspector $inspector, ProcurementOfficeReader $reader)
@@ -287,7 +301,7 @@ class VendorDocumentController extends Controller
 
     private function rules(): array
     {
-        return ['type' => ['required', Rule::in(array_keys(VendorDocument::TYPES))], 'title' => 'required|string|max:160', 'document_number' => 'nullable|string|max:160', 'expires_at' => 'nullable|date_format:Y-m-d', 'search_text' => 'nullable|string|max:200000', 'text_confirmed' => filled(request()->input('search_text')) ? 'required|accepted' : 'nullable'];
+        return ['type' => ['bail', 'required', 'string', Rule::in(array_keys(VendorDocument::TYPES))], 'title' => 'required|string|max:160', 'document_number' => 'nullable|string|max:160', 'expires_at' => 'nullable|date_format:Y-m-d', 'search_text' => 'nullable|string|max:200000', 'text_confirmed' => filled(request()->input('search_text')) ? 'required|accepted' : 'nullable'];
     }
 
     private function audit(Request $request, VendorDocument $document, string $action): void
@@ -317,7 +331,10 @@ class VendorDocumentController extends Controller
 
     private function metadata(array $data): array
     {
-        return ['type' => $data['type'], 'title' => trim($data['title']), 'document_number' => trim($data['document_number'] ?? '') ?: null, 'expires_at' => $data['expires_at'] ?? null, 'search_text' => trim($data['search_text'] ?? '') ?: null];
+        $number = trim($data['document_number'] ?? '');
+        $text = trim($data['search_text'] ?? '');
+
+        return ['type' => $data['type'], 'title' => trim($data['title']), 'document_number' => $number !== '' ? $number : null, 'expires_at' => $data['expires_at'] ?? null, 'search_text' => $text !== '' ? $text : null];
     }
 
     private function belongs(Vendor $vendor, VendorDocument $document): void
