@@ -166,9 +166,9 @@ Route::middleware(['auth', 'readonly.block'])->group(function () {
     Route::post('/account/password', [AccountController::class, 'updatePassword'])->middleware('throttle:5,1,account-password:')->name('account.password');
     Route::post('/presence/heartbeat', [App\Http\Controllers\PresenceController::class, 'heartbeat'])
         ->name('presence.heartbeat')
-        ->middleware('auth');
-    Route::post('/presence/mood', [PresenceController::class, 'updateMood'])->name('presence.mood');
-    Route::get('/presence/mood', [PresenceController::class, 'getMood'])->name('presence.mood.get');
+        ->middleware(['auth', 'throttle:60,1,presence-heartbeat:']);
+    Route::post('/presence/mood', [PresenceController::class, 'updateMood'])->middleware('throttle:20,1,presence-mood-write:')->name('presence.mood');
+    Route::get('/presence/mood', [PresenceController::class, 'getMood'])->middleware('throttle:60,1,presence-mood-read:')->name('presence.mood.get');
     Route::prefix('emoji')->name('emoji.')->middleware('auth')->group(function () {
         Route::get('/messages', [App\Http\Controllers\EmojiChatController::class, 'messages'])->name('messages');
         Route::post('/send', [App\Http\Controllers\EmojiChatController::class, 'send'])->name('send');

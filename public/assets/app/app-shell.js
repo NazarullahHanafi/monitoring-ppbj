@@ -122,12 +122,18 @@
                 }, 40);
             }
             function render(u) {
+                u = u.filter(function (x) { return x && Number.isSafeInteger(x.id) && x.id > 0 && typeof x.name === 'string'; }).map(function (x) {
+                    return { id: x.id, name: x.name, department: typeof x.department === 'string' ? x.department : '',
+                        initials: typeof x.initials === 'string' ? x.initials : '',
+                        color: typeof x.color === 'string' && /^#[a-f0-9]{6}$/i.test(x.color) ? x.color : CL[x.id % CL.length],
+                        mood: typeof x.mood === 'string' && x.mood.length <= 40 ? x.mood : null, is_me: x.is_me === true, idle: x.idle === true };
+                });
                 window._presenceUsers = u; var st = document.getElementById('avatarStack'), pl = document.getElementById('ppList'), c = u.length,
                     oc = document.getElementById('onlineCountLabel'), pc = document.getElementById('ppCount'), cp = document.getElementById('cpOnlineCount');
                 if (oc) oc.textContent = c; if (pc) pc.textContent = c; if (cp) cp.textContent = c + ' orang online';
                 var me = null; for (var i = 0; i < u.length; i++) { if (u[i].is_me) { me = u[i]; break } }
                 if (me && MOOD_ENABLED) myM = me.mood || null; else myM = null; window._myMood = myM || null; if (window.updateQuickMoodButton) window.updateQuickMoodButton(); var mf = document.getElementById('myMoodFloat'); if (mf) { if (myM) { mf.textContent = myM; mf.classList.remove('hidden') } else { mf.classList.add('hidden') } }
-                if (st) { var v = u.slice(0, MA), ov = c - MA, h = ''; for (var j = 0; j < v.length; j++) { var x = v[j], xt = x.name + (x.mood ? ' • ' + x.mood + ' ' + moodText(x.mood) : ''); h += '<div class="av" style="background:' + x.color + '" title="' + eH(xt) + '">' + x.initials + (x.mood ? '<span class="mood-tag mood-tag-sm">' + x.mood + '</span>' : '') + '</div>' } if (ov > 0) h += '<div class="av av-overflow" title="' + ov + ' lainnya">+' + ov + '</div>'; st.innerHTML = h }
+                if (st) { var v = u.slice(0, MA), ov = c - MA, h = ''; for (var j = 0; j < v.length; j++) { var x = v[j], xt = x.name + (x.mood ? ' • ' + x.mood + ' ' + moodText(x.mood) : ''); h += '<div class="av" style="background:' + x.color + '" title="' + eH(xt) + '">' + eH(x.initials) + (x.mood ? '<span class="mood-tag mood-tag-sm">' + eH(x.mood) + '</span>' : '') + '</div>' } if (ov > 0) h += '<div class="av av-overflow" title="' + ov + ' lainnya">+' + ov + '</div>'; st.innerHTML = h }
                 if (pl) {
                     if (!c) { pl.innerHTML = '<div class="pp-empty">Tidak ada yang online</div>'; return }
                     var ph = '';
@@ -136,7 +142,7 @@
                         var action = w.is_me
                             ? '<span class="pp-me-tag">Kamu</span>'
                             : '<button type="button" class="pp-chat-btn" data-uid="' + eH(w.id) + '" data-uname="' + eH(w.name) + '" data-mood="' + eH(w.mood || '') + '" title="Tanya mood ' + eH(w.name) + '">Chat mood</button>';
-                        ph += '<div class="pp-row' + (w.is_me ? ' me' : '') + '" title="' + eH(wt) + '"><div class="pp-av" style="background:' + w.color + '">' + w.initials + (w.mood ? '<span class="mood-tag">' + w.mood + '</span>' : '') + '</div><div class="pp-info"><div class="pp-name">' + eH(w.name) + '</div><div class="pp-dept">' + eH(w.department) + (w.mood ? ' • ' + eH(moodText(w.mood)) : '') + '</div></div>' + action + '</div>';
+                        ph += '<div class="pp-row' + (w.is_me ? ' me' : '') + '" title="' + eH(wt) + '"><div class="pp-av" style="background:' + w.color + '">' + eH(w.initials) + (w.mood ? '<span class="mood-tag">' + eH(w.mood) + '</span>' : '') + '</div><div class="pp-info"><div class="pp-name">' + eH(w.name) + '</div><div class="pp-dept">' + eH(w.department) + (w.mood ? ' • ' + eH(moodText(w.mood)) : '') + '</div></div>' + action + '</div>';
                     }
                     pl.innerHTML = ph;
                 }

@@ -29,8 +29,9 @@ class PresenceController extends Controller
 
     public function heartbeat(Request $request)
     {
-        $request->validate(['idle' => ['sometimes', 'boolean'], 'menu' => ['sometimes', 'nullable', \Illuminate\Validation\Rule::in(array_keys(\App\Services\VirtualOfficeActivity::MENUS))]]);
-        $user = Auth::user();
+        $request->validate(['idle' => ['bail', 'sometimes', 'boolean'], 'menu' => ['bail', 'sometimes', 'nullable', 'string', \Illuminate\Validation\Rule::in(array_keys(\App\Services\VirtualOfficeActivity::MENUS))]]);
+        $user = $request->user();
+        abort_unless($user, 401);
         if ($request->filled('menu') && $user->shouldDisplayInPresence() && in_array($user->department, ['umum', 'operasional'], true)) {
             // Presence only; the daily journal records successful page responses.
             Cache::put('office:menu:'.$user->id, $request->input('menu'), self::PRESENCE_TTL);
@@ -43,7 +44,7 @@ class PresenceController extends Controller
         // emoji lama di daftar presence pengguna lain.
         $moodKey = self::MOOD_PREFIX.$user->id;
         if ($user->shouldDisplayMoodFeature()) {
-            $mood = Cache::get($moodKey);
+            $mood = $this->safeMood(Cache::get($moodKey));
         } else {
             Cache::forget($moodKey);
             $mood = null;
@@ -68,21 +69,11 @@ class PresenceController extends Controller
             Cache::forget(self::CACHE_PREFIX.$user->id);
         }
 
-        $registry = $this->registerOnlineUser((int) $user->id, $displayInPresence);
-
-        $presenceKeys = array_map(
-            fn (int $uid) => self::CACHE_PREFIX.$uid,
-            $registry
-        );
-        $presenceByKey = $presenceKeys === [] ? [] : Cache::many($presenceKeys);
-
         $online = [];
-        foreach ($registry as $uid) {
-            $data = $presenceByKey[self::CACHE_PREFIX.$uid] ?? null;
-            if ($data) {
-                $data['is_me'] = ($uid === $user->id);
-                $online[] = $data;
-            }
+        // Reuse the snapshot already read while pruning the registry.
+        foreach ($this->registerOnlineUser((int) $user->id, $displayInPresence) as $uid => $data) {
+            $data['is_me'] = ($uid === (int) $user->id);
+            $online[] = $data;
         }
 
         usort(
@@ -94,7 +85,7 @@ class PresenceController extends Controller
         return response()->json([
             'online' => $online,
             'count' => count($online),
-        ]);
+        ])->header('Cache-Control', 'private, no-store');
     }
 
     /**
@@ -111,11 +102,11 @@ class PresenceController extends Controller
                 'success' => true,
                 'mood' => null,
                 'disabled' => true,
-            ]);
+            ])->header('Cache-Control', 'private, no-store');
         }
 
         $request->validate([
-            'mood' => 'required|string|max:20', // ✅ emoji bisa multi-byte
+            'mood' => ['bail', 'required', 'string', 'max:20', 'regex:/\A[^<>\x00-\x1F\x7F]*\z/u'],
         ]);
 
         $midnight = now()->copy()->endOfDay();
@@ -124,14 +115,19 @@ class PresenceController extends Controller
         Cache::put(self::MOOD_PREFIX.$user->id, $request->mood, $ttl);
 
         $key = self::CACHE_PREFIX.$user->id;
-        $data = Cache::get($key, []);
-        $data['mood'] = $request->mood;
-        Cache::put($key, $data, self::PRESENCE_TTL);
+        $data = Cache::get($key);
+        // Changing mood alone must not invent an online user after expiry.
+        if ($this->validPresence($data, (int) $user->id)) {
+            $data['mood'] = $request->mood;
+            Cache::put($key, $data, self::PRESENCE_TTL);
+        } elseif ($data !== null) {
+            Cache::forget($key);
+        }
 
         return response()->json([
             'success' => true,
             'mood' => $request->mood,
-        ]);
+        ])->header('Cache-Control', 'private, no-store');
     }
 
     /**
@@ -146,12 +142,12 @@ class PresenceController extends Controller
 
             // 204 juga menghentikan app-shell versi lama agar tidak membuka
             // popup wajib mood dari respons kosong.
-            return response()->noContent();
+            return response()->noContent()->header('Cache-Control', 'private, no-store');
         }
 
-        $mood = Cache::get(self::MOOD_PREFIX.$user->id);
+        $mood = $this->safeMood(Cache::get(self::MOOD_PREFIX.$user->id));
 
-        return response()->json(['mood' => $mood]);
+        return response()->json(['mood' => $mood])->header('Cache-Control', 'private, no-store');
     }
 
     // ── Helpers ──
@@ -203,35 +199,31 @@ class PresenceController extends Controller
      * menimpa daftar user online. ID kedaluwarsa ikut dibersihkan supaya
      * ukuran registry tetap kecil meskipun aplikasi dipakai banyak user.
      *
-     * @return array<int, int>
+     * @return array<int, array>
      */
     private function registerOnlineUser(int $userId, bool $shouldRegister = true): array
     {
+        $lock = null;
+        $acquired = false;
         try {
-            return Cache::lock(self::REGISTRY_KEY.':lock', 5)->block(2, function () use ($userId, $shouldRegister) {
-                $registry = array_map('intval', (array) Cache::get(self::REGISTRY_KEY, []));
-                if ($shouldRegister) {
-                    $registry[] = $userId;
-                } else {
-                    $registry = array_filter($registry, fn (int $id) => $id !== $userId);
-                }
-
-                $registry = $this->onlyActivePresenceIds(array_values(array_unique($registry)));
-
-                Cache::put(self::REGISTRY_KEY, $registry, self::REGISTRY_TTL);
-
-                return $registry;
-            });
-        } catch (\Throwable) {
-            // Heartbeat tidak boleh gagal hanya karena lock registry sedang sibuk.
-            $registry = array_map('intval', (array) Cache::get(self::REGISTRY_KEY, []));
-            if ($shouldRegister) {
-                $registry[] = $userId;
-            } else {
-                $registry = array_filter($registry, fn (int $id) => $id !== $userId);
+            $lock = Cache::lock(self::REGISTRY_KEY.':lock', 5);
+            $acquired = $lock->get();
+            $snapshot = $this->onlineSnapshot($userId, $shouldRegister);
+            if ($acquired) {
+                Cache::put(self::REGISTRY_KEY, array_keys($snapshot), self::REGISTRY_TTL);
             }
 
-            return $this->onlyActivePresenceIds(array_values(array_unique($registry)));
+            return $snapshot;
+        } catch (\Throwable) {
+            return $this->onlineSnapshot($userId, $shouldRegister);
+        } finally {
+            if ($acquired) {
+                try {
+                    $lock->release();
+                } catch (\Throwable) {
+                    // The short lease expires even if releasing it fails.
+                }
+            }
         }
     }
 
@@ -239,22 +231,60 @@ class PresenceController extends Controller
      * Bersihkan registry dengan satu operasi cache massal. Cara ini menjaga
      * heartbeat tetap ringan ketika banyak pengguna aktif bersamaan.
      *
-     * @param  array<int, int>  $registry
-     * @return array<int, int>
+     * A busy registry lock never delays the heartbeat. Its local snapshot can
+     * include this user without overwriting another worker's registry update.
+     *
+     * @return array<int, array>
      */
-    private function onlyActivePresenceIds(array $registry): array
+    private function onlineSnapshot(int $userId, bool $shouldRegister): array
     {
-        if ($registry === []) {
+        $registry = Cache::get(self::REGISTRY_KEY, []);
+        $ids = [];
+        foreach (is_array($registry) ? $registry : [] as $value) {
+            if ((! is_int($value) && ! is_string($value)) || filter_var($value, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]) === false) {
+                continue;
+            }
+            $id = (int) $value;
+            if ($id !== $userId) {
+                $ids[$id] = $id;
+            }
+        }
+        if ($shouldRegister) {
+            $ids[$userId] = $userId;
+        }
+        if ($ids === []) {
             return [];
         }
 
-        $keys = array_map(fn (int $id) => self::CACHE_PREFIX.$id, $registry);
+        $keys = array_map(fn (int $id) => self::CACHE_PREFIX.$id, array_values($ids));
         $presence = Cache::many($keys);
+        $snapshot = [];
+        foreach ($ids as $id) {
+            $row = $presence[self::CACHE_PREFIX.$id] ?? null;
+            if (! $this->validPresence($row, $id)) {
+                continue;
+            }
+            $snapshot[$id] = [
+                'id' => $id, 'name' => $row['name'], 'department' => $row['department'],
+                'initials' => is_string($row['initials'] ?? null) && mb_check_encoding($row['initials'], 'UTF-8') && mb_strlen($row['initials']) <= 8 ? $row['initials'] : $this->initials($row['name']),
+                'color' => is_string($row['color'] ?? null) && preg_match('/^#[a-f0-9]{6}$/i', $row['color']) ? $row['color'] : $this->colorFor($id),
+                'mood' => $this->safeMood($row['mood'] ?? null), 'idle' => ($row['idle'] ?? false) === true,
+            ];
+        }
 
-        return array_values(array_filter(
-            $registry,
-            fn (int $id) => ! empty($presence[self::CACHE_PREFIX.$id])
-        ));
+        return $snapshot;
+    }
+
+    private function validPresence(mixed $row, int $id): bool
+    {
+        return is_array($row) && ($row['id'] ?? null) === $id
+            && is_string($row['name'] ?? null) && mb_check_encoding($row['name'], 'UTF-8') && trim($row['name']) !== '' && mb_strlen($row['name']) <= 255
+            && is_string($row['department'] ?? null) && mb_check_encoding($row['department'], 'UTF-8') && mb_strlen($row['department']) <= 80;
+    }
+
+    private function safeMood(mixed $mood): ?string
+    {
+        return is_string($mood) && mb_check_encoding($mood, 'UTF-8') && $mood !== '' && mb_strlen($mood) <= 20 && ! preg_match('/[<>\x00-\x1F\x7F]/u', $mood) ? $mood : null;
     }
 
     private function markLastSeen($user): void
