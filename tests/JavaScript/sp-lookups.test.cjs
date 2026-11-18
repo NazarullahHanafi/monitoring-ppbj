@@ -4,7 +4,7 @@ const fs=require('node:fs');
 const vm=require('node:vm');
 const source=fs.readFileSync('public/assets/sp/sp.js','utf8').replace(/\r\n/g,'\n');
 const block=source.slice(source.indexOf('/* BEGIN SP LOOKUP READS */'),source.indexOf('/* END SP LOOKUP READS */'));
-const functions=source.slice(source.indexOf('        function getSuggestionUrlSp()'),source.indexOf('        function openEditModal('));
+const functions=source.slice(source.indexOf('        function getSuggestionUrlSp('),source.indexOf('        function openEditModal('));
 const escape=source.match(/function escapedHtml\(s\) \{[^\n]+/)[0],status=source.match(/function setStatus\([^\n]+/)[0];
 const tick=()=>new Promise(setImmediate);
 class Element {

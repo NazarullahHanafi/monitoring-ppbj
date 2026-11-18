@@ -51,6 +51,43 @@ test('SP edit cannot start preparation or a write while saved items or PR refere
     }
 });
 
+test('SP recovery only offers renumbering for an explicitly classified auto-number conflict', async () => {
+    for (const data of [{conflict:true}, {conflict:true,conflict_type:'ppbj',renumber_allowed:true}, {conflict:true,conflict_type:'record',renumber_allowed:false}, {conflict:true,conflict_type:'sp_number',renumber_allowed:false}]) {
+        const h=setup('sp',{ok:false,status:409,json:async()=>({...data,message:'Periksa referensi PR'})});
+        h.context.applyLatestNumberSp=()=>{throw new Error('Must not request a new SP number');};
+        h.context.Swal.fire=async options=>{h.dialogs.push(options);return{isConfirmed:true};};
+        await h.save();
+        assert.equal(h.dialogs[0].confirmButtonText,'Periksa Isian');
+        assert.equal(h.dialogs[0].showCancelButton,false);
+        assert.equal(h.requests.length,1);
+        assert.equal(h.button.disabled,false);
+    }
+});
+
+test('confirmed SP number conflict fetches one suggestion and never automatically resubmits the write', async () => {
+    const h=setup('sp',{ok:false,status:409,json:async()=>({conflict:true,conflict_type:'sp_number',renumber_allowed:true,message:'Nomor SP sudah digunakan'})});
+    let lookups=0;
+    h.context.applyLatestNumberSp=async isEdit=>{assert.equal(isEdit,true);lookups++;return'010/PKU-III/SP/2025';};
+    h.context.Swal.fire=async options=>{h.dialogs.push(options);return{isConfirmed:true};};
+    await h.save();
+    assert.equal(h.dialogs[0].confirmButtonText,'Ambil Nomor Terbaru');
+    assert.equal(h.dialogs[0].showCancelButton,true);
+    assert.equal(lookups,1);assert.equal(h.requests.length,1);
+    assert.match(h.dialogs[1].text,/simpan ulang/);
+    assert.equal(h.button.disabled,false);assert.equal(h.form.inert,false);
+});
+
+test('Oracle and cancelled SP conflicts keep their manually selected number', async () => {
+    for(const oracle of [false,true]){
+        const h=setup('sp',{ok:false,status:409,json:async()=>({conflict:true,conflict_type:'sp_number',renumber_allowed:true,message:'Nomor bentrok'})});
+        h.window.SP_PAGE_CONFIG.oracleMode=oracle;
+        h.context.applyLatestNumberSp=()=>{throw new Error('No auto number expected');};
+        h.context.Swal.fire=async options=>{h.dialogs.push(options);return{isConfirmed:oracle};};
+        await h.save();assert.equal(h.requests.length,1);assert.equal(h.dialogs.length,1);
+        assert.equal(h.dialogs[0].confirmButtonText,oracle?'Periksa Isian':'Ambil Nomor Terbaru');
+    }
+});
+
 for (const kind of ['sp', 'spph']) {
     test(`${kind}: successful save holds the lock until navigation and sends dates and edit method intact`, async () => {
         const h = setup(kind);

@@ -1526,12 +1526,38 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
             `;
         }
 
-        function getSuggestionUrlSp() {
+        function getSuggestionUrlSp(isEdit = false) {
             const url = new URL(SUGGEST_URL_SP, window.location.origin);
-            const tanggal = document.getElementById('tanggalSpInput')?.value;
+            const tanggal = document.getElementById(isEdit ? 'editTanggalSp' : 'tanggalSpInput')?.value;
             if (tanggal) url.searchParams.set('tanggal', tanggal);
             if (ORACLE_MODE_SP) url.searchParams.set('oracle_mode', '1');
             return url.toString();
+        }
+
+        async function applyLatestNumberSp(isEdit = false) {
+            if (ORACLE_MODE_SP) return null;
+            const input = document.getElementById(isEdit ? 'editNomorSp' : 'nomorSpInput');
+            const status = document.getElementById(isEdit ? 'editNomorStatusSp' : 'nomorStatusSp');
+            const form = document.getElementById(isEdit ? 'editFormSp' : 'addFormSp');
+            const modal = document.getElementById(isEdit ? 'editModal' : 'addModal');
+            if (!input || !form || !modal || modal.classList.contains('hidden')) return null;
+            const number = input.value, action = form.action, url = getSuggestionUrlSp(isEdit);
+            const record = isEdit ? document.getElementById('editIdSp')?.value : '';
+            const generation = isEdit ? editModalLoadSerial : 0;
+            const current = () => input.value === number && form.action === action && url === getSuggestionUrlSp(isEdit)
+                && !modal.classList.contains('hidden') && (!isEdit || (generation === editModalLoadSerial && document.getElementById('editIdSp')?.value === record));
+            try {
+                const data = await readSpLookup(`latest-number:${isEdit ? 'edit' : 'add'}`, url);
+                if (!current() || data?.manual === true || !Array.isArray(data?.suggestions) || data.suggestions.length > 5) return null;
+                const latest = data.suggestions[0];
+                if (typeof latest !== 'string' || !latest.trim() || latest.length > 60) return null;
+                input.value = latest;
+                input.dispatchEvent(new Event('input', { bubbles: true }));
+                if (status) status.textContent = 'Nomor terbaru dipilih. Periksa kembali sebelum menyimpan.';
+                return latest;
+            } catch {
+                return null;
+            }
         }
 
         async function loadSuggestionsSp() {
@@ -2643,30 +2669,6 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
                 return data?.message || 'Data belum bisa disimpan. Silakan cek kembali isian form.';
             }
 
-            async function applyLatestNumberSp(isEdit = false) {
-                const input = document.getElementById(isEdit ? 'editNomorSp' : 'nomorSpInput');
-                const status = document.getElementById(isEdit ? 'editNomorStatusSp' : 'nomorStatusSp');
-                if (!input) return null;
-
-                try {
-                    const response = await fetch(getSuggestionUrlSp(), {
-                        headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
-                    });
-                    const data = await response.json();
-                    const latest = data?.suggestions?.[0] || null;
-                    if (latest) {
-                        input.value = latest;
-                        input.dispatchEvent(new Event('input', { bubbles: true }));
-                        if (status) {
-                            status.innerHTML = '<span class="text-xs font-semibold text-blue-600 dark:text-blue-300">Nomor terbaru dipakai otomatis</span>';
-                        }
-                    }
-                    return latest;
-                } catch (error) {
-                    return null;
-                }
-            }
-
             async function submitFormAjaxSp(form, isEdit = false) {
                 if (isEdit && (form.dataset.spItemsState || form.dataset.spPpbjState) && !ensureSpEditDataReady(form)) return;
                 if (form.dataset.procurementSaving === 'true') return;
@@ -2724,21 +2726,22 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
 
                     const message = ajaxErrorMessageSp(data);
                     if (data?.conflict || response.status === 409) {
+                        const canRenumber = data?.conflict_type === 'sp_number' && data?.renumber_allowed === true && !window.SP_PAGE_CONFIG?.oracleMode;
                         const result = await Swal.fire({
                             title: 'Nomor bentrok / data berubah',
-                            html: `<div class="text-left leading-relaxed">${escapedHtml(message)}<br><br><strong>Solusi cepat:</strong> ambil nomor terbaru tanpa menutup form.</div>`,
+                            html: `<div class="text-left leading-relaxed">${escapedHtml(message)}<br><br>${canRenumber ? 'Ambil nomor berikutnya sesuai tanggal dokumen, lalu periksa dan simpan ulang.' : 'Periksa referensi dan isian yang disebutkan di atas. Isian form tetap dipertahankan.'}</div>`,
                             icon: 'warning',
-                            showCancelButton: true,
-                            confirmButtonText: 'Ambil Nomor Terbaru',
+                            showCancelButton: canRenumber,
+                            confirmButtonText: canRenumber ? 'Ambil Nomor Terbaru' : 'Periksa Isian',
                             cancelButtonText: 'Tetap di Form',
                             ...swalThemeSp()
                         });
 
-                        if (result.isConfirmed) {
+                        if (canRenumber && result.isConfirmed) {
                             const latest = await applyLatestNumberSp(isEdit);
                             Swal.fire({
                                 title: latest ? 'Nomor terbaru siap dipakai' : 'Saran nomor belum bisa dimuat',
-                                text: latest ? `Nomor diganti ke ${latest}. Silakan cek lalu simpan ulang.` : 'Silakan klik saran nomor atau refresh data jika perlu.',
+                                text: latest ? `Nomor diganti ke ${latest}. Silakan cek lalu simpan ulang.` : 'Saran belum diterapkan. Isian tetap dipertahankan. Periksa tanggal, nomor, dan koneksi sebelum mencoba lagi.',
                                 icon: latest ? 'success' : 'info',
                                 ...swalThemeSp()
                             });

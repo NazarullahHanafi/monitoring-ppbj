@@ -16,7 +16,7 @@ use App\Support\ProcurementDocumentSearch;
 use App\Support\ProcurementExportRows;
 use App\Support\SpPaymentTerms;
 use App\Traits\HasPresence;
-use Illuminate\Database\QueryException;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
@@ -1249,14 +1249,8 @@ class SpController extends Controller
                     $oracleMode ? 'Data SP Oracle berhasil disimpan!' : 'Data SP berhasil disimpan!'
                 );
             }, 3);
-        } catch (QueryException $e) {
-            return $this->formError(
-                $request,
-                'nomor_pr',
-                'Nomor SP atau nomor PR sudah dipakai oleh data lain. Silakan ambil nomor terbaru dan cek data terbaru.',
-                409,
-                ['conflict' => true]
-            );
+        } catch (UniqueConstraintViolationException) {
+            return $this->spUniqueConflict($request);
         }
     }
 
@@ -1450,14 +1444,8 @@ class SpController extends Controller
                     $oracleMode ? 'Data SP Oracle berhasil diperbarui!' : 'Data SP berhasil diperbarui!'
                 );
             }, 3);
-        } catch (QueryException $e) {
-            return $this->formError(
-                $request,
-                'nomor_pr',
-                'Nomor SP atau nomor PR sudah dipakai oleh data lain. Silakan ambil nomor terbaru dan cek data terbaru.',
-                409,
-                ['conflict' => true]
-            );
+        } catch (UniqueConstraintViolationException) {
+            return $this->spUniqueConflict($request, $sp->id);
         }
     }
 
@@ -1861,7 +1849,7 @@ class SpController extends Controller
             && $ppbj->awarding_sp !== $currentDocumentNumber);
 
         if ($conflict) {
-            return $this->formError($request, 'nomor_prs', "PPBJ {$conflict->ppbj_no} sudah terhubung dengan SP {$conflict->awarding_sp}.", 409, ['conflict' => true]);
+            return $this->formError($request, 'nomor_prs', "PPBJ {$conflict->ppbj_no} sudah terhubung dengan SP {$conflict->awarding_sp}.", 409, ['conflict' => true, 'conflict_type' => 'ppbj', 'renumber_allowed' => false]);
         }
 
         return null;
@@ -6326,6 +6314,26 @@ class SpController extends Controller
         if ($warning) {
             throw ValidationException::withMessages([$field => $warning]);
         }
+    }
+
+    private function spUniqueConflict(Request $request, ?int $excludeId = null)
+    {
+        // A database uniqueness race is checked after the write transaction has
+        // rolled back. Ordinary reads/writes gain no extra query.
+        $numberConflict = Sp::withTrashed()
+            ->where('nomor_sp', $request->input('nomor_sp'))
+            ->when($excludeId, fn ($query) => $query->whereKeyNot($excludeId))
+            ->exists();
+
+        return $this->formError(
+            $request,
+            $numberConflict ? 'nomor_sp' : 'nomor_pr',
+            $numberConflict
+                ? ($this->isOracleMode($request) ? 'Nomor SP Oracle sudah digunakan. Periksa nomor dari sistem Oracle sebelum mencoba lagi.' : 'Nomor SP baru saja digunakan oleh data lain. Pilih nomor terbaru, periksa kembali, lalu simpan ulang.')
+                : 'Data terkait sudah digunakan oleh dokumen lain. Periksa referensi PR dan data terbaru sebelum mencoba lagi.',
+            409,
+            ['conflict' => true, 'conflict_type' => $numberConflict ? 'sp_number' : 'record', 'renumber_allowed' => $numberConflict && ! $this->isOracleMode($request)]
+        );
     }
 
     private function formError(Request $request, string $field, string $message, int $status = 422, array $extra = [])

@@ -243,7 +243,9 @@ class ProcurementReviewTest extends TestCase
         $approval = $this->requestApproval($user, $payload);
         $this->approve($reviewer, $approval);
         DB::unprepared("CREATE TRIGGER reject_sp BEFORE INSERT ON sps BEGIN SELECT RAISE(ABORT, 'test insert failure'); END");
-        $this->actingAs($user)->postJson(route('sp.store'), $payload)->assertStatus(409);
+        config(['app.debug' => false]);
+        $this->actingAs($user)->postJson(route('sp.store'), $payload)->assertStatus(500)
+            ->assertExactJson(['message' => 'Server Error']);
         $this->assertSame('approved', $approval->fresh()->status);
         $this->assertDatabaseMissing('activity_logs', ['action' => 'value_approval_consumed', 'model_id' => $approval->id]);
         $this->assertNull($pr->fresh()->awarding_sp);
