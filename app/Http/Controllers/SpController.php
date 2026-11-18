@@ -50,8 +50,10 @@ class SpController extends Controller
             return null;
         }
 
-        return Vendor::where('nama_vendor', $name)->first()
-            ?: Vendor::whereRaw('LOWER(TRIM(nama_vendor)) = ?', [strtolower($name)])->first();
+        $columns = ['id', 'nama_vendor', 'alamat', 'telepon', 'fax', 'npwp', 'direktur', 'jabatan'];
+
+        return Vendor::where('nama_vendor', $name)->first($columns)
+            ?: Vendor::whereRaw('LOWER(TRIM(nama_vendor)) = ?', [strtolower($name)])->first($columns);
     }
 
     private function ppbjRegistrationNote(?Ppbj $ppbj): string
@@ -131,20 +133,19 @@ class SpController extends Controller
         }
     }
 
-    private function ppbjRegistrationNoteByPr(?string $nomorPr): string
+    private function findPrintPpbj(?string $nomorPr): ?Ppbj
     {
         $nomorPr = trim((string) $nomorPr);
 
         if ($nomorPr === '') {
-            return '';
+            return null;
         }
 
-        $ppbj = Ppbj::query()
-            ->select(['ppbj_no', 'general_registration_number', 'general_registered_at'])
+        return Ppbj::query()
+            ->select(['id', 'ppbj_no', 'tgl_ppbj', 'tgl_terima_pr', 'tgl_spph', 'spph_rfq_1',
+                'pemenang', 'tgl_pemenang', 'general_registration_number', 'general_registered_at'])
             ->where('ppbj_no', $nomorPr)
             ->first();
-
-        return $this->ppbjRegistrationNote($ppbj);
     }
 
     // =========================================================
@@ -2117,7 +2118,7 @@ class SpController extends Controller
         // ==============================================
         // TABEL PENGADAAN (FORMAT SUB-ITEM)
         // ==============================================
-        $sp->load('items');
+        $sp->loadMissing('items');
         $items = $sp->items;
 
         $tbl = $section->addTable([
@@ -2298,7 +2299,7 @@ class SpController extends Controller
         $catatanSegments = [];
 
         if ($sp->nomor_pr) {
-            $ppbjCatatan = Ppbj::where('ppbj_no', $sp->nomor_pr)->first();
+            $ppbjCatatan = $this->findPrintPpbj($sp->nomor_pr);
 
             $tglPpbjCatatan = $ppbjCatatan && ! empty($ppbjCatatan->tgl_ppbj)
                 ? \Carbon\Carbon::parse($ppbjCatatan->tgl_ppbj)->locale('id')->translatedFormat('d F Y')
@@ -2557,7 +2558,7 @@ class SpController extends Controller
         $signer = $this->resolvePrintSciSigner($sp, $penandatanganSci, $jabatanSci, $nilaiAcuan);
         $penandatanganSci = $signer['name'];
         $jabatanSci = $signer['title'];
-        $sp->load('items');
+        $sp->loadMissing('items');
 
         $phpWord = new PhpWord;
         \PhpOffice\PhpWord\Settings::setOutputEscapingEnabled(true);
@@ -2597,7 +2598,7 @@ class SpController extends Controller
         ]);
 
         $vendor = $this->findVendorByName($sp->nama_vendor);
-        $ppbj = $sp->nomor_pr ? Ppbj::where('ppbj_no', $sp->nomor_pr)->first() : null;
+        $ppbj = $this->findPrintPpbj($sp->nomor_pr);
 
         $vendorUp = strtoupper(trim((string) $sp->nama_vendor));
         $alamatV = ($vendor && trim((string) ($vendor->alamat ?? '')) !== '') ? trim((string) $vendor->alamat) : '(.....................................)';
@@ -2793,7 +2794,7 @@ class SpController extends Controller
         $catatanPr = $sp->nomor_pr
             ? 'Memenuhi PR Bidang '.$bidangPr.' PT Sucofindo Cabang Pekanbaru sesuai PR No. '.$sp->linkedPpbjLabel().' tanggal '.$tglPr.'.'
             : 'Memenuhi PR Bidang '.$bidangPr.' PT Sucofindo Cabang Pekanbaru sesuai PR No. (....................) tanggal (....................).';
-        $catatanPr .= $this->ppbjRegistrationNoteByPr($sp->nomor_pr);
+        $catatanPr .= $this->ppbjRegistrationNote($ppbj);
 
         // Summary: kolom Catatan dibuat vertical merge 3 baris supaya tidak muncul garis
         // tepat di bawah tanggal catatan saat baris kanan berisi Harga / PPN / Total.
@@ -3288,7 +3289,7 @@ class SpController extends Controller
         // Template Kontrak Ringkas Jasa Subkon Diatas 500 jt.
         // Isi mengikuti dokumen template >500: Pasal 1 s.d. Pasal 13, Jaminan Pelaksanaan,
         // tanda tangan, Pakta Integritas, dan Formulir Uji Kelayakan Penyedia Eksternal.
-        $sp->load('items');
+        $sp->loadMissing('items');
 
         $phpWord = new PhpWord;
         \PhpOffice\PhpWord\Settings::setOutputEscapingEnabled(true);
@@ -3328,7 +3329,7 @@ class SpController extends Controller
         ]);
 
         $vendor = $this->findVendorByName($sp->nama_vendor);
-        $ppbj = $sp->nomor_pr ? Ppbj::where('ppbj_no', $sp->nomor_pr)->first() : null;
+        $ppbj = $this->findPrintPpbj($sp->nomor_pr);
 
         $vendorUp = strtoupper(trim((string) $sp->nama_vendor));
         $alamatV = ($vendor && trim((string) ($vendor->alamat ?? '')) !== '') ? trim((string) $vendor->alamat) : '(.....................................)';
@@ -3524,7 +3525,7 @@ class SpController extends Controller
         $catatanPr = $sp->nomor_pr
             ? 'Memenuhi PR Bidang '.$bidangPr.' PT Sucofindo Cabang Pekanbaru sesuai PR No. '.$sp->linkedPpbjLabel().' tanggal '.$tglPr.'.'
             : 'Memenuhi PR Bidang '.$bidangPr.' PT Sucofindo Cabang Pekanbaru sesuai PR No. (....................) tanggal (....................).';
-        $catatanPr .= $this->ppbjRegistrationNoteByPr($sp->nomor_pr);
+        $catatanPr .= $this->ppbjRegistrationNote($ppbj);
 
         // Summary: kolom Catatan dibuat vertical merge 3 baris supaya tidak muncul garis
         // tepat di bawah tanggal catatan saat baris kanan berisi Harga / PPN / Total.
@@ -4016,7 +4017,7 @@ class SpController extends Controller
         $signer = $this->resolvePrintSciSigner($sp, $penandatanganSci, $jabatanSci, $nilaiAcuan);
         $penandatanganSci = $signer['name'];
         $jabatanSci = $signer['title'];
-        $sp->load('items');
+        $sp->loadMissing('items');
 
         $phpWord = new PhpWord;
         \PhpOffice\PhpWord\Settings::setOutputEscapingEnabled(true);
@@ -4052,7 +4053,7 @@ class SpController extends Controller
         ]);
 
         $vendor = $this->findVendorByName($sp->nama_vendor);
-        $ppbj = $sp->nomor_pr ? Ppbj::where('ppbj_no', $sp->nomor_pr)->first() : null;
+        $ppbj = $this->findPrintPpbj($sp->nomor_pr);
         $rfqText = trim((string) ($sp->rfq ?? ''));
         $rfqText = $rfqText !== '' ? $rfqText : '.......';
 
@@ -4279,7 +4280,7 @@ class SpController extends Controller
         $catatanPr = $sp->nomor_pr
             ? 'Memenuhi PR Bidang '.$bidangPr.' PT Sucofindo Cabang Pekanbaru sesuai PR No. '.$sp->linkedPpbjLabel().' tanggal '.$tglPrText
             : 'Memenuhi PR Bidang '.$bidangPr.' PT Sucofindo Cabang Pekanbaru sesuai PR No. (....................) tanggal (....................)';
-        $catatanPr .= $this->ppbjRegistrationNoteByPr($sp->nomor_pr);
+        $catatanPr .= $this->ppbjRegistrationNote($ppbj);
 
         $tbl->addRow();
         $catCell = $tbl->addCell(6325, [
