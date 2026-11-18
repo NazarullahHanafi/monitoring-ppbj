@@ -20,6 +20,7 @@ class PrintSelectionInput
         ];
         if ($sp) {
             $rules += [
+                'payment_mode' => ['bail', 'sometimes', 'filled', 'string', Rule::in(SpPaymentTerms::MODES)],
                 'field_id' => ['bail', 'nullable', 'integer', 'min:1'],
                 'field_reason' => ['bail', 'nullable', 'string', 'max:500'],
                 'learn_portfolio' => ['bail', 'nullable', 'boolean'],

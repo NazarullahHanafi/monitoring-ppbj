@@ -14,6 +14,7 @@ use App\Services\ProcurementJourneyService;
 use App\Support\CacheBatch;
 use App\Support\ProcurementDocumentSearch;
 use App\Support\ProcurementExportRows;
+use App\Support\SpPaymentTerms;
 use App\Traits\HasPresence;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
@@ -1913,8 +1914,10 @@ class SpController extends Controller
         Sp $sp,
         ?string $bidangPr = null,
         ?string $penandatanganSci = null,
-        ?string $jabatanSci = null
+        ?string $jabatanSci = null,
+        ?string $paymentMode = null
     ) {
+        $paymentMode = SpPaymentTerms::resolve($paymentMode ?? request()->query('payment_mode'));
         $sp->load('items');
         $bidangPr = $this->resolvePrintBidangPr($bidangPr ?? request()->query('bidang_pr'));
         $nilaiAcuan = $this->hitungNilaiAcuan($sp);
@@ -1930,17 +1933,17 @@ class SpController extends Controller
         // 500 juta ke atas memakai template Kontrak Ringkas Jasa Subkon > 500 jt.
         // Jangan arahkan ke kontrak lama, karena formatnya berbeda dari template yang diupload.
         if ($nilaiAcuan >= 500_000_000) {
-            return $this->cetakKontrakRingkas500($sp, $nilaiAcuan, $bidangPr, $penandatanganSci, $jabatanSci);
+            return $this->cetakKontrakRingkas500($sp, $nilaiAcuan, $bidangPr, $penandatanganSci, $jabatanSci, $paymentMode);
         }
 
         // 300 juta s.d. sebelum 500 juta memakai template Kontrak Ringkas Jasa Subkon > 300 jt.
         if ($nilaiAcuan >= 300_000_000 && $nilaiAcuan < 500_000_000) {
-            return $this->cetakKontrakRingkas300($sp, $nilaiAcuan, $bidangPr, $penandatanganSci, $jabatanSci);
+            return $this->cetakKontrakRingkas300($sp, $nilaiAcuan, $bidangPr, $penandatanganSci, $jabatanSci, $paymentMode);
         }
 
         // 50 juta s.d. sebelum 300 juta tetap memakai template kontrak lama.
         if ($nilaiAcuan >= 50_000_000) {
-            return $this->cetakKontrak($sp, $nilaiAcuan, $bidangPr, $penandatanganSci, $jabatanSci);
+            return $this->cetakKontrak($sp, $nilaiAcuan, $bidangPr, $penandatanganSci, $jabatanSci, $paymentMode);
         }
 
         $phpWord = new PhpWord;
@@ -2419,7 +2422,7 @@ class SpController extends Controller
         $payTbl->addCell(100, ['borders' => $noBdr])->addText(':', $fs, $p0);
         $payVal = $payTbl->addCell(6544, ['borders' => $noBdr]);
         $payVal->addText(
-            'Secara sekaligus 100% (Seratus Persen) dibayarkan setelah barang diterima, dibayarkan paling lambat selama 60 (Enam Puluh) hari kalender setelah dokumen tagihan lengkap diterima oleh Keuangan dan Akuntansi dengan melampirkan:',
+            SpPaymentTerms::spClause($paymentMode),
             $fs,
             $p0
         );
@@ -2526,8 +2529,10 @@ class SpController extends Controller
         ?float $nilaiAcuan = null,
         ?string $bidangPr = null,
         ?string $penandatanganSci = null,
-        ?string $jabatanSci = null
+        ?string $jabatanSci = null,
+        ?string $paymentMode = null
     ) {
+        $paymentMode = SpPaymentTerms::resolve($paymentMode ?? request()->query('payment_mode'));
         $bidangPr = $this->resolvePrintBidangPr($bidangPr ?? request()->query('bidang_pr'));
         $signer = $this->resolvePrintSciSigner($sp, $penandatanganSci, $jabatanSci, $nilaiAcuan);
         $penandatanganSci = $signer['name'];
@@ -2813,7 +2818,7 @@ class SpController extends Controller
             'PIHAK KEDUA merupakan perusahaan kena pajak apabila faktur pajak yang dikeluarkan oleh PIHAK KEDUA tidak diakui atau tidak benar menurut kantor pajak sehingga menyebabkan kerugian PIHAK KESATU maka akan dilakukan pemotongan beban PPN 11% (sebelas persen) dari total nilai kontrak untuk mengganti kerugian tersebut.',
             'Pembayaran ini akan dilakukan pemotongan atau pemungutan sesuai dengan peraturan pajak-pajak yang berlaku.',
             'Apabila ada perbedaan tanggal faktur pajak dengan tanggal penyampaian faktur pajak yang menyebabkan Badan Usaha Milik Negara (BUMN) dikenakan sanksi administrasi perpajakan maka sanksi tersebut akan ditanggung oleh PIHAK KEDUA.',
-            'Pembayaran sebesar '.$nominalPembayaran.' ('.$terbilangSubtotal.' Rupiah) belum termasuk PPN 11% (sebelas persen) akan dibayarkan secara sekaligus setelah pelaksanaan pekerjaan dilaksanakan dan dinyatakan selesai, diverifikasi, dan disetujui oleh PIHAK KESATU melalui transfer ke Rekening Bank PIHAK KEDUA, setelah persyaratan tagihan pembayaran sebagaimana dimaksud pada ayat (8) diterima lengkap.',
+            'Pembayaran sebesar '.$nominalPembayaran.' ('.$terbilangSubtotal.' Rupiah) belum termasuk PPN 11% (sebelas persen) akan dibayarkan '.SpPaymentTerms::contractSchedule($paymentMode).' melalui transfer ke Rekening Bank PIHAK KEDUA, setelah persyaratan tagihan pembayaran sebagaimana dimaksud pada ayat (8) diterima lengkap.',
             'Biaya transfer menjadi beban PIHAK KEDUA',
             'Pembayaran atas harga sebagaimana dimaksud pada ayat (6) pasal ini akan diatur dan dilaksanakan kepada PIHAK KEDUA setelah ditandatangani Kontrak ini oleh Para Pihak dan PIHAK KEDUA telah menyerahkan syarat-syarat sebagai berikut:',
         ];
@@ -2849,7 +2854,7 @@ class SpController extends Controller
         }
 
         $pasal3lanjutan = [
-            'Pembayaran dilakukan dengan cara sekaligus keseluruhan setelah seluruh pekerjaan selesai dan diterima oleh PIHAK KESATU dan Pemberi Kerja dengan benar dan dapat dipergunakan serta dipenuhinya ayat (8).',
+            SpPaymentTerms::contractFollowUp($paymentMode, true),
             'PIHAK KESATU (c/q. Divisi Keuangan dan Akuntansi (KAK)) menerima dokumen tagihan dari PIHAK KEDUA setiap hari Senin dan Rabu dengan batas akhir pada tanggal 20 (dua puluh) setiap bulannya, apabila pada tanggal 20 (dua puluh) bukan jatuh pada hari Senin dan Rabu, maka tagihan tersebut dimasukan ke awal bulan berikutnya.',
             'PARA PIHAK sepakat bahwa pembayaran kepada PIHAK KEDUA akan dilakukan setelah PIHAK KESATU menerima pembayaran dari Pemberi Kerja.',
             'Dengan tetap tunduk kepada ketentuan ayat (11) Pasal ini, PIHAK KESATU akan melakukan pembayaran sebagaimana dimaksud pada ayat (6) melalui transfer ke Rekening Bank PIHAK KEDUA selambat-lambatnya 60 (enam puluh) hari kalender sejak dokumen tagihan lengkap diterima oleh PIHAK KESATU.',
@@ -3252,8 +3257,10 @@ class SpController extends Controller
         ?float $nilaiAcuan = null,
         ?string $bidangPr = null,
         ?string $penandatanganSci = null,
-        ?string $jabatanSci = null
+        ?string $jabatanSci = null,
+        ?string $paymentMode = null
     ) {
+        $paymentMode = SpPaymentTerms::resolve($paymentMode ?? request()->query('payment_mode'));
         $bidangPr = $this->resolvePrintBidangPr($bidangPr ?? request()->query('bidang_pr'));
         $signer = $this->resolvePrintSciSigner($sp, $penandatanganSci, $jabatanSci, $nilaiAcuan);
         $penandatanganSci = $signer['name'];
@@ -3542,7 +3549,7 @@ class SpController extends Controller
             'PIHAK KEDUA merupakan perusahaan kena pajak apabila faktur pajak yang dikeluarkan oleh PIHAK KEDUA tidak diakui atau tidak benar menurut kantor pajak sehingga menyebabkan kerugian PIHAK KESATU maka akan dilakukan pemotongan beban PPN 11% (sebelas persen) dari total nilai kontrak untuk mengganti kerugian tersebut.',
             'Pembayaran ini akan dilakukan pemotongan atau pemungutan sesuai dengan peraturan pajak-pajak yang berlaku.',
             'Apabila ada perbedaan tanggal faktur pajak dengan tanggal penyampaian faktur pajak yang menyebabkan Badan Usaha Milik Negara (BUMN) dikenakan sanksi administrasi perpajakan maka sanksi tersebut akan ditanggung oleh PIHAK KEDUA.',
-            'Pembayaran sebesar '.$nominalPembayaran.' ('.$terbilangSubtotal.' Rupiah) belum termasuk PPN 11% (sebelas persen) akan dibayarkan secara sekaligus setelah pelaksanaan pekerjaan dilaksanakan dan dinyatakan selesai, diverifikasi, dan disetujui oleh PIHAK KESATU melalui transfer ke Rekening Bank PIHAK KEDUA, setelah persyaratan tagihan pembayaran sebagaimana dimaksud pada ayat (8) diterima lengkap.',
+            'Pembayaran sebesar '.$nominalPembayaran.' ('.$terbilangSubtotal.' Rupiah) belum termasuk PPN 11% (sebelas persen) akan dibayarkan '.SpPaymentTerms::contractSchedule($paymentMode).' melalui transfer ke Rekening Bank PIHAK KEDUA, setelah persyaratan tagihan pembayaran sebagaimana dimaksud pada ayat (8) diterima lengkap.',
             'Biaya transfer menjadi beban PIHAK KEDUA',
             'Pembayaran atas harga sebagaimana dimaksud pada ayat (6) pasal ini akan diatur dan dilaksanakan kepada PIHAK KEDUA setelah ditandatangani Kontrak ini oleh Para Pihak dan PIHAK KEDUA telah menyerahkan syarat-syarat sebagai berikut:',
         ];
@@ -3578,7 +3585,7 @@ class SpController extends Controller
         }
 
         $pasal3lanjutan = [
-            'Pembayaran dilakukan dengan cara sekaligus keseluruhan setelah seluruh pekerjaan selesai dan diterima oleh PIHAK KESATU dan Pemberi Kerja dengan benar dan dapat dipergunakan serta dipenuhinya ayat (8).',
+            SpPaymentTerms::contractFollowUp($paymentMode, true),
             'PIHAK KESATU (c/q. Divisi Keuangan dan Akuntansi (KAK)) menerima dokumen tagihan dari PIHAK KEDUA setiap hari Senin dan Rabu dengan batas akhir pada tanggal 20 (dua puluh) setiap bulannya, apabila pada tanggal 20 (dua puluh) bukan jatuh pada hari Senin dan Rabu, maka tagihan tersebut dimasukan ke awal bulan berikutnya.',
             'PARA PIHAK sepakat bahwa pembayaran kepada PIHAK KEDUA akan dilakukan setelah PIHAK KESATU menerima pembayaran dari Pemberi Kerja.',
             'Dengan tetap tunduk kepada ketentuan ayat (11) Pasal ini, PIHAK KESATU akan melakukan pembayaran sebagaimana dimaksud pada ayat (6) melalui transfer ke Rekening Bank PIHAK KEDUA selambat-lambatnya 60 (enam puluh) hari kalender sejak dokumen tagihan lengkap diterima oleh PIHAK KESATU.',
@@ -3981,8 +3988,10 @@ class SpController extends Controller
         ?float $nilaiAcuan = null,
         ?string $bidangPr = null,
         ?string $penandatanganSci = null,
-        ?string $jabatanSci = null
+        ?string $jabatanSci = null,
+        ?string $paymentMode = null
     ) {
+        $paymentMode = SpPaymentTerms::resolve($paymentMode ?? request()->query('payment_mode'));
         $bidangPr = $this->resolvePrintBidangPr($bidangPr ?? request()->query('bidang_pr'));
         $signer = $this->resolvePrintSciSigner($sp, $penandatanganSci, $jabatanSci, $nilaiAcuan);
         $penandatanganSci = $signer['name'];
@@ -4330,7 +4339,7 @@ class SpController extends Controller
             'PIHAK KEDUA merupakan perusahaan kena pajak apabila faktur pajak yang dikeluarkan oleh PIHAK KEDUA tidak diakui atau tidak benar menurut kantor pajak sehingga menyebabkan kerugian PIHAK KESATU maka akan dilakukan pemotongan beban PPN 11% (sebelas persen) dari total nilai kontrak untuk mengganti kerugian tersebut.',
             'Pembayaran ini akan dilakukan pemotongan atau pemungutan sesuai dengan peraturan pajak – pajak yang berlaku.',
             'Apabila ada perbedaan tanggal faktur pajak dengan tanggal penyampaian faktur pajak yang menyebabkan Badan Usaha Milik Negara (BUMN) dikenakan sanksi administrasi perpajakan maka sanksi tersebut akan ditanggung oleh PIHAK KEDUA.',
-            'Pembayaran sebesar '.$nominalPembayaran.',- ('.$terbilangSubtotal.' Rupiah) belum termasuk PPN 11% (sebelas persen) adalah nilai maksimal yang bisa dilakukan penagihan dan akan dilakukan melalui transfer ke Rekening Bank PIHAK KEDUA.',
+            'Pembayaran sebesar '.$nominalPembayaran.',- ('.$terbilangSubtotal.' Rupiah) belum termasuk PPN 11% (sebelas persen) adalah nilai maksimal yang bisa dilakukan penagihan dan akan dibayarkan '.SpPaymentTerms::contractSchedule($paymentMode).' melalui transfer ke Rekening Bank PIHAK KEDUA.',
             'Biaya transfer menjadi beban PIHAK KEDUA.',
             'Pembayaran atas harga sebagaimana dimaksud pada ayat (6) pasal ini akan diatur dan dilaksanakan kepada PIHAK KEDUA setelah ditandatangani Kontrak ini oleh Para Pihak dan PIHAK KEDUA telah menyerahkan syarat-syarat sebagai berikut :',
         ];
@@ -4357,7 +4366,9 @@ class SpController extends Controller
             'f.' => 'Lampiran Pembayaran SPT PPN di bulan sebelumnya;',
             'g.' => 'Faktur Penjualan atau Invoice rangkap 2 (dua);',
             'h.' => '1 (satu) Asli Lembar Kesatu dan 2 (dua) copy/salinan E-Faktur Pajak yang sudah ada barcode;',
-            'i.' => 'Copy Kontrak yang telah ditandatangani oleh Para Pihak dan dibubuhi meterai cukup untuk setiap kali mengajukan tagihan sesuai dengan realisasi pemakaian setiap bulannya, sedangkan untuk tagihan terakhir menggunakan Kontrak Asli;',
+            'i.' => $paymentMode === 'realization'
+                ? 'Copy Kontrak yang telah ditandatangani oleh Para Pihak dan dibubuhi meterai cukup untuk setiap kali mengajukan tagihan sesuai dengan realisasi pekerjaan, sedangkan untuk tagihan terakhir menggunakan Kontrak Asli;'
+                : 'Asli Kontrak yang telah ditandatangani oleh Para Pihak dan dibubuhi meterai cukup;',
             'j.' => 'Asli Surat Jalan atau Berita Acara Serah Terima Barang atau Delivery Order yang telah ditandatangani oleh PIHAK KESATU dan PIHAK KEDUA;',
             'k.' => 'Surat Perintah Pembayaran (SPP) yang diterbitkan oleh PIHAK KESATU dari aplikasi ERP (c/q. Fungsi Keuangan);',
             'l.' => 'Receipt atau Bukti Penerimaan Gudang (BPG) yang diterbitkan PIHAK KESATU (c/q Fungsi Umum) dari aplikasi ERP;',
@@ -4366,7 +4377,7 @@ class SpController extends Controller
             $addNo($no, $text, 1);
         }
         foreach ([
-            9 => 'Pembayaran dilakukan secara bertahap setiap bulannya berdasarkan realisasi pemakaian yang ditandatangani KEDUA PIHAK melalui transfer ke Rekening Bank Perusahaan Saudara serta dipenuhinya persyaratan tagihan sebagaimana dimaksud pada ayat (8).',
+            9 => SpPaymentTerms::contractFollowUp($paymentMode),
             10 => 'Pajak-pajak lain, bea-bea, termasuk bea meterai yang menjadi kewajiban PIHAK KEDUA dan jika ada pungutan-pungutan lain yang timbul karena pembuatan dan/atau pelaksanaan perjanjian ini menjadi tanggung jawab PIHAK KEDUA untuk melunasinya.',
             11 => 'Pajak Pertambahan Nilai (PPN) dan Pajak Penghasilan (PPh) yang timbul atas transaksi mengikuti ketentuan Perundang-undangan Perpajakan yang berlaku di Negara Republik Indonesia.',
             12 => 'PIHAK KEDUA wajib memberikan bukti penyetoran (jika ada) dan Bukti Pelaporan Surat Pemberitahuan (SPT) beserta lampiran A2 masa PPN sesuai transaksi yang ditagihkan kepada PIHAK KESATU selambat-lambatnya 60 (enam puluh) hari kalender sejak tanggal terbitnya faktur pajak.',

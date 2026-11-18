@@ -6,6 +6,7 @@ use App\Models\Ppbj;
 use App\Models\Sp;
 use App\Models\SpMasterOption;
 use App\Models\SpPortfolioFieldMap;
+use App\Support\SpPaymentTerms;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
 
@@ -71,6 +72,7 @@ class SpPrintPolicy
 
     public function validate(Request $request, array $context, bool $allowLearning = false): array
     {
+        $paymentMode = SpPaymentTerms::resolve($request->query('payment_mode'));
         $selected = app(SpphPrintPolicy::class)->validate($request, $context);
         $data = validator($request->query(), ['field_id' => ['required', 'integer', 'min:1'], 'field_reason' => ['nullable', 'string', 'max:500'], 'learn_portfolio' => ['nullable', 'boolean']])->validate();
         $field = SpMasterOption::active()->where('type', 'bidang_pr')->find($data['field_id']);
@@ -90,7 +92,12 @@ class SpPrintPolicy
         $selected['field_manual'] = $manual;
         $selected['learn_portfolio'] = $learning;
         $selected['field_reason'] = trim($data['field_reason'] ?? '');
+        $selected['payment_mode'] = $paymentMode;
         $selected['query'] += ['field_id' => $field->id, 'field_reason' => $selected['field_reason']];
+        // Old open tabs still validate a fixed selection field list.
+        if ($request->query->has('payment_mode')) {
+            $selected['query']['payment_mode'] = $paymentMode;
+        }
 
         return $selected;
     }

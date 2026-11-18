@@ -1,0 +1,25 @@
+# SP payment selection — 18 November 2026
+
+The SP print confirmation now offers **100% sekaligus** and **Bertahap sesuai realisasi** in the existing dialog. A visible summary shows the selected wording before continuing. The initial choice is 100%; a user can change it for the document being prepared. No extra modal, polling, browser storage or network request is introduced when switching choices.
+
+The realization wording for the standard SP is: “Secara bertahap sesuai dengan realisasi pekerjaan dan dibayarkan setelah barang/jasa diterima”. The existing 60-calendar-day payment deadline and invoice-document requirements remain attached. The standard 100% wording remains available. The same selection reaches the payment paragraphs in all three contract value tiers, preserving the nominal amount, tax text, verification/acceptance requirements and transfer recipient. Follow-up payment paragraphs also follow the chosen mode, so a realization print cannot retain the old “sekaligus keseluruhan” schedule, and a full print cannot retain a monthly installment schedule. The legacy contract's signed-contract attachment requirement follows one-time versus repeated billing. Template-specific wording still differs between SP and contracts.
+
+## Selection and document consistency
+
+`SpPaymentTerms` centralizes the two permitted modes, labels and generated clauses. `PrintSelectionInput` rejects unknown, array-valued, empty or malformed modes before context queries, confirmation locks or document generation. The policy returns the validated mode through the existing confirmation flow; the print controller passes it explicitly into the renderer and every contract dispatch branch. The preview metadata identifies the selected payment schedule, and its signed download link serves that same prepared file.
+
+Choices survive signing-mode changes, master-manager reopening, validation failures and context refreshes. The browser verifies the server-confirmed mode before navigating; a missing legacy response is accepted only for the 100% default. A realization mismatch cannot silently navigate to a different payment clause. Old open tabs that omit the new parameter retain their previous selection DTO field list. Direct legacy links default to full payment.
+
+This is a per-print choice, not a new persisted SP field. It does not modify the SP record or change shared portfolio mappings merely because payment mode changed. Realization prints are included in the existing manual-print audit, with the payment enum recorded alongside signing/owner details. An already generated document keeps its wording when downloaded again.
+
+## Verification
+
+Passed **930 PHP tests / 10,472 assertions** and **486 JavaScript tests**. New feature tests inspect actual DOCX XML for both payment modes across four value tiers, reject contradictory follow-up schedules, and validate legacy compatibility, round-trip confirmation, unchanged SP/mapping data, viewer context access, preview/download consistency, audit data and early rejection of invalid modes. New JavaScript tests cover wording, retained drafts, manager reopening, cancellation and mismatched/invalid server choices. Explicit-file Pint, JavaScript syntax and whitespace checks pass. Existing SP/SPPH browser regression checks for cancellation, deadlines, escaped errors and stale-context confirmation also pass.
+
+Actual SweetAlert/helper/SP assets pass desktop/light and mobile/dark browser tests for both modes. Switching payment options adds no requests, the selected state and summary match, signing drafts survive, cancellation sends no print POST, confirmation sends one CSRF-protected POST and the resulting same-tab preview URL carries the confirmed enum. Dialog actions remain within the viewport.
+
+Eight synthetic DOCX samples were opened read-only and exported by Microsoft Word. Standard SP samples remain two pages each; contract samples remain twelve pages each for these fixtures. Generated payment paragraphs and standard SP pages were checked visually, alongside contract layout overviews. QA files use an isolated in-memory SQLite database. No real procurement record or the user's existing PDF was changed.
+
+The production candidate is verified using an unsaved synthetic identity, array cache/session, blocked outbound HTTP and a read-only database transaction. Legacy, 100% and realization context checks each use five queries; payment selection adds no context SQL. Twenty invalid mode/action combinations are rejected with zero controller/service SQL. The probe makes no real account/SP/mapping changes and generates no production documents.
+
+Rollout backs up changed files and the published SP script, checks the exact commit/file allowlist, verifies the staged candidate, and prepublishes the independent helper before updating its callers. Route, view and configuration caches are preserved because they are unchanged. Post-deployment checks repeat the synthetic probe, compare the public script hash, verify public health and confirm unauthenticated print-context access is still rejected. File rollback is prepared if verification fails.

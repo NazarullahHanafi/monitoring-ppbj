@@ -103,3 +103,34 @@ test('SP renders server validation text without interpreting markup',async()=>{
     const confirm=h.dialogs[1].options.preConfirm();h.respond(1,{errors:{field_id:['<img src=x onerror=bad()>']}},422);assert.equal(await confirm,false);
     assert.match(h.messages.at(-1),/&lt;img/);assert.doesNotMatch(h.messages.at(-1),/<img/);h.dialogs[1].resolve({isDismissed:true});await task;
 });
+
+test('payment choices update the wording, survive signer switches, and use the confirmed value in the preview URL',async()=>{
+    const h=runtime(),task=h.window.openSpPrintPreview('/sp/12/cetak-preview');h.respond(0,data());await tick();const d=h.dialogs[1];d.options.didOpen();
+    assert.match(d.options.html,/data-sp-payment="full" aria-pressed="true"/);
+    await h.events.click({target:{closest:()=>({dataset:{spPayment:'realization'}})}});
+    assert.match(h.updates.at(-1).html,/data-sp-payment="realization" aria-pressed="true"/);assert.match(h.updates.at(-1).html,/Secara bertahap sesuai dengan realisasi pekerjaan/);
+    h.nodes.spPrintFieldReason={value:'Catatan bidang tetap tersimpan'};
+    await h.events.click({target:{closest:()=>({dataset:{spPrint:'manual'}})}});
+    h.nodes.spPrintSigner={value:'3'};h.nodes.spPrintTitle={value:'4'};h.nodes.spPrintReason={value:'Penugasan pejabat pengganti'};
+    await h.events.click({target:{closest:()=>({dataset:{spPrint:'auto'}})}});
+    assert.match(h.updates.at(-1).html,/data-sp-payment="realization" aria-pressed="true"/);assert.match(h.updates.at(-1).html,/Catatan bidang tetap tersimpan/);
+    const confirm=d.options.preConfirm();assert.equal(JSON.parse(h.requests[1].options.body).payment_mode,'realization');
+    const response=data();response.selection.payment_mode='realization';h.respond(1,response);const url=await confirm;assert.equal(new URL(url).searchParams.get('payment_mode'),'realization');
+    d.resolve({isConfirmed:true,value:url});await task;assert.equal(h.navigations.length,1);
+});
+
+test('payment mismatch or invalid confirmed mode cannot silently print a different clause',async()=>{
+    for(const mode of [undefined,'full','unknown','<img>']){
+        const h=runtime(),task=h.window.openSpPrintPreview('/sp/12/cetak-preview');h.respond(0,data());await tick();const d=h.dialogs[1];d.options.didOpen();
+        await h.events.click({target:{closest:()=>({dataset:{spPayment:'realization'}})}});const confirm=d.options.preConfirm(),response=data();if(mode!==undefined)response.selection.payment_mode=mode;h.respond(1,response);
+        assert.equal(await confirm,false);assert.equal(h.navigations.length,0);assert.match(h.messages.at(-1),/belum terkonfirmasi/);d.resolve({isDismissed:true});await task;
+    }
+});
+
+test('payment choice survives master-manager reopening and cancellation creates no print request',async()=>{
+    const h=runtime();h.window.SPPHPrintMasters.open=async()=>null;
+    const task=h.window.openSpPrintPreview('/sp/12/cetak-preview');h.respond(0,data());await tick();const d=h.dialogs[1];d.options.didOpen();
+    await h.events.click({target:{closest:()=>({dataset:{spPayment:'realization'}})}});
+    await h.events.click({target:{closest:()=>({dataset:{spPrint:'masters'}})}});h.respond(1,data());await tick();
+    assert.match(h.dialogs.at(-1).options.html,/data-sp-payment="realization" aria-pressed="true"/);h.dialogs.at(-1).resolve({isDismissed:true});d.resolve({isDismissed:true});await task;assert.equal(h.requests.length,2);
+});

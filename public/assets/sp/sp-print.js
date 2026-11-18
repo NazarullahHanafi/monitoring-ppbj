@@ -5,6 +5,10 @@
     const options = (rows, id) => '<option value="">Pilih master aktif…</option>' + rows.map(row => `<option value="${Number(row.id)}" ${Number(id)===Number(row.id)?'selected':''}>${escape(row.nama)}</option>`).join('');
     const theme = () => ({width:760,customClass:{popup:'spph-signing-popup sg-preview-popup'},background:document.documentElement.classList.contains('dark')?'#162034':'#fff',color:document.documentElement.classList.contains('dark')?'#edf3ff':'#18253d'});
     const canLearn = data => Boolean(data.owner_can_learn && data.can_manage);
+    const paymentModes = {
+        full: {label:'100% sekaligus',description:'Dibayarkan setelah barang diterima.',text:'Secara sekaligus 100% (Seratus Persen) dibayarkan setelah barang diterima'},
+        realization: {label:'Bertahap sesuai realisasi',description:'Dibayarkan sesuai pekerjaan yang telah direalisasikan.',text:'Secara bertahap sesuai dengan realisasi pekerjaan dan dibayarkan setelah barang/jasa diterima'}
+    };
     let serial=0, pending, activeConfirm;
     window.addEventListener('pagehide',()=>{serial++;pending?.abort();activeConfirm?.abort();});
     function checked(data, selection = false) {
@@ -16,9 +20,9 @@
             ||!Array.isArray(data.portfolios)||data.portfolios.length>101||!data.portfolios.every(x=>typeof x==='string')
             ||!Array.isArray(data.owner_diagnostics)||data.owner_diagnostics.length>105||!data.owner_diagnostics.every(x=>typeof x==='string'))throw new Error('Konfirmasi cetak belum lengkap. Buka ulang konfirmasi.');
         if(selection){
-            const s=data.selection, allowed=['signing_mode','field_id','field_reason','signer_id','title_id','manual_reason','penandatangan','jabatan','print_basis'];
+            const s=data.selection, allowed=['signing_mode','field_id','field_reason','signer_id','title_id','manual_reason','penandatangan','jabatan','print_basis','payment_mode'];
             if(!s||Array.isArray(s)||typeof s!=='object'||Object.keys(s).some(key=>!allowed.includes(key))
-                ||!['auto','manual'].includes(s.signing_mode)||s.print_basis!==data.fingerprint||typeof s.penandatangan!=='string'||typeof s.jabatan!=='string'
+                ||!['auto','manual'].includes(s.signing_mode)||(s.payment_mode!==undefined&&!Object.hasOwn(paymentModes,s.payment_mode))||s.print_basis!==data.fingerprint||typeof s.penandatangan!=='string'||typeof s.jabatan!=='string'
                 ||!Number.isSafeInteger(Number(s.field_id))||Number(s.field_id)<1||Object.values(s).some(value=>!['string','number'].includes(typeof value)))throw new Error('Pilihan cetak belum terkonfirmasi. Periksa kembali sebelum melanjutkan.');
         }
         return data;
@@ -47,6 +51,7 @@
         return `<div class="spph-signing-content"><div class="spph-signing-intro"><span class="sg-eyebrow">SP / KONTRAK · KONFIRMASI CETAK</span>${escape(data.number)}<p>Periksa penandatangan SCI dan bidang pemilik PR sebelum membuat dokumen. Penandatangan vendor tetap mengikuti Master Vendor.</p></div>
         ${data.errors.length?`<div class="spph-signing-warning">${data.errors.map(x=>`<p>${escape(x)}</p>`).join('')}</div>`:''}
         <div class="spph-signing-grid"><div class="spph-signing-card"><small>NILAI SP</small><strong>${money(data.amount)}</strong><p>${escape(data.basis)}</p></div><div class="spph-signing-card spph-signing-official"><small>REKOMENDASI SCI</small><strong>${escape(data.name)}</strong><p>${escape(data.title)}</p></div></div>
+        <section class="sg-manual" aria-label="Skema pembayaran"><span class="sg-eyebrow">PEMBAYARAN PENGADAAN</span><p>Pilih skema yang sesuai dengan kesepakatan pengadaan. Pilihan berlaku untuk dokumen yang akan dicetak ini.</p><div class="sg-modes" aria-label="Pilihan pembayaran">${Object.entries(paymentModes).map(([mode,choice])=>`<button type="button" data-sp-payment="${mode}" aria-pressed="${s.paymentMode===mode}">${escape(choice.label)}<span>${escape(choice.description)}</span></button>`).join('')}</div><p aria-live="polite"><strong>Ringkasan pembayaran:</strong> ${escape(paymentModes[s.paymentMode].text)}.</p><p>Ketentuan batas waktu pembayaran dan kelengkapan tagihan tetap tercantum pada dokumen. Periksa kembali pada preview sebelum mengunduh.</p></section>
         <div class="sg-modes" aria-label="Mode penandatangan"><button type="button" data-sp-print="auto" aria-pressed="${s.mode==='auto'}">Otomatis<span>Sesuai nilai SP</span></button><button type="button" data-sp-print="manual" aria-pressed="${s.mode==='manual'}">Pilih manual<span>Nama dan jabatan dari master aktif</span></button></div>
         ${s.mode==='manual'?`<section class="sg-manual"><div class="spph-signing-grid"><label>Penandatangan SCI<select id="spPrintSigner">${options(s.names,s.signerId)}</select></label><label>Jabatan SCI<select id="spPrintTitle">${options(s.titles,s.titleId)}</select></label></div><label>Alasan manual (minimal 10 karakter)<textarea id="spPrintReason" maxlength="500" rows="2">${escape(s.reason)}</textarea></label><p>Pilihan dicatat di audit. Memilih nama bukan pemberian kewenangan tanda tangan.</p></section>`:''}
         <section class="sg-manual"><span class="sg-eyebrow">BIDANG PEMILIK PR</span><p>Portofolio: <strong>${escape(data.portfolios.join(', ')||'Belum tersedia')}</strong></p><p>${canLearn(data)?'Cukup pilih bidang di bawah. Saat klik <strong>Lanjut Preview</strong>, pilihan otomatis diingat untuk portofolio ini dan cetak berikutnya terisi otomatis.':data.owner_field_name?'Terisi otomatis: '+escape(data.owner_field_name):'Pilih bidang penanggung jawab. Untuk paket lintas portofolio atau pemetaan nonaktif, sertakan alasan.'}</p>
@@ -69,6 +74,7 @@
             let data=await context(match[1],controller.signal);
             if(current!==serial||controller.signal.aborted)return;
             const s=retained&&typeof retained==='object'?retained:{mode:'auto',signerId:data.name_id,titleId:data.title_id,reason:'',fieldId:data.owner_field_id,fieldReason:'',fieldManual:false};
+            if(!Object.hasOwn(paymentModes,s.paymentMode))s.paymentMode='full';
             if(!s.fieldManual)s.fieldId=data.owner_field_id;
             Object.assign(s,await window.SPPHPrintMasters.choices(s.signerId,s.titleId,s.fieldId,true,controller.signal));
             if(current!==serial||controller.signal.aborted)return;loaded=true;
@@ -77,7 +83,8 @@
             const ready=()=>s.mode==='manual'?data.amount_valid:data.ready;
             const result=await Swal.fire({title:'Siapkan cetak SP / Kontrak',html:render(data,s),...theme(),showCancelButton:true,cancelButtonText:'Batal',showConfirmButton:ready(),confirmButtonText:'Lanjut Preview',confirmButtonColor:'#3157d9',focusConfirm:false,showLoaderOnConfirm:true,allowOutsideClick:()=>!submitting&&!Swal.isLoading(),allowEscapeKey:()=>!submitting,willClose:()=>{closed=true;controller.abort();confirmRequest?.abort();},
                 didOpen:()=>Swal.getHtmlContainer().addEventListener('click',async event=>{
-                    const button=event.target.closest('[data-sp-print]');if(!button||closed||submitting||managing||Swal.isLoading())return;capture();
+                    const button=event.target.closest('[data-sp-payment],[data-sp-print]');if(!button||closed||submitting||managing||Swal.isLoading())return;capture();
+                    if(Object.hasOwn(paymentModes,button.dataset.spPayment)){s.paymentMode=button.dataset.spPayment;Swal.update({html:render(data,s),showConfirmButton:ready()});return;}
                     const action=button.dataset.spPrint;
                     if(['auto','manual'].includes(action)){s.mode=action;Swal.update({html:render(data,s),showConfirmButton:ready()});return;}
                     managing=true;Swal.close();
@@ -92,7 +99,7 @@
                 }),
                 preConfirm:async()=>{
                     if(closed||submitting)return false;
-                    capture();const params=new URLSearchParams({signing_mode:s.mode,field_id:s.fieldId||'',field_reason:s.fieldReason});
+                    capture();const params=new URLSearchParams({signing_mode:s.mode,field_id:s.fieldId||'',field_reason:s.fieldReason,payment_mode:s.paymentMode});
                     if(!s.fieldId){Swal.showValidationMessage('Pilih bidang pemilik PR terlebih dahulu.');return false;}
                     if(s.fieldManual&&!canLearn(data)&&s.fieldReason.trim().length<10){Swal.showValidationMessage('Tuliskan alasan pilihan bidang minimal 10 karakter.');return false;}
                     params.set('print_basis',data.fingerprint);
@@ -106,6 +113,8 @@
                         const latest=data.can_manage?await confirmSelection(match[1],confirmRequest.signal,params):await context(match[1],confirmRequest.signal,params.toString());
                         if(closed||current!==serial||!Swal.isVisible())return false;
                         if(latest.fingerprint!==data.fingerprint&&!latest.mapping_saved){data=latest;Swal.update({html:render(data,s),showConfirmButton:ready()});Swal.showValidationMessage('Data berubah. Periksa rekomendasi terbaru sebelum melanjutkan.');return false;}
+                        if((latest.selection.payment_mode??'full')!==s.paymentMode){Swal.showValidationMessage('Pilihan pembayaran belum terkonfirmasi. Muat ulang halaman dan pilih kembali skema pembayaran.');return false;}
+                        latest.selection.payment_mode=s.paymentMode;
                         url.search='';for(const [key,value]of Object.entries(latest.selection))url.searchParams.set(key,value);return url.href;
                     }catch(error){
                         if(error.name==='AbortError')return false;

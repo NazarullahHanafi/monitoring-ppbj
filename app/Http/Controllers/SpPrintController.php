@@ -8,6 +8,7 @@ use App\Services\SpPrintPolicy;
 use App\Services\SpPrintSelection;
 use App\Support\PrintPreviewFile;
 use App\Support\PrintSelectionInput;
+use App\Support\SpPaymentTerms;
 use Illuminate\Http\Request;
 
 class SpPrintController extends Controller
@@ -36,14 +37,14 @@ class SpPrintController extends Controller
     {
         PrintSelectionInput::validate($request->query(), true);
         $selected = app(SpPrintPolicy::class)->validate($request, app(SpPrintPolicy::class)->context($sp));
-        if ($selected['signing_mode'] === 'manual' || $selected['field_manual']) {
+        if ($selected['signing_mode'] === 'manual' || $selected['field_manual'] || $selected['payment_mode'] === 'realization') {
             ActivityLog::create(['user_id' => $request->user()->id, 'model_type' => Sp::class, 'model_id' => $sp->id,
                 'action' => 'manual_print_selection', 'description' => 'Permintaan cetak SP dengan pilihan manual',
                 'changes' => ['signer' => $selected['name'], 'title' => $selected['title'], 'reason' => $selected['manual_reason'] ?? null,
-                    'owner_field' => $selected['field_name'], 'field_reason' => $selected['field_reason'], 'nilai_sp' => $selected['amount']]]);
+                    'owner_field' => $selected['field_name'], 'field_reason' => $selected['field_reason'], 'nilai_sp' => $selected['amount'], 'payment_mode' => $selected['payment_mode']]]);
         }
 
-        return [$selected, app(SpController::class)->cetakSp($sp, $selected['field_name'], $selected['name'], $selected['title'])];
+        return [$selected, app(SpController::class)->cetakSp($sp, $selected['field_name'], $selected['name'], $selected['title'], $selected['payment_mode'])];
     }
 
     public function download(Request $request, Sp $sp)
@@ -65,6 +66,7 @@ class SpPrintController extends Controller
             'meta' => ['Nomor SP' => $sp->nomor_sp, 'Nomor PR/PPBJ' => $sp->linkedPpbjLabel(), 'Vendor' => $sp->nama_vendor,
                 'Dasar penandatangan' => 'Nilai SP Rp '.number_format((float) $selected['amount'], 2, ',', '.'),
                 'Bidang pemilik PR' => $selected['field_name'], 'Sumber bidang' => $selected['field_manual'] ? 'Manual — '.$selected['field_reason'] : 'Pemetaan portofolio aktif',
+                'Pembayaran' => SpPaymentTerms::label($selected['payment_mode']),
                 'Penandatangan SCI' => $selected['name'].' — '.$selected['title'],
                 'Mode SCI' => $selected['signing_mode'] === 'manual' ? 'Manual — '.$selected['manual_reason'] : 'Otomatis sesuai nilai SP',
                 'Link berlaku sampai' => $preview['expiresText']],
