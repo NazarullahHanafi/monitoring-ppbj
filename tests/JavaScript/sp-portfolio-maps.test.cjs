@@ -6,7 +6,7 @@ const source = fs.readFileSync('public/assets/sp/sp-portfolio-maps.js', 'utf8');
 const tick = () => new Promise(setImmediate);
 const row = {id: 1, portfolio: 'PK - LAB', field_id: 5, field_name: 'Bidang LAB', field_available: true, is_active: true, version: 'a'.repeat(64)};
 const field = {id: 5, nama: 'Bidang LAB', type: 'bidang_pr', is_active: true, version: 'b'.repeat(64)};
-const page = (rows, extra = {}) => ({rows, page: 1, last_page: 1, total: rows.length, portfolio_options: ['IT - FERS', 'PK - LAB', 'PK - QAQC'], options_truncated: false, ...extra});
+const page = (rows = [], extra = {}) => ({rows, page: 1, last_page: 1, total: rows.length, portfolio_options: ['IT - FERS', 'PK - LAB', 'PK - QAQC'], options_truncated: false, ...extra});
 function runtime() {
     const requests = [], updates = [], events = {}, nodes = {}, windowEvents = {}, timers = new Map(), window = {addEventListener: (type, handler) => windowEvents[type] = handler};
     let dialog, serial = 0, confirms = {disabled: false}, csrf = 'test-csrf';
@@ -63,7 +63,7 @@ test('edits use a versioned PUT and successful write with failed refresh is neve
 test('body deadline releases writes without retry and keeps the draft', async () => {
     const h = runtime(); const {task} = await opened(h); h.draft('Slow draft'); submit(h, 'spMapForm');
     h.respond(2, {}, 200, {json: () => new Promise(() => {})}); await tick(); [...h.timers.values()][0](); await tick();
-    assert.equal(h.requests.length, 3); assert.equal(h.confirms.disabled, false); assert.match(h.updates.at(-1).html, /Slow draft/); assert.match(h.updates.at(-1).html, /belum terkonfirmasi/); assert.equal(h.timers.size, 0); h.close(); await task;
+    assert.equal(h.requests.length, 3); assert.equal(h.confirms.disabled, false); assert.match(h.updates.at(-1).html, /Slow draft/); assert.match(h.updates.at(-1).html, /belum terkonfirmasi/); assert.equal(h.timers.size, 0); submit(h, 'spMapForm'); assert.equal(h.requests.length, 3); assert.match(h.updates.at(-1).html, /Penyimpanan belum terverifikasi/); h.close(); await task;
 });
 test('starting a write cancels pending reads and closing ignores all late completions', async () => {
     const h = runtime(); const {task} = await opened(h); h.nodes.spMapQuery = {value: 'pending search'}; submit(h, 'spMapSearch');
@@ -95,6 +95,47 @@ test('out-of-range live pages clamp once and never loop', async () => {
 });
 test('HTML sessions, missing CSRF and malformed JSON never confirm or retry writes', async () => {
     const h = runtime(); const {task} = await opened(h); h.draft(); submit(h, 'spMapForm'); h.respond(2, {}, 200, {headers: {get: () => 'text/html'}}); await tick(); assert.match(h.updates.at(-1).html, /belum dapat diverifikasi/);
-    submit(h, 'spMapForm'); h.respond(3, {}, 200, {json: async () => {const error = new Error('private-fragment'); error.name = 'SyntaxError'; throw error;}}); await tick(); assert.match(h.updates.at(-1).html, /belum dapat dibaca/); assert.doesNotMatch(h.updates.at(-1).html, /private-fragment/);
-    h.csrf(''); submit(h, 'spMapForm'); await tick(); assert.equal(h.requests.length, 4); assert.match(h.updates.at(-1).html, /Sesi formulir berakhir/); h.close(); await task;
+    submit(h, 'spMapForm'); assert.equal(h.requests.length, 3); click(h, 'refresh'); h.respond(3, page()); await tick();
+    submit(h, 'spMapForm'); h.respond(4, {}, 200, {json: async () => {const error = new Error('private-fragment'); error.name = 'SyntaxError'; throw error;}}); await tick(); assert.match(h.updates.at(-1).html, /belum dapat dibaca/); assert.doesNotMatch(h.updates.at(-1).html, /private-fragment/);
+    submit(h, 'spMapForm'); assert.equal(h.requests.length, 5); click(h, 'refresh'); h.respond(5, page()); await tick();
+    h.csrf(''); submit(h, 'spMapForm'); await tick(); assert.equal(h.requests.length, 6); assert.match(h.updates.at(-1).html, /Sesi formulir berakhir/); h.close(); await task;
+});
+
+test('a successful-looking reply must match the edited ID and every submitted field before clearing drafts', async () => {
+    for (const mismatch of [{id: 99}, {portfolio: 'Other portfolio'}, {field_id: 99}, {is_active: false}, {field_available: false}, {version: 'broken'}]) {
+        const h = runtime(); const {task} = await opened(h, [row]); click(h, 'edit'); h.draft(); submit(h, 'spMapForm');
+        h.respond(2, {row: {...row, ...mismatch}}); await tick();
+        assert.match(h.updates.at(-1).html, /Penyimpanan belum terverifikasi/); assert.match(h.updates.at(-1).html, /PK - LAB/);
+        submit(h, 'spMapForm'); assert.equal(h.requests.length, 3); assert.equal(h.confirms.disabled, false); h.close(); await task;
+    }
+});
+test('uncertain writes cannot be repeated until a valid list reload and failed reloads keep the draft locked', async () => {
+    const h = runtime(); const {task} = await opened(h); h.draft('Uncertain draft'); submit(h, 'spMapForm'); h.respond(2, {message: 'PRIVATE SQL'}, 500); await tick();
+    submit(h, 'spMapForm'); assert.equal(h.requests.length, 3); assert.doesNotMatch(h.updates.at(-1).html, /PRIVATE SQL/);
+    click(h, 'refresh'); h.respond(3, {}, 500); await tick(); submit(h, 'spMapForm'); assert.equal(h.requests.length, 4);
+    assert.match(h.updates.at(-1).html, /Uncertain draft/); assert.match(h.updates.at(-1).html, /Daftar pemetaan belum dapat dimuat/); assert.doesNotMatch(h.updates.at(-1).html, /Tidak ada pemetaan yang cocok/);
+    click(h, 'refresh'); h.respond(4, page()); await tick(); submit(h, 'spMapForm'); assert.equal(h.requests.length, 6); h.respond(5, {row: {...row, portfolio: 'Uncertain draft'}}); await tick(); h.respond(6, page()); await tick(); h.close(); await task;
+});
+test('stale versions require a successful reload and explicit selection of the latest row, preserving drafts until then', async () => {
+    const h = runtime(); const {task} = await opened(h, [row]); click(h, 'edit'); h.draft('My unsaved changes'); submit(h, 'spMapForm');
+    h.respond(2, {message: 'Versi berubah'}, 409); await tick(); submit(h, 'spMapForm'); assert.equal(h.requests.length, 3); assert.match(h.updates.at(-1).html, /My unsaved changes/); assert.doesNotMatch(h.updates.at(-1).html, /data-sp-map="edit"/);
+    click(h, 'refresh'); h.respond(3, page([{...row, version: 'c'.repeat(64)}])); await tick(); submit(h, 'spMapForm'); assert.equal(h.requests.length, 4); assert.match(h.updates.at(-1).html, /My unsaved changes/);
+    click(h, 'edit'); h.draft(); submit(h, 'spMapForm'); assert.equal(JSON.parse(h.requests[4].options.body).version, 'c'.repeat(64)); h.respond(4, {row: {...row, version: 'c'.repeat(64)}}); await tick(); h.respond(5, page()); await tick(); h.close(); await task;
+});
+test('inconsistent counts, duplicate rows and malformed option metadata cannot be treated as a valid empty list', async () => {
+    for (const payload of [page([row], {total: 2}), page([row, row]), page([], {total: 20}), page([], {last_page: 2}), page([], {portfolio_options: [null]}), page([], {options_truncated: 'false'}), page([], {page: 100001})]) {
+        const h = runtime(), task = h.window.SPPortfolioMaps.open({can_manage: false}); h.dialog().options.didOpen(); h.respond(0, payload); await tick();
+        assert.match(h.updates.at(-1).html, /Daftar pemetaan belum lengkap/); assert.match(h.updates.at(-1).html, /Daftar pemetaan belum dapat dimuat/); assert.doesNotMatch(h.updates.at(-1).html, /Tidak ada pemetaan yang cocok/); h.close(); await task;
+    }
+});
+
+test('closing after an uncertain result carries the verification requirement to the next open', async () => {
+    const h = runtime(); const {task} = await opened(h); h.draft(); submit(h, 'spMapForm'); h.respond(2, {}, 500); await tick(); h.close(); await task;
+    const next = h.window.SPPortfolioMaps.open({can_manage: false}); assert.match(h.dialog().options.html, /belum terverifikasi/); h.dialog().options.didOpen(); h.respond(3, page()); await tick(); assert.match(h.updates.at(-1).html, /Daftar terbaru sudah dimuat/); h.close(); await next;
+});
+
+test('departure while refreshing an already confirmed save cannot relabel that write as uncertain', async () => {
+    const h = runtime(); const {task} = await opened(h); h.draft(); submit(h, 'spMapForm'); h.respond(2, {row}); await tick(); assert.equal(h.requests.length, 4);
+    h.windowEvents.pagehide(); await task; assert.equal(h.requests[3].options.signal.aborted, true);
+    const next = h.window.SPPortfolioMaps.open({can_manage: false}); assert.doesNotMatch(h.dialog().options.html, /Hasil tindakan sebelumnya belum terverifikasi/); h.close(); await next;
 });
