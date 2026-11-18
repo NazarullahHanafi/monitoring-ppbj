@@ -4,7 +4,8 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const path = require('node:path');
 
-for (const module of ['sp', 'spph']) {
+// SP has deadline, ownership and timer coverage in sp-background.test.cjs.
+for (const module of ['spph']) {
     const source = fs.readFileSync(path.join(__dirname, `../../public/assets/${module}/${module}.js`), 'utf8');
     // Run the actual polling functions, independently of unrelated form/UI setup.
     function functionSource(name, singleLine = false) {

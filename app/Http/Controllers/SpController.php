@@ -188,7 +188,7 @@ class SpController extends Controller
         // Nilai ringkasan tidak perlu dihitung ulang pada setiap refresh halaman.
         // Versi cache diputar sesudah create/update/delete sehingga angka tetap akurat.
         $statsVersion = Cache::get('sp:index-stats:version', '1');
-        $statsCacheKey = 'sp:index-stats:goods-v1:'.sha1(json_encode([
+        $statsCacheKey = 'sp:index-stats:goods-v2:'.sha1(json_encode([
             'version' => $statsVersion,
             'mode' => $oracleMode ? 'oracle' : 'auto',
             'search' => mb_strtolower(trim((string) $search)),
@@ -200,6 +200,7 @@ class SpController extends Controller
         $stats = Cache::remember($statsCacheKey, now()->addSeconds(90), fn () => (clone $baseQuery)
             ->selectRaw('
                 COUNT(*) as total_count,
+                COALESCE(MAX(id), 0) as latest_id,
                 COALESCE(SUM(nilai_sp), 0) as total_nilai_sp,
                 COALESCE(SUM(nilai_pr), 0) as total_nilai_pr
             ')
@@ -1009,8 +1010,15 @@ class SpController extends Controller
     // =========================================================
     public function poll(Request $request)
     {
-        $lastId = (int) $request->get('last_id', 0);
-        $rows = Sp::select([
+        $request->validate([
+            'last_id' => ['bail', 'sometimes', 'integer', 'min:0', 'max:'.PHP_INT_MAX],
+            'summary' => ['bail', 'sometimes', 'boolean'],
+            'oracle_mode' => ['bail', 'sometimes', 'boolean'],
+            'oracle' => ['bail', 'sometimes', 'boolean'],
+            'mode' => ['bail', 'nullable', 'string', Rule::in(['auto', 'oracle'])],
+        ]);
+        $summary = $request->boolean('summary');
+        $rows = $this->spModeQuery($this->isOracleMode($request))->select($summary ? ['id'] : [
             'id',
             'nomor_sp',
             'tanggal_sp',
@@ -1021,15 +1029,11 @@ class SpController extends Controller
             'deskripsi_pengadaan',
             'pic',
         ])
-            ->where(function ($query) {
-                $query->whereNull('numbering_mode')
-                    ->orWhere('numbering_mode', 'auto');
-            })
-            ->where('id', '>', $lastId)
+            ->where('id', '>', (int) $request->input('last_id', 0))
             ->orderBy('id')
             ->limit(50)
             ->get()
-            ->map(fn ($r) => [
+            ->map(fn ($r) => $summary ? ['id' => $r->id] : [
                 'id' => $r->id,
                 'nomor_sp' => $r->nomor_sp,
                 'tanggal_sp' => $r->tanggal_sp?->format('d/m/Y') ?? '-',
@@ -1041,7 +1045,7 @@ class SpController extends Controller
                 'pic' => $r->pic,
             ]);
 
-        return response()->json(['rows' => $rows]);
+        return response()->json(['rows' => $rows])->header('Cache-Control', 'no-store, private');
     }
 
     // =========================================================

@@ -129,7 +129,7 @@ class PollingPerformanceTest extends TestCase
 
         $this->assertStringNotContainsString('if (!document.hidden) pollNow();', $sp);
         $this->assertStringNotContainsString('setTimeout(() => { if (!document.hidden) pollNow(); }, 2500)', $spph);
-        $this->assertStringContainsString('setInterval(pollNow, 45000)', $sp);
+        $this->assertStringContainsString("key: 'background:data', interval: 45000", $sp);
         $this->assertStringContainsString('setInterval(pollNow, BACKGROUND_POLL_INTERVAL)', $spph);
         $this->assertStringContainsString("window.addEventListener('pagehide'", $sp);
         $this->assertStringContainsString("window.addEventListener('pagehide'", $spph);

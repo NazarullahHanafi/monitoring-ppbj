@@ -1,0 +1,27 @@
+# SP background updates and presence — 18 November 2026
+
+This release addresses the SP list's background requests and their interaction with business forms. Previously, a stalled fetch or response body could hold a polling guard forever. Timed intervals could keep starting presence writes while earlier writes were unfinished. Each new SP also appended an incomplete table row, changed the displayed count independently of pagination, and opened a SweetAlert toast that could replace an active confirmation dialog. Long-running pages could accumulate unbounded rows.
+
+## Resulting behavior
+
+New SPs produce one accessible, nonintrusive notice. The table, statistics, pagination and complete server-rendered action buttons stay together; the user explicitly chooses **Muat ulang daftar**. Refresh is blocked while a form, vendor save, procurement write, archive confirmation or SweetAlert is active. Staged filter edits also prevent refresh and direct the user to apply their filter. Duplicate IDs cannot inflate the notice; its displayed count is capped at 1000+. No server-provided SP number is interpolated into a notification HTML title.
+
+Data polling starts after 45 seconds. Presence first reads after 12 seconds and normally waits 60 seconds between completed reads. A single owner controls each request and schedules its successor only after completion. Both connection and JSON body are covered by a 20-second deadline, including uncooperative responses. Failures increase the delay, capped at five minutes. HTTP 401/403/419 and login redirects stop automatic work until reload. Hiding/leaving the page cancels reads and timers; late completions cannot overwrite or unlock replacements. BFCache restoration installs one timer per reader. Existing form lookups retain their previous user-facing messages and gain HTTP status metadata for background error handling.
+
+Presence names are assigned with textContent, with at most 20 names displayed. Ephemeral start/stop writes are serialized, retain only the latest desired action, carry same-origin credentials and CSRF, and have a 10-second connection deadline. Heartbeats use a completion-based 15-second interval and pause while hidden. Failed presence does not block a procurement form. A timed-out request may still finish at the server; the server's existing 50-second activity expiry remains the fallback. This release does not change the shared cache trait or claim transactional presence across browsers.
+
+## Backend and query scope
+
+The opt-in `summary=1` SP poll selects only `id`, returns at most 50 IDs in ascending order, uses one SELECT, and respects the automatic/Oracle mode and soft-delete scope. Cursor, summary and mode inputs are validated before SQL. Responses are private/no-store. Legacy clients that omit summary retain the existing formatted nine-field DTO. Existing authentication, department and read-only middleware remain in place.
+
+The initial cursor now includes MAX(id) from the existing cached statistics aggregate, avoiding an extra query and accounting for existing IDs outside the first ten rows. The statistics cache shape is versioned to goods-v2; the rendered page also takes the maximum with its visible IDs. Oracle mode can now poll its own updates. Filtered or later pages still skip data polling.
+
+Production read-only preflight measured the same 50 automatic SPs at **501 bytes for summary JSON versus 13,983 bytes for legacy JSON**, approximately **96.4% less JSON payload**. This measures serialized response size for that sample, not end-to-end page latency or a whole-site speedup. The Oracle production sample had no rows; populated Oracle coverage uses isolated test fixtures.
+
+## Verification and release
+
+JavaScript regression checks pass **538 tests**. Actual-page browser scenarios pass on desktop/light and mobile/dark using the current Blade view, jQuery, Select2 and SweetAlert, with synthetic API responses. They verify that new data does not replace a confirmation or mutate table rows, active SP/vendor drafts and staged filters block refresh, and presence names cannot become markup. Existing inline-vendor and SP-number-recovery browser regressions also pass. Screenshots were inspected in both layouts. The browser fixture uses in-memory SQLite and does not connect to production storage.
+
+Backend tests exercise malformed inputs without SQL, the one-query/fifty-ID limit, continuation, mode isolation, archived records, legacy response fields, access boundaries and a maximum-ID cursor outside the first page. The existing archive regression distinguishes the guarded manual refresh from automatic post-archive navigation; archive behavior is unchanged. The full PHP suite passes **952 tests / 10,652 assertions**.
+
+Production preflight uses an unsaved synthetic identity, array cache/session, blocked outbound HTTP and a read-only transaction, rolled back in all cases. It confirms bounded SQL, private responses, DTO compatibility and unchanged access middleware without mutating real accounts, SPs or vendors. Deployment requires the exact prior commit, a clean tracked tree and a ten-file allowlist, creates a private backup, validates staged code before fast-forwarding, publishes the SP asset atomically, and repeats probes plus public asset SHA256/health/authentication checks. No migration, global cache flush, maintenance window or shared presence-trait change is required.

@@ -50,7 +50,10 @@ class SpSpphFormStateTest extends TestCase
         $this->assertIsString($spphScript);
         $this->assertStringContainsString("window.location.assign(destination || '/sp')", $spScript);
         $this->assertStringContainsString('window.location.assign(SPPH_INDEX_URL)', $spphScript);
-        $this->assertStringNotContainsString('window.location.reload();', $spScript);
+        // Explicit, draft-guarded background refresh is separate from archive navigation.
+        $spArchiveScript = preg_replace('/function refreshSpList\(\) \{[\s\S]*?\n        \}/', '', $spScript, 1, $refreshFunctions);
+        $this->assertSame(1, $refreshFunctions);
+        $this->assertStringNotContainsString('window.location.reload();', $spArchiveScript);
         $this->assertStringNotContainsString('window.location.reload();', $spphScript);
     }
 

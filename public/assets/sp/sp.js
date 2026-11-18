@@ -17,9 +17,8 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
         const SP_ORACLE_URL = SP_PAGE_CONFIG.oracleUrl;
 
         let lastIdSp = Number(SP_PAGE_CONFIG.lastId || 0);
-        let pollTimer = null, searchTimer = null, presenceTimer = null, heartbeatTimer = null, modalOpen = false;
+        let searchTimer = null, modalOpen = false;
         let secureDeleteSearchSnapshot = null;
-        let pollInFlight = false, presenceInFlight = false, presenceStartTimer = null;
         let currentPrMode = 'ppbj', currentEditPrMode = 'ppbj';
         let editModalLoadSerial = 0;
         const spAllocationState = {
@@ -62,9 +61,9 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
                     const response = await fetch(url.href, { signal: controller.signal, cache: 'no-store', credentials: 'same-origin',
                         headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' } });
                     if (controller.signal.aborted) throw new DOMException('Pemeriksaan dibatalkan.', 'AbortError');
-                    if ([401, 419].includes(response.status) || response.redirected) throw new Error('Sesi perlu diperbarui. Muat ulang halaman sebelum memeriksa kembali.');
-                    if (response.status === 429) throw new Error('Terlalu banyak pemeriksaan. Tunggu sebentar, lalu coba lagi.');
-                    if (!response.ok || !response.headers.get('Content-Type')?.toLowerCase().includes('application/json')) throw new Error('Pemeriksaan belum berhasil. Periksa nomor dan tanggal, lalu coba lagi.');
+                    if ([401, 419].includes(response.status) || response.redirected) throw Object.assign(new Error('Sesi perlu diperbarui. Muat ulang halaman sebelum memeriksa kembali.'), { status: response.redirected ? 401 : response.status });
+                    if (response.status === 429) throw Object.assign(new Error('Terlalu banyak pemeriksaan. Tunggu sebentar, lalu coba lagi.'), { status: 429 });
+                    if (!response.ok || !response.headers.get('Content-Type')?.toLowerCase().includes('application/json')) throw Object.assign(new Error('Pemeriksaan belum berhasil. Periksa nomor dan tanggal, lalu coba lagi.'), { status: response.status });
                     const data = await response.json();
                     if (controller.signal.aborted || spLookupRequests.get(key) !== request) throw new DOMException('Pemeriksaan dibatalkan.', 'AbortError');
                     return data;
@@ -789,12 +788,156 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
         function resetFilters() { window.ProcurementFilters.reset(); }
 
         // ═══════════════════════════════════════
-        // PRESENCE
+        // BACKGROUND DATA AND PRESENCE
         // ═══════════════════════════════════════
-        async function sendPresence(a) { if (document.hidden && a === PRESENCE_START) return; try { await fetch(a, { method: 'POST', headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content } }); } catch { } }
-        async function pollPresence() { if (document.hidden || presenceInFlight) return; presenceInFlight = true; try { const r = await fetch(PRESENCE_URL); if (!r.ok) return; const d = await r.json(); const b = document.getElementById('presenceBar'), t = document.getElementById('presenceText'); if (d.users.length > 0) { t.innerHTML = d.users.map(u => `<strong>${escapedHtml(u.name)}</strong>`).join(', ') + ' sedang menambahkan SP<span class="animate-pulse">...</span>'; b.classList.remove('hidden'); } else b.classList.add('hidden'); } catch { } finally { presenceInFlight = false; } }
-        function startHeartbeat() { if (heartbeatTimer) return; sendPresence(PRESENCE_START); heartbeatTimer = setInterval(() => sendPresence(PRESENCE_START), 15000); }
-        function stopHeartbeat() { if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null; } sendPresence(PRESENCE_STOP); }
+        /* BEGIN SP BACKGROUND */
+        const spBackground = {
+            data: { key: 'background:data', interval: 45000, timer: null, lease: null, failures: 0 },
+            presence: { key: 'background:presence', interval: 60000, timer: null, lease: null, failures: 0 }
+        };
+        let spBackgroundActive = true, spBackgroundDenied = false, spUpdateCount = 0, spInitialFilters = null;
+        const spHeartbeat = { timer: null, lease: null, desired: null };
+
+        function spBackgroundAllowed(state) {
+            return spBackgroundActive && !spBackgroundDenied && !document.hidden &&
+                (state !== spBackground.data || (IS_FIRST_PAGE && !HAS_FILTER));
+        }
+        function scheduleSpBackground(state, delay = state.interval) {
+            clearTimeout(state.timer); state.timer = null;
+            if (!spBackgroundAllowed(state) || state.lease) return;
+            state.timer = setTimeout(() => {
+                state.timer = null;
+                if (state === spBackground.data) pollNow(); else pollPresence();
+            }, delay);
+        }
+        async function runSpBackground(state, url, apply) {
+            if (!spBackgroundAllowed(state) || state.lease) return;
+            clearTimeout(state.timer); state.timer = null;
+            const lease = {}; state.lease = lease;
+            try {
+                const data = await readSpLookup(state.key, url);
+                if (state.lease !== lease || !spBackgroundAllowed(state)) return;
+                apply(data); state.failures = 0;
+            } catch (error) {
+                if (state.lease !== lease) return;
+                if ([401, 403, 419].includes(error.status)) {
+                    spBackgroundDenied = true;
+                    pauseSpBackground();
+                    return;
+                }
+                if (error.name !== 'AbortError') state.failures = Math.min(state.failures + 1, 3);
+            } finally {
+                if (state.lease === lease) {
+                    state.lease = null;
+                    scheduleSpBackground(state, Math.min(300000, state.interval * (2 ** state.failures)));
+                }
+            }
+        }
+        function pauseSpBackground() {
+            for (const state of Object.values(spBackground)) {
+                clearTimeout(state.timer); state.timer = null;
+                state.lease = null; cancelSpLookup(state.key);
+            }
+        }
+        function resumeSpBackground(initial = false) {
+            scheduleSpBackground(spBackground.data);
+            scheduleSpBackground(spBackground.presence, initial ? 12000 : 60000);
+        }
+        async function pollPresence() {
+            return runSpBackground(spBackground.presence, PRESENCE_URL, data => {
+                if (!Array.isArray(data?.users) || data.users.some(user => typeof user?.name !== 'string')) throw new Error('Invalid presence');
+                const bar = document.getElementById('presenceBar'), text = document.getElementById('presenceText');
+                if (!bar || !text) return;
+                text.textContent = data.users.length ? data.users.slice(0, 20).map(user => user.name).join(', ') + ' sedang menambahkan SP...' : '';
+                bar.classList.toggle('hidden', data.users.length === 0);
+            });
+        }
+        async function pollNow() {
+            const url = new URL(POLL_URL_SP, window.location.origin);
+            url.searchParams.set('last_id', String(lastIdSp));
+            url.searchParams.set('summary', '1');
+            if (ORACLE_MODE_SP) url.searchParams.set('mode', 'oracle');
+            return runSpBackground(spBackground.data, url.href, data => {
+                if (!Array.isArray(data?.rows) || data.rows.length > 50 || data.rows.some(row => !Number.isSafeInteger(row?.id) || row.id <= 0)) throw new Error('Invalid SP update');
+                const ids = [...new Set(data.rows.map(row => row.id))].filter(id => id > lastIdSp);
+                if (!ids.length) return;
+                lastIdSp = Math.max(lastIdSp, ...ids);
+                spUpdateCount = Math.min(1000, spUpdateCount + ids.length);
+                const banner = document.getElementById('spUpdates'), text = document.getElementById('spUpdatesText');
+                if (!banner || !text) return;
+                text.textContent = `${spUpdateCount >= 1000 ? '1000+' : spUpdateCount} SP baru tersedia. Muat ulang untuk melihat data dan seluruh tombol aksinya.`;
+                banner.classList.remove('hidden');
+            });
+        }
+        function refreshSpList() {
+            const hint = document.getElementById('spUpdatesHint');
+            if (modalOpen || spInlineVendorOperation || secureDeleteSearchSnapshot !== null ||
+                document.querySelector('[data-procurement-saving="true"]') || window.Swal?.isVisible()) {
+                if (hint) hint.textContent = 'Selesaikan atau tutup formulir dan dialog yang sedang terbuka sebelum memuat ulang.';
+                return;
+            }
+            if (spInitialFilters !== null && getFilterParams() !== spInitialFilters) {
+                if (hint) hint.textContent = 'Filter telah diubah. Klik Terapkan Filter agar pilihan Anda ikut digunakan.';
+                return;
+            }
+            window.location.reload();
+        }
+
+        // Presence is ephemeral: serialize start/stop and bound even a stalled body.
+        async function sendPresence(action) {
+            spHeartbeat.desired = action;
+            clearTimeout(spHeartbeat.timer); spHeartbeat.timer = null;
+            if (spHeartbeat.lease || !spBackgroundActive || spBackgroundDenied || (document.hidden && action === PRESENCE_START)) return;
+            const controller = new AbortController(), lease = { controller };
+            spHeartbeat.lease = lease;
+            let timeout;
+            try {
+                const response = await Promise.race([
+                    fetch(action, { method: 'POST', signal: controller.signal, credentials: 'same-origin', cache: 'no-store',
+                        headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content, Accept: 'application/json' } }),
+                    new Promise((resolve, reject) => { timeout = setTimeout(() => { controller.abort(); reject(new Error('Presence timeout')); }, 10000); })
+                ]);
+                if ([401, 403, 419].includes(response.status) || response.redirected) {
+                    spBackgroundDenied = true; pauseSpBackground();
+                }
+            } catch { /* Presence expires on the server; never block a business form. */ }
+            finally {
+                clearTimeout(timeout);
+                if (spHeartbeat.lease === lease) {
+                    spHeartbeat.lease = null;
+                    if (spHeartbeat.desired !== action) sendPresence(spHeartbeat.desired);
+                    else if (action === PRESENCE_START && modalOpen && !document.hidden && spBackgroundActive && !spBackgroundDenied) {
+                        spHeartbeat.timer = setTimeout(() => sendPresence(PRESENCE_START), 15000);
+                    }
+                }
+            }
+        }
+        function startHeartbeat() { sendPresence(PRESENCE_START); }
+        function stopHeartbeat() { sendPresence(PRESENCE_STOP); }
+        function initializeSpBackground() {
+            spInitialFilters = getFilterParams();
+            resumeSpBackground(true);
+            document.addEventListener('visibilitychange', () => {
+                if (document.hidden) { pauseSpBackground(); if (modalOpen) stopHeartbeat(); }
+                else { resumeSpBackground(); if (modalOpen) startHeartbeat(); }
+            });
+            window.addEventListener('pagehide', () => {
+                spBackgroundActive = false; pauseSpBackground();
+                clearTimeout(spHeartbeat.timer); spHeartbeat.timer = null;
+                spHeartbeat.desired = PRESENCE_STOP;
+                spHeartbeat.lease?.controller.abort();
+                if (modalOpen) {
+                    const fd = new FormData(); fd.append('_token', document.querySelector('meta[name="csrf-token"]').content);
+                    navigator.sendBeacon(PRESENCE_STOP, fd);
+                }
+            });
+            window.addEventListener('pageshow', event => {
+                if (!event.persisted) return;
+                spBackgroundActive = true; resumeSpBackground();
+                if (modalOpen && !document.hidden) startHeartbeat();
+            });
+        }
+        /* END SP BACKGROUND */
 
         // ═══════════════════════════════════════
         // MODAL
@@ -1775,48 +1918,6 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
                 $('#editBtnPpbjMode').removeClass('active-mode');
                 $('#editBtnManualMode').addClass('active-mode');
             }
-        }
-
-        // ═══════════════════════════════════════
-        // POLLING
-        // ═══════════════════════════════════════
-        async function pollNow() {
-            if (!IS_FIRST_PAGE || HAS_FILTER || document.hidden || pollInFlight) return;
-            pollInFlight = true;
-            try {
-                const r = await fetch(`${POLL_URL_SP}?last_id=${lastIdSp}`, { headers: { 'Accept': 'application/json' } });
-                if (!r.ok) return;
-                const data = await r.json();
-                if (data.rows && data.rows.length > 0) {
-                    const tbody = document.getElementById('spBody');
-                    const empty = document.getElementById('emptyRow');
-                    if (empty) empty.remove();
-                    data.rows.forEach(row => {
-                        if (document.querySelector(`tr[data-id="${row.id}"]`)) return;
-                        lastIdSp = Math.max(lastIdSp, row.id);
-                        const tr = document.createElement('tr');
-                        tr.className = 'tbl-row-hover new-row-flash';
-                        tr.dataset.id = row.id;
-                        tr.dataset.pic = row.pic;
-                        tr.dataset.search = `${row.nomor_sp} ${row.nomor_pr} ${row.nama_vendor} ${row.deskripsi_pengadaan}`.toLowerCase();
-                        tr.innerHTML = `
-                                                        <td class="px-3 py-3 text-gray-400 text-xs font-mono">—</td>
-                                                        <td class="px-3 py-3"><span class="badge-sp inline-flex items-center px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">${escapedHtml(row.nomor_sp)}</span></td>
-                                                        <td class="px-3 py-3 text-gray-600 dark:text-gray-300 text-xs">${escapedHtml(row.tanggal_sp)}</td>
-                                                        <td class="px-3 py-3 text-right"><span class="nilai-badge text-emerald-700 dark:text-emerald-400 font-semibold">${escapedHtml(row.nilai_sp)}</span></td>
-                                                        <td class="px-3 py-3 text-gray-600 dark:text-gray-300 font-mono text-xs">${escapedHtml(row.nomor_pr)}</td>
-                                                        <td class="px-3 py-3 text-right"><span class="nilai-badge text-indigo-600 dark:text-indigo-400">${escapedHtml(row.nilai_pr)}</span></td>
-                                                        <td class="px-3 py-3 text-gray-700 dark:text-gray-200 font-medium text-xs">${escapedHtml(row.nama_vendor)}</td>
-                                                        <td class="px-3 py-3 text-gray-600 dark:text-gray-300 text-xs max-w-xs truncate">${escapedHtml(row.deskripsi_pengadaan)}</td>
-                                                        <td class="px-3 py-3"><span class="inline-block bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 text-xs font-semibold px-2 py-0.5 rounded-full">${escapedHtml(row.pic)}</span></td>
-                                                        <td class="px-3 py-3 text-center"><button type="button" onclick="shareRecordToChat('sp', ${Number(row.id)})" class="px-2 py-1 rounded-lg text-indigo-600 bg-indigo-50 dark:bg-indigo-900/30 text-xs font-semibold" title="Bagikan SP ke Chat Tim">💬</button></td>`;
-                        tbody.insertBefore(tr, tbody.firstChild);
-                        Swal.fire({ toast: true, position: 'top-end', icon: 'info', title: `📝 SP baru: ${row.nomor_sp}`, showConfirmButton: false, timer: 3000, timerProgressBar: true, background: document.documentElement.classList.contains('dark') ? '#1f2937' : '#fff', color: document.documentElement.classList.contains('dark') ? '#f3f4f6' : '#111827' });
-                    });
-                    const c = document.getElementById('totalCount');
-                    if (c) c.textContent = parseInt(c.textContent) + data.rows.length;
-                }
-            } catch { } finally { pollInFlight = false; }
         }
 
         // ═══════════════════════════════════════
@@ -2992,54 +3093,7 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
             // Search
             window.ProcurementFilters.bind({ apply: doSearch, lockedSearch: () => secureDeleteSearchSnapshot });
 
-            // Data hasil render sudah mutakhir. Poll pertama cukup dijalankan
-            // setelah interval agar request awal tidak berebut dengan aset UI.
-            if (IS_FIRST_PAGE && !HAS_FILTER && !document.hidden) {
-                pollTimer = setInterval(pollNow, 45000);
-            }
-
-            // Presence kolaboratif bukan data utama halaman, jadi beri ruang
-            // untuk render dan interaksi pertama pengguna.
-            if (!document.hidden) {
-                presenceStartTimer = setTimeout(() => {
-                    presenceStartTimer = null;
-                    if (!document.hidden && !presenceTimer) {
-                        pollPresence();
-                        presenceTimer = setInterval(pollPresence, 60000);
-                    }
-                }, 12000);
-            }
-            document.addEventListener('visibilitychange', () => {
-                if (document.hidden) {
-                    clearTimeout(presenceStartTimer);
-                    presenceStartTimer = null;
-                    clearInterval(heartbeatTimer);
-                    heartbeatTimer = null;
-                    clearInterval(pollTimer);
-                    clearInterval(presenceTimer);
-                    pollTimer = null;
-                    presenceTimer = null;
-                }
-                else {
-                    if (IS_FIRST_PAGE && !HAS_FILTER && !pollTimer) pollTimer = setInterval(pollNow, 45000);
-                    if (!presenceTimer) presenceTimer = setInterval(pollPresence, 60000);
-                    if (modalOpen) startHeartbeat();
-                }
-            });
-            window.addEventListener('pagehide', () => {
-                clearTimeout(presenceStartTimer);
-                clearInterval(pollTimer);
-                clearInterval(presenceTimer);
-                clearInterval(heartbeatTimer);
-                presenceStartTimer = pollTimer = presenceTimer = heartbeatTimer = null;
-                if (modalOpen) { const fd = new FormData(); fd.append('_token', document.querySelector('meta[name="csrf-token"]').content); navigator.sendBeacon(PRESENCE_STOP, fd); }
-            });
-            window.addEventListener('pageshow', (event) => {
-                if (!event.persisted || document.hidden) return;
-                if (IS_FIRST_PAGE && !HAS_FILTER && !pollTimer) pollTimer = setInterval(pollNow, 45000);
-                if (!presenceTimer) presenceTimer = setInterval(pollPresence, 60000);
-                if (modalOpen) startHeartbeat();
-            });
+            initializeSpBackground();
             if ('requestIdleCallback' in window) {
                 requestIdleCallback(checkOnboardingStatus, { timeout: 6000 });
             } else {
