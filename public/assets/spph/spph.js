@@ -22,7 +22,7 @@
         let vendorUsageStatsPromise = null;
 
         let lastId = Number(SPPH_PAGE_CONFIG.lastId || 0);
-        let checkTimer = null, searchTimer = null;
+        let searchTimer = null;
         let secureDeleteSearchSnapshot = null;
         let modalOpen = false, addIdx = 0, editIdx = 5000;
         let currentPrMode = 'ppbj', currentEditPrMode = 'ppbj';
@@ -31,6 +31,59 @@
         const HAS_FILTER = Boolean(SPPH_PAGE_CONFIG.hasFilter);
 
         // ════════════════════════════════════════════════════════════
+        /* BEGIN SPPH LOOKUP READS */
+        const spphLookupRequests = new Map(), spphLookupCleanups = new Map();
+        let spphSuggestionSerial = 0;
+        function cancelSpphLookup(key) { spphLookupRequests.get(key)?.cancel(); }
+        function cancelSpphFormLookups() {
+            spphLookupCleanups.forEach(cancel => cancel());
+            Array.from(spphLookupRequests.values()).forEach(request => request.cancel());
+        }
+        function appendSpphLookupRetry(container, retry) {
+            if (!container) return;
+            const button = document.createElement('button');
+            button.type = 'button'; button.className = 'ml-2 text-xs font-semibold underline text-blue-600 dark:text-blue-300';
+            button.textContent = 'Cek ulang'; button.addEventListener('click', retry); container.appendChild(button);
+        }
+        async function readSpphLookup(key, rawUrl) {
+            const url = new URL(rawUrl, window.location.origin);
+            if (url.origin !== window.location.origin) throw new Error('Alamat pemeriksaan tidak valid. Muat ulang halaman.');
+            cancelSpphLookup(key);
+            const controller = new AbortController();
+            let rejectCancel, timer;
+            const cancelled = new Promise((resolve, reject) => { rejectCancel = reject; });
+            const request = { timedOut: false, cancel() {
+                clearTimeout(timer); controller.abort();
+                if (spphLookupRequests.get(key) === request) spphLookupRequests.delete(key);
+                rejectCancel(new DOMException('Pemeriksaan dibatalkan.', 'AbortError'));
+            }};
+            spphLookupRequests.set(key, request);
+            timer = setTimeout(() => { request.timedOut = true; request.cancel(); }, 20000);
+            try {
+                return await Promise.race([cancelled, (async () => {
+                    const response = await fetch(url.href, { signal: controller.signal, cache: 'no-store', credentials: 'same-origin',
+                        headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' } });
+                    if (controller.signal.aborted) throw new DOMException('Pemeriksaan dibatalkan.', 'AbortError');
+                    if ([401, 419].includes(response.status) || response.redirected) throw Object.assign(new Error('Sesi perlu diperbarui. Muat ulang halaman sebelum memeriksa kembali.'), { status: response.redirected ? 401 : response.status });
+                    if (response.status === 429) throw Object.assign(new Error('Terlalu banyak pemeriksaan. Tunggu sebentar, lalu coba lagi.'), { status: 429 });
+                    if (!response.ok || !response.headers.get('Content-Type')?.toLowerCase().includes('application/json')) throw Object.assign(new Error('Pemeriksaan belum berhasil. Periksa nomor dan tanggal, lalu coba lagi.'), { status: response.status });
+                    const data = await response.json();
+                    if (controller.signal.aborted || spphLookupRequests.get(key) !== request) throw new DOMException('Pemeriksaan dibatalkan.', 'AbortError');
+                    return data;
+                })()]);
+            } catch (error) {
+                if (request.timedOut) throw new Error('Pemeriksaan terlalu lama. Silakan coba lagi.');
+                if (['TypeError', 'SyntaxError'].includes(error.name)) throw new Error('Respons pemeriksaan belum lengkap. Coba lagi setelah koneksi stabil.');
+                throw error;
+            } finally {
+                clearTimeout(timer);
+                if (spphLookupRequests.get(key) === request) spphLookupRequests.delete(key);
+            }
+        }
+        window.addEventListener('pagehide', cancelSpphFormLookups);
+        document.addEventListener('visibilitychange', () => { if (document.hidden) cancelSpphFormLookups(); });
+        /* END SPPH LOOKUP READS */
+
         // HELPERS
         // ════════════════════════════════════════════════════════════
         function escapedHtml(str) {
@@ -354,9 +407,10 @@
         // MODAL
         // ════════════════════════════════════════════════════════════
         function openModal(id) { document.getElementById(id).classList.remove('hidden'); document.getElementById(id).classList.add('flex'); document.body.style.overflow = 'hidden'; modalOpen = true; startHb(); }
-        function closeModal(id) { document.getElementById(id).classList.add('hidden'); document.getElementById(id).classList.remove('flex'); document.body.style.overflow = ''; modalOpen = false; stopHb(); }
+        function closeModal(id) { cancelSpphFormLookups(); document.getElementById(id).classList.add('hidden'); document.getElementById(id).classList.remove('flex'); document.body.style.overflow = ''; modalOpen = false; stopHb(); }
 
         function openAddModal() {
+            cancelSpphFormLookups();
             addIdx = 0;
             document.getElementById('addRows').innerHTML = '';
             addRow('add');
@@ -388,6 +442,7 @@
         }
 
         async function openEditModal(id, nomor, tgl, nomorPr, vendorNames, deskripsi, pic, linkedPpbjNumbers = []) {
+            cancelSpphFormLookups();
             const editLoadId = ++editModalLoadSerial;
             ensureVendorUsageStats().then(() => {
                 if (editLoadId !== editModalLoadSerial || String(document.getElementById('editId').value) !== String(id)) return;
@@ -810,39 +865,121 @@
         // NOMOR CHECK
         // ════════════════════════════════════════════════════════════
         function setStatus(inp, stEl, state, msg) { inp.classList.remove('nomor-input-ok', 'nomor-input-error', 'nomor-input-warn'); stEl.innerHTML = ''; if (!msg) return; const ic = { ok: '✅', duplicate: '❌', warn: '⚠️', checking: '🔄' }, cl = { ok: 'nomor-status-ok', duplicate: 'nomor-status-error', warn: 'nomor-status-warn', checking: 'text-gray-400' }, bd = { ok: 'nomor-input-ok', duplicate: 'nomor-input-error', warn: 'nomor-input-warn' }; if (bd[state]) inp.classList.add(bd[state]); stEl.innerHTML = `<span class="${cl[state] || ''}">${ic[state] || ''} ${escapedHtml(msg)}</span>`; }
-        function attachCheck(inputId, statusId, getExcId, dateInputId = null) {
-            const inp = document.getElementById(inputId), st = document.getElementById(statusId);
+        /* BEGIN SPPH NUMBER LOOKUPS */
+        function getSuggestionUrl(isEdit = false) {
+            const url = new URL(SUGGEST_URL, window.location.origin);
+            const tanggal = document.getElementById(isEdit ? 'editTanggal' : 'tanggalSpphInput')?.value;
+            if (tanggal) url.searchParams.set('tanggal', tanggal);
+            return url.toString();
+        }
+
+        async function applyLatestNumberSpph(isEdit = false) {
+            const input = document.getElementById(isEdit ? 'editNomor' : 'nomorSpphInput');
+            const status = document.getElementById(isEdit ? 'editNomorStatus' : 'nomorStatus');
+            const form = document.getElementById(isEdit ? 'editForm' : 'addForm');
+            const modal = document.getElementById(isEdit ? 'editModal' : 'addModal');
+            if (!input || !form || !modal || modal.classList.contains('hidden')) return null;
+            const number = input.value, action = form.action, url = getSuggestionUrl(isEdit);
+            const record = isEdit ? document.getElementById('editId')?.value : '';
+            const generation = isEdit ? editModalLoadSerial : 0;
+            const current = () => input.value === number && form.action === action && url === getSuggestionUrl(isEdit)
+                && !modal.classList.contains('hidden') && (!isEdit || (generation === editModalLoadSerial && document.getElementById('editId')?.value === record));
+            try {
+                const data = await readSpphLookup(`latest-number:${isEdit ? 'edit' : 'add'}`, url);
+                if (!current() || data?.manual === true || !Array.isArray(data?.suggestions) || data.suggestions.length > 5) return null;
+                const latest = data.suggestions[0];
+                if (typeof latest !== 'string' || !latest.trim() || latest.length > 60) return null;
+                input.value = latest;
+                input.dispatchEvent(new Event('input', { bubbles: true }));
+                if (status) status.textContent = 'Nomor terbaru dipilih. Periksa kembali sebelum menyimpan.';
+                return latest;
+            } catch {
+                return null;
+            }
+        }
+
+        async function loadSuggestions() {
+            const box = document.getElementById('suggBox');
+            if (!box) return;
+            const requestId = ++spphSuggestionSerial, url = getSuggestionUrl();
+            box.textContent = 'Memuat saran nomor…';
+            try {
+                const data = await readSpphLookup('suggestions', url);
+                if (requestId !== spphSuggestionSerial || url !== getSuggestionUrl()) return;
+                if (!data || !Array.isArray(data.suggestions) || data.suggestions.length > 5
+                    || !data.suggestions.every(value => typeof value === 'string' && value.length > 0 && value.length <= 255)
+                    || (data.last != null && (typeof data.last !== 'string' || data.last.length > 255))) throw new Error('Saran nomor belum lengkap. Silakan coba lagi.');
+                box.replaceChildren();
+                const label = document.createElement('span');
+                label.className = 'text-xs text-gray-400 dark:text-gray-500 mr-1';
+                label.textContent = data.last ? `Terakhir: ${data.last} →` : 'Saran:';
+                box.appendChild(label);
+                data.suggestions.forEach(value => {
+                    const button = document.createElement('button');
+                    button.type = 'button'; button.className = 'suggest-pill'; button.textContent = `✨ ${value}`;
+                    button.addEventListener('click', () => {
+                        if (requestId !== spphSuggestionSerial || url !== getSuggestionUrl()) return;
+                        const input = document.getElementById('nomorSpphInput');
+                        input.value = value; input.dispatchEvent(new Event('input'));
+                    });
+                    box.appendChild(button);
+                });
+            } catch (error) {
+                if (requestId === spphSuggestionSerial && url === getSuggestionUrl()) {
+                    box.textContent = error.name === 'AbortError' ? 'Saran nomor belum dimuat.' : error.message;
+                    appendSpphLookupRetry(box, loadSuggestions);
+                }
+            }
+        }
+
+        function attachCheck(inputId, statusId, getExcludeId, dateInputId = null) {
+            const input = document.getElementById(inputId), status = document.getElementById(statusId);
+            if (!input || !status || spphLookupCleanups.has(inputId)) return;
+            const key = `number:${inputId}`;
+            let timer = null, requestSerial = 0;
+            const dateValue = () => dateInputId ? document.getElementById(dateInputId)?.value || '' : '';
+            const cancel = () => { requestSerial++; clearTimeout(timer); timer = null; cancelSpphLookup(key); setStatus(input, status, null, ''); };
+            spphLookupCleanups.set(inputId, cancel);
             const runCheck = () => {
-                const v = inp.value.trim();
-                if (!v) { setStatus(inp, st, null, ''); return; }
-                setStatus(inp, st, 'checking', 'Memeriksa...');
-                clearTimeout(checkTimer);
-                checkTimer = setTimeout(async () => {
+                cancel();
+                const number = input.value.trim(), date = dateValue(), exclude = String(getExcludeId() ?? 0), requestId = requestSerial;
+                if (!number) { setStatus(input, status, null, ''); return; }
+                const current = () => requestId === requestSerial && input.value.trim() === number && dateValue() === date && String(getExcludeId() ?? 0) === exclude;
+                setStatus(input, status, 'checking', 'Memeriksa...');
+                timer = setTimeout(async () => {
+                    timer = null;
+                    if (!current()) return;
                     try {
                         const url = new URL(CHECK_URL, window.location.origin);
-                        url.searchParams.set('nomor', v);
-                        url.searchParams.set('exclude_id', getExcId());
-                        const tanggal = dateInputId ? document.getElementById(dateInputId)?.value : '';
-                        if (tanggal) url.searchParams.set('tanggal', tanggal);
-                        const r = await fetch(url.toString());
-                        const d = await r.json();
-                        if (d.normalized_nomor && inp.value.trim() !== d.normalized_nomor) {
-                            inp.value = d.normalized_nomor;
+                        url.searchParams.set('nomor', number); url.searchParams.set('exclude_id', exclude);
+                                    if (date) url.searchParams.set('tanggal', date);
+                        const data = await readSpphLookup(key, url.toString());
+                        if (!current()) return;
+                        if (!data || !['ok', 'duplicate', 'empty'].includes(data.status)
+                            || (data.normalized_nomor != null && (typeof data.normalized_nomor !== 'string' || data.normalized_nomor.length > 255))
+                            || ['warning', 'message'].some(field => data[field] != null && (typeof data[field] !== 'string' || data[field].length > 2048))) throw new Error('Hasil pemeriksaan belum lengkap. Silakan coba lagi.');
+                        if (data.normalized_nomor) input.value = data.normalized_nomor;
+                        if (data.status === 'empty') setStatus(input, status, null, '');
+                        else if (data.status === 'duplicate') setStatus(input, status, 'duplicate', data.message || 'Nomor SPPH sudah digunakan.');
+                        else if (data.warning) setStatus(input, status, 'warn', data.warning);
+                        else setStatus(input, status, 'ok', 'Tersedia ✓');
+                    } catch (error) {
+                        if (error.name !== 'AbortError' && current()) {
+                            setStatus(input, status, 'warn', error.message);
+                            appendSpphLookupRetry(status, runCheck);
                         }
-                        if (d.status === 'duplicate') setStatus(inp, st, 'duplicate', d.message);
-                        else if (d.warning) setStatus(inp, st, 'warn', d.warning);
-                        else {
-                            setStatus(inp, st, 'ok', 'Tersedia ✓');
-                            setTimeout(() => { if (st.textContent.includes('tersedia')) setStatus(inp, st, null, ''); }, 2000);
-                        }
-                    } catch { setStatus(inp, st, null, ''); }
+                    }
                 }, 400);
             };
-            inp.addEventListener('input', runCheck);
+            input.addEventListener('input', runCheck);
             if (dateInputId) document.getElementById(dateInputId)?.addEventListener('change', runCheck);
         }
-        function getSuggestionUrl() { const url = new URL(SUGGEST_URL, window.location.origin); const tanggal = document.getElementById('tanggalSpphInput')?.value; if (tanggal) url.searchParams.set('tanggal', tanggal); return url.toString(); }
-        async function loadSuggestions() { const box = document.getElementById('suggBox'); try { const r = await fetch(getSuggestionUrl()), data = await r.json(); box.innerHTML = data.last ? `<span class="text-xs text-gray-400 dark:text-gray-500 mr-1">Terakhir: <span class="font-mono font-semibold">${data.last}</span> →</span>` : '<span class="text-xs text-gray-400 mr-1">Saran:</span>'; data.suggestions.forEach(s => { const p = document.createElement('span'); p.className = 'suggest-pill'; p.textContent = '✨ ' + s; p.onclick = () => { document.getElementById('nomorSpphInput').value = s; document.getElementById('nomorSpphInput').dispatchEvent(new Event('input')); }; box.appendChild(p); }); } catch { box.innerHTML = '<span class="text-xs text-gray-400">Tidak bisa memuat saran</span>'; } }
+
+        // ═══════════════════════════════════════
+        // OPEN EDIT MODAL
+        // ═══════════════════════════════════════
+        /* END SPPH NUMBER LOOKUPS */
+
 
         // ════════════════════════════════════════════════════════════
         // PRESENCE & HEARTBEAT
@@ -1438,30 +1575,6 @@
                     if (first) return first;
                 }
                 return data?.message || 'Data belum bisa disimpan. Silakan cek kembali isian form.';
-            }
-
-            async function applyLatestNumberSpph(isEdit = false) {
-                const input = document.getElementById(isEdit ? 'editNomor' : 'nomorSpphInput');
-                const status = document.getElementById(isEdit ? 'editNomorStatus' : 'nomorStatus');
-                if (!input) return null;
-
-                try {
-                    const response = await fetch(getSuggestionUrl(), {
-                        headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
-                    });
-                    const data = await response.json();
-                    const latest = data?.suggestions?.[0] || null;
-                    if (latest) {
-                        input.value = latest;
-                        input.dispatchEvent(new Event('input', { bubbles: true }));
-                        if (status) {
-                            status.innerHTML = '<span class="text-xs font-semibold text-blue-600 dark:text-blue-300">Nomor terbaru dipakai otomatis</span>';
-                        }
-                    }
-                    return latest;
-                } catch (error) {
-                    return null;
-                }
             }
 
             async function submitFormAjaxSpph(form, isEdit = false) {

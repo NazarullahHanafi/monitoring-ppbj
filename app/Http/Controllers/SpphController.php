@@ -318,18 +318,19 @@ class SpphController extends Controller
     // =========================================================
     public function checkNomor(Request $request)
     {
+        $this->validateNumberLookup($request);
         $originalNomor = trim($request->get('nomor', ''));
         $nomor = $this->normalizeNumberPeriod($originalNomor, $request->get('tanggal'), 'SPPH');
         $excludeId = (int) $request->get('exclude_id', 0);
         $tanggal = $request->get('tanggal');
 
         if (! $nomor) {
-            return response()->json(['status' => 'empty']);
+            return response()->json(['status' => 'empty'])->header('Cache-Control', 'private, no-store');
         }
 
         $cacheKey = 'spph:check:'.md5($originalNomor.':'.$nomor.':'.$excludeId.':'.$tanggal);
 
-        return Cache::remember($cacheKey, 30, function () use ($nomor, $originalNomor, $excludeId, $tanggal) {
+        $result = Cache::remember($cacheKey, 30, function () use ($nomor, $originalNomor, $excludeId, $tanggal) {
             $exists = Spph::withTrashed()
                 ->where('nomor_spph', $nomor)
                 ->when($excludeId, fn ($q) => $q->where('id', '!=', $excludeId))
@@ -375,6 +376,8 @@ class SpphController extends Controller
                 'normalized_nomor' => $nomor !== $originalNomor ? $nomor : null,
             ];
         });
+
+        return response()->json($result)->header('Cache-Control', 'private, no-store');
     }
 
     // =========================================================
@@ -382,6 +385,7 @@ class SpphController extends Controller
     // =========================================================
     public function suggestNomor(Request $request)
     {
+        $this->validateNumberLookup($request);
         [$year, $roman] = $this->periodFromDate($request->query('tanggal'));
 
         $nextSeq = $this->nextAvailableSequence(null, $year);
@@ -390,10 +394,20 @@ class SpphController extends Controller
             ->orderBy('sequence_number', 'desc')
             ->value('nomor_spph');
 
-        return [
+        return response()->json([
             'suggestions' => [sprintf('%03d/PKU-%s/SPPH/%d', $nextSeq, $roman, $year)],
             'last' => $lastNomor,
-        ];
+        ])->header('Cache-Control', 'private, no-store');
+    }
+
+    private function validateNumberLookup(Request $request): void
+    {
+        // Preserve the existing unusual-date confirmation when saving documents.
+        $request->validate([
+            'nomor' => ['bail', 'nullable', 'string', 'max:255'],
+            'tanggal' => ['bail', 'nullable', 'string', 'date_format:Y-m-d'],
+            'exclude_id' => ['bail', 'nullable', 'integer', 'min:0', 'max:'.PHP_INT_MAX],
+        ]);
     }
 
     // =========================================================
