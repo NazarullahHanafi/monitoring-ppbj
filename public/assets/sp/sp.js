@@ -100,6 +100,7 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
         }
 
         function setPrMode(mode, reset = false) {
+            spLookupCleanups.get('manual-pr:add')?.();
             const previousMode = currentPrMode;
             currentPrMode = mode;
             const $badge = $('#addDeskripsiBadge');
@@ -144,6 +145,10 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
         }
 
         function setEditPrMode(mode, reset = false) {
+            spLookupCleanups.get('manual-pr:edit')?.();
+            cancelSpLookup('edit-ppbj');
+            const editForm = document.getElementById('editFormSp');
+            if (editForm) editForm.dataset.spPpbjState = 'ready';
             const previousMode = currentEditPrMode;
             currentEditPrMode = mode;
             const $badge = $('#editDeskripsiBadge');
@@ -376,6 +381,10 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
                 templateSelection: item => item.id ? $('<span class="font-mono font-semibold">').text(item.id) : item.text
             });
             $sel.off('change.ppbjAutoFill').on('change.ppbjAutoFill', function (e) {
+                if (vendorPrefix === 'edit' && !e._suppressCustom) {
+                    cancelSpLookup('edit-ppbj');
+                    document.getElementById('editFormSp').dataset.spPpbjState = 'ready';
+                }
                 const requestId = ++requestSerial;
                 if (activeRequest && activeRequest.readyState !== 4) activeRequest.abort();
                 activeRequest = null;
@@ -1636,6 +1645,7 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
             existingAllocations = {},
             existingAllocationMode = 'automatic'
         ) {
+            cancelSpFormLookups();
             const editLoadId = ++editModalLoadSerial;
             document.getElementById('editFormSp').action = `/sp/${id}`;
             window.ProcurementDetails?.reset(document.getElementById('editFormSp'));
@@ -1683,55 +1693,30 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
                 // Toggle UI ke mode PPBJ (tanpa clear field)
                 _switchEditPpbjUiOnly('ppbj');
 
-                $.get(PPBJ_CHECK_URL, { ppbj_no: nomorPr, ppbj_nos: editPpbjNumbers }, function (d) {
-                    if (editLoadId !== editModalLoadSerial || String(document.getElementById('editIdSp').value) !== String(id)) return;
-                    if (d.status === 'available' || d.status === 'already_linked') {
-                        const o = new Option(
-                            nomorPr + (d.uraian ? ' — ' + d.uraian.substring(0, 40) : ''),
-                            nomorPr, true, true
-                        );
-                        $('#editPpbjSelect').append(o);
-                        editPpbjNumbers.slice(1).forEach(ppbjNo => {
-                            if (!$('#editPpbjSelect option[value="' + CSS.escape(ppbjNo) + '"]').length) {
-                                $('#editPpbjSelect').append(new Option(ppbjNo, ppbjNo, true, true));
-                            }
-                        });
-                        $('#editPpbjSelect').val(editPpbjNumbers).trigger({ type: 'change', _suppressCustom: true });
-                        updateEditPrFinalValue();
-                        $('#editPpbjStatus').html('<span class="text-green-600 dark:text-green-400">✅ Terhubung dengan PPBJ</span>');
-                        renderSpphVendorRecommendation('edit', d.spph_vendors || [], d.spph_nomor || null);
-                        setSpAllocationItems('edit', d.package_items || [], existingAllocations, existingAllocationMode);
-                    } else {
-                        _switchEditPpbjUiOnly('manual');
-                        $('#editNomorPrManual').val(nomorPr);
-                        updateEditPrFinalValue();
-                        renderSpphVendorRecommendation('edit', [], null);
-                        setSpAllocationItems('edit', []);
+                editPpbjNumbers.forEach(number => {
+                    if (!Array.from(document.getElementById('editPpbjSelect').options).some(option => option.value === number)) {
+                        $('#editPpbjSelect').append(new Option(number, number, true, true));
                     }
-                }).fail(() => {
-                    if (editLoadId !== editModalLoadSerial || String(document.getElementById('editIdSp').value) !== String(id)) return;
-                    _switchEditPpbjUiOnly('manual');
-                    $('#editNomorPrManual').val(nomorPr);
-                    updateEditPrFinalValue();
-                    renderSpphVendorRecommendation('edit', [], null);
-                    setSpAllocationItems('edit', []);
                 });
+                $('#editPpbjSelect').val(editPpbjNumbers).trigger({ type: 'change', _suppressCustom: true });
+                updateEditPrFinalValue();
+                // The async read starts after the dialog becomes visible.
+                document.getElementById('editFormSp').dataset.spPpbjState = 'loading';
             } else {
                 _switchEditPpbjUiOnly('ppbj');
                 $('#editNomorPrFinal').val('');
                 renderSpphVendorRecommendation('edit', [], null);
                 setSpAllocationItems('edit', []);
+                document.getElementById('editFormSp').dataset.spPpbjState = 'ready';
             }
 
-            const $ev = $('#editVendorSp'), $ep = $('#editPicSp');
-            if ($ev.find(`option[value="${vendor}"]`).length === 0) {
-                $ev.append(new Option(vendor, vendor, true, true));
-            }
-            $ev.val(vendor).trigger('change');
+            const $ep = $('#editPicSp');
+            ensureSelectHasValue('#editVendorSp', vendor);
             $ep.val(pic).trigger('change');
             document.getElementById('editNomorSp').dispatchEvent(new Event('input'));
             openModal('editModal');
-            loadEditItems(id);
+            loadEditItems(id, editLoadId);
+            if (editPpbjNumbers.length) loadEditPpbj(id, editPpbjNumbers, existingAllocations, existingAllocationMode, editLoadId);
             setTimeout(() => updateOracleReadinessChecklist('edit'), 150);
         }
 
@@ -1887,73 +1872,126 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
         // ═══════════════════════════════════════
         // MANUAL INPUT CHECK (ADD)
         // ═══════════════════════════════════════
-        $('#nomorPrManual').on('input', function () {
-            updatePrFinalValue();
-            const val = $(this).val().trim();
-            const $status = $('#ppbjStatus');
-            const $badge = $('#addDeskripsiBadge');
-            const $input = $(this);
-            if (!val) { $status.html(''); $badge.addClass('hidden').html(''); $input.css({ 'border-color': '' }); return; }
-            clearTimeout(window._prManualCheck);
-            window._prManualCheck = setTimeout(() => {
-                $.get(PPBJ_CHECK_URL, { ppbj_no: val }, function (d) {
-                    if (d.status === 'available') {
-                        $status.html(`<div class="p-2 bg-red-50 dark:bg-red-900 border border-red-200 dark:border-red-700 rounded-lg"><div class="flex items-start gap-2"><svg class="w-4 h-4 mt-0.5 shrink-0 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg><div class="text-red-700 dark:text-red-300"><strong class="block text-sm">⚠️ Nomor ini ada di database PPBJ!</strong><p class="text-xs mt-1">Gunakan mode <strong>"📋 Pilih PPBJ"</strong> agar otomatis terhubung.</p></div></div></div>`);
-                        $input.css({ 'border-color': '#ef4444' });
-                        $badge.addClass('hidden').html('');
-                    } else if (d.status === 'already_linked') {
-                        $status.html(`<div class="p-2 bg-amber-50 dark:bg-amber-900 border border-amber-200 dark:border-amber-800 rounded-lg"><div class="flex items-start gap-2"><svg class="w-4 h-4 mt-0.5 shrink-0 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg><div class="text-amber-700 dark:text-amber-300"><strong class="block text-sm">⚠️ ${d.message}</strong></div></div></div>`);
-                        $input.css({ 'border-color': '#f59e0b' });
-                        $badge.addClass('hidden').html('');
-                    } else if (d.status === 'cancelled') {
-                        $status.html(`<div class="p-2 bg-red-50 dark:bg-red-900 border border-red-200 dark:border-red-700 rounded-lg"><div class="flex items-start gap-2"><svg class="w-4 h-4 mt-0.5 shrink-0 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg><div class="text-red-700 dark:text-red-300"><strong class="block text-sm">❌ ${d.message}</strong></div></div></div>`);
-                        $input.css({ 'border-color': '#ef4444' });
-                    } else {
-                        $status.html(`<div class="p-2 bg-green-50 dark:bg-green-950/60 border border-green-200 dark:border-green-800 rounded-lg"><div class="flex items-center gap-2"><svg class="w-4 h-4 shrink-0 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg><span class="text-sm font-semibold text-green-700 dark:text-green-300">📝 Manual — aman</span></div></div>`);
-                        $input.css({ 'border-color': '#22c55e' });
-                        $badge.addClass('hidden').html('');
+        /* BEGIN SP MANUAL PR READS */
+        function attachManualPrCheck(prefix) {
+            const edit = prefix === 'edit';
+            const input = document.getElementById(edit ? 'editNomorPrManual' : 'nomorPrManual');
+            const status = document.getElementById(edit ? 'editPpbjStatus' : 'ppbjStatus');
+            const badge = document.getElementById(edit ? 'editDeskripsiBadge' : 'addDeskripsiBadge');
+            const key = `manual-pr:${prefix}`;
+            if (!input || !status || spLookupCleanups.has(key)) return;
+            let timer, serial = 0;
+            const cancel = () => { serial++; clearTimeout(timer); cancelSpLookup(key); setStatus(input, status, null, ''); input.style.borderColor = ''; };
+            spLookupCleanups.set(key, cancel);
+            const run = () => {
+                cancel();
+                if (edit) updateEditPrFinalValue(); else updatePrFinalValue();
+                const number = input.value.trim(), requestId = serial;
+                const record = edit ? document.getElementById('editIdSp')?.value : '';
+                const current = () => serial === requestId && input.value.trim() === number
+                    && (edit ? currentEditPrMode : currentPrMode) === 'manual'
+                    && (!edit || document.getElementById('editIdSp')?.value === record);
+                if (!number || !current()) return;
+                badge?.classList.add('hidden');
+                setStatus(input, status, 'checking', 'Memeriksa PR manual…');
+                timer = setTimeout(async () => {
+                    if (!current()) return;
+                    try {
+                        const url = new URL(PPBJ_CHECK_URL, window.location.origin);
+                        url.searchParams.set('ppbj_no', number);
+                        const data = await readSpLookup(key, url.href);
+                        if (!current()) return;
+                        if (!data || !['available', 'already_linked', 'cancelled', 'manual'].includes(data.status)
+                            || (data.message != null && (typeof data.message !== 'string' || data.message.length > 2048))) throw new Error('Hasil pemeriksaan PR belum lengkap. Silakan coba lagi.');
+                        if (data.status === 'available') setStatus(input, status, 'duplicate', 'Nomor ini ada di database PPBJ. Gunakan mode Pilih PPBJ agar otomatis terhubung.');
+                        else if (data.status === 'already_linked') setStatus(input, status, 'warn', data.message || 'PR sudah terhubung dengan SP. Gunakan mode Pilih PPBJ.');
+                        else if (data.status === 'cancelled') setStatus(input, status, 'duplicate', data.message || 'PPBJ sudah dibatalkan.');
+                        else setStatus(input, status, 'ok', 'Nomor manual belum terdaftar di PPBJ.');
+                    } catch (error) {
+                        if (error.name !== 'AbortError' && current()) {
+                            setStatus(input, status, 'warn', error.message);
+                            appendSpLookupRetry(status, run);
+                        }
                     }
-                }).fail(() => { $status.html('<span class="text-gray-400 text-sm">📝 Tidak bisa memeriksa</span>'); $input.css({ 'border-color': '' }); });
-            }, 500);
-        });
-        $('#nomorPrManual').on('blur', function () { if (!$(this).val().trim()) { $(this).css({ 'border-color': '' }); $('#ppbjStatus').html(''); } });
+                }, 500);
+            };
+            input.addEventListener('input', run);
+            input.addEventListener('blur', () => { if (!input.value.trim()) cancel(); });
+        }
+        /* END SP MANUAL PR READS */
 
-        // ═══════════════════════════════════════
-        // MANUAL INPUT CHECK (EDIT)
-        // ═══════════════════════════════════════
-        $('#editNomorPrManual').on('input', function () {
-            updateEditPrFinalValue();
-            const val = $(this).val().trim();
-            const $status = $('#editPpbjStatus');
-            const $badge = $('#editDeskripsiBadge');
-            const $input = $(this);
-            if (!val) { $status.html(''); $badge.addClass('hidden').html(''); $input.css({ 'border-color': '' }); return; }
-            clearTimeout(window._editPrManualCheck);
-            window._editPrManualCheck = setTimeout(() => {
-                $.get(PPBJ_CHECK_URL, { ppbj_no: val }, function (d) {
-                    if (d.status === 'available') {
-                        $status.html(`<div class="p-2 bg-red-50 dark:bg-red-900 border border-red-200 dark:border-red-700 rounded-lg"><div class="flex items-start gap-2"><svg class="w-4 h-4 mt-0.5 shrink-0 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg><div class="text-red-700 dark:text-red-300"><strong class="block text-sm">⚠️ Nomor ini ada di database PPBJ!</strong><p class="text-xs mt-1">Gunakan mode <strong>"📋 Pilih PPBJ"</strong>.</p></div></div></div>`);
-                        $input.css({ 'border-color': '#ef4444' });
-                        $badge.addClass('hidden').html('');
-                    } else if (d.status === 'already_linked') {
-                        $status.html(`<div class="p-2 bg-amber-50 dark:bg-amber-900 border border-amber-200 dark:border-amber-800 rounded-lg"><div class="text-amber-700 dark:text-amber-300"><strong class="text-sm">⚠️ ${d.message}</strong></div></div>`);
-                        $input.css({ 'border-color': '#f59e0b' });
-                    } else if (d.status === 'cancelled') {
-                        $status.html(`<div class="p-2 bg-red-50 dark:bg-red-900 border border-red-200 dark:border-red-700 rounded-lg"><div class="text-red-700 dark:text-red-300"><strong class="text-sm">❌ ${d.message}</strong></div></div>`);
-                        $input.css({ 'border-color': '#ef4444' });
-                    } else {
-                        $status.html(`<div class="p-2 bg-green-50 dark:bg-green-950/60 border border-green-200 dark:border-green-800 rounded-lg"><div class="flex items-center gap-2"><svg class="w-4 h-4 shrink-0 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg><span class="text-sm font-semibold text-green-700 dark:text-green-300">📝 Manual — aman</span></div></div>`);
-                        $input.css({ 'border-color': '#22c55e' });
-                        $badge.addClass('hidden').html('');
-                    }
-                }).fail(() => { $status.html('<span class="text-gray-400 text-sm">📝 Tidak bisa memeriksa</span>'); $input.css({ 'border-color': '' }); });
-            }, 500);
-        });
-        $('#editNomorPrManual').on('blur', function () { if (!$(this).val().trim()) { $(this).css({ 'border-color': '' }); $('#editPpbjStatus').html(''); } });
+        /* BEGIN SP EDIT READS */
+        function ensureSpEditDataReady(form) {
+            const states = [form.dataset.spItemsState, form.dataset.spPpbjState];
+            if (!states.some(state => state === 'loading' || state === 'error')) return true;
+            Swal.fire({ title: 'Data edit belum lengkap', text: 'Tunggu hingga rincian barang dan referensi PR selesai dimuat. Jika gagal, klik Cek ulang sebelum menyimpan.', icon: 'info' });
+            return false;
+        }
 
-        // ════════════════════════════════════════════════════════════
-        // ONBOARDING TUTORIAL (SP)
-        // ════════════════════════════════════════════════════════════
+        async function loadEditPpbj(id, numbers, allocations, allocationMode, loadId) {
+            const form = document.getElementById('editFormSp');
+            const status = document.getElementById('editPpbjStatus');
+            const selection = JSON.stringify(numbers);
+            const current = () => loadId === editModalLoadSerial && String(document.getElementById('editIdSp').value) === String(id)
+                && !document.getElementById('editModal').classList.contains('hidden') && currentEditPrMode === 'ppbj'
+                && JSON.stringify($('#editPpbjSelect').val() || []) === selection;
+            form.dataset.spPpbjState = 'loading';
+            status.textContent = 'Memeriksa referensi PR tersimpan…';
+            try {
+                const url = new URL(PPBJ_CHECK_URL, window.location.origin);
+                numbers.forEach(number => url.searchParams.append('ppbj_nos[]', number));
+                const data = await readSpLookup('edit-ppbj', url.href);
+                if (!current()) return;
+                if (!data || !['available', 'already_linked', 'manual', 'cancelled'].includes(data.status)
+                    || ![data.spph_vendors, data.package_items].every(value => value == null || Array.isArray(value))) throw new Error('Referensi PR belum lengkap. Silakan coba lagi.');
+                if (data.status === 'cancelled') throw new Error('PPBJ tersimpan sudah dibatalkan. Periksa atau pilih referensi PR yang sesuai.');
+                if (data.status === 'manual') {
+                    _switchEditPpbjUiOnly('manual');
+                    $('#editNomorPrManual').val(numbers[0]);
+                    updateEditPrFinalValue();
+                    renderSpphVendorRecommendation('edit', [], null);
+                    setSpAllocationItems('edit', []);
+                    status.textContent = 'Nomor PR tersimpan menggunakan mode manual.';
+                } else {
+                    status.textContent = 'Terhubung dengan PPBJ';
+                    renderSpphVendorRecommendation('edit', data.spph_vendors || [], data.spph_nomor || null);
+                    setSpAllocationItems('edit', data.package_items || [], allocations, allocationMode);
+                }
+                form.dataset.spPpbjState = 'ready';
+            } catch (error) {
+                if (!current()) return;
+                form.dataset.spPpbjState = 'error';
+                status.textContent = error.name === 'AbortError' ? 'Pemeriksaan PR tertunda. Silakan cek ulang.' : error.message;
+                appendSpLookupRetry(status, () => loadEditPpbj(id, numbers, allocations, allocationMode, loadId));
+            }
+        }
+
+        async function loadEditItems(spId, loadId = editModalLoadSerial) {
+            const form = document.getElementById('editFormSp'), rows = document.getElementById('editRows');
+            const current = () => loadId === editModalLoadSerial && String(document.getElementById('editIdSp')?.value || '') === String(spId)
+                && !document.getElementById('editModal').classList.contains('hidden');
+            if (!current()) return;
+            form.dataset.spItemsState = 'loading';
+            rows.textContent = 'Memuat rincian barang…';
+            try {
+                const data = await readSpLookup('edit-items', `/sp/${encodeURIComponent(spId)}/items`);
+                if (!current()) return;
+                if (!Array.isArray(data) || !data.every(item => item && typeof item === 'object' && !Array.isArray(item)
+                    && typeof item.nama_barang === 'string'
+                    && ['satuan', 'jumlah', 'harga_satuan', 'subtotal', 'tgl_pemenuhan'].every(field => item[field] == null || ['string', 'number'].includes(typeof item[field])))) throw new Error('Rincian barang belum lengkap. Silakan coba lagi.');
+                rows.replaceChildren();
+                form.dataset.spItemsState = 'ready';
+                (data.length ? data : [null]).forEach(item => addRow('edit', item));
+            } catch (error) {
+                if (!current()) return;
+                form.dataset.spItemsState = 'error';
+                rows.textContent = error.name === 'AbortError' ? 'Pemuatan rincian tertunda. Silakan cek ulang.' : error.message;
+                appendSpLookupRetry(rows, () => loadEditItems(spId, loadId));
+            }
+        }
+        /* END SP EDIT READS */
+
+
         let obCurrentStep = 1, isFirstOpen = true, obFinished = false;
         function getCsrfToken() { const m = document.querySelector('meta[name="csrf-token"]'); return m ? m.content : ''; }
 
@@ -2337,6 +2375,7 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
 
         function addRow(mode, item = null, shouldScroll = false) {
             const wrapper = document.getElementById(mode === 'add' ? 'addRows' : 'editRows');
+            if (mode === 'edit' && ['loading', 'error'].includes(document.getElementById('editFormSp')?.dataset.spItemsState)) return;
             const idx = mode === 'add' ? addIdx++ : editIdx++;
             const prefix = mode === 'add' ? 'add' : 'edit';
             const rowNum = wrapper.querySelectorAll('.item-row').length + 1;
@@ -2444,25 +2483,6 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
         }
 
         // ── FIX BUG 9: Tambahkan parameter err pada catch ──
-        async function loadEditItems(spId) {
-            try {
-                const r = await fetch(`/sp/${spId}/items`, {
-                    headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
-                });
-                if (!r.ok) throw new Error(`HTTP ${r.status}`);
-                const data = await r.json();
-                if (String(document.getElementById('editIdSp')?.value || '') !== String(spId)) return;
-                document.getElementById('editRows').innerHTML = '';
-                (data.length ? data : [null]).forEach(item => addRow('edit', item));
-            } catch (err) {
-                console.error('[SP] loadEditItems error:', err);
-                document.getElementById('editRows').innerHTML = '<p class="text-red-500 text-xs p-2">Gagal memuat data barang.</p>';
-            }
-        }
-
-        // ═══════════════════════════════════════
-        // INIT
-        // ═══════════════════════════════════════
         function initVendorAjaxSelectSp(selector, placeholder) {
             const $select = $(selector);
             $select.select2({
@@ -2509,6 +2529,8 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
         }
 
         $(document).ready(function () {
+            attachManualPrCheck('add');
+            attachManualPrCheck('edit');
             const cfg = ph => ({ placeholder: ph, allowClear: true, width: '100%' });
             initVendorAjaxSelectSp('#vendorSelectSp', '-- Pilih Vendor --');
             $('.pic-select-sp').select2(cfg('-- Pilih PIC --'));
@@ -2646,6 +2668,7 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
             }
 
             async function submitFormAjaxSp(form, isEdit = false) {
+                if (isEdit && (form.dataset.spItemsState || form.dataset.spPpbjState) && !ensureSpEditDataReady(form)) return;
                 if (form.dataset.procurementSaving === 'true') return;
                 form.dataset.procurementSaving = 'true';
                 const submitBtn = form.querySelector('button[type="submit"]');
@@ -2810,6 +2833,7 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
 
             // ── FIX BUG 3 & 4 & Guard submit EDIT ──
             document.getElementById('editFormSp').addEventListener('submit', function (e) {
+                if (!ensureSpEditDataReady(this)) { e.preventDefault(); return; }
                 // ── FIX BUG 3: Cek nomor SP duplikat di form edit ──
                 if ($('#editNomorStatusSp').html().includes('❌')) {
                     e.preventDefault();

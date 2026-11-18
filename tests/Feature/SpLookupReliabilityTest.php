@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Http\Controllers\SpController;
 use App\Models\Ppbj;
+use App\Models\Sp;
 use App\Models\Spph;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -185,5 +186,39 @@ class SpLookupReliabilityTest extends TestCase
         $this->getJson(route('sp.suggest-nomor'))->assertOk();
         $this->actingAs(User::factory()->create(['role' => 'user', 'department' => 'operasional']));
         $this->getJson(route('sp.ppbj-options'))->assertForbidden();
+    }
+
+    public function test_edit_item_read_is_private_ordered_and_uses_one_narrow_query(): void
+    {
+        $sp = Sp::create(['nomor_sp' => '902/PKU-XI/SP/2026', 'sequence_number' => 902, 'tanggal_sp' => '2026-11-18', 'nama_vendor' => 'Vendor uji', 'deskripsi_pengadaan' => 'Uji item edit', 'pic' => auth()->user()->name]);
+        $sp->items()->create(['urutan' => 2, 'nama_barang' => 'Barang kedua', 'satuan' => 'unit', 'jumlah' => '2', 'harga_satuan' => 25000, 'subtotal' => 50000, 'tgl_pemenuhan' => '2026-12-01']);
+        $sp->items()->create(['urutan' => 1, 'nama_barang' => '<b>Barang pertama</b>', 'satuan' => 'unit', 'jumlah' => '1']);
+        DB::enableQueryLog();
+        DB::flushQueryLog();
+        $response = app(SpController::class)->getItems($sp);
+        $this->assertCount(1, DB::getQueryLog());
+        $this->assertSame('no-store, private', $response->headers->get('Cache-Control'));
+        $data = $response->getData(true);
+        $this->assertSame([1, 2], array_column($data, 'urutan'));
+        $this->assertSame('<b>Barang pertama</b>', $data[0]['nama_barang']);
+        $this->assertSame('25.000', $data[1]['harga_satuan']);
+        $this->assertSame('50.000', $data[1]['subtotal']);
+        $this->assertSame('2026-12-01', $data[1]['tgl_pemenuhan']);
+        $this->assertSame(['id', 'urutan', 'nama_barang', 'satuan', 'jumlah', 'harga_satuan', 'subtotal', 'tgl_pemenuhan'], array_keys($data[0]));
+        $sp->items()->delete();
+        $this->assertSame([], app(SpController::class)->getItems($sp)->getData(true));
+    }
+
+    public function test_edit_item_endpoint_retains_read_access_guards(): void
+    {
+        $middleware = $this->app['router']->getRoutes()->getByName('sp.items')->gatherMiddleware();
+        foreach (['auth', 'readonly.block', 'dept:umum'] as $guard) {
+            $this->assertContains($guard, $middleware);
+        }
+        $sp = Sp::create(['nomor_sp' => '903/PKU-XI/SP/2026', 'sequence_number' => 903, 'tanggal_sp' => '2026-11-18', 'nama_vendor' => 'Vendor uji', 'deskripsi_pengadaan' => 'Uji akses', 'pic' => auth()->user()->name]);
+        $this->actingAs(User::factory()->create(['role' => 'viewer', 'department' => 'umum']));
+        $this->getJson(route('sp.items', $sp))->assertOk()->assertHeader('Cache-Control', 'no-store, private')->assertExactJson([]);
+        $this->actingAs(User::factory()->create(['role' => 'user', 'department' => 'operasional']));
+        $this->getJson(route('sp.items', $sp))->assertForbidden();
     }
 }

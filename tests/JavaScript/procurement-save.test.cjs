@@ -36,6 +36,21 @@ function setup(kind, response = {}) {
     return {form, fields, button, dialogs, requests, timers, cleared, context, window, save: () => context[name](form, true)};
 }
 
+test('SP edit cannot start preparation or a write while saved items or PR references are incomplete', async () => {
+    for (const field of ['spItemsState', 'spPpbjState']) {
+        const h = setup('sp');
+        h.form.dataset[field] = 'error';
+        let guarded = 0;
+        h.context.ensureSpEditDataReady = form => {assert.equal(form, h.form); guarded++; return false;};
+        h.window.ProcurementDetails.beforeSave = () => {throw new Error('Must not reach preparation');};
+        await h.save();
+        assert.equal(guarded, 1);
+        assert.equal(h.requests.length, 0);
+        assert.equal(h.form.dataset.procurementSaving, undefined);
+        assert.equal(h.button.disabled, false);
+    }
+});
+
 for (const kind of ['sp', 'spph']) {
     test(`${kind}: successful save holds the lock until navigation and sends dates and edit method intact`, async () => {
         const h = setup(kind);

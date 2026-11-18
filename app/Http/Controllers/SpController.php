@@ -1066,7 +1066,7 @@ class SpController extends Controller
                         ? \Carbon\Carbon::parse($item->tgl_pemenuhan)->format('Y-m-d')
                         : null,
                 ])
-        );
+        )->header('Cache-Control', 'private, no-store');
     }
 
     // =========================================================
