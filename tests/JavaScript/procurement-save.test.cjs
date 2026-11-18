@@ -51,8 +51,8 @@ test('SP edit cannot start preparation or a write while saved items or PR refere
     }
 });
 
-test('SP save cannot start preparation while an inline vendor write is pending', async () => {
-    const h = setup('sp');
+for (const kind of ['sp', 'spph']) test(`${kind.toUpperCase()} save cannot start preparation while an inline vendor write is pending`, async () => {
+    const h = setup(kind);
     h.form.dataset.inlineVendorSaving = 'true';
     h.window.ProcurementDetails.beforeSave = () => {throw new Error('Preparation must wait for vendor');};
     await h.save();
