@@ -51,6 +51,16 @@ test('SP edit cannot start preparation or a write while saved items or PR refere
     }
 });
 
+test('SP save cannot start preparation while an inline vendor write is pending', async () => {
+    const h = setup('sp');
+    h.form.dataset.inlineVendorSaving = 'true';
+    h.window.ProcurementDetails.beforeSave = () => {throw new Error('Preparation must wait for vendor');};
+    await h.save();
+    assert.equal(h.requests.length, 0);
+    assert.equal(h.form.dataset.procurementSaving, undefined);
+    assert.equal(h.button.disabled, false);
+});
+
 test('SP recovery only offers renumbering for an explicitly classified auto-number conflict', async () => {
     for (const data of [{conflict:true}, {conflict:true,conflict_type:'ppbj',renumber_allowed:true}, {conflict:true,conflict_type:'record',renumber_allowed:false}, {conflict:true,conflict_type:'sp_number',renumber_allowed:false}]) {
         const h=setup('sp',{ok:false,status:409,json:async()=>({...data,message:'Periksa referensi PR'})});

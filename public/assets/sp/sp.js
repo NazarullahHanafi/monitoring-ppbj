@@ -858,6 +858,7 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
         // bergantung pada urutan inisialisasi plugin di document.ready, sehingga
         // modal tetap dapat dibuka ketika salah satu plugin opsional gagal dimuat.
         window.openAddSpCreateModal = function () {
+            if (spInlineVendorOperation) return;
             try {
                 document.getElementById('nomorSpInput').value = '';
                 document.getElementById('nilaiSpInput').value = '';
@@ -917,7 +918,7 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
             modalOpen = true;
             startHeartbeat();
         }
-        function closeModal(id) { cancelSpFormLookups(); document.getElementById(id).classList.add('hidden'); document.getElementById(id).classList.remove('flex'); document.body.style.overflow = ''; modalOpen = false; stopHeartbeat(); }
+        function closeModal(id) { if (id === 'addModal' && spInlineVendorOperation) return; cancelSpFormLookups(); document.getElementById(id).classList.add('hidden'); document.getElementById(id).classList.remove('flex'); document.body.style.overflow = ''; modalOpen = false; stopHeartbeat(); }
         function secureDeletePad(value) {
             return String(Math.max(0, Math.floor(Number(value) || 0))).padStart(2, '0');
         }
@@ -1671,6 +1672,7 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
             existingAllocations = {},
             existingAllocationMode = 'automatic'
         ) {
+            if (spInlineVendorOperation) return;
             cancelSpFormLookups();
             const editLoadId = ++editModalLoadSerial;
             document.getElementById('editFormSp').action = `/sp/${id}`;
@@ -1824,6 +1826,7 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
         const CSRF_TOKEN = document.querySelector('meta[name="csrf-token"]').content;
 
         function cancelNewVendor() {
+            if (spInlineVendorOperation) return;
             const $select = $('#vendorSelectSp');
             const previousVendor = String($select.data('vendorBeforeAdd') || '').trim();
             $select.val(previousVendor || null).trigger('change');
@@ -1831,7 +1834,7 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
             document.getElementById('newVendorBoxSp').classList.add('hidden');
             resetNewVendorForm();
         }
-        function resetNewVendorForm() { ['newVendorNama', 'newVendorAlamat', 'newVendorTelp', 'newVendorFax', 'newVendorEmail', 'newVendorNpwp', 'newVendorDirektur', 'newVendorJabatan'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; }); setVendorStatus('', ''); updateVendorProfileChecklistSp(); }
+        function resetNewVendorForm() { if (spInlineVendorOperation) return; ['newVendorNama', 'newVendorAlamat', 'newVendorTelp', 'newVendorFax', 'newVendorEmail', 'newVendorNpwp', 'newVendorDirektur', 'newVendorJabatan'].forEach(id => { const el = document.getElementById(id); if (el) { el.value = ''; el.removeAttribute('aria-invalid'); } }); setVendorStatus('', ''); updateVendorProfileChecklistSp(); }
         function setVendorStatus(msg, type) { const el = document.getElementById('newVendorStatus'); if (!msg) { el.classList.add('hidden'); return; } el.classList.remove('hidden', 'bg-red-100', 'text-red-700', 'bg-green-100', 'text-green-700', 'dark:bg-red-900/30', 'dark:text-red-400', 'dark:bg-green-900/30', 'dark:text-green-400'); if (type === 'error') el.classList.add('bg-red-100', 'dark:bg-red-900/30', 'text-red-700', 'dark:text-red-400'); else el.classList.add('bg-green-100', 'dark:bg-green-900/30', 'text-green-700', 'dark:text-green-400'); el.textContent = msg; }
 
         function updateVendorProfileChecklistSp() {
@@ -1852,52 +1855,141 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
             ).join('');
         }
 
-        async function saveNewVendor() {
-            const nama = document.getElementById('newVendorNama').value.trim();
-            const alamat = document.getElementById('newVendorAlamat').value.trim();
-            const telp = document.getElementById('newVendorTelp').value.trim();
-            const fax = document.getElementById('newVendorFax').value.trim();
-            const email = document.getElementById('newVendorEmail').value.trim();
-            const npwp = document.getElementById('newVendorNpwp').value.trim();
-            const direktur = document.getElementById('newVendorDirektur').value.trim();
-            const jabatan = document.getElementById('newVendorJabatan').value.trim();
-            if (!nama) { setVendorStatus('❌ Nama vendor wajib diisi!', 'error'); document.getElementById('newVendorNama').focus(); return; }
-            document.getElementById('newVendorBtnText').textContent = 'Menyimpan...';
-            document.getElementById('newVendorSpinner').classList.remove('hidden');
-            setVendorStatus('', '');
-            try {
-                const fd = new FormData();
-                fd.append('_token', CSRF_TOKEN);
-                fd.append('nama_vendor', nama);
-                if (alamat) fd.append('alamat', alamat);
-                if (telp) fd.append('telepon', telp);
-                if (fax) fd.append('fax', fax);
-                if (email) fd.append('email', email);
-                if (npwp) fd.append('npwp', npwp);
-                if (direktur) fd.append('direktur', direktur);
-                if (jabatan) fd.append('jabatan', jabatan);
-                fd.append('is_active', '1');
-                const res = await fetch(VENDOR_STORE_URL, { method: 'POST', body: fd, headers: { 'Accept': 'application/json' } });
-                const data = await res.json();
-                if (!res.ok) {
-                    const msgs = data.errors ? Object.values(data.errors).flat().join(', ') : (data.message || 'Gagal menyimpan vendor.');
-                    setVendorStatus('❌ ' + msgs, 'error'); return;
-                }
-                const newOption = new Option(data.nama_vendor, data.nama_vendor, true, true);
-                const $vendorSelectSp = $('#vendorSelectSp');
-                const $addVendorMarker = $vendorSelectSp.find('option[value="__tambah__"]');
-                if ($addVendorMarker.length) $addVendorMarker.before(newOption); else $vendorSelectSp.append(newOption);
-                $('#vendorSelectSp').val(data.nama_vendor).trigger('change');
-                document.getElementById('newVendorBoxSp').classList.add('hidden');
-                resetNewVendorForm();
-                Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: `✅ Vendor "${data.nama_vendor}" berhasil ditambahkan!`, showConfirmButton: false, timer: 3000, timerProgressBar: true, background: document.documentElement.classList.contains('dark') ? '#1f2937' : '#fff', color: document.documentElement.classList.contains('dark') ? '#f3f4f6' : '#111827' });
-            } catch (err) { setVendorStatus('❌ Terjadi kesalahan koneksi.', 'error'); }
-            finally { document.getElementById('newVendorBtnText').textContent = '💾 Simpan Vendor'; document.getElementById('newVendorSpinner').classList.add('hidden'); }
+        /* BEGIN SP INLINE VENDOR SAVE */
+        let spInlineVendorOperation = null, spInlineVendorEpoch = 0;
+        const spInlineVendorFields = {
+            nama_vendor: ['newVendorNama', 255], alamat: ['newVendorAlamat', 500],
+            telepon: ['newVendorTelp', 50], fax: ['newVendorFax', 50], email: ['newVendorEmail', 255],
+            npwp: ['newVendorNpwp', 50], direktur: ['newVendorDirektur', 255], jabatan: ['newVendorJabatan', 255]
+        };
+        function inlineVendorValuesSp() {
+            return Object.fromEntries(Object.entries(spInlineVendorFields).map(([name, [id]]) => [name, document.getElementById(id).value.trim()]));
         }
+        function showInlineVendorListSp(name) {
+            const url = new URL('/vendors', window.location.origin);
+            url.searchParams.set('search', name);
+            const link = document.createElement('a');
+            link.href = url.href; link.target = '_blank'; link.rel = 'noopener';
+            link.textContent = 'Periksa daftar vendor di tab baru'; link.className = 'block mt-2 font-semibold underline';
+            document.getElementById('newVendorStatus').appendChild(link);
+        }
+        function releaseInlineVendorSp(operation) {
+            if (spInlineVendorOperation !== operation) return;
+            operation.controls.forEach(([node, disabled]) => { node.disabled = disabled; });
+            delete operation.form.dataset.inlineVendorSaving;
+            if (operation.busy === null) operation.box.removeAttribute('aria-busy'); else operation.box.setAttribute('aria-busy', operation.busy);
+            document.getElementById('newVendorBtnText').textContent = operation.buttonText;
+            document.getElementById('newVendorSpinner').classList.toggle('hidden', operation.spinnerHidden);
+            spInlineVendorOperation = null;
+        }
+        async function inlineVendorRequestSp(url, body, controller) {
+            let timer, onAbort;
+            try {
+                const cancelled = new Promise((resolve, reject) => {
+                    onAbort = () => reject(new DOMException('Penyimpanan belum terkonfirmasi.', 'AbortError'));
+                    controller.signal.addEventListener('abort', onAbort, { once: true });
+                    if (controller.signal.aborted) onAbort();
+                });
+                timer = setTimeout(() => controller.abort(), 30000);
+                return await Promise.race([cancelled, (async () => {
+                    const response = await fetch(url, { method: 'POST', body, signal: controller.signal, cache: 'no-store', credentials: 'same-origin',
+                        headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-TOKEN': CSRF_TOKEN } });
+                    if (controller.signal.aborted) throw new DOMException('Dibatalkan', 'AbortError');
+                    if (response.redirected || !response.headers.get('content-type')?.toLowerCase().includes('application/json')) throw new Error('Unconfirmed vendor response');
+                    const data = await response.json();
+                    if (controller.signal.aborted) throw new DOMException('Dibatalkan', 'AbortError');
+                    if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('Incomplete vendor response');
+                    if (!response.ok) throw Object.assign(new Error('Vendor request rejected'), { status: response.status, fields: response.status === 422 ? data.errors : null });
+                    return data;
+                })()]);
+            } finally {
+                clearTimeout(timer);
+                if (onAbort) controller.signal.removeEventListener('abort', onAbort);
+            }
+        }
+        async function saveNewVendor() {
+            const form = document.getElementById('addFormSp'), box = document.getElementById('newVendorBoxSp');
+            if (spInlineVendorOperation || form.dataset.procurementSaving === 'true' || box.classList.contains('hidden')) return;
+            Object.values(spInlineVendorFields).forEach(([id]) => document.getElementById(id).removeAttribute('aria-invalid'));
+            const values = inlineVendorValuesSp();
+            let invalid;
+            if (!values.nama_vendor) invalid = ['nama_vendor', 'Nama vendor wajib diisi.'];
+            for (const [name, [, max]] of Object.entries(spInlineVendorFields)) {
+                if (!invalid && Array.from(values[name]).length > max) invalid = [name, `Maksimal ${max} karakter untuk kolom ini.`];
+            }
+            if (!invalid && values.email) {
+                const emailCheck = document.createElement('input'); emailCheck.type = 'email'; emailCheck.value = values.email;
+                if (emailCheck.validity.typeMismatch) invalid = ['email', 'Masukkan alamat email lengkap, misalnya nama@perusahaan.co.id.'];
+            }
+            if (invalid) {
+                const input = document.getElementById(spInlineVendorFields[invalid[0]][0]);
+                input.setAttribute('aria-invalid', 'true'); input.focus(); setVendorStatus(invalid[1], 'error'); return;
+            }
+            let url;
+            try { url = new URL(VENDOR_STORE_URL, window.location.origin); if (url.origin !== window.location.origin) throw new Error(); }
+            catch { setVendorStatus('Alamat penyimpanan tidak valid. Muat ulang halaman sebelum mencoba lagi.', 'error'); return; }
+            const body = new FormData();
+            body.append('_token', CSRF_TOKEN); body.append('is_active', '1');
+            Object.entries(values).forEach(([name, value]) => { if (value) body.append(name, value); });
+            const operation = { form, box, epoch: spInlineVendorEpoch, action: form.action, controller: new AbortController(),
+                controls: [...new Set([...box.querySelectorAll('input,textarea,button'), ...form.querySelectorAll('button[type="submit"],#vendorSelectSp,#toggleNewVendorSp'), ...document.getElementById('addModal').querySelectorAll('button[onclick*="closeModal"]')])].map(node => [node, node.disabled]),
+                busy: box.getAttribute('aria-busy'), buttonText: document.getElementById('newVendorBtnText').textContent,
+                spinnerHidden: document.getElementById('newVendorSpinner').classList.contains('hidden'), selection: $('#vendorSelectSp').val() };
+            spInlineVendorOperation = operation; form.dataset.inlineVendorSaving = 'true'; box.setAttribute('aria-busy', 'true');
+            operation.controls.forEach(([node]) => { node.disabled = true; });
+            document.getElementById('newVendorBtnText').textContent = 'Menyimpan vendor…';
+            document.getElementById('newVendorSpinner').classList.remove('hidden');
+            setVendorStatus('Menunggu konfirmasi penyimpanan vendor…', '');
+            let confirmed = false;
+            try {
+                const data = await inlineVendorRequestSp(url.href, body, operation.controller);
+                if (spInlineVendorOperation !== operation || operation.epoch !== spInlineVendorEpoch) return;
+                if (!Number.isSafeInteger(data.id) || data.id < 1 || typeof data.nama_vendor !== 'string' || data.nama_vendor !== values.nama_vendor) throw new Error('Mismatched vendor response');
+                confirmed = true;
+                if (form.action !== operation.action || document.getElementById('addModal').classList.contains('hidden')
+                    || JSON.stringify(inlineVendorValuesSp()) !== JSON.stringify(values) || $('#vendorSelectSp').val() !== operation.selection) {
+                    setVendorStatus('Vendor sudah disimpan. Isian terbaru tetap dipertahankan; pilih vendor melalui daftar.', '');
+                    showInlineVendorListSp(values.nama_vendor); return;
+                }
+                ensureSelectHasValue('#vendorSelectSp', data.nama_vendor);
+                $('#vendorSelectSp').removeData('vendorBeforeAdd');
+                releaseInlineVendorSp(operation);
+                box.classList.add('hidden'); resetNewVendorForm();
+                Swal.fire({ toast: true, position: 'top-end', icon: 'success', titleText: 'Vendor berhasil ditambahkan', text: data.nama_vendor,
+                    showConfirmButton: false, timer: 3000, timerProgressBar: true,
+                    background: document.documentElement.classList.contains('dark') ? '#1f2937' : '#fff', color: document.documentElement.classList.contains('dark') ? '#f3f4f6' : '#111827' });
+            } catch (error) {
+                if (spInlineVendorOperation !== operation || operation.epoch !== spInlineVendorEpoch) return;
+                releaseInlineVendorSp(operation);
+                const messages = { 401: 'Sesi berakhir. Masuk kembali sebelum menyimpan vendor.', 419: 'Sesi formulir berakhir. Periksa daftar vendor lalu muat ulang halaman.',
+                    403: 'Anda tidak memiliki akses untuk menambah vendor.', 429: 'Terlalu banyak permintaan. Tunggu sebentar sebelum mencoba lagi.' };
+                if (error.status === 422) {
+                    let first;
+                    for (const [name, [id]] of Object.entries(spInlineVendorFields)) {
+                        const raw = error.fields?.[name], message = Array.isArray(raw) ? raw.find(value => typeof value === 'string' && value.length <= 1000) : null;
+                        if (!message) continue;
+                        const input = document.getElementById(id); input.setAttribute('aria-invalid', 'true');
+                        first ||= { input, message };
+                    }
+                    setVendorStatus(first?.message || 'Periksa isian vendor sebelum mencoba lagi.', 'error'); first?.input.focus();
+                } else if (messages[error.status]) setVendorStatus(messages[error.status], 'error');
+                else {
+                    setVendorStatus(confirmed ? 'Vendor sudah disimpan. Pilih vendor dari daftar untuk melanjutkan.' : 'Status penyimpanan belum dapat dipastikan. Isian tetap ada. Periksa daftar vendor sebelum menyimpan ulang.', 'error');
+                    showInlineVendorListSp(values.nama_vendor);
+                }
+            } finally { releaseInlineVendorSp(operation); }
+        }
+        window.addEventListener('pagehide', () => {
+            spInlineVendorEpoch++;
+            const operation = spInlineVendorOperation;
+            if (!operation) return;
+            operation.controller.abort(); releaseInlineVendorSp(operation);
+            setVendorStatus('Status penyimpanan belum terkonfirmasi. Periksa daftar vendor sebelum menyimpan ulang.', 'error');
+            showInlineVendorListSp(document.getElementById('newVendorNama').value.trim());
+        });
+        /* END SP INLINE VENDOR SAVE */
 
-        // ═══════════════════════════════════════
-        // MANUAL INPUT CHECK (ADD)
-        // ═══════════════════════════════════════
+
         /* BEGIN SP MANUAL PR READS */
         function attachManualPrCheck(prefix) {
             const edit = prefix === 'edit';
@@ -2606,6 +2698,7 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
                 }
             });
             $('#toggleNewVendorSp').on('click', function () {
+                if (spInlineVendorOperation) return;
                 const box = document.getElementById('newVendorBoxSp');
                 if (!box) return;
                 box.classList.toggle('hidden');
@@ -2670,6 +2763,7 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
             }
 
             async function submitFormAjaxSp(form, isEdit = false) {
+                if (form.dataset.inlineVendorSaving === 'true') return;
                 if (isEdit && (form.dataset.spItemsState || form.dataset.spPpbjState) && !ensureSpEditDataReady(form)) return;
                 if (form.dataset.procurementSaving === 'true') return;
                 form.dataset.procurementSaving = 'true';
@@ -2778,6 +2872,7 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
 
             // ── FIX BUG 4 & Guard submit TAMBAH ──
             document.getElementById('addFormSp').addEventListener('submit', function (e) {
+                if (this.dataset.inlineVendorSaving === 'true') { e.preventDefault(); return; }
                 const $nomorStatus = $('#nomorStatusSp');
                 if ($nomorStatus.html().includes('❌')) {
                     e.preventDefault();

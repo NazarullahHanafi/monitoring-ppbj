@@ -1,0 +1,25 @@
+# Safe inline vendor creation in SP - 18 November 2026
+
+The SP form's inline vendor save previously allowed repeated clicks, had no request deadline and treated every interrupted response as an ordinary failure. A delayed result could also select a vendor after the user had changed the form. This release bounds that write interaction and keeps the SP/profile drafts intact during failures.
+
+## Interaction and security
+
+One operation owns the inline vendor write. While it is pending, its profile controls, vendor selection, toggle, cancel/save buttons, main SP submit and modal close button are locked. Programmatic duplicate save, cancel/reset, modal reopening/closing and parent SP submit paths also respect the lock. Other SP fields stay available. Every previously disabled control is restored to its original state after the operation.
+
+The write has a 30-second deadline covering the connection and JSON body, including an uncooperative response. It uses same-origin credentials, a body/header CSRF token, JSON headers and no-store requests. Foreign endpoints are rejected before sending vendor data. Page departure aborts the client operation and ignores late results; merely hiding the tab does not cancel this write. No POST is repeated automatically.
+
+Client validation handles required name, backend field-length limits and email syntax with inline text, focus and aria-invalid markers. A detached email input supplies validity checking without showing a native browser popup. The inline email field uses text/inputmode=email so an invalid draft inside a hidden panel cannot block the enclosing SP form's native submission. Server validation remains authoritative. The status area announces updates to assistive technology.
+
+HTTP 422 errors mark known fields and retain every profile value. Session/access/rate-limit responses use safe messages. Timeout, HTML/redirected/incomplete responses, malformed success or unknown server failures retain drafts and explain that the save outcome is unconfirmed, with a same-origin vendor-list link in a new tab. That distinction matters because a disconnected browser cannot know whether the server committed the record.
+
+A success requires a positive integer vendor ID and the exact submitted trimmed name. Before selecting or clearing anything, the code rechecks the operation epoch, SP form action, modal visibility, vendor selection and complete profile snapshot. Changed drafts/selections are preserved even if the vendor was saved. Confirmed results reuse existing option values rather than adding duplicates. Options, feedback and the success toast treat vendor names as text; markup in a name cannot become toast HTML. Reset clears prior validation markers. SP descriptions and other draft fields are preserved.
+
+## Verification and deployment
+
+Final checks pass **947 PHP tests / 10,615 assertions**, **532 JavaScript tests**, both desktop/light and mobile/dark inline-vendor browser scenarios, the existing SP number-recovery browser regression, JavaScript syntax and git whitespace checks. The current Blade view renders successfully with the isolated in-memory SQLite fixture and compiles successfully on the production PHP runtime.
+
+JavaScript tests cover the mutex and CSRF payload, profile fields, validation, disabled-state restoration, field errors, session/access/rate-limit responses, connection/body deadlines, late results, page departure, malformed successes, stale drafts/actions/selections, text-only names, foreign endpoints and the parent SP save guard. Actual-page browser tests run on desktop/light and mobile/dark with the current Blade view, SP script, jQuery, Select2 and SweetAlert. They verify one vendor request per click sequence, no procurement POST while pending, retained SP/profile data, no native dialogs, explicit timeout verification links, safe names and option deduplication. Existing SP number-recovery browser scenarios also pass. API responses in browser tests are synthetic; no real vendor is created by these checks.
+
+Backend vendor validation, uniqueness, role/read-only guards and transactions are unchanged. No backend query, schema, polling, external storage or route changes are introduced. Performance work here avoids duplicate writes and stuck client operations; it does not claim a site-wide latency reduction.
+
+Production preflight compiles the staged/current SP Blade view without rendering user data or writing compiled caches, and repeats bounded helper queries and existing access guards in a read-only database transaction. It uses an unsaved synthetic identity, array cache/session and blocked outbound HTTP. Deployment checks an exact commit/file allowlist, backs up modified files and the published SP asset, fast-forwards and publishes the asset atomically. Blade uses ordinary view timestamps; unrelated view/route/configuration caches are preserved. Rollback restores files and refreshes the SP view timestamp so a newly compiled version cannot survive a file rollback. Post-deployment probes, public asset SHA256, health and unauthenticated access checks run again.
