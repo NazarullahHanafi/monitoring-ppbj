@@ -232,7 +232,8 @@ class SpController extends Controller
     // =========================================================
     public function getPpbjOptions(Request $request)
     {
-        $search = $request->get('q', '');
+        $request->validate(['q' => ['bail', 'nullable', 'string', 'max:160']]);
+        $search = trim((string) $request->query('q', ''));
 
         $query = DB::table('ppbj')
             ->select(['ppbj_no', 'uraian', 'portofolio', 'buyer', 'spph_rfq_1', 'total_sebelum_ppn'])
@@ -242,10 +243,11 @@ class SpController extends Controller
                     ->orWhere('awarding_sp', '');
             });
 
-        if ($search) {
-            $query->where(function ($q) use ($search) {
-                $q->where('ppbj_no', 'LIKE', "%{$search}%")
-                    ->orWhere('uraian', 'LIKE', "%{$search}%");
+        if ($search !== '') {
+            $pattern = '%'.str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $search).'%';
+            $query->where(function ($q) use ($pattern) {
+                $q->whereRaw("ppbj_no LIKE ? ESCAPE '!'", [$pattern])
+                    ->orWhereRaw("uraian LIKE ? ESCAPE '!'", [$pattern]);
             });
         }
 
@@ -270,7 +272,7 @@ class SpController extends Controller
             ];
         });
 
-        return response()->json(['results' => $results]);
+        return response()->json(['results' => $results])->header('Cache-Control', 'private, no-store');
     }
 
     // =========================================================
@@ -278,11 +280,15 @@ class SpController extends Controller
     // =========================================================
     public function checkPpbjStatus(Request $request)
     {
+        $request->validate([
+            'ppbj_nos' => ['bail', 'sometimes', 'array', 'max:20'],
+            'ppbj_nos.*' => ['bail', 'nullable', 'string', 'max:255'],
+            'ppbj_no' => ['bail', 'nullable', 'string', 'max:255'],
+        ], ['ppbj_nos.max' => 'Pilih maksimal 20 PPBJ dalam satu SP.']);
         $ppbjNumbers = collect($request->input('ppbj_nos', []))
             ->map(fn ($number) => trim((string) $number))
-            ->filter()
+            ->filter(fn ($number) => $number !== '')
             ->unique()
-            ->take(20)
             ->values();
 
         if ($ppbjNumbers->isEmpty() && $request->filled('ppbj_no')) {
@@ -290,7 +296,7 @@ class SpController extends Controller
         }
 
         if ($ppbjNumbers->isEmpty()) {
-            return response()->json(['status' => 'empty']);
+            return response()->json(['status' => 'empty'])->header('Cache-Control', 'private, no-store');
         }
 
         $positions = array_flip($ppbjNumbers->all());
@@ -302,11 +308,11 @@ class SpController extends Controller
             ->values();
 
         if ($ppbjs->count() !== $ppbjNumbers->count()) {
-            return response()->json(['status' => 'manual', 'message' => 'Salah satu nomor PPBJ tidak ditemukan.']);
+            return response()->json(['status' => 'manual', 'message' => 'Salah satu nomor PPBJ tidak ditemukan.'])->header('Cache-Control', 'private, no-store');
         }
 
         if ($cancelled = $ppbjs->first(fn ($ppbj) => $ppbj->status === 'CANCELLED')) {
-            return response()->json(['status' => 'cancelled', 'message' => "PPBJ {$cancelled->ppbj_no} sudah di-CANCELLED!"]);
+            return response()->json(['status' => 'cancelled', 'message' => "PPBJ {$cancelled->ppbj_no} sudah di-CANCELLED!"])->header('Cache-Control', 'private, no-store');
         }
 
         $primary = $ppbjs->first();
@@ -344,7 +350,7 @@ class SpController extends Controller
             'package_items' => $summary['items'],
             'merged_description' => $summary['merged_description'],
             'primary_ppbj_no' => $primary->ppbj_no,
-        ]);
+        ])->header('Cache-Control', 'private, no-store');
     }
 
     private function ppbjPackageSummary($ppbjs): array
@@ -596,9 +602,10 @@ class SpController extends Controller
     {
         return Cache::remember('spph_items:auto_fill_columns:v1', 3600, function () {
             $columns = ['id', 'spph_id', 'urutan', 'nama_barang', 'satuan', 'jumlah', 'tgl_pemenuhan'];
+            $available = array_flip(Schema::getColumnListing('spph_items'));
 
             foreach (['harga_satuan', 'subtotal', 'harga', 'unit_price', 'price'] as $optionalColumn) {
-                if (Schema::hasColumn('spph_items', $optionalColumn)) {
+                if (isset($available[$optionalColumn])) {
                     $columns[] = $optionalColumn;
                 }
             }
@@ -882,7 +889,8 @@ class SpController extends Controller
     // =========================================================
     public function checkNomor(Request $request)
     {
-        $originalNomor = trim($request->get('nomor', ''));
+        $this->validateNumberLookup($request);
+        $originalNomor = trim((string) $request->query('nomor', ''));
         $oracleMode = $this->isOracleMode($request);
         $nomor = $oracleMode
             ? $originalNomor
@@ -891,12 +899,15 @@ class SpController extends Controller
         $tanggal = $request->get('tanggal');
 
         if (! $nomor) {
-            return response()->json(['status' => 'empty']);
+            return response()->json(['status' => 'empty'])->header('Cache-Control', 'private, no-store');
         }
 
-        $cacheKey = 'sp:check:'.md5($originalNomor.':'.$nomor.':'.$excludeId.':'.$tanggal.':'.(int) $oracleMode);
+        // Use the same version already rotated by SP create/update/archive/
+        // restore actions, so a just-saved number cannot reuse an old OK hint.
+        $version = Cache::get('sp:index-stats:version', '1');
+        $cacheKey = 'sp:check:'.md5($version.':'.$originalNomor.':'.$nomor.':'.$excludeId.':'.$tanggal.':'.(int) $oracleMode);
 
-        return Cache::remember($cacheKey, 30, function () use ($nomor, $originalNomor, $excludeId, $oracleMode, $tanggal) {
+        $result = Cache::remember($cacheKey, 30, function () use ($nomor, $originalNomor, $excludeId, $oracleMode, $tanggal) {
             $exists = Sp::withTrashed()
                 ->where('nomor_sp', $nomor)
                 ->when($excludeId, fn ($q) => $q->where('id', '!=', $excludeId))
@@ -945,6 +956,8 @@ class SpController extends Controller
                 'normalized_nomor' => $nomor !== $originalNomor ? $nomor : null,
             ];
         });
+
+        return response()->json($result)->header('Cache-Control', 'private, no-store');
     }
 
     // =========================================================
@@ -952,13 +965,14 @@ class SpController extends Controller
     // =========================================================
     public function suggestNomor(Request $request)
     {
+        $this->validateNumberLookup($request);
         if ($this->isOracleMode($request)) {
-            return [
+            return response()->json([
                 'suggestions' => [],
                 'last' => null,
                 'manual' => true,
                 'message' => 'Mode Oracle ERP: nomor SP diketik manual dari sistem Oracle.',
-            ];
+            ])->header('Cache-Control', 'private, no-store');
         }
 
         [$year, $roman] = $this->periodFromDate($request->query('tanggal'));
@@ -970,10 +984,24 @@ class SpController extends Controller
             ->orderBy('sequence_number', 'desc')
             ->value('nomor_sp');
 
-        return [
+        return response()->json([
             'suggestions' => [sprintf('%03d/PKU-%s/SP/%d', $nextSeq, $roman, $year)],
             'last' => $lastNomor,
-        ];
+        ])->header('Cache-Control', 'private, no-store');
+    }
+
+    private function validateNumberLookup(Request $request): void
+    {
+        // Lookup validation only; unusual document dates keep their existing
+        // save-time confirmation flow instead of gaining a new year restriction.
+        $request->validate([
+            'nomor' => ['bail', 'nullable', 'string', 'max:255'],
+            'tanggal' => ['bail', 'nullable', 'string', 'date_format:Y-m-d'],
+            'exclude_id' => ['bail', 'nullable', 'integer', 'min:0', 'max:'.PHP_INT_MAX],
+            'oracle_mode' => ['bail', 'sometimes', 'boolean'],
+            'oracle' => ['bail', 'sometimes', 'boolean'],
+            'mode' => ['bail', 'nullable', 'string', Rule::in(['auto', 'oracle'])],
+        ]);
     }
 
     // =========================================================

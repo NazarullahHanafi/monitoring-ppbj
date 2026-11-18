@@ -17,7 +17,7 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
         const SP_ORACLE_URL = SP_PAGE_CONFIG.oracleUrl;
 
         let lastIdSp = Number(SP_PAGE_CONFIG.lastId || 0);
-        let pollTimer = null, checkTimer = null, searchTimer = null, presenceTimer = null, heartbeatTimer = null, modalOpen = false;
+        let pollTimer = null, searchTimer = null, presenceTimer = null, heartbeatTimer = null, modalOpen = false;
         let secureDeleteSearchSnapshot = null;
         let pollInFlight = false, presenceInFlight = false, presenceStartTimer = null;
         let currentPrMode = 'ppbj', currentEditPrMode = 'ppbj';
@@ -28,6 +28,59 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
         };
         const IS_FIRST_PAGE = Boolean(SP_PAGE_CONFIG.firstPage);
         const HAS_FILTER = Boolean(SP_PAGE_CONFIG.hasFilter);
+
+        /* BEGIN SP LOOKUP READS */
+        const spLookupRequests = new Map(), spLookupCleanups = new Map();
+        let spSuggestionSerial = 0;
+        function cancelSpLookup(key) { spLookupRequests.get(key)?.cancel(); }
+        function cancelSpFormLookups() {
+            spLookupCleanups.forEach(cancel => cancel());
+            Array.from(spLookupRequests.values()).forEach(request => request.cancel());
+        }
+        function appendSpLookupRetry(container, retry) {
+            if (!container) return;
+            const button = document.createElement('button');
+            button.type = 'button'; button.className = 'ml-2 text-xs font-semibold underline text-blue-600 dark:text-blue-300';
+            button.textContent = 'Cek ulang'; button.addEventListener('click', retry); container.appendChild(button);
+        }
+        async function readSpLookup(key, rawUrl) {
+            const url = new URL(rawUrl, window.location.origin);
+            if (url.origin !== window.location.origin) throw new Error('Alamat pemeriksaan tidak valid. Muat ulang halaman.');
+            cancelSpLookup(key);
+            const controller = new AbortController();
+            let rejectCancel, timer;
+            const cancelled = new Promise((resolve, reject) => { rejectCancel = reject; });
+            const request = { timedOut: false, cancel() {
+                clearTimeout(timer); controller.abort();
+                if (spLookupRequests.get(key) === request) spLookupRequests.delete(key);
+                rejectCancel(new DOMException('Pemeriksaan dibatalkan.', 'AbortError'));
+            }};
+            spLookupRequests.set(key, request);
+            timer = setTimeout(() => { request.timedOut = true; request.cancel(); }, 20000);
+            try {
+                return await Promise.race([cancelled, (async () => {
+                    const response = await fetch(url.href, { signal: controller.signal, cache: 'no-store', credentials: 'same-origin',
+                        headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' } });
+                    if (controller.signal.aborted) throw new DOMException('Pemeriksaan dibatalkan.', 'AbortError');
+                    if ([401, 419].includes(response.status) || response.redirected) throw new Error('Sesi perlu diperbarui. Muat ulang halaman sebelum memeriksa kembali.');
+                    if (response.status === 429) throw new Error('Terlalu banyak pemeriksaan. Tunggu sebentar, lalu coba lagi.');
+                    if (!response.ok || !response.headers.get('Content-Type')?.toLowerCase().includes('application/json')) throw new Error('Pemeriksaan belum berhasil. Periksa nomor dan tanggal, lalu coba lagi.');
+                    const data = await response.json();
+                    if (controller.signal.aborted || spLookupRequests.get(key) !== request) throw new DOMException('Pemeriksaan dibatalkan.', 'AbortError');
+                    return data;
+                })()]);
+            } catch (error) {
+                if (request.timedOut) throw new Error('Pemeriksaan terlalu lama. Silakan coba lagi.');
+                if (['TypeError', 'SyntaxError'].includes(error.name)) throw new Error('Respons pemeriksaan belum lengkap. Coba lagi setelah koneksi stabil.');
+                throw error;
+            } finally {
+                clearTimeout(timer);
+                if (spLookupRequests.get(key) === request) spLookupRequests.delete(key);
+            }
+        }
+        window.addEventListener('pagehide', cancelSpFormLookups);
+        document.addEventListener('visibilitychange', () => { if (document.hidden) cancelSpFormLookups(); });
+        /* END SP LOOKUP READS */
 
         // ── FIX BUG 2: Flag untuk mencegah change handler PPBJ menimpa field saat load edit ──
         let _suppressEditPpbjChange = false;
@@ -305,10 +358,13 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
             const vendorPrefix = selector === '.edit-sp-ppbj-select' ? 'edit' : 'add';
             let requestSerial = 0;
             let activeRequest = null;
+            const cleanupKey = `ppbj:${vendorPrefix}`;
+            spLookupCleanups.get(cleanupKey)?.();
+            spLookupCleanups.set(cleanupKey, () => { requestSerial++; activeRequest?.abort(); activeRequest = null; $('#' + statusId).empty(); });
             $sel.select2({
                 placeholder: $sel.data('placeholder') || 'Pilih No. PPBJ...',
                 allowClear: true, width: '100%', closeOnSelect: false, maximumSelectionLength: 20, minimumInputLength: 0,
-                ajax: { url: PPBJ_OPTIONS_URL, dataType: 'json', delay: 300, data: p => ({ q: p.term || '' }), processResults: d => ({ results: d.results }), cache: true },
+                ajax: { url: PPBJ_OPTIONS_URL, dataType: 'json', timeout: 20000, delay: 300, data: p => ({ q: p.term || '' }), processResults: d => ({ results: Array.isArray(d?.results) ? d.results : [] }), cache: true },
                 templateResult: item => {
                     if (item.loading) return 'Mencari...';
                     const $c = $('<div>').append($('<strong class="font-mono">').text(item.id));
@@ -351,11 +407,19 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
                     return;
                 }
                 $status.html('<span class="text-gray-400">🔄 Memeriksa...</span>');
-                activeRequest = $.get(PPBJ_CHECK_URL, { ppbj_no: val, ppbj_nos: selectedValues }).done(function (d) {
+                activeRequest = $.ajax({url: PPBJ_CHECK_URL, dataType: 'json', timeout: 20000, data: { ppbj_no: val, ppbj_nos: selectedValues }}).done(function (d) {
                     const latestRawValue = $sel.val();
                     const latestValues = Array.isArray(latestRawValue) ? latestRawValue.filter(Boolean) : (latestRawValue ? [latestRawValue] : []);
                     const isActiveMode = vendorPrefix === 'edit' ? currentEditPrMode === 'ppbj' : currentPrMode === 'ppbj';
                     if (requestId !== requestSerial || JSON.stringify(latestValues) !== selectionKey || !isActiveMode) return;
+                    if (!d || !['available', 'already_linked', 'cancelled', 'manual', 'empty'].includes(d.status)) {
+                        $status.text('Hasil pemeriksaan PPBJ belum lengkap. Silakan coba lagi.');
+                        appendSpLookupRetry($status[0], () => $sel.trigger('change'));
+                        $info.addClass('hidden');
+                        renderSpphVendorRecommendation(vendorPrefix, [], null);
+                        setSpAllocationItems(vendorPrefix, []);
+                        return;
+                    }
                     $status.html('');
                     if (d.status === 'available') {
                         $status.html(`<span class="text-green-600 dark:text-green-400">✅ ${escapedHtml(d.message || 'PPBJ tersedia — akan otomatis terhubung')}</span>`);
@@ -385,7 +449,7 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
                             if ($npInput && !d.total_sebelum_ppn) $npInput.val('');
                         }
                     } else if (d.status === 'already_linked') {
-                        $status.html(`<span class="text-amber-600 dark:text-amber-400">⚠️ ${d.message}</span>`);
+                        $status.html(`<span class="text-amber-600 dark:text-amber-400">⚠️ ${escapedHtml(d.message)}</span>`);
                         $info.removeClass('hidden');
                         let linkedHtml = renderPpbjPackageSummary(d);
                         if (d.spph_nomor) linkedHtml += `<div><strong>SPPH:</strong> <span class="font-mono">${escapedHtml(d.spph_nomor)}</span></div>`;
@@ -412,7 +476,7 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
                             if ($npInput && !d.total_sebelum_ppn) $npInput.val('');
                         }
                     } else if (d.status === 'cancelled') {
-                        $status.html(`<span class="text-red-600 dark:text-red-400">❌ ${d.message}</span>`); $info.addClass('hidden');
+                        $status.html(`<span class="text-red-600 dark:text-red-400">❌ ${escapedHtml(d.message)}</span>`); $info.addClass('hidden');
                         renderSpphVendorRecommendation(vendorPrefix, [], null);
                         setSpAllocationItems(vendorPrefix, []);
                     } else { $status.html('<span class="text-blue-600">📝 Manual</span>'); $info.addClass('hidden'); if ($badge) $badge.addClass('hidden').html(''); renderSpphVendorRecommendation(vendorPrefix, [], null); }
@@ -420,8 +484,10 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
                     if (status === 'abort' || requestId !== requestSerial) return;
                     const latestRawValue = $sel.val();
                     const latestValues = Array.isArray(latestRawValue) ? latestRawValue.filter(Boolean) : (latestRawValue ? [latestRawValue] : []);
-                    if (JSON.stringify(latestValues) !== selectionKey) return;
-                    $status.html('<span class="text-red-600">❌ Gagal</span>');
+                    const isActiveMode = vendorPrefix === 'edit' ? currentEditPrMode === 'ppbj' : currentPrMode === 'ppbj';
+                    if (JSON.stringify(latestValues) !== selectionKey || !isActiveMode) return;
+                    $status.text(status === 'timeout' ? 'Pemeriksaan PPBJ terlalu lama. Silakan coba lagi.' : 'PPBJ belum dapat diperiksa. Periksa koneksi lalu coba lagi.');
+                    appendSpLookupRetry($status[0], () => $sel.trigger('change'));
                     $info.addClass('hidden');
                     renderSpphVendorRecommendation(vendorPrefix, [], null);
                     setSpAllocationItems(vendorPrefix, []);
@@ -842,7 +908,7 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
             modalOpen = true;
             startHeartbeat();
         }
-        function closeModal(id) { document.getElementById(id).classList.add('hidden'); document.getElementById(id).classList.remove('flex'); document.body.style.overflow = ''; modalOpen = false; stopHeartbeat(); }
+        function closeModal(id) { cancelSpFormLookups(); document.getElementById(id).classList.add('hidden'); document.getElementById(id).classList.remove('flex'); document.body.style.overflow = ''; modalOpen = false; stopHeartbeat(); }
         function secureDeletePad(value) {
             return String(Math.max(0, Math.floor(Number(value) || 0))).padStart(2, '0');
         }
@@ -1171,7 +1237,7 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
         // ═══════════════════════════════════════
         // NOMOR CHECK
         // ═══════════════════════════════════════
-        function setStatus(inputEl, statusEl, state, msg) { inputEl.classList.remove('nomor-input-ok', 'nomor-input-error', 'nomor-input-warn'); statusEl.innerHTML = ''; if (!msg) return; const i = { ok: '✅', duplicate: '❌', warn: '⚠️', checking: '🔄' }, c = { ok: 'nomor-status-ok', duplicate: 'nomor-status-error', warn: 'nomor-status-warn', checking: 'text-gray-400' }, b = { ok: 'nomor-input-ok', duplicate: 'nomor-input-error', warn: 'nomor-input-warn' }; if (b[state]) inputEl.classList.add(b[state]); statusEl.innerHTML = `<span class="${c[state] || ''}">${i[state] || ''} ${msg}</span>`; }
+        function setStatus(inputEl, statusEl, state, msg) { inputEl.classList.remove('nomor-input-ok', 'nomor-input-error', 'nomor-input-warn'); statusEl.innerHTML = ''; if (!msg) return; const i = { ok: '✅', duplicate: '❌', warn: '⚠️', checking: '🔄' }, c = { ok: 'nomor-status-ok', duplicate: 'nomor-status-error', warn: 'nomor-status-warn', checking: 'text-gray-400' }, b = { ok: 'nomor-input-ok', duplicate: 'nomor-input-error', warn: 'nomor-input-warn' }; if (b[state]) inputEl.classList.add(b[state]); statusEl.innerHTML = `<span class="${c[state] || ''}">${i[state] || ''} ${escapedHtml(msg)}</span>`; }
 
         const SP_MODE_DRAFT_KEY = 'simonpr_sp_mode_switch_draft';
 
@@ -1451,71 +1517,91 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
             `;
         }
 
-        function getSuggestionUrlSp() { const url = new URL(SUGGEST_URL_SP, window.location.origin); const tanggal = document.getElementById('tanggalSpInput')?.value; if (tanggal) url.searchParams.set('tanggal', tanggal); return url.toString(); }
-        async function loadSuggestionsSp() { const box = document.getElementById('suggBoxSp'); try { const r = await fetch(getSuggestionUrlSp()); const d = await r.json(); box.innerHTML = d.last ? `<span class="text-xs text-gray-400 dark:text-gray-500 mr-1">Terakhir: <span class="font-mono font-semibold">${d.last}</span> →</span>` : `<span class="text-xs text-gray-400 mr-1">Saran:</span>`; d.suggestions.forEach(s => { const p = document.createElement('span'); p.className = 'suggest-pill'; p.innerHTML = `✨ ${s}`; p.onclick = () => { document.getElementById('nomorSpInput').value = s; document.getElementById('nomorSpInput').dispatchEvent(new Event('input')); }; box.appendChild(p); }); } catch { box.innerHTML = '<span class="text-xs text-gray-400">Tidak bisa memuat saran</span>'; } }
-
-        getSuggestionUrlSp = function () {
+        function getSuggestionUrlSp() {
             const url = new URL(SUGGEST_URL_SP, window.location.origin);
             const tanggal = document.getElementById('tanggalSpInput')?.value;
             if (tanggal) url.searchParams.set('tanggal', tanggal);
             if (ORACLE_MODE_SP) url.searchParams.set('oracle_mode', '1');
             return url.toString();
-        };
+        }
 
-        loadSuggestionsSp = async function () {
+        async function loadSuggestionsSp() {
             const box = document.getElementById('suggBoxSp');
             if (!box) return;
+            const requestId = ++spSuggestionSerial, url = getSuggestionUrlSp();
             if (ORACLE_MODE_SP) {
-                box.innerHTML = `<span class="text-xs text-amber-700 dark:text-amber-300 font-semibold bg-amber-100 dark:bg-amber-900/40 border border-amber-200 dark:border-amber-700 rounded-full px-3 py-1">Mode Oracle: nomor SP diketik manual dari ERP</span>`;
+                cancelSpLookup('suggestions');
+                box.innerHTML = '<span class="text-xs text-amber-700 dark:text-amber-300">Mode Oracle: nomor SP diketik manual dari ERP</span>';
                 return;
             }
-
+            box.textContent = 'Memuat saran nomor…';
             try {
-                const r = await fetch(getSuggestionUrlSp());
-                const d = await r.json();
-                box.innerHTML = d.last ? `<span class="text-xs text-gray-400 dark:text-gray-500 mr-1">Terakhir: <span class="font-mono font-semibold">${d.last}</span> →</span>` : `<span class="text-xs text-gray-400 mr-1">Saran:</span>`;
-                d.suggestions.forEach(s => {
-                    const p = document.createElement('span');
-                    p.className = 'suggest-pill';
-                    p.innerHTML = `✨ ${s}`;
-                    p.onclick = () => {
-                        document.getElementById('nomorSpInput').value = s;
-                        document.getElementById('nomorSpInput').dispatchEvent(new Event('input'));
-                    };
-                    box.appendChild(p);
+                const data = await readSpLookup('suggestions', url);
+                if (requestId !== spSuggestionSerial || url !== getSuggestionUrlSp()) return;
+                if (!data || !Array.isArray(data.suggestions) || data.suggestions.length > 5
+                    || !data.suggestions.every(value => typeof value === 'string' && value.length > 0 && value.length <= 255)
+                    || (data.last != null && (typeof data.last !== 'string' || data.last.length > 255))) throw new Error('Saran nomor belum lengkap. Silakan coba lagi.');
+                box.replaceChildren();
+                const label = document.createElement('span');
+                label.className = 'text-xs text-gray-400 dark:text-gray-500 mr-1';
+                label.textContent = data.last ? `Terakhir: ${data.last} →` : 'Saran:';
+                box.appendChild(label);
+                data.suggestions.forEach(value => {
+                    const button = document.createElement('button');
+                    button.type = 'button'; button.className = 'suggest-pill'; button.textContent = `✨ ${value}`;
+                    button.addEventListener('click', () => {
+                        if (requestId !== spSuggestionSerial || url !== getSuggestionUrlSp()) return;
+                        const input = document.getElementById('nomorSpInput');
+                        input.value = value; input.dispatchEvent(new Event('input'));
+                    });
+                    box.appendChild(button);
                 });
-            } catch {
-                box.innerHTML = '<span class="text-xs text-gray-400">Tidak bisa memuat saran</span>';
+            } catch (error) {
+                if (requestId === spSuggestionSerial && url === getSuggestionUrlSp()) {
+                    box.textContent = error.name === 'AbortError' ? 'Saran nomor belum dimuat.' : error.message;
+                    appendSpLookupRetry(box, loadSuggestionsSp);
+                }
             }
-        };
+        }
 
         function attachNomorCheck(inputId, statusId, getExcludeId, dateInputId = null) {
             const input = document.getElementById(inputId), status = document.getElementById(statusId);
+            if (!input || !status || spLookupCleanups.has(inputId)) return;
+            const key = `number:${inputId}`;
+            let timer = null, requestSerial = 0;
+            const dateValue = () => dateInputId ? document.getElementById(dateInputId)?.value || '' : '';
+            const cancel = () => { requestSerial++; clearTimeout(timer); timer = null; cancelSpLookup(key); setStatus(input, status, null, ''); };
+            spLookupCleanups.set(inputId, cancel);
             const runCheck = () => {
-                const v = input.value.trim();
-                if (!v) { setStatus(input, status, null, ''); return; }
+                cancel();
+                const number = input.value.trim(), date = dateValue(), exclude = String(getExcludeId() ?? 0), requestId = requestSerial;
+                if (!number) { setStatus(input, status, null, ''); return; }
+                const current = () => requestId === requestSerial && input.value.trim() === number && dateValue() === date && String(getExcludeId() ?? 0) === exclude;
                 setStatus(input, status, 'checking', 'Memeriksa...');
-                clearTimeout(checkTimer);
-                checkTimer = setTimeout(async () => {
+                timer = setTimeout(async () => {
+                    timer = null;
+                    if (!current()) return;
                     try {
                         const url = new URL(CHECK_URL_SP, window.location.origin);
-                        url.searchParams.set('nomor', v);
-                        url.searchParams.set('exclude_id', getExcludeId());
+                        url.searchParams.set('nomor', number); url.searchParams.set('exclude_id', exclude);
                         if (ORACLE_MODE_SP) url.searchParams.set('oracle_mode', '1');
-                        const tanggal = dateInputId ? document.getElementById(dateInputId)?.value : '';
-                        if (tanggal) url.searchParams.set('tanggal', tanggal);
-                        const r = await fetch(url.toString());
-                        const d = await r.json();
-                        if (d.normalized_nomor && input.value.trim() !== d.normalized_nomor) {
-                            input.value = d.normalized_nomor;
+                        if (date) url.searchParams.set('tanggal', date);
+                        const data = await readSpLookup(key, url.toString());
+                        if (!current()) return;
+                        if (!data || !['ok', 'duplicate', 'empty'].includes(data.status)
+                            || (data.normalized_nomor != null && (typeof data.normalized_nomor !== 'string' || data.normalized_nomor.length > 255))
+                            || ['warning', 'message'].some(field => data[field] != null && (typeof data[field] !== 'string' || data[field].length > 2048))) throw new Error('Hasil pemeriksaan belum lengkap. Silakan coba lagi.');
+                        if (data.normalized_nomor) input.value = data.normalized_nomor;
+                        if (data.status === 'empty') setStatus(input, status, null, '');
+                        else if (data.status === 'duplicate') setStatus(input, status, 'duplicate', data.message || 'Nomor SP sudah digunakan.');
+                        else if (data.warning) setStatus(input, status, 'warn', data.warning);
+                        else setStatus(input, status, 'ok', 'Tersedia ✓');
+                    } catch (error) {
+                        if (error.name !== 'AbortError' && current()) {
+                            setStatus(input, status, 'warn', error.message);
+                            appendSpLookupRetry(status, runCheck);
                         }
-                        if (d.status === 'duplicate') setStatus(input, status, 'duplicate', d.message);
-                        else if (d.warning) setStatus(input, status, 'warn', d.warning);
-                        else {
-                            setStatus(input, status, 'ok', 'Tersedia ✓');
-                            setTimeout(() => { if (status.textContent.includes('Tersedia')) setStatus(input, status, null, ''); }, 400);
-                        }
-                    } catch { setStatus(input, status, null, ''); }
+                    }
                 }, 400);
             };
             input.addEventListener('input', runCheck);
