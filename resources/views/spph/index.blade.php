@@ -84,6 +84,14 @@
             </div>
         </div>
 
+        <div id="spphUpdates" class="hidden rounded-xl border border-blue-200 bg-blue-50 p-3 dark:border-blue-800 dark:bg-blue-900/20" role="status" aria-live="polite">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+                <span id="spphUpdatesText" class="text-sm font-semibold text-blue-800 dark:text-blue-200"></span>
+                <button type="button" onclick="refreshSpphList()" class="rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white">Muat ulang daftar</button>
+            </div>
+            <p id="spphUpdatesHint" class="mt-2 text-xs text-blue-800 dark:text-blue-200">Muat ulang setelah selesai mengisi formulir.</p>
+        </div>
+
         {{-- ── ALERTS ──────────────────────────────────────────────── --}}
         @if(session('success'))
             <div
@@ -1004,6 +1012,7 @@
     <script src="{{ asset('assets/app/procurement-review.js') }}?v={{ filemtime(public_path('assets/app/procurement-review.js')) }}" defer></script>
     <script src="{{ asset('assets/app/procurement-filters.js') }}?v={{ filemtime(public_path('assets/app/procurement-filters.js')) }}" defer></script>
     <script src="{{ asset('assets/app/satuan.js') }}?v={{ filemtime(public_path('assets/app/satuan.js')) }}" defer></script>
+    <script src="{{ asset('assets/app/procurement-background.js') }}?v={{ filemtime(public_path('assets/app/procurement-background.js')) }}" defer></script>
     <script src="{{ asset('assets/spph/spph.js') }}?v={{ filemtime(public_path('assets/spph/spph.js')) }}" defer></script>
     <script src="{{ asset('assets/spph/spph-print.js') }}?v={{ filemtime(public_path('assets/spph/spph-print.js')) }}" defer></script>
     <script src="{{ asset('assets/spph/spph-print-master.js') }}?v={{ filemtime(public_path('assets/spph/spph-print-master.js')) }}" defer></script>

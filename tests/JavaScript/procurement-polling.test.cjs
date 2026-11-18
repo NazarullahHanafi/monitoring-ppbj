@@ -2,81 +2,122 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
-const path = require('node:path');
-
-// SP has deadline, ownership and timer coverage in sp-background.test.cjs.
-for (const module of ['spph']) {
-    const source = fs.readFileSync(path.join(__dirname, `../../public/assets/${module}/${module}.js`), 'utf8');
-    // Run the actual polling functions, independently of unrelated form/UI setup.
-    function functionSource(name, singleLine = false) {
-        const start = source.indexOf(`async function ${name}(`);
-        assert.ok(start >= 0);
-        const end = singleLine ? source.indexOf('\n', start) : source.indexOf('\n        }', start) + 10;
-        return source.slice(start, end);
+const source = fs.readFileSync('public/assets/spph/spph.js', 'utf8');
+const engine = fs.readFileSync('public/assets/app/procurement-background.js', 'utf8');
+const block = name => source.slice(source.indexOf(`/* BEGIN SPPH ${name} */`), source.indexOf(`/* END SPPH ${name} */`));
+const tick = () => new Promise(setImmediate);
+function runtime(extra = {}) {
+    const timers = new Map(), requests = [], events = {}, nodes = {}, serials = { timer: 0, reload: 0, beacon: 0 };
+    for (const id of ['spphUpdates', 'spphUpdatesText', 'spphUpdatesHint', 'presenceBar', 'presenceText']) {
+        const classes = new Set(['hidden']);
+        nodes[id] = { textContent: '', classList: { add: x => classes.add(x), remove: x => classes.delete(x), toggle: (x, on) => on ? classes.add(x) : classes.delete(x), contains: x => classes.has(x) } };
     }
-    function setup() {
-        let calls = 0;
-        let finish;
-        const deferred = new Promise(resolve => { finish = resolve; });
-        const context = vm.createContext({
-            IS_FIRST: true, IS_FIRST_PAGE: true, HAS_FILTER: false,
-            pollInFlight: false, presenceInFlight: false,
-            lastId: 1, lastIdSp: 1, POLL_URL: '/spph/poll', POLL_URL_SP: '/sp/poll', PRESENCE_URL: '/presence',
-            document: { hidden: false, getElementById: () => ({ classList: { add() {}, remove() {} } }) },
-            fetch: () => { calls++; return deferred; },
-        });
-        vm.runInContext(functionSource('pollNow'), context);
-        vm.runInContext(functionSource(module === 'sp' ? 'pollPresence' : 'pollPres', true), context);
-        return { context, calls: () => calls, finish };
-    }
-    test(`${module}: hidden or filtered page sends no data poll`, async () => {
-        const h = setup();
-        h.context.document.hidden = true;
-        await h.context.pollNow();
-        h.context.document.hidden = false;
-        h.context.HAS_FILTER = true;
-        await h.context.pollNow();
-        h.context.HAS_FILTER = false;
-        h.context.IS_FIRST = h.context.IS_FIRST_PAGE = false;
-        await h.context.pollNow();
-        assert.equal(h.calls(), 0);
-    });
-    test(`${module}: slow data requests cannot overlap and release guard on completion`, async () => {
-        const h = setup();
-        const first = h.context.pollNow();
-        await h.context.pollNow();
-        assert.equal(h.calls(), 1);
-        h.finish({ ok: true, json: async () => ({ rows: [] }) });
-        await first;
-        assert.equal(h.context.pollInFlight, false);
-        await h.context.pollNow();
-        assert.equal(h.calls(), 2);
-    });
-    test(`${module}: HTTP failure releases data guard`, async () => {
-        const h = setup();
-        const first = h.context.pollNow();
-        h.finish({ ok: false });
-        await first;
-        assert.equal(h.context.pollInFlight, false);
-    });
-    test(`${module}: presence pauses while hidden and cannot overlap`, async () => {
-        const h = setup();
-        const presence = module === 'sp' ? h.context.pollPresence : h.context.pollPres;
-        h.context.document.hidden = true;
-        await presence();
-        assert.equal(h.calls(), 0);
-        h.context.document.hidden = false;
-        const first = presence();
-        await presence();
-        assert.equal(h.calls(), 1);
-        h.finish({ ok: true, json: async () => ({ users: [] }) });
-        await first;
-        assert.equal(h.context.presenceInFlight, false);
-    });
-    test(`${module}: presence guard releases after network failure`, async () => {
-        const h = setup();
-        h.context.fetch = async () => { throw new Error('offline'); };
-        await (module === 'sp' ? h.context.pollPresence() : h.context.pollPres());
-        assert.equal(h.context.presenceInFlight, false);
-    });
+    const on = (name, fn) => (events[name] ??= []).push(fn);
+    const context = vm.createContext({ URL, AbortController, DOMException, FormData, navigator: { sendBeacon: () => serials.beacon++ },
+        IS_FIRST: true, HAS_FILTER: false, lastId: 10,
+        POLL_URL: '/spph/poll', PRESENCE_URL: '/spph/presence', PRES_START: '/spph/presence/start', PRES_STOP: '/spph/presence/stop',
+        modalOpen: false, secureDeleteSearchSnapshot: null, filters: '', saving: false, dialog: false,
+        getQS: () => context.filters,
+        window: { location: { origin: 'https://spph.test', href: 'https://spph.test/spph', assign: () => serials.reload++ }, addEventListener: on, Swal: { isVisible: () => context.dialog } },
+        document: { hidden: false, addEventListener: on, getElementById: id => nodes[id], querySelector: selector => selector.startsWith('meta') ? { content: 'csrf' } : context.saving ? {} : null },
+        setTimeout: (fn, delay) => { timers.set(++serials.timer, { fn, delay }); return serials.timer; }, clearTimeout: id => timers.delete(id),
+        fetch: (url, options) => new Promise(resolve => requests.push({ url, options, resolve })), ...extra });
+    vm.runInContext(engine + '\n' + block('BACKGROUND'), context);
+    context.pollNow = () => vm.runInContext("spphBackground.run('data')", context);
+    context.pollPresence = () => vm.runInContext("spphBackground.run('presence')", context);
+    context.startHeartbeat = context.startHb; context.stopHeartbeat = context.stopHb;
+    return { context, nodes, requests, timers, serials,
+        emit: (name, event = {}) => (events[name] || []).forEach(fn => fn(event)),
+        fire: delay => { for (const [id, timer] of [...timers]) if (timer.delay === delay) { timers.delete(id); timer.fn(); } },
+        respond: (i, data, status = 200, extra = {}) => requests[i].resolve({ ok: status < 400, status, redirected: false, headers: { get: () => 'application/json' }, json: async () => data, ...extra }),
+        count: delay => [...timers.values()].filter(t => t.delay === delay).length };
 }
+test('SPPH: background starts late, uses summary IDs and schedules only after completion', async () => {
+    const h = runtime(); h.context.initializeSpphBackground();
+    assert.equal(h.requests.length, 0); assert.equal(h.count(45000), 1); assert.equal(h.count(12000), 1);
+    h.fire(45000); h.fire(45000); await h.context.pollNow();
+    assert.equal(h.requests.length, 1); assert.equal(h.count(45000), 0);
+    const url = new URL(h.requests[0].url); assert.equal(url.searchParams.get('summary'), '1'); assert.equal(url.searchParams.get('last_id'), '10');
+    h.respond(0, { rows: [] }); await tick(); assert.equal(h.count(45000), 1);
+});
+test('SPPH: hidden, filtered or later pages never fetch data', async () => {
+    for (const extra of [{ HAS_FILTER: true }, { IS_FIRST: false }]) { const h = runtime(extra); await h.context.pollNow(); assert.equal(h.requests.length, 0); }
+    const h = runtime(); h.context.document.hidden = true; await h.context.pollNow(); await h.context.pollPresence(); assert.equal(h.requests.length, 0);
+    h.context.document.hidden = false; const task = h.context.pollNow(); assert.equal(new URL(h.requests[0].url).searchParams.get('summary'), '1'); h.respond(0, { rows: [] }); await task;
+});
+test('SPPH: stalled fetch and JSON body reach a deadline, release ownership and back off', async () => {
+    for (const stalledBody of [false, true]) {
+        const h = runtime(); const task = h.context.pollNow();
+        if (stalledBody) { h.respond(0, null, 200, { json: () => new Promise(() => {}) }); await tick(); }
+        h.fire(20000); await task;
+        assert.equal(h.requests[0].options.signal.aborted, true); assert.equal(h.count(90000), 1);
+        h.fire(90000); h.respond(1, { rows: [] }); await tick(); assert.equal(h.count(45000), 1);
+    }
+});
+test('SPPH: hidden cancellation and late completions cannot overwrite a resumed request', async () => {
+    const h = runtime(); h.context.initializeSpphBackground(); h.fire(45000);
+    h.context.document.hidden = true; h.emit('visibilitychange'); assert.equal(h.requests[0].options.signal.aborted, true); assert.equal(h.timers.size, 0);
+    h.context.document.hidden = false; h.emit('visibilitychange'); h.fire(45000);
+    h.respond(0, { rows: [{ id: 99 }] }); await tick(); assert.equal(h.nodes.spphUpdatesText.textContent, ''); assert.equal(h.count(45000), 0);
+    h.respond(1, { rows: [{ id: 11 }] }); await tick(); assert.match(h.nodes.spphUpdatesText.textContent, /^1 SPPH/); assert.equal(h.count(45000), 1);
+});
+test('SPPH: HTTP authorization loss stops both background readers until reload', async () => {
+    for (const status of [401, 403, 419]) {
+        const h = runtime(); h.context.initializeSpphBackground(); h.fire(45000); h.respond(0, {}, status); await tick();
+        await h.context.pollNow(); await h.context.pollPresence(); h.emit('visibilitychange');
+        assert.equal(h.requests.length, 1); assert.equal(h.timers.size, 0);
+    }
+    const h = runtime(); const task = h.context.pollPresence(); h.respond(0, {}, 200, { redirected: true }); await task; await h.context.pollNow(); assert.equal(h.requests.length, 1);
+});
+test('SPPH: network, rate limit, HTML and malformed payloads back off without busy loops', async () => {
+    for (const [data, status, extra] of [[{}, 429, {}], [{ rows: [{ id: '<img>' }] }, 200, {}], [{ rows: Array(51).fill({ id: 11 }) }, 200, {}], [{}, 200, { headers: { get: () => 'text/html' } }]]) {
+        const h = runtime(); const task = h.context.pollNow(); h.respond(0, data, status, extra); await task; assert.equal(h.count(90000), 1); assert.equal(h.nodes.spphUpdatesText.textContent, '');
+    }
+    const h = runtime(); h.context.fetch = async () => { throw new TypeError('offline'); };
+    for (const delay of [90000, 180000, 300000, 300000]) { await h.context.pollNow(); assert.equal(h.count(delay), 1); }
+});
+test('SPPH: updates only change a bounded notice, deduplicate IDs and never open a dialog', async () => {
+    const h = runtime(); h.context.dialog = true; let task = h.context.pollNow();
+    h.respond(0, { rows: [{ id: 11, nomor_spph: '<img onerror=bad()>' }, { id: 11 }, { id: 9 }] }); await task;
+    assert.match(h.nodes.spphUpdatesText.textContent, /^1 SPPH/); assert.equal(h.context.lastId, 11); assert.equal(h.context.dialog, true); assert.equal(h.nodes.spphUpdates.classList.contains('hidden'), false);
+    task = h.context.pollNow(); h.respond(1, { rows: [{ id: 11 }, { id: 12 }] }); await task; assert.match(h.nodes.spphUpdatesText.textContent, /^2 SPPH/);
+});
+test('SPPH: refresh preserves active dialogs, forms, writes and staged filters', () => {
+    const h = runtime(); h.context.initializeSpphBackground();
+    for (const flag of ['modalOpen', 'saving', 'dialog']) {
+        h.context[flag] = true; h.context.refreshSpphList(); assert.equal(h.serials.reload, 0); h.context[flag] = false;
+    }
+    h.context.secureDeleteSearchSnapshot = ''; h.context.refreshSpphList(); assert.equal(h.serials.reload, 0); h.context.secureDeleteSearchSnapshot = null;
+    h.context.filters = 'search=draft'; h.context.refreshSpphList(); assert.equal(h.serials.reload, 0); assert.match(h.nodes.spphUpdatesHint.textContent, /Terapkan Filter/);
+    h.context.filters = ''; h.context.refreshSpphList(); assert.equal(h.serials.reload, 1);
+});
+test('SPPH: presence uses the same bounded read, treats names as text and cannot overlap', async () => {
+    const h = runtime(); const task = h.context.pollPresence(); await h.context.pollPresence(); assert.equal(h.requests.length, 1);
+    h.respond(0, { users: [{ name: '<img src=x onerror=bad()>' }] }); await task; assert.match(h.nodes.presenceText.textContent, /<img/); assert.equal(h.count(60000), 1);
+    const stalled = h.context.pollPresence(); h.fire(20000); await stalled; assert.equal(h.count(120000), 1);
+});
+test('SPPH: pagehide/BFCache restore has exactly one timer per reader and cancels old work', async () => {
+    const h = runtime(); h.context.initializeSpphBackground(); h.fire(12000); h.emit('pagehide'); assert.equal(h.requests[0].options.signal.aborted, true); assert.equal(h.timers.size, 0);
+    h.emit('pageshow', { persisted: true }); h.emit('pageshow', { persisted: true }); assert.equal(h.count(45000), 1); assert.equal(h.count(60000), 1);
+    h.respond(0, { users: [{ name: 'stale' }] }); await tick(); assert.equal(h.nodes.presenceText.textContent, ''); assert.equal(h.count(60000), 1);
+});
+test('SPPH: heartbeats serialize the latest start/stop, expire stalled writes and stop on logout', async () => {
+    const h = runtime(); h.context.modalOpen = true; h.context.startHeartbeat(); h.context.startHeartbeat(); h.context.stopHeartbeat(); assert.equal(h.requests.length, 1);
+    h.respond(0, {}); await tick(); assert.equal(h.requests.length, 2); assert.equal(new URL(h.requests[1].url).pathname, '/spph/presence/stop'); assert.equal(h.requests[1].options.headers['X-CSRF-TOKEN'], 'csrf');
+    h.respond(1, {}); await tick(); assert.equal(h.count(15000), 0);
+    h.context.startHeartbeat(); h.fire(10000); await tick(); assert.equal(h.requests[2].options.signal.aborted, true); assert.equal(h.count(30000), 1);
+    h.fire(30000); h.respond(3, {}, 419); await tick(); assert.equal(h.timers.size, 0); h.context.startHeartbeat(); assert.equal(h.requests.length, 4);
+});
+test('SPPH: page departure aborts heartbeat deadlines and sends a best-effort stop beacon', async () => {
+    const h = runtime(); h.context.initializeSpphBackground(); h.context.modalOpen = true; h.context.startHeartbeat(); h.emit('pagehide');
+    assert.equal(h.requests[0].options.signal.aborted, true); assert.equal(h.timers.size, 0); assert.equal(h.serials.beacon, 1); await tick(); assert.equal(h.timers.size, 0);
+});
+test('SPPH: foreign background endpoints cannot receive reads, presence or CSRF', async () => {
+    const h = runtime({ POLL_URL: 'https://foreign.test/poll', PRES_START: 'https://foreign.test/presence' });
+    await h.context.pollNow(); h.context.startHeartbeat(); await tick(); assert.equal(h.requests.length, 0);
+});
+test('SPPH: presence hides stale names after errors and displays at most twenty literal names', async () => {
+    const h = runtime(); let task = h.context.pollPresence(); h.respond(0, { users: Array.from({ length: 25 }, () => ({ name: '<b>Name</b>' })) }); await task;
+    assert.equal(h.nodes.presenceText.textContent.match(/<b>/g).length, 20); assert.equal(h.nodes.presenceBar.classList.contains('hidden'), false);
+    task = h.context.pollPresence(); h.respond(1, {}, 500); await task; assert.equal(h.nodes.presenceBar.classList.contains('hidden'), true);
+});

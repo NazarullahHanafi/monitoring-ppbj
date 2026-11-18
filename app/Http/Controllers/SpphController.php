@@ -401,14 +401,18 @@ class SpphController extends Controller
     // =========================================================
     public function poll(Request $request)
     {
-        $lastId = (int) $request->get('last_id', 0);
+        $request->validate([
+            'last_id' => ['bail', 'sometimes', 'integer', 'min:0', 'max:'.PHP_INT_MAX],
+            'summary' => ['bail', 'sometimes', 'boolean'],
+        ]);
+        $summary = $request->boolean('summary');
 
-        $rows = Spph::select(['id', 'nomor_spph', 'tanggal', 'nomor_pr', 'nama_vendor', 'vendor_names', 'deskripsi_pengadaan', 'pic'])
-            ->where('id', '>', $lastId)
+        $rows = Spph::select($summary ? ['id'] : ['id', 'nomor_spph', 'tanggal', 'nomor_pr', 'nama_vendor', 'vendor_names', 'deskripsi_pengadaan', 'pic'])
+            ->where('id', '>', (int) $request->input('last_id', 0))
             ->orderBy('id')
             ->limit(50)
             ->get()
-            ->map(fn ($r) => [
+            ->map(fn ($r) => $summary ? ['id' => $r->id] : [
                 'id' => $r->id,
                 'nomor_spph' => $r->nomor_spph,
                 'tanggal' => $r->tanggal?->format('d/m/Y'),
@@ -421,7 +425,7 @@ class SpphController extends Controller
                 'pic' => $r->pic,
             ]);
 
-        return response()->json(['rows' => $rows]);
+        return response()->json(['rows' => $rows])->header('Cache-Control', 'no-store, private');
     }
 
     // =========================================================

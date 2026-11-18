@@ -22,9 +22,8 @@
         let vendorUsageStatsPromise = null;
 
         let lastId = Number(SPPH_PAGE_CONFIG.lastId || 0);
-        let pollTimer = null, checkTimer = null, searchTimer = null, presTimer = null, hbTimer = null;
+        let checkTimer = null, searchTimer = null;
         let secureDeleteSearchSnapshot = null;
-        let pollInFlight = false, presenceInFlight = false, presenceStartTimer = null;
         let modalOpen = false, addIdx = 0, editIdx = 5000;
         let currentPrMode = 'ppbj', currentEditPrMode = 'ppbj';
         let editModalLoadSerial = 0;
@@ -848,45 +847,56 @@
         // ════════════════════════════════════════════════════════════
         // PRESENCE & HEARTBEAT
         // ════════════════════════════════════════════════════════════
-        async function sendPres(url) { if (document.hidden && url === PRES_START) return; try { await fetch(url, { method: 'POST', headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content } }); } catch { } }
-        async function pollPres() { if (document.hidden || presenceInFlight) return; presenceInFlight = true; try { const r = await fetch(PRESENCE_URL); if (!r.ok) return; const data = await r.json(), bar = document.getElementById('presenceBar'), txt = document.getElementById('presenceText'); if (data.users.length > 0) { txt.innerHTML = data.users.map(u => `<strong>${escapedHtml(u.name)}</strong>`).join(', ') + ' sedang menambahkan SPPH<span class="animate-pulse">...</span>'; bar.classList.remove('hidden'); } else { bar.classList.add('hidden'); } } catch { } finally { presenceInFlight = false; } }
-        function startHb() { if (hbTimer) return; sendPres(PRES_START); hbTimer = setInterval(() => sendPres(PRES_START), 15000); }
-        function stopHb() { if (hbTimer) { clearInterval(hbTimer); hbTimer = null; } sendPres(PRES_STOP); }
-
-        // ════════════════════════════════════════════════════════════
-        // POLLING
-        // ════════════════════════════════════════════════════════════
-        async function pollNow() {
-            if (!IS_FIRST || HAS_FILTER || document.hidden || pollInFlight) return;
-            pollInFlight = true;
-            try {
-                const r = await fetch(`${POLL_URL}?last_id=${lastId}`, { headers: { 'Accept': 'application/json' } });
-                if (!r.ok) return;
-                const data = await r.json();
-                if (!data.rows?.length) return;
-
-                const tbody = document.getElementById('spphBody');
-                document.getElementById('emptyRow')?.remove();
-                data.rows.forEach(row => {
-                    if (document.querySelector(`tr[data-id="${Number(row.id)}"]`)) return;
-                    lastId = Math.max(lastId, Number(row.id));
-                    const tr = document.createElement('tr');
-                    tr.className = 'tbl-row-hover new-row-flash';
-                    tr.dataset.id = Number(row.id);
-                    tr.dataset.pic = String(row.pic || '');
-                    const vendorCount = Number(row.vendor_count || 1);
-                    const vendorBadge = vendorCount > 1 ? `<span class="inline-flex items-center px-2 py-0.5 rounded-full bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-700 font-semibold mr-1">${vendorCount} vendor</span>` : '';
-                    tr.innerHTML = `<td class="px-4 py-3 text-gray-400 text-xs font-mono">—</td><td class="px-4 py-3"><span class="badge-nomor inline-flex items-center px-2.5 py-1 rounded-lg bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800">${escapedHtml(row.nomor_spph)}</span></td><td class="px-4 py-3 text-gray-600 dark:text-gray-300 text-xs">${escapedHtml(row.tanggal || '-')}</td><td class="px-4 py-3 text-gray-600 dark:text-gray-300 font-mono text-xs">${escapedHtml(row.nomor_pr)}</td><td class="px-4 py-3 text-gray-700 dark:text-gray-200 font-medium text-xs">${escapedHtml(row.nama_vendor)}</td><td class="px-4 py-3 text-gray-600 dark:text-gray-300 text-xs max-w-xs truncate">${escapedHtml(row.deskripsi_pengadaan)}</td><td class="px-4 py-3"><span class="inline-block bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 text-xs font-semibold px-2 py-0.5 rounded-full">${escapedHtml(row.pic)}</span></td><td class="px-4 py-3 text-center"><button type="button" onclick="shareRecordToChat('spph', ${Number(row.id)})" class="px-2 py-1 rounded-lg text-indigo-600 bg-indigo-50 dark:bg-indigo-900/30 text-xs font-semibold" title="Bagikan SPPH ke Chat Tim">💬</button></td>`;
-                    if (tr.children[4]) {
-                        tr.children[4].innerHTML = vendorBadge + escapedHtml(row.vendor_label || row.nama_vendor);
+        /* BEGIN SPPH BACKGROUND */
+        let spphUpdateCount = 0, spphInitialFilters = null;
+        function hideSpphPresence() { document.getElementById('presenceBar')?.classList.add('hidden'); }
+        const spphBackground = window.ProcurementBackground.create({
+            channels: {
+                data: {
+                    interval: 45000, enabled: () => IS_FIRST && !HAS_FILTER,
+                    url: () => {
+                        const url = new URL(POLL_URL, window.location.origin);
+                        url.searchParams.set('last_id', String(lastId)); url.searchParams.set('summary', '1');
+                        return url.href;
+                    },
+                    apply: data => {
+                        if (!Array.isArray(data?.rows) || data.rows.length > 50 || data.rows.some(row => !Number.isSafeInteger(row?.id) || row.id <= 0)) throw new Error('Invalid SPPH update');
+                        const ids = [...new Set(data.rows.map(row => row.id))].filter(id => id > lastId);
+                        if (!ids.length) return;
+                        lastId = Math.max(lastId, ...ids); spphUpdateCount = Math.min(1000, spphUpdateCount + ids.length);
+                        document.getElementById('spphUpdatesText').textContent = (spphUpdateCount >= 1000 ? '1000+' : spphUpdateCount) + ' SPPH baru tersedia. Muat ulang untuk melihat data dan seluruh tombol aksinya.';
+                        document.getElementById('spphUpdates').classList.remove('hidden');
                     }
-                    tbody.insertBefore(tr, tbody.firstChild);
-                    Swal.fire({ toast: true, position: 'top-end', icon: 'info', title: `📋 SPPH baru: ${String(row.nomor_spph || '')}`, showConfirmButton: false, timer: 3000, timerProgressBar: true, background: document.documentElement.classList.contains('dark') ? '#1f2937' : '#fff', color: document.documentElement.classList.contains('dark') ? '#f3f4f6' : '#111827' });
-                });
-                const c = document.getElementById('totalCount');
-                if (c) c.textContent = parseInt(c.textContent) + data.rows.length;
-            } catch { } finally { pollInFlight = false; }
+                },
+                presence: {
+                    interval: 60000, initialDelay: 12000, url: PRESENCE_URL,
+                    onPause: hideSpphPresence, onError: hideSpphPresence,
+                    apply: data => {
+                        if (!Array.isArray(data?.users) || data.users.some(user => typeof user?.name !== 'string')) throw new Error('Invalid presence');
+                        document.getElementById('presenceText').textContent = data.users.length ? data.users.slice(0, 20).map(user => user.name).join(', ') + ' sedang menambahkan SPPH...' : '';
+                        document.getElementById('presenceBar').classList.toggle('hidden', data.users.length === 0);
+                    }
+                }
+            },
+            presence: { startUrl: PRES_START, stopUrl: PRES_STOP, csrf: () => document.querySelector('meta[name="csrf-token"]').content },
+            isEditing: () => modalOpen
+        });
+        function startHb() { spphBackground.heartbeat(true); }
+        function stopHb() { spphBackground.heartbeat(false); }
+        function refreshSpphList() {
+            const hint = document.getElementById('spphUpdatesHint');
+            if (modalOpen || secureDeleteSearchSnapshot !== null || document.querySelector('[data-procurement-saving="true"]') || window.Swal?.isVisible()) {
+                hint.textContent = 'Selesaikan atau tutup formulir dan dialog yang sedang terbuka sebelum memuat ulang.';
+                return;
+            }
+            if (spphInitialFilters !== null && getQS() !== spphInitialFilters) {
+                hint.textContent = 'Filter telah diubah. Klik Terapkan Filter agar pilihan Anda ikut digunakan.';
+                return;
+            }
+            window.location.assign(window.location.href);
         }
+        function initializeSpphBackground() { spphInitialFilters = getQS(); spphBackground.start(); }
+        /* END SPPH BACKGROUND */
 
         // ════════════════════════════════════════════════════════════
         // ONBOARDING TUTORIAL
@@ -1602,61 +1612,7 @@
 
             window.ProcurementFilters.bind({ apply: doSearch, lockedSearch: () => secureDeleteSearchSnapshot });
 
-            const BACKGROUND_POLL_INTERVAL = 45000;
-
-            function stopBackgroundPolling() {
-                clearTimeout(presenceStartTimer);
-                presenceStartTimer = null;
-                clearInterval(pollTimer);
-                clearInterval(presTimer);
-                pollTimer = null;
-                presTimer = null;
-            }
-
-            function startBackgroundPolling() {
-                if (document.hidden) return;
-
-                if (IS_FIRST && !HAS_FILTER && !pollTimer) {
-                    pollTimer = setInterval(pollNow, BACKGROUND_POLL_INTERVAL);
-                }
-
-                if (!presTimer && !presenceStartTimer) {
-                    presenceStartTimer = setTimeout(() => {
-                        presenceStartTimer = null;
-                        if (!document.hidden && !presTimer) {
-                            pollPres();
-                            presTimer = setInterval(pollPres, 60000);
-                        }
-                    }, 12000);
-                }
-            }
-
-            startBackgroundPolling();
-            document.addEventListener('visibilitychange', () => {
-                if (document.hidden) {
-                    stopBackgroundPolling();
-                    clearInterval(hbTimer);
-                    hbTimer = null;
-                } else {
-                    startBackgroundPolling();
-                    if (modalOpen) startHb();
-                }
-            });
-            window.addEventListener('pagehide', () => {
-                stopBackgroundPolling();
-                clearInterval(hbTimer);
-                hbTimer = null;
-                if (modalOpen) {
-                    const fd = new FormData();
-                    fd.append('_token', document.querySelector('meta[name="csrf-token"]').content);
-                    navigator.sendBeacon(PRES_STOP, fd);
-                }
-            });
-            window.addEventListener('pageshow', (event) => {
-                if (!event.persisted || document.hidden) return;
-                startBackgroundPolling();
-                if (modalOpen) startHb();
-            });
+            initializeSpphBackground();
 
             if ('requestIdleCallback' in window) {
                 requestIdleCallback(checkOnboardingStatus, { timeout: 6000 });
