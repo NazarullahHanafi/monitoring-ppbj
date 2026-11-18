@@ -1923,7 +1923,7 @@ class SpController extends Controller
         Cache::forget('sp:last_nomor:auto');
         Cache::forget('sp:last_nomor:oracle');
         Cache::forget('sp:suggest');
-        Cache::forget('vendor:usage-stats:spph-sp:v1');
+        Cache::forget('vendor:usage-stats:spph-sp:v2');
         Cache::forever('sp:index-stats:version', (string) Str::uuid());
     }
 

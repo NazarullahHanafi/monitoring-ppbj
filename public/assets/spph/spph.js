@@ -17,9 +17,7 @@
         const SATUAN_STORE_URL = SPPH_PAGE_CONFIG.satuanStoreUrl;
         const ADD_SATUAN_VALUE = '__add_satuan__';
         const VENDOR_USAGE_STATS_URL = SPPH_PAGE_CONFIG.vendorUsageStatsUrl;
-        let VENDOR_USAGE_STATS = {};
-        let vendorUsageStatsLoaded = false;
-        let vendorUsageStatsPromise = null;
+
 
         let lastId = Number(SPPH_PAGE_CONFIG.lastId || 0);
         let searchTimer = null;
@@ -395,10 +393,7 @@
             document.getElementById('nomorStatus').innerHTML = '';
             $('#vendorSelect').val(null).trigger('change');
             renderVendorUsagePanel('vendorSelect', 'vendorUsagePanel');
-            ensureVendorUsageStats().then(() => {
-                $('#vendorSelect').trigger('change.select2');
-                renderVendorUsagePanel('vendorSelect', 'vendorUsagePanel');
-            });
+            ensureVendorUsageStats();
             document.getElementById('newVendorBoxSpph')?.classList.add('hidden');
             resetNewVendorSpphForm();
 
@@ -455,10 +450,7 @@
             for (const key in rtSavedSel) if (key.startsWith('rt-e-')) delete rtSavedSel[key];
             for (const key in sizeDebounce) if (key.startsWith('rt-e-')) { clearTimeout(sizeDebounce[key]); delete sizeDebounce[key]; }
             openModal('editModal');
-            ensureVendorUsageStats().then(() => {
-                if (editLoadId !== editModalLoadSerial || String(document.getElementById('editId').value) !== String(id) || document.getElementById('editModal').classList.contains('hidden')) return;
-                $('#editVendor').trigger('change.select2'); renderVendorUsagePanel('editVendor', 'editVendorUsagePanel');
-            });
+            ensureVendorUsageStats();
             await Promise.all([loadEditItems(id, editLoadId), numbers.length ? loadEditPpbj(id, numbers, editLoadId, Boolean(linkedPpbjNumbers?.length)) : Promise.resolve()]);
         }
 
@@ -1190,41 +1182,73 @@
             return String(name || '').trim().toLowerCase().replace(/\s+/g, ' ');
         }
 
-        function ensureVendorUsageStats() {
-            if (vendorUsageStatsLoaded) {
-                return Promise.resolve(VENDOR_USAGE_STATS);
+        /* BEGIN SPPH VENDOR USAGE READ */
+        let VENDOR_USAGE_STATS = Object.create(null), vendorUsageState = 'idle', vendorUsageLoadedAt = 0;
+        let vendorUsageOperation = null, vendorUsageMessage = '';
+        function parseVendorUsageStats(data) {
+            const raw = data?.stats;
+            if (!raw || typeof raw !== 'object' || (Array.isArray(raw) && raw.length)) throw new Error('Invalid vendor statistics');
+            const parsed = Object.create(null);
+            for (const [key, row] of Object.entries(raw)) {
+                if (!row || typeof row !== 'object' || Array.isArray(row) || typeof row.name !== 'string' || !row.name.trim() || Array.from(row.name).length > 255
+                    || !['spph_count', 'sp_count', 'total_count'].every(field => Number.isSafeInteger(row[field]) && row[field] >= 0)
+                    || row.total_count !== row.spph_count + row.sp_count || !['baru', 'normal', 'cukup-sering', 'sering'].includes(row.status)
+                    || typeof row.hint !== 'string' || row.hint.length > 1000 || typeof row.last_used_label !== 'string' || row.last_used_label.length > 100
+                    || (row.last_document !== null && (typeof row.last_document !== 'string' || Array.from(row.last_document).length > 255))
+                    || (row.last_used_at !== null && (typeof row.last_used_at !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(row.last_used_at)))) throw new Error('Invalid vendor statistics');
+                parsed[key] = {name: row.name, spph_count: row.spph_count, sp_count: row.sp_count, total_count: row.total_count,
+                    last_used_at: row.last_used_at, last_used_label: row.last_used_label, last_document: row.last_document, status: row.status, hint: row.hint};
             }
-
-            if (!vendorUsageStatsPromise) {
-                vendorUsageStatsPromise = fetch(VENDOR_USAGE_STATS_URL, {
-                    headers: {
-                        'Accept': 'application/json',
-                        'X-Requested-With': 'XMLHttpRequest'
-                    },
-                    credentials: 'same-origin'
-                }).then(async response => {
-                    const data = await response.json().catch(() => ({}));
-                    if (!response.ok) {
-                        throw new Error(data.message || 'Statistik vendor gagal dimuat.');
-                    }
-
-                    VENDOR_USAGE_STATS = data.stats && typeof data.stats === 'object' ? data.stats : {};
-                    vendorUsageStatsLoaded = true;
-                    return VENDOR_USAGE_STATS;
-                }).catch(error => {
-                    console.warn('Statistik vendor belum tersedia:', error);
-                    return VENDOR_USAGE_STATS;
-                }).finally(() => {
-                    vendorUsageStatsPromise = null;
-                });
-            }
-
-            return vendorUsageStatsPromise;
+            return parsed;
         }
+        function refreshVendorUsageUi() {
+            if (document.hidden) return;
+            for (const [modal, select, panel] of [['addModal', 'vendorSelect', 'vendorUsagePanel'], ['editModal', 'editVendor', 'editVendorUsagePanel']]) {
+                if (document.getElementById(modal)?.classList.contains('hidden')) continue;
+                $('#' + select).trigger('change.select2'); renderVendorUsagePanel(select, panel);
+            }
+        }
+        function cancelVendorUsageRead() {
+            if (!vendorUsageOperation) return;
+            vendorUsageOperation = null; cancelSpphLookup('vendor-usage');
+            vendorUsageState = 'paused'; vendorUsageMessage = 'Riwayat belum selesai dimuat. Cek ulang saat Anda siap.';
+            refreshVendorUsageUi();
+        }
+        spphLookupCleanups.set('vendor-usage', cancelVendorUsageRead);
+        document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshVendorUsageUi(); });
+        function ensureVendorUsageStats() {
+            if (vendorUsageState === 'ready' && Date.now() - vendorUsageLoadedAt < 60000) return Promise.resolve(VENDOR_USAGE_STATS);
+            if (vendorUsageOperation) return vendorUsageOperation.promise;
+            if (document.hidden) return Promise.resolve(null);
+            const operation = {}; vendorUsageOperation = operation;
+            vendorUsageState = 'loading'; vendorUsageMessage = 'Memuat riwayat pemakaian vendor…'; refreshVendorUsageUi();
+            operation.promise = (async () => {
+                try {
+                    const data = await readSpphLookup('vendor-usage', VENDOR_USAGE_STATS_URL);
+                    if (vendorUsageOperation !== operation) return null;
+                    const parsed = parseVendorUsageStats(data);
+                    VENDOR_USAGE_STATS = parsed; vendorUsageLoadedAt = Date.now(); vendorUsageState = 'ready'; vendorUsageMessage = '';
+                    return parsed;
+                } catch (error) {
+                    if (vendorUsageOperation !== operation) return null;
+                    vendorUsageState = error.name === 'AbortError' ? 'paused' : 'error';
+                    vendorUsageMessage = [401, 419].includes(error.status) ? 'Sesi perlu diperbarui. Muat ulang halaman untuk melihat riwayat.'
+                        : error.status === 403 ? 'Akses riwayat vendor tidak tersedia untuk akun ini.'
+                        : error.status === 429 ? 'Pemeriksaan terlalu sering. Tunggu sebentar, lalu cek ulang.'
+                        : 'Riwayat belum tersedia. Jumlah pemakaian belum dapat dipastikan. Silakan cek ulang.';
+                    return null;
+                } finally {
+                    if (vendorUsageOperation === operation) { vendorUsageOperation = null; refreshVendorUsageUi(); }
+                }
+            })();
+            return operation.promise;
+        }
+        /* END SPPH VENDOR USAGE READ */
 
         function vendorUsageFor(name) {
             const key = vendorUsageKey(name);
-            return VENDOR_USAGE_STATS[key] || {
+            if (vendorUsageState !== 'ready') return null;
+            return (Object.hasOwn(VENDOR_USAGE_STATS, key) ? VENDOR_USAGE_STATS[key] : null) || {
                 name,
                 spph_count: 0,
                 sp_count: 0,
@@ -1239,7 +1263,7 @@
         function vendorUsageBadgeText(name) {
             if (!name || name === '__tambah__') return '';
             const usage = vendorUsageFor(name);
-            return `${Number(usage.total_count || 0)}x`;
+            return usage ? `${usage.total_count}x` : 'riwayat belum tersedia';
         }
 
         function vendorUsageOptionTemplate(item) {
@@ -1247,6 +1271,8 @@
             if (item.id === '__tambah__') return $('<span class="font-semibold text-emerald-600 dark:text-emerald-300">').text(item.text || 'Tambah Vendor Baru...');
 
             const usage = vendorUsageFor(item.id);
+            if (!usage) return $('<div>').append($('<div class="font-bold">').text(item.text || item.id))
+                .append($('<div class="text-[11px] text-slate-500 dark:text-slate-300">').text(vendorUsageState === 'loading' ? 'Riwayat sedang dimuat…' : 'Riwayat belum tersedia'));
             const $wrap = $('<div class="flex items-start justify-between gap-3">');
             const $left = $('<div class="min-w-0">')
                 .append($('<div class="font-bold text-slate-800 dark:text-slate-100 truncate">').text(item.text || item.id))
@@ -1275,6 +1301,13 @@
             }
 
             panel.classList.remove('hidden');
+            if (vendorUsageState !== 'ready') {
+                panel.textContent = '';
+                const status = document.createElement('div'); status.className = 'vendor-usage-card'; status.setAttribute('role', 'status');
+                status.textContent = vendorUsageMessage || 'Riwayat pemakaian belum dimuat.'; panel.appendChild(status);
+                if (vendorUsageState !== 'loading') appendSpphLookupRetry(status, () => ensureVendorUsageStats());
+                return;
+            }
             panel.innerHTML = vendors.map(vendor => {
                 const usage = vendorUsageFor(vendor);
                 const statusClass = `status-${usage.status || 'normal'}`;

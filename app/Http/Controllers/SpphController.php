@@ -159,8 +159,8 @@ class SpphController extends Controller
     public function vendorUsageStatsJson()
     {
         return response()->json([
-            'stats' => $this->vendorUsageStats(),
-        ])->header('Cache-Control', 'private, max-age=60');
+            'stats' => (object) $this->vendorUsageStats(),
+        ])->header('Cache-Control', 'private, no-store');
     }
 
     // =========================================================
@@ -541,7 +541,7 @@ class SpphController extends Controller
 
                 Cache::forget('spph:last_nomor');
                 Cache::forget('spph:suggest');
-                Cache::forget('vendor:usage-stats:spph-sp:v1');
+                Cache::forget('vendor:usage-stats:spph-sp:v2');
 
                 return $this->formSuccess($request, route('spph.index'), 'Data SPPH berhasil disimpan!');
             }, 3);
@@ -659,7 +659,7 @@ class SpphController extends Controller
 
                 Cache::forget('spph:last_nomor');
                 Cache::forget('spph:suggest');
-                Cache::forget('vendor:usage-stats:spph-sp:v1');
+                Cache::forget('vendor:usage-stats:spph-sp:v2');
 
                 return $this->formSuccess($request, route('spph.index'), 'Data SPPH berhasil diperbarui!');
             }, 3);
@@ -767,7 +767,7 @@ class SpphController extends Controller
             $spph->delete();
             Cache::forget('spph:last_nomor');
             Cache::forget('spph:suggest');
-            Cache::forget('vendor:usage-stats:spph-sp:v1');
+            Cache::forget('vendor:usage-stats:spph-sp:v2');
         }, 3);
 
         return response()->json([
@@ -840,7 +840,7 @@ class SpphController extends Controller
             ]);
             Cache::forget('spph:last_nomor');
             Cache::forget('spph:suggest');
-            Cache::forget('vendor:usage-stats:spph-sp:v1');
+            Cache::forget('vendor:usage-stats:spph-sp:v2');
         }, 3);
 
         return response()->json(['ok' => true, 'message' => 'SPPH berhasil dipulihkan beserta seluruh relasi PR-nya.']);
@@ -901,7 +901,7 @@ class SpphController extends Controller
             $spph->forceDelete();
             Cache::forget('spph:last_nomor');
             Cache::forget('spph:suggest');
-            Cache::forget('vendor:usage-stats:spph-sp:v1');
+            Cache::forget('vendor:usage-stats:spph-sp:v2');
         }, 3);
 
         return response()->json(['ok' => true, 'message' => 'SPPH telah dihapus permanen tanpa menghapus SP lanjutan.']);
@@ -2257,7 +2257,7 @@ XML;
 
     private function vendorUsageStats(): array
     {
-        return Cache::remember('vendor:usage-stats:spph-sp:v1', 3600, function () {
+        return Cache::remember('vendor:usage-stats:spph-sp:v2', 3600, function () {
             $stats = [];
 
             $ensure = function (string $vendor) use (&$stats): string {
@@ -2300,9 +2300,14 @@ XML;
                 ->chunkById(500, function ($spphs) use (&$stats, $ensure, $touchLastUsed) {
                     $spphs->each(function (Spph $spph) use (&$stats, $ensure, $touchLastUsed) {
                         $date = $spph->tanggal ? Carbon::parse($spph->tanggal) : null;
+                        $seen = [];
 
                         foreach ($spph->print_vendor_names as $vendor) {
                             $key = $ensure($vendor);
+                            if (isset($seen[$key])) {
+                                continue;
+                            }
+                            $seen[$key] = true;
                             $stats[$key]['spph_count']++;
                             $touchLastUsed($key, $date, $spph->nomor_spph);
                         }
