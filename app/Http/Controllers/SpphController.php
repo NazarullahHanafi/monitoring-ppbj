@@ -202,9 +202,14 @@ class SpphController extends Controller
     // =========================================================
     public function checkPpbjStatus(Request $request)
     {
+        $request->validate([
+            'ppbj_no' => ['bail', 'nullable', 'string', 'max:255'],
+            'ppbj_nos' => ['bail', 'nullable', 'array', 'max:20'],
+            'ppbj_nos.*' => ['bail', 'required', 'string', 'max:255'],
+        ]);
         $ppbjNumbers = collect($request->input('ppbj_nos', []))
             ->map(fn ($number) => trim((string) $number))
-            ->filter()
+            ->filter(fn ($number) => $number !== '')
             ->unique()
             ->take(20)
             ->values();
@@ -214,7 +219,7 @@ class SpphController extends Controller
         }
 
         if ($ppbjNumbers->isEmpty()) {
-            return response()->json(['status' => 'empty']);
+            return response()->json(['status' => 'empty'])->header('Cache-Control', 'private, no-store');
         }
 
         $positions = array_flip($ppbjNumbers->all());
@@ -226,11 +231,11 @@ class SpphController extends Controller
             ->values();
 
         if ($ppbjs->count() !== $ppbjNumbers->count()) {
-            return response()->json(['status' => 'manual', 'message' => 'Salah satu nomor PPBJ tidak ditemukan.']);
+            return response()->json(['status' => 'manual', 'message' => 'Salah satu nomor PPBJ tidak ditemukan.'])->header('Cache-Control', 'private, no-store');
         }
 
         if ($cancelled = $ppbjs->first(fn ($ppbj) => $ppbj->status === 'CANCELLED')) {
-            return response()->json(['status' => 'cancelled', 'message' => "PPBJ {$cancelled->ppbj_no} sudah di-CANCELLED!"]);
+            return response()->json(['status' => 'cancelled', 'message' => "PPBJ {$cancelled->ppbj_no} sudah di-CANCELLED!"])->header('Cache-Control', 'private, no-store');
         }
 
         $primary = $ppbjs->first();
@@ -262,7 +267,7 @@ class SpphController extends Controller
             'package_items' => $items->all(),
             'merged_description' => $mergedDescription,
             'primary_ppbj_no' => $primary->ppbj_no,
-        ]);
+        ])->header('Cache-Control', 'private, no-store');
     }
 
     // =========================================================
@@ -1039,7 +1044,7 @@ class SpphController extends Controller
                         ? \Carbon\Carbon::parse($item->tgl_pemenuhan)->format('Y-m-d')
                         : null,
                 ])
-        );
+        )->header('Cache-Control', 'private, no-store');
     }
 
     // =========================================================

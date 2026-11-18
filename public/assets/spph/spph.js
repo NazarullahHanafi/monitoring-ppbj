@@ -224,6 +224,11 @@
         }
 
         function setEditPrMode(mode, reset = false) {
+            if (mode !== currentEditPrMode || reset) {
+                cancelSpphLookup('edit-ppbj'); cancelSpphLookup('ppbj-select:editPpbjInfo');
+                document.getElementById('editForm').dataset.spphPpbjState = 'ready';
+                $('#editPpbjStatus').text('');
+            }
             const previousMode = currentEditPrMode;
             currentEditPrMode = mode;
             const $ppbjBox = $('#editPpbjModeBox');
@@ -273,15 +278,6 @@
             const $select = $(selector);
             const modePrefix = selector.includes('edit') ? 'edit' : 'add';
             let requestSerial = 0;
-            let activeRequest = null;
-
-            // ✅ FIX: Tambahkan flag untuk mencegah auto-clear saat loading
-            let isLoadingEdit = false;
-
-            // Expose method untuk set flag
-            if (selector.includes('edit')) {
-                window['_editPpbjLoading'] = false;
-            }
 
             $select.select2({
                 placeholder: $select.data('placeholder') || 'Pilih No. PPBJ...',
@@ -310,69 +306,49 @@
                 }
             });
 
-            $select.off('change.ppbjAutoFill').on('change.ppbjAutoFill', function () {
-                const requestId = ++requestSerial;
-                if (activeRequest && activeRequest.readyState !== 4) activeRequest.abort();
-                activeRequest = null;
-                const rawValue = $(this).val();
-                const selectedValues = Array.isArray(rawValue) ? rawValue.filter(Boolean) : (rawValue ? [rawValue] : []);
+            const requestKey = 'ppbj-select:' + infoBoxId;
+            const checkSelection = async () => {
+                const requestId = ++requestSerial, generation = editModalLoadSerial;
+                cancelSpphLookup(requestKey);
+                const selected = $select.val(), selectedValues = Array.isArray(selected) ? selected.filter(Boolean) : (selected ? [selected] : []);
                 const selectionKey = JSON.stringify(selectedValues);
-                const val = selectedValues[0] || '';
-                const $info = $('#' + infoBoxId);
-                const $status = $('#' + statusId);
-                const $content = $('#' + contentId);
-                const $deskripsi = deskripsiFieldId ? $('#' + deskripsiFieldId) : null;
-                const $badge = badgeContainerId ? $('#' + badgeContainerId) : null;
-
+                const $info = $('#' + infoBoxId), $status = $('#' + statusId), $content = $('#' + contentId);
+                const $deskripsi = deskripsiFieldId ? $('#' + deskripsiFieldId) : null, $badge = badgeContainerId ? $('#' + badgeContainerId) : null;
+                const form = document.getElementById('editForm');
+                const current = () => requestId === requestSerial && JSON.stringify($select.val() || []) === selectionKey
+                    && (modePrefix === 'edit' ? currentEditPrMode === 'ppbj' && generation === editModalLoadSerial : currentPrMode === 'ppbj')
+                    && !document.getElementById(modePrefix === 'edit' ? 'editModal' : 'addModal').classList.contains('hidden');
                 if (onChangeCb) onChangeCb(selectedValues);
-
-                if (!val) {
-                    $info.addClass('hidden');
-                    $status.html('');
-                    // ✅ FIX: JANGAN kosongkan deskripsi jika tidak ada nilai yang dipilih
-                    // Hanya kosongkan badge, biarkan deskripsi tetap
-                    if ($badge) $badge.addClass('hidden').html('');
+                if (modePrefix === 'edit') { cancelSpphLookup('edit-ppbj'); form.dataset.spphPpbjState = selectedValues.length ? 'loading' : 'ready'; }
+                if (!selectedValues.length) {
+                    $info.addClass('hidden'); $status.text(''); if ($badge) $badge.addClass('hidden').html('');
                     return;
                 }
-
-                $status.html('<span class="text-gray-400">🔄 Memeriksa...</span>');
-
-                activeRequest = $.get(PPBJ_CHECK_URL, { ppbj_no: val, ppbj_nos: selectedValues }).done(function (data) {
-                    const latestRawValue = $select.val();
-                    const latestValues = Array.isArray(latestRawValue) ? latestRawValue.filter(Boolean) : (latestRawValue ? [latestRawValue] : []);
-                    const isActiveMode = modePrefix === 'edit' ? currentEditPrMode === 'ppbj' : currentPrMode === 'ppbj';
-                    if (requestId !== requestSerial || JSON.stringify(latestValues) !== selectionKey || !isActiveMode) return;
-                    $status.html('');
-                    if (data.status === 'available') {
-                        $status.html(`<span class="text-green-600 dark:text-green-400">✅ ${escapedHtml(data.message || 'PPBJ tersedia — akan otomatis terhubung')}</span>`);
-                        $info.removeClass('hidden');
-                        $content.html(renderPpbjPackageSummary(data));
-                        // ✅ FIX: Hanya auto-fill deskripsi jika deskripsi KOSONG
-                        // Jangan timpa jika sudah ada isi (misal saat edit)
+                $status.text('Memeriksa referensi PR…'); $info.addClass('hidden');
+                try {
+                    const url = new URL(PPBJ_CHECK_URL, window.location.origin);
+                    selectedValues.forEach(number => url.searchParams.append('ppbj_nos[]', number));
+                    const data = await readSpphLookup(requestKey, url.href);
+                    if (!current()) return;
+                    if (!validSpphPpbjResponse(data)) throw new Error('Referensi PR belum lengkap. Silakan coba lagi.');
+                    if (['available', 'already_linked'].includes(data.status)) {
+                        $status.text((data.status === 'available' ? '✅ ' : '⚠️ ') + (data.message || 'Referensi PPBJ berhasil diperiksa.'));
+                        $info.removeClass('hidden'); $content.html(renderPpbjPackageSummary(data));
                         applyPpbjDescription($deskripsi, $badge, data);
-                    } else if (data.status === 'already_linked') {
-                        $status.html(`<span class="text-amber-600 dark:text-amber-400">⚠️ ${data.message}</span>`);
-                        $info.removeClass('hidden');
-                        $content.html(renderPpbjPackageSummary(data));
-                        // ✅ FIX: Sama, jangan timpa jika sudah ada isi
-                        applyPpbjDescription($deskripsi, $badge, data);
-                    } else if (data.status === 'cancelled') {
-                        $status.html(`<span class="text-red-600 dark:text-red-400">❌ ${data.message}</span>`);
-                        $info.addClass('hidden');
+                        if (modePrefix === 'edit') form.dataset.spphPpbjState = 'ready';
                     } else {
-                        $status.html('<span class="text-blue-600 dark:text-blue-400">📝 Nomor PR manual</span>');
-                        $info.addClass('hidden');
+                        $status.text('❌ ' + (data.message || 'Pilih referensi PPBJ yang tersedia.'));
                         if ($badge) $badge.addClass('hidden').html('');
+                        if (modePrefix === 'edit') form.dataset.spphPpbjState = 'error';
                     }
-                }).fail((xhr, status) => {
-                    if (status === 'abort' || requestId !== requestSerial) return;
-                    const latestRawValue = $select.val();
-                    const latestValues = Array.isArray(latestRawValue) ? latestRawValue.filter(Boolean) : (latestRawValue ? [latestRawValue] : []);
-                    if (JSON.stringify(latestValues) !== selectionKey) return;
-                    $status.html('<span class="text-red-600">❌ Gagal memeriksa</span>');
-                    $info.addClass('hidden');
-                });
-            });
+                } catch (error) {
+                    if (!current()) return;
+                    if (modePrefix === 'edit') form.dataset.spphPpbjState = 'error';
+                    $status.text('❌ ' + (error.name === 'AbortError' ? 'Pemeriksaan PR tertunda. Silakan cek ulang.' : error.message));
+                    $info.addClass('hidden'); appendSpphLookupRetry(document.getElementById(statusId), checkSelection);
+                }
+            };
+            $select.off('change.ppbjAutoFill').on('change.ppbjAutoFill', checkSelection);
         }
 
         // ════════════════════════════════════════════════════════════
@@ -442,112 +418,116 @@
         }
 
         async function openEditModal(id, nomor, tgl, nomorPr, vendorNames, deskripsi, pic, linkedPpbjNumbers = []) {
+            if (!Number.isSafeInteger(Number(id)) || Number(id) <= 0) return;
             cancelSpphFormLookups();
             const editLoadId = ++editModalLoadSerial;
-            ensureVendorUsageStats().then(() => {
-                if (editLoadId !== editModalLoadSerial || String(document.getElementById('editId').value) !== String(id)) return;
-                $('#editVendor').trigger('change.select2');
-                renderVendorUsagePanel('editVendor', 'editVendorUsagePanel');
-            });
-            document.getElementById('editForm').action = `/spph/${id}`;
-            window.ProcurementDetails?.reset(document.getElementById('editForm'));
+            const form = document.getElementById('editForm');
+            form.action = '/spph/' + id;
+            window.ProcurementDetails?.reset(form);
+            form.dataset.spphPpbjState = 'ready'; setSpphItemsState('loading');
             document.getElementById('editId').value = id;
             document.getElementById('editNomor').value = nomor;
             document.getElementById('editTanggal').value = tgl || '';
-
-            // ✅ FIX: Simpan deskripsi asli dari database
-            const originalDeskripsi = deskripsi || '';
-            document.getElementById('editDeskripsi').value = originalDeskripsi;
-
+            $('#editDeskripsi').val(deskripsi || '').removeData('ppbjAutoValue');
             $('#editDeskripsiBadge').addClass('hidden').html('');
-
-            $('#editPpbjSelect').val(null).trigger('change.select2');
+            $('#editPpbjInfo').addClass('hidden'); $('#editPpbjStatus').text('');
             $('#editNomorPrManual').val('');
-            $('#editPpbjInfo').addClass('hidden');
-            $('#editPpbjStatus').html('');
-            $('#editNomorPrFinal').val('');
-
-            const editPpbjNumbers = Array.isArray(linkedPpbjNumbers) && linkedPpbjNumbers.length
-                ? linkedPpbjNumbers.filter(Boolean)
-                : (nomorPr && nomorPr !== 'null' && nomorPr.trim() ? [nomorPr] : []);
-
-            if (editPpbjNumbers.length) {
-                nomorPr = editPpbjNumbers[0];
-                $.get(PPBJ_CHECK_URL, { ppbj_no: nomorPr, ppbj_nos: editPpbjNumbers }, function (data) {
-                    if (editLoadId !== editModalLoadSerial || String(document.getElementById('editId').value) !== String(id)) return;
-                    if (data.status === 'available' || data.status === 'already_linked') {
-                        setEditPrMode('ppbj');
-
-                        const o = new Option(nomorPr, nomorPr, true, true);
-                        o.is_ppbj = true;
-                        o.text = nomorPr + (data.uraian ? ' — ' + data.uraian.substring(0, 40) : '');
-                        o.uraian = data.uraian;
-                        $('#editPpbjSelect').append(o);
-                        editPpbjNumbers.slice(1).forEach(ppbjNo => {
-                            if (!$('#editPpbjSelect option[value="' + CSS.escape(ppbjNo) + '"]').length) {
-                                $('#editPpbjSelect').append(new Option(ppbjNo, ppbjNo, true, true));
-                            }
-                        });
-                        $('#editPpbjSelect').val(editPpbjNumbers).trigger('change.select2');
-                        updateEditPrFinalValue();
-
-                        // ✅ FIX: Gunakan uraian PPBJ jika ada, JIKA TIDAK gunakan deskripsi asli dari DB
-                        if (data.uraian) {
-                            $('#editDeskripsi').val(data.uraian);
-                            showDeskripsiBadge($('#editDeskripsiBadge'), data.uraian, data.status === 'already_linked');
-                        } else {
-                            // ✅ Jika PPBJ tidak punya uraian, PERTAHANKAN deskripsi dari database!
-                            $('#editDeskripsi').val(originalDeskripsi);
-                        }
-                    } else {
-                        setEditPrMode('manual');
-                        $('#editNomorPrManual').val(nomorPr);
-                        updateEditPrFinalValue();
-
-                        // ✅ Pastikan deskripsi tetap dari database
-                        $('#editDeskripsi').val(originalDeskripsi);
-                    }
-                }).fail(() => {
-                    if (editLoadId !== editModalLoadSerial || String(document.getElementById('editId').value) !== String(id)) return;
-                    setEditPrMode('manual');
-                    $('#editNomorPrManual').val(nomorPr);
-                    updateEditPrFinalValue();
-
-                    // ✅ Pastikan deskripsi tetap dari database saat gagal
-                    $('#editDeskripsi').val(originalDeskripsi);
-                });
-            } else {
-                setEditPrMode('ppbj');
-            }
-
-            const $ev = $('#editVendor'), $pc = $('#editPic');
-            const vendorsForEdit = Array.isArray(vendorNames) ? vendorNames : [vendorNames].filter(Boolean);
-            vendorsForEdit.forEach(vendor => {
-                if (vendor && $ev.find(`option[value="${vendor}"]`).length === 0) {
-                    $ev.append(new Option(vendor, vendor, true, true));
-                }
+            // Seed the stored selection without issuing autofill or clearing the stored description.
+            currentEditPrMode = 'ppbj'; setEditPrMode('ppbj');
+            const numbers = [...new Set(Array.isArray(linkedPpbjNumbers) && linkedPpbjNumbers.length
+                ? linkedPpbjNumbers.filter(Boolean).map(String)
+                : (nomorPr && nomorPr !== 'null' && String(nomorPr).trim() ? [String(nomorPr)] : []))];
+            const select = document.getElementById('editPpbjSelect');
+            numbers.forEach(number => {
+                if (!Array.from(select.options).some(option => option.value === number)) select.append(new Option(number, number, true, true));
             });
-            $ev.val(vendorsForEdit).trigger('change');
-            $pc.val(pic).trigger('change');
+            $('#editPpbjSelect').val(numbers).trigger('change.select2'); updateEditPrFinalValue();
+            const vendors = (Array.isArray(vendorNames) ? vendorNames : [vendorNames]).filter(Boolean);
+            const vendorSelect = document.getElementById('editVendor');
+            vendors.forEach(vendor => {
+                if (!Array.from(vendorSelect.options).some(option => option.value === vendor)) vendorSelect.append(new Option(vendor, vendor, true, true));
+            });
+            $('#editVendor').val(vendors).trigger('change'); $('#editPic').val(pic).trigger('change');
             document.getElementById('editNomor').dispatchEvent(new Event('input'));
             editIdx = 5000;
-            document.getElementById('editRows').innerHTML = '...';
-
-            for (let k in rtSavedSel) { if (k.startsWith('rt-e-')) delete rtSavedSel[k]; }
-            for (let k in sizeDebounce) { if (k.startsWith('rt-e-')) { clearTimeout(sizeDebounce[k]); delete sizeDebounce[k]; } }
-
+            for (const key in rtSavedSel) if (key.startsWith('rt-e-')) delete rtSavedSel[key];
+            for (const key in sizeDebounce) if (key.startsWith('rt-e-')) { clearTimeout(sizeDebounce[key]); delete sizeDebounce[key]; }
             openModal('editModal');
-            await loadEditItems(id);
+            ensureVendorUsageStats().then(() => {
+                if (editLoadId !== editModalLoadSerial || String(document.getElementById('editId').value) !== String(id) || document.getElementById('editModal').classList.contains('hidden')) return;
+                $('#editVendor').trigger('change.select2'); renderVendorUsagePanel('editVendor', 'editVendorUsagePanel');
+            });
+            await Promise.all([loadEditItems(id, editLoadId), numbers.length ? loadEditPpbj(id, numbers, editLoadId, Boolean(linkedPpbjNumbers?.length)) : Promise.resolve()]);
         }
 
-        async function loadEditItems(spphId) {
-            try {
-                const r = await fetch(`${ITEMS_BASE}${spphId}/items`); const data = await r.json();
-                if (String(document.getElementById('editId')?.value || '') !== String(spphId)) return;
-                document.getElementById('editRows').innerHTML = '';
-                (data.length ? data : [null]).forEach(item => addRow('edit', item));
-            } catch { document.getElementById('editRows').innerHTML = '<p class="text-red-500 text-xs p-2">Gagal memuat data barang.</p>'; }
+        /* BEGIN SPPH EDIT READS */
+        function setSpphItemsState(state) {
+            document.getElementById('editForm').dataset.spphItemsState = state;
+            const button = document.querySelector('#editModal .btn-add-row');
+            if (button) button.disabled = state !== 'ready';
         }
+        function ensureSpphEditDataReady(form) {
+            if (![form.dataset.spphItemsState, form.dataset.spphPpbjState].some(state => ['loading', 'error'].includes(state))) return true;
+            Swal.fire({ title: 'Data edit belum lengkap', text: 'Tunggu hingga rincian barang dan referensi PR selesai dimuat. Jika gagal, klik Cek ulang sebelum menyimpan.', icon: 'info' });
+            return false;
+        }
+        function validSpphPpbjResponse(data) {
+            return data && ['available', 'already_linked', 'manual', 'cancelled'].includes(data.status)
+                && (data.message == null || typeof data.message === 'string')
+                && (data.uraian == null || typeof data.uraian === 'string')
+                && (data.package_items == null || Array.isArray(data.package_items));
+        }
+        async function loadEditPpbj(id, numbers, loadId, knownLinked = false) {
+            const form = document.getElementById('editForm'), status = document.getElementById('editPpbjStatus');
+            const selection = JSON.stringify(numbers);
+            const current = () => loadId === editModalLoadSerial && String(document.getElementById('editId').value) === String(id)
+                && !document.getElementById('editModal').classList.contains('hidden') && currentEditPrMode === 'ppbj'
+                && JSON.stringify($('#editPpbjSelect').val() || []) === selection;
+            if (!current()) return;
+            form.dataset.spphPpbjState = 'loading'; status.textContent = 'Memeriksa referensi PR tersimpan…';
+            try {
+                const url = new URL(PPBJ_CHECK_URL, window.location.origin);
+                numbers.forEach(number => url.searchParams.append('ppbj_nos[]', number));
+                const data = await readSpphLookup('edit-ppbj', url.href);
+                if (!current()) return;
+                if (!validSpphPpbjResponse(data)) throw new Error('Referensi PR belum lengkap. Silakan coba lagi.');
+                if (data.status === 'cancelled' || (knownLinked && data.status === 'manual')) throw new Error('Referensi PPBJ tersimpan perlu diperiksa. Pilih referensi yang sesuai atau cek ulang.');
+                if (data.status === 'manual') {
+                    setEditPrMode('manual'); $('#editNomorPrManual').val(numbers[0]); updateEditPrFinalValue();
+                    status.textContent = 'Nomor PR tersimpan menggunakan mode manual.';
+                } else {
+                    status.textContent = 'Referensi PPBJ tersimpan berhasil dimuat.';
+                }
+                form.dataset.spphPpbjState = 'ready';
+            } catch (error) {
+                if (!current()) return;
+                form.dataset.spphPpbjState = 'error';
+                status.textContent = error.name === 'AbortError' ? 'Pemeriksaan PR tertunda. Silakan cek ulang.' : error.message;
+                appendSpphLookupRetry(status, () => loadEditPpbj(id, numbers, loadId, knownLinked));
+            }
+        }
+        async function loadEditItems(spphId, loadId = editModalLoadSerial) {
+            const rows = document.getElementById('editRows');
+            const current = () => loadId === editModalLoadSerial && String(document.getElementById('editId').value) === String(spphId)
+                && !document.getElementById('editModal').classList.contains('hidden');
+            if (!current()) return;
+            setSpphItemsState('loading'); rows.textContent = 'Memuat rincian barang…';
+            try {
+                const data = await readSpphLookup('edit-items', `/spph/${encodeURIComponent(spphId)}/items`);
+                if (!current()) return;
+                if (!Array.isArray(data) || !data.every(item => item && typeof item === 'object' && !Array.isArray(item)
+                    && typeof item.nama_barang === 'string'
+                    && ['satuan', 'jumlah', 'tgl_pemenuhan'].every(field => item[field] == null || ['string', 'number'].includes(typeof item[field])))) throw new Error('Rincian barang belum lengkap. Silakan coba lagi.');
+                rows.replaceChildren(); setSpphItemsState('ready');
+                (data.length ? data : [null]).forEach(item => addRow('edit', item));
+            } catch (error) {
+                if (!current()) return;
+                setSpphItemsState('error');
+                rows.textContent = error.name === 'AbortError' ? 'Pemuatan rincian tertunda. Silakan cek ulang.' : error.message;
+                appendSpphLookupRetry(rows, () => loadEditItems(spphId, loadId));
+            }
+        }
+        /* END SPPH EDIT READS */
 
         function secureDeletePad(value) {
             return String(Math.max(0, Math.floor(Number(value) || 0))).padStart(2, '0');
@@ -852,6 +832,7 @@
         }
 
         function addRow(mode, item = null) {
+            if (mode === 'edit' && ['loading', 'error'].includes(document.getElementById('editForm').dataset.spphItemsState)) { ensureSpphEditDataReady(document.getElementById('editForm')); return; }
             const wrapper = document.getElementById(mode === 'add' ? 'addRows' : 'editRows'), idx = mode === 'add' ? addIdx++ : editIdx++;
             const ns = mode === 'add' ? 'a' : 'e', rowNum = wrapper.querySelectorAll('.item-row').length + 1, edId = `rt-${ns}-${idx}`;
             const pemenuhanValue = item?.tgl_pemenuhan ? item.tgl_pemenuhan.substring(0, 10) : (rowNum > 1 ? getDefaultFulfillmentDate(mode) : '');
@@ -1578,6 +1559,7 @@
             }
 
             async function submitFormAjaxSpph(form, isEdit = false) {
+                if (isEdit && (form.dataset.spphItemsState || form.dataset.spphPpbjState) && !ensureSpphEditDataReady(form)) return;
                 if (form.dataset.procurementSaving === 'true') return;
                 form.dataset.procurementSaving = 'true';
                 const submitBtn = form.querySelector('button[type="submit"]');
@@ -1695,7 +1677,7 @@
                     const $status = $('#ppbjStatus');
                     if (manualVal && ($status.html().includes('ada di database PPBJ') || $status.html().includes('⚠️') || $status.html().includes('sudah terhubung'))) {
                         e.preventDefault();
-                        Swal.fire({ title: '⚠️ Nomor PR Tidak Valid untuk Manual!', html: `Nomor <strong class="font-mono">${manualVal}</strong> ada di database PPBJ.<br><br>Gunakan mode <strong>"📋 Pilih PPBJ"</strong>.`, icon: 'warning', confirmButtonColor: '#6366f1', confirmButtonText: 'Mengerti', background: document.documentElement.classList.contains('dark') ? '#1f2937' : '#fff', color: document.documentElement.classList.contains('dark') ? '#f3f4f6' : '#111827' });
+                        Swal.fire({ title: '⚠️ Nomor PR Tidak Valid untuk Manual!', html: `Nomor <strong class="font-mono">${escapedHtml(manualVal)}</strong> ada di database PPBJ.<br><br>Gunakan mode <strong>"📋 Pilih PPBJ"</strong>.`, icon: 'warning', confirmButtonColor: '#6366f1', confirmButtonText: 'Mengerti', background: document.documentElement.classList.contains('dark') ? '#1f2937' : '#fff', color: document.documentElement.classList.contains('dark') ? '#f3f4f6' : '#111827' });
                         return;
                     }
                 }

@@ -61,6 +61,18 @@ test('SP save cannot start preparation while an inline vendor write is pending',
     assert.equal(h.button.disabled, false);
 });
 
+test('SPPH edit cannot prepare or save while saved items or PR metadata are incomplete', async () => {
+    for (const field of ['spphItemsState', 'spphPpbjState']) for (const state of ['loading', 'error']) {
+        const h = setup('spph'); h.form.dataset[field] = state;
+        let guarded = 0;
+        h.context.ensureSpphEditDataReady = form => { assert.equal(form, h.form); guarded++; return false; };
+        h.window.ProcurementDetails.beforeSave = () => { throw new Error('Preparation must wait'); };
+        await h.save();
+        assert.equal(guarded, 1); assert.equal(h.requests.length, 0);
+        assert.equal(h.form.dataset.procurementSaving, undefined); assert.equal(h.button.disabled, false);
+    }
+});
+
 test('SP recovery only offers renumbering for an explicitly classified auto-number conflict', async () => {
     for (const data of [{conflict:true}, {conflict:true,conflict_type:'ppbj',renumber_allowed:true}, {conflict:true,conflict_type:'record',renumber_allowed:false}, {conflict:true,conflict_type:'sp_number',renumber_allowed:false}]) {
         const h=setup('sp',{ok:false,status:409,json:async()=>({...data,message:'Periksa referensi PR'})});

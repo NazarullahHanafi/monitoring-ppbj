@@ -27,8 +27,8 @@ class SpSpphFormStateTest extends TestCase
         $this->assertIsString($script);
         $this->assertStringContainsString('function setEditPrMode(mode, reset = false)', $script);
         $this->assertStringContainsString("$('#editPpbjSelect').prop('disabled', true).trigger('change.select2')", $script);
-        $this->assertStringContainsString('if (activeRequest && activeRequest.readyState !== 4) activeRequest.abort();', $script);
-        $this->assertStringContainsString('requestId !== requestSerial', $script);
+        $this->assertStringContainsString('const data = await readSpphLookup(requestKey, url.href);', $script);
+        $this->assertStringContainsString('requestId === requestSerial && JSON.stringify($select.val() || []) === selectionKey', $script);
         $this->assertStringContainsString("setPrMode('ppbj', true)", $script);
     }
 
