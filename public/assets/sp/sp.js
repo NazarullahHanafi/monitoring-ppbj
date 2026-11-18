@@ -1174,18 +1174,25 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
         }
 
         async function secureDeleteRecord(label, nomor, url) {
-            if (!await window.ProcurementReview.confirmDelete('sp', url)) return;
-            const csrf = document.querySelector('meta[name="csrf-token"]')?.content || SP_PAGE_CONFIG.csrfToken || '';
-            const searchInput = document.getElementById('searchInput');
-            secureDeleteSearchSnapshot = searchInput?.value || '';
-            clearTimeout(searchTimer);
-            document.getElementById('searchSpinner')?.classList.add('hidden');
-
-            let result;
+            const operation = window.ProcurementArchive?.begin('sp', url);
+            if (!operation) {
+                if (!window.ProcurementArchive) await Swal.fire({icon: 'warning', title: 'Formulir perlu diperbarui', text: 'Muat ulang halaman sebelum memindahkan dokumen.'});
+                return;
+            }
             try {
-                result = await Swal.fire({
-                icon: 'warning',
-                title: `Pindahkan ${label} ke Sampah?`,
+                if (!await window.ProcurementReview.confirmDelete('sp', url) || !operation.current) return;
+                const csrf = document.querySelector('meta[name="csrf-token"]')?.content || SP_PAGE_CONFIG.csrfToken || '';
+                const searchInput = document.getElementById('searchInput'), savedSearch = searchInput?.value || '';
+                secureDeleteSearchSnapshot = savedSearch;
+                clearTimeout(searchTimer); document.getElementById('searchSpinner')?.classList.add('hidden');
+                operation.onRelease(() => {
+                    clearTimeout(searchTimer);
+                    if (searchInput) searchInput.value = savedSearch;
+                    document.getElementById('searchSpinner')?.classList.add('hidden'); secureDeleteSearchSnapshot = null;
+                });
+                let closed = false;
+                const result = await Swal.fire({
+                    icon: 'warning', titleText: 'Pindahkan ' + label + ' ke Sampah?',
                 html: `
                     <div class="secure-delete-stack">
                     <div class="secure-delete-danger">
@@ -1214,13 +1221,9 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
                     <div class="secure-delete-lock-preview"><p>Jika salah 3 kali, aksi hapus dikunci 15 menit untuk menjaga keamanan data.</p></div>
                     </div>
                 `,
-                showCancelButton: true,
-                confirmButtonText: `Pindahkan ke Sampah`,
-                cancelButtonText: 'Batal',
-                confirmButtonColor: '#ef4444',
-                cancelButtonColor: '#64748b',
-                focusConfirm: false,
-                customClass: { popup: 'secure-delete-popup' },
+                    showCancelButton: true, confirmButtonText: 'Pindahkan ke Sampah', cancelButtonText: 'Batal',
+                    confirmButtonColor: '#ef4444', cancelButtonColor: '#64748b', focusConfirm: false,
+                    customClass: {popup: 'secure-delete-popup'}, showLoaderOnConfirm: true,
                 didOpen: () => {
                     const input = document.getElementById('secureDeletePassword');
                     const toggle = document.getElementById('secureDeleteToggle');
@@ -1230,66 +1233,32 @@ const SP_PAGE_CONFIG = window.SP_PAGE_CONFIG || {};
                         toggle.textContent = input.type === 'password' ? 'Lihat' : 'Sembunyikan';
                     });
                 },
-                preConfirm: async () => {
-                    const password = document.getElementById('secureDeletePassword')?.value || '';
-                    if (!password.trim()) {
-                        Swal.showValidationMessage('Password wajib diisi.');
-                        return false;
-                    }
-
-                    try {
-                        const response = await fetch(url, {
-                            method: 'DELETE',
-                            headers: {
-                                'X-CSRF-TOKEN': csrf,
-                                'Accept': 'application/json',
-                                'Content-Type': 'application/json'
-                            },
-                            body: JSON.stringify({ creator_password: password, archive_reason: document.getElementById('secureDeleteReason')?.value || '' })
-                        });
-                        const data = await response.json().catch(() => ({}));
-
-                        if (response.status === 429 && data.locked) {
-                            return { locked: true, data };
+                    willClose: () => { closed = true; operation.cancelRequest(); },
+                    allowOutsideClick: () => !operation.busy, allowEscapeKey: () => !operation.busy,
+                    preConfirm: async () => {
+                        if (!operation.current || operation.busy || operation.uncertain || closed) return false;
+                        const password = document.getElementById('secureDeletePassword')?.value || '';
+                        const reason = document.getElementById('secureDeleteReason')?.value || '';
+                        if (!password.trim() || Array.from(password).length > 255 || Array.from(reason).length > 500) {
+                            Swal.showValidationMessage(!password.trim() ? 'Password wajib diisi.' : 'Password maksimal 255 karakter dan alasan maksimal 500 karakter.'); return false;
                         }
-
-                        if (!response.ok) {
-                            Swal.showValidationMessage(data.message || `Gagal menghapus ${label}.`);
+                        try {
+                            const result = await operation.request({creator_password: password, archive_reason: reason}, csrf);
+                            return operation.current && !closed ? result : false;
+                        } catch (error) {
+                            if (operation.current && !closed) window.ProcurementArchive.feedback(error, 'sp');
                             return false;
                         }
-
-                        return { ok: true, data };
-                    } catch (error) {
-                        Swal.showValidationMessage(`Gagal menghapus ${label}. Periksa koneksi lalu coba lagi.`);
-                        return false;
                     }
-                },
-                    allowOutsideClick: () => !Swal.isLoading()
                 });
-            } finally {
-                clearTimeout(searchTimer);
-                if (searchInput) searchInput.value = secureDeleteSearchSnapshot || '';
-                document.getElementById('searchSpinner')?.classList.add('hidden');
-                secureDeleteSearchSnapshot = null;
-            }
-
-            if (!result?.isConfirmed || !result.value) return;
-
-            if (result.value.locked) {
-                showSecureDeleteLockCountdown(result.value.data.message, result.value.data.retry_after, result.value.data.locked_until);
-                return;
-            }
-
-            await Swal.fire({
-                icon: 'success',
-                title: `${label} dipindahkan`,
-                text: result.value.data?.message || `Data ${label} berhasil dipindahkan ke Sampah.`,
-                timer: 1400,
-                showConfirmButton: false,
-                customClass: { popup: 'secure-delete-popup' }
-            });
-            const destination = ORACLE_MODE_SP ? SP_ORACLE_URL : SP_AUTO_URL;
-            window.location.assign(destination || '/sp');
+                if (!operation.current || !result?.isConfirmed || !result.value) return;
+                if (result.value.locked) { showSecureDeleteLockCountdown(result.value.data.message, result.value.data.retry_after, result.value.data.locked_until); return; }
+                if (result.value.ok !== true) return;
+                await Swal.fire({icon: 'success', titleText: label + ' dipindahkan', text: result.value.data.message || 'Dokumen berhasil dipindahkan ke Tempat Sampah.', timer: 1400, showConfirmButton: false, customClass: {popup: 'secure-delete-popup'}});
+                if (!operation.current) return;
+                const destination = ORACLE_MODE_SP ? SP_ORACLE_URL : SP_AUTO_URL;
+                window.location.assign(destination || '/sp');
+            } finally { operation.release(); }
         }
 
         document.getElementById('spBody').addEventListener('click', function (e) {

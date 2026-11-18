@@ -1493,6 +1493,7 @@
     </script>
     <script src="{{ asset('assets/app/procurement-date-warning.js') }}?v={{ filemtime(public_path('assets/app/procurement-date-warning.js')) }}" defer></script>
     <script src="{{ asset('assets/app/procurement-review.js') }}?v={{ filemtime(public_path('assets/app/procurement-review.js')) }}" defer></script>
+    <script src="{{ asset('assets/app/procurement-archive.js') }}?v={{ filemtime(public_path('assets/app/procurement-archive.js')) }}" defer></script>
     <script src="{{ asset('assets/app/procurement-filters.js') }}?v={{ filemtime(public_path('assets/app/procurement-filters.js')) }}" defer></script>
     <script src="{{ asset('assets/spph/spph-print-master.js') }}?v={{ filemtime(public_path('assets/spph/spph-print-master.js')) }}" defer></script>
     <script src="{{ asset('assets/sp/sp-portfolio-maps.js') }}?v={{ filemtime(public_path('assets/sp/sp-portfolio-maps.js')) }}" defer></script>
