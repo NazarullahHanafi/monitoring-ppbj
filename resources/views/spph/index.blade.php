@@ -174,13 +174,13 @@
                     <button type="button" onclick="resetFilters()" title="Hapus semua filter dan tampilkan ulang daftar" class="quick-pill">🔄 Reset Filter</button>
                 </div>
                 <div class="flex items-center gap-2 flex-wrap sm:ml-auto">
-                    @if($search)<span
+                    @if($search !== '')<span
                         class="inline-flex items-center gap-1 text-xs bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 px-2 py-0.5 rounded-full font-mono">"{{ $search }}"
                     <button type="button" onclick="clearSearch()" aria-label="Hapus filter pencarian" title="Hapus filter pencarian" class="hover:text-red-500 ml-0.5">✕</button></span>@endif
-                    @if($pic)<span
+                    @if($pic !== '')<span
                         class="inline-flex items-center gap-1 text-xs bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 px-2 py-0.5 rounded-full">PIC:
                     {{ $pic }} <button type="button" onclick="clearPic()" aria-label="Hapus filter PIC" title="Hapus filter PIC" class="hover:text-red-500 ml-0.5">✕</button></span>@endif
-                    @if($vendorFilter)<span
+                    @if($vendorFilter !== '')<span
                         class="inline-flex items-center gap-1 text-xs bg-sky-100 dark:bg-sky-900/40 text-sky-700 dark:text-sky-300 px-2 py-0.5 rounded-full">Vendor:
                     {{ $vendorFilter }} <button type="button" onclick="clearVendor()" aria-label="Hapus filter vendor" title="Hapus filter vendor" class="hover:text-red-500 ml-0.5">x</button></span>@endif
                     @if($dari || $sampai)<span
@@ -1000,7 +1000,7 @@
             'vendorStoreUrl' => route('vendor.store'),
             'lastId' => $spphs->count() > 0 ? $spphs->max('id') : 0,
             'firstPage' => $spphs->onFirstPage(),
-            'hasFilter' => (bool) ((($search ?? '') !== '') || ($pic ?? '') || ($vendorFilter ?? '') || ($dari ?? '') || ($sampai ?? '')),
+            'hasFilter' => (($search ?? '') !== '') || (($pic ?? '') !== '') || (($vendorFilter ?? '') !== '') || (($dari ?? '') !== '') || (($sampai ?? '') !== ''),
             'csrfToken' => csrf_token(),
             'today' => now()->toDateString(),
         ];

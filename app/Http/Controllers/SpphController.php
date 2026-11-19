@@ -13,6 +13,7 @@ use App\Services\SpphPrintPolicy;
 use App\Support\CacheBatch;
 use App\Support\PrintPreviewFile;
 use App\Support\PrintSelectionInput;
+use App\Support\ProcurementDocumentFilters;
 use App\Support\ProcurementDocumentSearch;
 use App\Support\ProcurementExportRows;
 use App\Traits\HasPresence;
@@ -80,11 +81,12 @@ class SpphController extends Controller
     // =========================================================
     public function index(Request $request)
     {
+        $filters = ProcurementDocumentFilters::read($request, true);
         $search = ProcurementDocumentSearch::term($request);
-        $pic = $request->get('pic', '');
-        $vendorFilter = $request->get('vendor', '');
-        $dari = $request->get('dari', '');
-        $sampai = $request->get('sampai', '');
+        $pic = $filters['pic'];
+        $vendorFilter = $filters['vendor'];
+        $dari = $filters['dari'];
+        $sampai = $filters['sampai'];
 
         $referenceData = CacheBatch::remember([
             'vendors:active' => fn () => Vendor::active()
@@ -121,8 +123,8 @@ class SpphController extends Controller
             'pic',
             'sequence_number',
         ])->with(['ppbjs:id,ppbj_no'])
-            ->when($pic, fn ($q) => $q->where('pic', $pic))
-            ->when($vendorFilter, fn ($q) => $this->applyVendorFilter($q, $vendorFilter))
+            ->when($pic !== '', fn ($q) => $q->where('pic', $pic))
+            ->when($vendorFilter !== '', fn ($q) => $this->applyVendorFilter($q, $vendorFilter))
             ->when($dari, fn ($q) => $q->where('tanggal', '>=', $dari))
             ->when($sampai, fn ($q) => $q->where('tanggal', '<=', $sampai))
             ->orderBy('id', 'desc')
@@ -277,16 +279,16 @@ class SpphController extends Controller
     // =========================================================
     public function export(Request $request)
     {
-        $request->validate(['pic' => 'nullable|string|max:255', 'vendor' => 'nullable|string|max:255', 'dari' => 'nullable|date_format:Y-m-d', 'sampai' => 'nullable|date_format:Y-m-d']);
+        $filters = ProcurementDocumentFilters::read($request, true);
         $search = ProcurementDocumentSearch::term($request);
-        $pic = $request->get('pic', '');
-        $vendorFilter = $request->get('vendor', '');
-        $dari = $request->get('dari', '');
-        $sampai = $request->get('sampai', '');
+        $pic = $filters['pic'];
+        $vendorFilter = $filters['vendor'];
+        $dari = $filters['dari'];
+        $sampai = $filters['sampai'];
 
         $query = ProcurementDocumentSearch::apply(Spph::query(), $search)
-            ->when($pic, fn ($q) => $q->where('pic', $pic))
-            ->when($vendorFilter, fn ($q) => $this->applyVendorFilter($q, $vendorFilter))
+            ->when($pic !== '', fn ($q) => $q->where('pic', $pic))
+            ->when($vendorFilter !== '', fn ($q) => $this->applyVendorFilter($q, $vendorFilter))
             ->when($dari, fn ($q) => $q->where('tanggal', '>=', $dari))
             ->when($sampai, fn ($q) => $q->where('tanggal', '<=', $sampai))
             ->select(['id', 'nomor_spph', 'tanggal', 'nomor_pr', 'nama_vendor', 'vendor_names', 'deskripsi_pengadaan', 'pic']);

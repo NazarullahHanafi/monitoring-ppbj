@@ -12,6 +12,7 @@ use App\Models\User;
 use App\Models\Vendor;
 use App\Services\ProcurementJourneyService;
 use App\Support\CacheBatch;
+use App\Support\ProcurementDocumentFilters;
 use App\Support\ProcurementDocumentSearch;
 use App\Support\ProcurementExportRows;
 use App\Support\SpPaymentTerms;
@@ -153,10 +154,11 @@ class SpController extends Controller
     // =========================================================
     public function index(Request $request)
     {
+        $filters = ProcurementDocumentFilters::read($request);
         $search = ProcurementDocumentSearch::term($request);
-        $pic = $request->get('pic', '');
-        $dari = $request->get('dari', '');
-        $sampai = $request->get('sampai', '');
+        $pic = $filters['pic'];
+        $dari = $filters['dari'];
+        $sampai = $filters['sampai'];
         $oracleMode = $this->isOracleMode($request);
 
         $lastNumberCacheKey = 'sp:last_nomor:'.($oracleMode ? 'oracle' : 'auto');
@@ -182,14 +184,15 @@ class SpController extends Controller
         $jabatanScis = $referenceData['sp_master_options:jabatan_sci:active_names'];
 
         $baseQuery = ProcurementDocumentSearch::apply($this->spModeQuery($oracleMode), $search)
-            ->when($pic, fn ($q) => $q->where('pic', $pic))
+            ->when($pic !== '', fn ($q) => $q->where('pic', $pic))
             ->when($dari, fn ($q) => $q->where('tanggal_sp', '>=', $dari))
             ->when($sampai, fn ($q) => $q->where('tanggal_sp', '<=', $sampai));
 
         // Nilai ringkasan tidak perlu dihitung ulang pada setiap refresh halaman.
         // Versi cache diputar sesudah create/update/delete sehingga angka tetap akurat.
         $statsVersion = Cache::get('sp:index-stats:version', '1');
-        $statsCacheKey = 'sp:index-stats:goods-v2:'.sha1(json_encode([
+        // Do not reuse summaries cached before literal zero filters were applied.
+        $statsCacheKey = 'sp:index-stats:goods-v3:'.sha1(json_encode([
             'version' => $statsVersion,
             'mode' => $oracleMode ? 'oracle' : 'auto',
             'search' => mb_strtolower(trim((string) $search)),
@@ -746,15 +749,15 @@ class SpController extends Controller
     // =========================================================
     public function export(Request $request)
     {
-        $request->validate(['pic' => 'nullable|string|max:255', 'dari' => 'nullable|date_format:Y-m-d', 'sampai' => 'nullable|date_format:Y-m-d']);
+        $filters = ProcurementDocumentFilters::read($request);
         $search = ProcurementDocumentSearch::term($request);
-        $pic = $request->get('pic', '');
-        $dari = $request->get('dari', '');
-        $sampai = $request->get('sampai', '');
+        $pic = $filters['pic'];
+        $dari = $filters['dari'];
+        $sampai = $filters['sampai'];
         $oracleMode = $this->isOracleMode($request);
 
         $query = ProcurementDocumentSearch::apply($this->spModeQuery($oracleMode), $search)
-            ->when($pic, fn ($q) => $q->where('pic', $pic))
+            ->when($pic !== '', fn ($q) => $q->where('pic', $pic))
             ->when($dari, fn ($q) => $q->where('tanggal_sp', '>=', $dari))
             ->when($sampai, fn ($q) => $q->where('tanggal_sp', '<=', $sampai))
             ->select(['id', 'sequence_number', 'nomor_sp', 'tanggal_sp', 'nilai_sp', 'nomor_pr', 'nilai_pr', 'sph', 'tgl_sph', 'nama_vendor', 'deskripsi_pengadaan', 'pic']);

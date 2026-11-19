@@ -263,10 +263,10 @@
                     <button type="button" onclick="resetFilters()" title="Hapus semua filter dan tampilkan ulang daftar" class="quick-pill">🔄 Reset Filter</button>
                 </div>
                 <div class="flex items-center gap-2 flex-wrap sm:ml-auto">
-                    @if($search)<span
+                    @if($search !== '')<span
                         class="inline-flex items-center gap-1 text-xs bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 px-2 py-0.5 rounded-full font-mono">"{{ $search }}"
                     <button type="button" onclick="clearSearch()" aria-label="Hapus filter pencarian" title="Hapus filter pencarian" class="hover:text-red-500 ml-0.5">✕</button></span>@endif
-                    @if($pic)<span
+                    @if($pic !== '')<span
                         class="inline-flex items-center gap-1 text-xs bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 px-2 py-0.5 rounded-full">PIC:
                     {{ $pic }} <button type="button" onclick="clearPic()" aria-label="Hapus filter PIC" title="Hapus filter PIC" class="hover:text-red-500 ml-0.5">✕</button></span>@endif
                     @if($dari || $sampai)<span
@@ -1483,7 +1483,7 @@
             'oracleUrl' => $oracleSpUrl,
             'lastId' => max((int) data_get($stats, 'latest_id', 0), (int) ($sps->max('id') ?? 0)),
             'firstPage' => $sps->onFirstPage(),
-            'hasFilter' => (bool) ((($search ?? '') !== '') || ($pic ?? '') || ($dari ?? '') || ($sampai ?? '')),
+            'hasFilter' => (($search ?? '') !== '') || (($pic ?? '') !== '') || (($dari ?? '') !== '') || (($sampai ?? '') !== ''),
             'csrfToken' => csrf_token(),
             'today' => now()->toDateString(),
         ];
