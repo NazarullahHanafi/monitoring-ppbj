@@ -12,6 +12,9 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Psr\Http\Message\RequestInterface;
+use Psr\Http\Message\ResponseInterface;
+use Psr\Http\Message\UriInterface;
 use Symfony\Component\HttpFoundation\HeaderUtils;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
@@ -133,15 +136,24 @@ class ArchiveDownloadGatewayController extends Controller
 
     private function streamArchiveFile(Request $request, string $target, string $name, bool $download): Response
     {
+        $body = null;
+        $streaming = false;
         try {
             $upstreamRequest = Http::connectTimeout(5)
                 ->timeout(300)
                 ->withOptions([
                     'stream' => true,
+                    'read_timeout' => 15,
                     'allow_redirects' => [
                         'max' => 5,
                         'strict' => true,
                         'referer' => false,
+                        'on_redirect' => function (RequestInterface $request, ResponseInterface $response, UriInterface $uri): void {
+                            if (! $this->isTrustedStreamUrl((string) $uri)) {
+                                $response->getBody()->close();
+                                abort(502, 'Pengalihan unduhan arsip tidak valid.');
+                            }
+                        },
                     ],
                 ]);
 
@@ -156,32 +168,51 @@ class ArchiveDownloadGatewayController extends Controller
             }
 
             $upstream = $upstreamRequest->get($target);
+            $body = $upstream->toPsrResponse()->getBody();
+
+            if ($request->hasHeader('Range') && $upstream->status() === 416) {
+                $headers = $this->securityHeaders();
+                $contentRange = $upstream->header('Content-Range');
+                if (preg_match('/^bytes \*\/\d+$/', $contentRange) === 1) {
+                    $headers['Content-Range'] = $contentRange;
+                }
+
+                return response('', 416, $headers);
+            }
 
             abort_unless(in_array($upstream->status(), [200, 206], true), 502, 'File arsip belum dapat diunduh.');
 
-            $body = $upstream->toPsrResponse()->getBody();
             $fileName = $this->safeFileName($name);
             $headers = array_merge($this->securityHeaders(), [
                 'Content-Type' => $upstream->header('Content-Type') ?: 'application/octet-stream',
                 'Content-Disposition' => HeaderUtils::makeDisposition(
                     $download ? HeaderUtils::DISPOSITION_ATTACHMENT : HeaderUtils::DISPOSITION_INLINE,
                     $fileName,
-                    Str::ascii($fileName) ?: 'dokumen-arsip'
+                    str_replace('%', '_', Str::ascii($fileName)) ?: 'dokumen-arsip'
                 ),
                 'Accept-Ranges' => $upstream->header('Accept-Ranges') ?: 'bytes',
                 'X-Accel-Buffering' => 'no',
             ]);
 
             foreach (['Content-Length', 'Content-Range', 'ETag', 'Last-Modified'] as $header) {
-                if ($value = $upstream->header($header)) {
+                if (($value = $upstream->header($header)) !== '') {
                     $headers[$header] = $value;
                 }
             }
 
-            return response()->stream(function () use ($body): void {
+            $response = response()->stream(function () use ($body): void {
+                $bytesSent = 0;
                 try {
-                    while (! $body->eof()) {
-                        echo $body->read(262144);
+                    while (! connection_aborted() && ! $body->eof()) {
+                        $chunk = $body->read(262144);
+                        if ($chunk === '') {
+                            if ($body->eof()) {
+                                break;
+                            }
+                            throw new \RuntimeException('Archive stream stopped producing bytes.');
+                        }
+                        echo $chunk;
+                        $bytesSent += strlen($chunk);
 
                         if (ob_get_level() > 0) {
                             @ob_flush();
@@ -189,19 +220,32 @@ class ArchiveDownloadGatewayController extends Controller
 
                         flush();
                     }
+                } catch (Throwable $exception) {
+                    // Headers may already be sent: never append an error page to file bytes.
+                    Log::notice('Streaming file arsip terhenti.', [
+                        'exception_class' => $exception::class,
+                        'bytes_sent' => $bytesSent,
+                    ]);
                 } finally {
                     $body->close();
                 }
             }, $upstream->status(), $headers);
+            $streaming = true;
+
+            return $response;
         } catch (ConnectionException $exception) {
             Log::notice('Streaming file arsip gagal terhubung.', [
                 'target_host' => parse_url($target, PHP_URL_HOST),
-                'message' => $exception->getMessage(),
+                'exception_class' => $exception::class,
             ]);
         } catch (HttpExceptionInterface $exception) {
             throw $exception;
         } catch (Throwable $exception) {
-            report($exception);
+            Log::warning('Persiapan streaming file arsip gagal.', ['exception_class' => $exception::class]);
+        } finally {
+            if (! $streaming && $body !== null) {
+                $body->close();
+            }
         }
 
         abort(502, 'File arsip sedang tidak dapat diunduh. Silakan coba kembali.');
@@ -209,7 +253,7 @@ class ArchiveDownloadGatewayController extends Controller
 
     private function safeFileName(string $name): string
     {
-        $name = trim(str_replace(["\r", "\n", '\0'], '', $name));
+        $name = trim(preg_replace('/[\x00-\x1f\x7f]/', '', $name) ?? '');
         $name = preg_replace('~[\\\/:*?"<>|]+~u', '-', $name) ?: 'dokumen-arsip';
 
         return Str::limit($name, 180, '');
@@ -231,7 +275,9 @@ class ArchiveDownloadGatewayController extends Controller
         $targetParts = parse_url($target);
         $baseParts = parse_url($baseUrl);
 
-        if (! is_array($targetParts) || ! is_array($baseParts)) {
+        if (! is_array($targetParts) || ! is_array($baseParts)
+            || isset($targetParts['user']) || isset($targetParts['pass'])
+            || preg_match('/[\x00-\x20\x7f\\\\]/', $target)) {
             return false;
         }
 
@@ -241,13 +287,37 @@ class ArchiveDownloadGatewayController extends Controller
         $baseHost = strtolower((string) ($baseParts['host'] ?? ''));
         $targetPort = (int) ($targetParts['port'] ?? ($targetScheme === 'https' ? 443 : 80));
         $basePort = (int) ($baseParts['port'] ?? ($baseScheme === 'https' ? 443 : 80));
-        $path = (string) ($targetParts['path'] ?? '');
+        $path = rawurldecode((string) ($targetParts['path'] ?? ''));
 
-        return $targetScheme !== ''
+        return in_array($targetScheme, ['http', 'https'], true)
             && $targetScheme === $baseScheme
             && $targetHost !== ''
             && hash_equals($baseHost, $targetHost)
             && $targetPort === $basePort
-            && str_starts_with($path, '/api/archive/');
+            && str_starts_with($path, '/api/archive/')
+            && ! preg_match('~(?:^|/)\.\.?(?:/|$)|[\x00-\x1f\x7f\\\\]~', $path);
+    }
+
+    private function isTrustedStreamUrl(string $target): bool
+    {
+        if ($this->isTrustedArchiveUrl($target)) {
+            return true;
+        }
+        $parts = parse_url($target);
+        if (! is_array($parts) || ($parts['scheme'] ?? '') !== 'https'
+            || isset($parts['user']) || isset($parts['pass']) || ($parts['port'] ?? 443) !== 443
+            || preg_match('/[\x00-\x20\x7f\\\\]/', $target)) {
+            return false;
+        }
+        // Archive remote attachments redirect to OneDrive. Match the existing
+        // vendor download domain boundary, including a check at every later hop.
+        $host = strtolower($parts['host'] ?? '');
+        foreach (['sharepoint.com', '1drv.com', '1drv.ms', 'onedrive.com', 'live.com', 'microsoft.com'] as $domain) {
+            if ($host === $domain || str_ends_with($host, '.'.$domain)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }
