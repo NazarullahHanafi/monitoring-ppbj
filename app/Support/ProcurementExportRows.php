@@ -40,11 +40,14 @@ final class ProcurementExportRows
                 }
             }
             $rows = $page->limit(200)->get();
+            $count = $rows->count();
             foreach ($rows as $row) {
                 $lastId = $row->id;
                 $lastValue = $row->getAttribute($order);
                 yield $row;
             }
-        } while ($rows->count() === 200);
+            // Release this batch and its eager-loaded items before fetching another.
+            unset($rows, $row);
+        } while ($count === 200);
     }
 }

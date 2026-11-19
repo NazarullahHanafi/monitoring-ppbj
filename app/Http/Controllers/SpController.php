@@ -764,7 +764,7 @@ class SpController extends Controller
         $query = ProcurementExportRows::snapshot($query);
         $hasItems = (clone $query)->whereHas('items')->exists();
         if ($hasItems) {
-            $query->with('items');
+            $query->with('items:id,sp_id,urutan,nama_barang,satuan,jumlah,harga_satuan,subtotal');
         }
 
         $filename = 'SP_'.now()->format('Ymd_His').'.csv';
