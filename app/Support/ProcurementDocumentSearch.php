@@ -39,9 +39,13 @@ class ProcurementDocumentSearch
 
     public static function apply(Builder $query, string $term): Builder
     {
-        if ($term === '' || !config('procurement_search.enabled')) return self::native($query, $term);
+        if ($term === '' || ! config('procurement_search.enabled')) {
+            return self::native($query, $term);
+        }
         $model = $query->getModel();
-        if (!$model instanceof Sp && !$model instanceof Spph) throw new \InvalidArgumentException('Unsupported procurement document.');
+        if (! $model instanceof Sp && ! $model instanceof Spph) {
+            throw new \InvalidArgumentException('Unsupported procurement document.');
+        }
         $sp = $model instanceof Sp;
         $table = $model->getTable();
         $pivot = $sp ? 'sp_ppbj' : 'spph_ppbj';
@@ -53,6 +57,7 @@ class ProcurementDocumentSearch
             $combined->orWhereIn($table.'.id', DB::table($pivot)->select($key)->whereIn('ppbj_id', clone $matches));
             $combined->orWhereExists(fn ($pr) => $pr->selectRaw('1')->from('ppbj')->whereRaw($legacy)->whereIn('ppbj.id', clone $matches));
         });
+
         return $query;
     }
 
@@ -132,13 +137,22 @@ class ProcurementDocumentSearch
         if ($term === '' || $documents->isEmpty()) {
             return [];
         }
-        $rows = DB::table('procurement_detail_attachments')->where('kind', $sp ? 'sp' : 'spph')
-            ->whereIn('document_id', $documents->modelKeys())->whereNotNull('reviewed_at')
+        $table = $sp ? 'sps' : 'spphs';
+        // Pick the first matching reviewed file per displayed document before
+        // transferring its large text. The scalar LIMIT stays inside one query.
+        $firstMatch = DB::table('procurement_detail_attachments as candidate')
+            ->select('candidate.id')->where('candidate.kind', $sp ? 'sp' : 'spph')
+            ->whereColumn('candidate.document_id', $table.'.id')->whereNotNull('candidate.reviewed_at')
             ->where(function ($query) use ($term) {
                 foreach (self::tokens($term) as $token) {
-                    self::like($query, 'reviewed_text', self::pattern($token), 'or');
+                    self::like($query, 'candidate.reviewed_text', self::pattern($token), 'or');
                 }
-            })->select('id', 'document_id', 'original_name', 'reviewed_text')->orderBy('created_at')->get();
+            })->orderBy('candidate.created_at')->orderBy('candidate.id')->limit(1);
+        $matches = DB::table($table)->whereIn($table.'.id', $documents->modelKeys())
+            ->selectSub($firstMatch, 'matched_attachment_id');
+        $rows = DB::table('procurement_detail_attachments')->whereIn('id', $matches)
+            ->select('id', 'document_id', 'original_name', 'reviewed_text')
+            ->orderBy('created_at')->orderBy('id')->get();
         $hints = [];
         foreach ($rows as $row) {
             if (isset($hints[$row->document_id])) {
