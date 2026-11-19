@@ -1946,12 +1946,15 @@ class SpController extends Controller
      */
     private function invalidateSpIndexCaches(): void
     {
-        Cache::forget('sp:last_nomor');
-        Cache::forget('sp:last_nomor:auto');
-        Cache::forget('sp:last_nomor:oracle');
-        Cache::forget('sp:suggest');
-        Cache::forget('vendor:usage-stats:spph-sp:v2');
-        Cache::forever('sp:index-stats:version', (string) Str::uuid());
+        // Publish the new generation only when its database state is committed.
+        DB::afterCommit(static function (): void {
+            Cache::forget('sp:last_nomor');
+            Cache::forget('sp:last_nomor:auto');
+            Cache::forget('sp:last_nomor:oracle');
+            Cache::forget('sp:suggest');
+            Cache::forget('vendor:usage-stats:spph-sp:v2');
+            Cache::forever('sp:index-stats:version', (string) Str::uuid());
+        });
     }
 
     // =========================================================
