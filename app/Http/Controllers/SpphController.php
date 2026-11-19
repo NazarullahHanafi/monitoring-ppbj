@@ -493,6 +493,8 @@ class SpphController extends Controller
 
         try {
             return DB::transaction(function () use ($request, $nomorPr, $nomorPrType, $ppbjNumbers) {
+                // A transaction retry must read final vendors again.
+                $this->activeSpVendorCache = [];
                 $ppbjRecords = collect();
 
                 if ($nomorPrType === 'ppbj' && $ppbjNumbers) {
@@ -618,6 +620,7 @@ class SpphController extends Controller
 
         try {
             return DB::transaction(function () use ($request, $spph, $nomorPr, $nomorPrType, $oldVendorName, $oldVendorSummary, $ppbjNumbers) {
+                $this->activeSpVendorCache = [];
                 $newPpbjs = collect();
                 $oldDocumentNumber = $spph->nomor_spph;
                 $oldPpbjs = Ppbj::where('spph_rfq_1', $oldDocumentNumber)->lockForUpdate()->get();
@@ -923,6 +926,39 @@ class SpphController extends Controller
         ));
     }
 
+    /** Prime canonical references together; unusual database collation matches keep the scalar fallback. */
+    private function primeActiveSpVendors($records): void
+    {
+        $numbers = [];
+        foreach ($records as $ppbj) {
+            $number = trim((string) ($ppbj->awarding_sp ?? ''));
+            $key = mb_strtolower($number);
+            if ($number !== '' && ! array_key_exists($key, $this->activeSpVendorCache)) {
+                // Preserve the first spelling, as the existing per-request cache does.
+                $numbers[$key] ??= $number;
+            }
+        }
+
+        foreach (array_chunk($numbers, 100, true) as $chunk) {
+            $rows = Sp::query()->whereIn('nomor_sp', array_values($chunk))->get(['nomor_sp', 'nama_vendor']);
+            if ($rows->isEmpty()) {
+                // No reference matched under the database's own comparison rules.
+                foreach ($chunk as $key => $number) {
+                    $this->activeSpVendorCache[$key] = null;
+                }
+            } else {
+                foreach ($rows as $row) {
+                    $key = mb_strtolower(trim((string) $row->nomor_sp));
+                    if (array_key_exists($key, $chunk)) {
+                        $this->activeSpVendorCache[$key] = $row->nama_vendor;
+                    }
+                }
+                // Leave unmatched spellings unresolved: the database may equate
+                // accents or other characters that PHP case folding does not.
+            }
+        }
+    }
+
     private function activeSpVendorForPpbj(Ppbj $ppbj): ?string
     {
         $spNo = trim((string) ($ppbj->awarding_sp ?? ''));
@@ -1016,6 +1052,7 @@ class SpphController extends Controller
     {
         $pivot = [];
         $vendorName = $spph->vendor_summary;
+        $this->primeActiveSpVendors($records);
 
         foreach ($records->values() as $index => $ppbj) {
             $ppbj->spph_rfq_1 = $spph->nomor_spph;
