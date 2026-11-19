@@ -15,6 +15,7 @@ use App\Support\CacheBatch;
 use App\Support\ProcurementDocumentFilters;
 use App\Support\ProcurementDocumentSearch;
 use App\Support\ProcurementExportRows;
+use App\Support\ProcurementFormInput;
 use App\Support\SpPaymentTerms;
 use App\Traits\HasPresence;
 use Illuminate\Database\UniqueConstraintViolationException;
@@ -1099,6 +1100,7 @@ class SpController extends Controller
     // =========================================================
     public function store(Request $request)
     {
+        ProcurementFormInput::validate($request, true);
         $oracleMode = $this->isOracleMode($request);
 
         $this->normalizePpbjSelection($request);
@@ -1284,9 +1286,6 @@ class SpController extends Controller
     // =========================================================
     public function update(Request $request, Sp $sp)
     {
-        $oracleMode = $this->isOracleMode($request);
-        $this->normalizePpbjSelection($request);
-        $this->normalizeSpAllocationInput($request);
         $currentUser = $request->user();
         $currentUserId = $currentUser?->id;
 
@@ -1299,6 +1298,11 @@ class SpController extends Controller
 
             return back()->withErrors(['edit' => $message])->withInput();
         }
+
+        ProcurementFormInput::validate($request, true);
+        $oracleMode = $this->isOracleMode($request);
+        $this->normalizePpbjSelection($request);
+        $this->normalizeSpAllocationInput($request);
 
         $request->merge([
             'nomor_sp' => $oracleMode
@@ -1708,6 +1712,7 @@ class SpController extends Controller
     /** Read-only, bounded preparation shared by simulation and approval requests. */
     public function reviewData(Request $request, ?Sp $sp = null): array
     {
+        ProcurementFormInput::validate($request, true);
         $request->validate([
             'nomor_prs' => 'nullable|array|max:20',
             'nomor_prs.*' => 'required|string|max:100|distinct',

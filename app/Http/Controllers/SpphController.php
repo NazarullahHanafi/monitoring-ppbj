@@ -16,6 +16,7 @@ use App\Support\PrintSelectionInput;
 use App\Support\ProcurementDocumentFilters;
 use App\Support\ProcurementDocumentSearch;
 use App\Support\ProcurementExportRows;
+use App\Support\ProcurementFormInput;
 use App\Traits\HasPresence;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
@@ -456,6 +457,7 @@ class SpphController extends Controller
     // =========================================================
     public function store(Request $request)
     {
+        ProcurementFormInput::validate($request, false);
         $this->normalizePpbjSelection($request);
         $request->merge([
             'nomor_spph' => $this->normalizeNumberPeriod($request->input('nomor_spph', ''), $request->input('tanggal'), 'SPPH'),
@@ -578,6 +580,7 @@ class SpphController extends Controller
             return back()->withErrors(['edit' => $message])->withInput();
         }
 
+        ProcurementFormInput::validate($request, false);
         $this->normalizePpbjSelection($request);
         $request->merge([
             'nomor_spph' => $this->normalizeNumberPeriod($request->input('nomor_spph', ''), $request->input('tanggal'), 'SPPH'),
