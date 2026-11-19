@@ -61,11 +61,17 @@ class ProcurementDetailService
         $counts = DB::table('procurement_detail_attachments')->where('kind', $kind)->whereIn('document_id', $ids)
             ->select('document_id')->selectRaw('COUNT(*) AS total, SUM(CASE WHEN reviewed_at IS NOT NULL THEN 1 ELSE 0 END) AS ready')->groupBy('document_id')->get()->keyBy('document_id');
         $key = $kind.'_id';
-        $items = DB::table($kind.'_items')->whereIn($key, $ids)->where(function ($query) {
-            foreach (['lampir', 'menyusul', 'terpisah', 'attach'] as $word) {
-                $query->orWhereRaw('LOWER(nama_barang) LIKE ?', ['%'.$word.'%']);
-            }
-        })->select($key, 'nama_barang')->get()->groupBy($key);
+        // Explicit requirements and existing files already determine the status.
+        // Only legacy documents without either need item-text intent detection.
+        $itemIds = array_values(array_filter($ids, fn ($id) => ! $requirements->has($id) && ! $counts->has($id)));
+        $items = collect();
+        if ($itemIds) {
+            $items = DB::table($kind.'_items')->whereIn($key, $itemIds)->where(function ($query) {
+                foreach (['lampir', 'menyusul', 'terpisah', 'attach'] as $word) {
+                    $query->orWhereRaw('LOWER(nama_barang) LIKE ?', ['%'.$word.'%']);
+                }
+            })->select($key, 'nama_barang')->get()->groupBy($key);
+        }
         $result = [];
         foreach ($documents as $document) {
             $count = $counts->get($document->id);

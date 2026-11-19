@@ -168,7 +168,8 @@ class SpphController extends Controller
     // =========================================================
     public function getPpbjOptions(Request $request)
     {
-        $search = $request->get('q', '');
+        $request->validate(['q' => ['bail', 'nullable', 'string', 'max:160']]);
+        $search = trim((string) $request->query('q', ''));
 
         $query = DB::table('ppbj')
             ->select(['ppbj_no', 'uraian', 'portofolio', 'buyer', 'total_sebelum_ppn'])
@@ -177,10 +178,11 @@ class SpphController extends Controller
                 $q->whereNull('spph_rfq_1')->orWhere('spph_rfq_1', '');
             });
 
-        if ($search) {
-            $query->where(function ($q) use ($search) {
-                $q->where('ppbj_no', 'LIKE', "%{$search}%")
-                    ->orWhere('uraian', 'LIKE', "%{$search}%");
+        if ($search !== '') {
+            $pattern = '%'.str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $search).'%';
+            $query->where(function ($q) use ($pattern) {
+                $q->whereRaw("ppbj_no LIKE ? ESCAPE '!'", [$pattern])
+                    ->orWhereRaw("uraian LIKE ? ESCAPE '!'", [$pattern]);
             });
         }
 
@@ -194,7 +196,7 @@ class SpphController extends Controller
                 'total_sebelum_ppn' => $r->total_sebelum_ppn,
             ]);
 
-        return response()->json(['results' => $results]);
+        return response()->json(['results' => $results])->header('Cache-Control', 'private, no-store');
     }
 
     // =========================================================

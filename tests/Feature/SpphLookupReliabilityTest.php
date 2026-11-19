@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Http\Controllers\SpphController;
+use App\Models\Ppbj;
 use App\Models\Spph;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -69,6 +70,68 @@ class SpphLookupReliabilityTest extends TestCase
         $this->assertSame($cold->getData(true), $warm->getData(true));
         $this->assertCount(0, DB::getQueryLog());
         $this->assertSame('no-store, private', $warm->headers->get('Cache-Control'));
+    }
+
+    public function test_options_reject_malformed_search_before_sql(): void
+    {
+        foreach ([['q' => []], ['q' => ['nested']], ['q' => str_repeat('x', 161)]] as $input) {
+            $request = $this->request($input);
+            DB::enableQueryLog();
+            DB::flushQueryLog();
+            try {
+                app(SpphController::class)->getPpbjOptions($request);
+                $this->fail('Malformed option search accepted');
+            } catch (ValidationException) {
+                $this->assertCount(0, DB::getQueryLog());
+            } finally {
+                DB::disableQueryLog();
+            }
+        }
+    }
+
+    public function test_options_search_zero_and_special_characters_literally_and_keep_the_existing_dto(): void
+    {
+        foreach (['0', '%', '_', '!', '\\'] as $term) {
+            Ppbj::create(['ppbj_no' => 'PR/'.$term.'/literal', 'uraian' => 'Barang '.$term, 'status' => 'ACTIVE', 'buyer' => 'Buyer uji', 'total_sebelum_ppn' => 100]);
+        }
+        Ppbj::create(['ppbj_no' => 'PR/ordinary', 'uraian' => 'Barang biasa', 'status' => 'ACTIVE']);
+        foreach (['0', '%', '_', '!', '\\'] as $term) {
+            $response = app(SpphController::class)->getPpbjOptions($this->request(['q' => ' '.$term.' ']));
+            $rows = $response->getData(true)['results'];
+            $this->assertCount(1, $rows, $term);
+            $this->assertSame('PR/'.$term.'/literal', $rows[0]['id']);
+            $this->assertSame(['id', 'text', 'uraian', 'portofolio', 'buyer', 'total_sebelum_ppn'], array_keys($rows[0]));
+            $this->assertSame('no-store, private', $response->headers->get('Cache-Control'));
+        }
+    }
+
+    public function test_options_are_fresh_bounded_and_exclude_cancelled_or_already_linked_prs(): void
+    {
+        foreach (range(1, 55) as $i) {
+            Ppbj::create(['ppbj_no' => sprintf('PR/%03d', $i), 'status' => 'ACTIVE', 'spph_rfq_1' => $i % 2 ? null : '']);
+        }
+        Ppbj::create(['ppbj_no' => 'PR/cancelled', 'status' => 'CANCELLED']);
+        Ppbj::create(['ppbj_no' => 'PR/linked', 'status' => 'ACTIVE', 'spph_rfq_1' => 'SPPH/1']);
+        $controller = app(SpphController::class);
+        DB::enableQueryLog();
+        DB::flushQueryLog();
+        $response = $controller->getPpbjOptions($this->request(['q' => '  ']));
+        $queries = DB::getQueryLog();
+        DB::disableQueryLog();
+        $rows = $response->getData(true)['results'];
+        $this->assertCount(1, $queries);
+        $this->assertStringContainsString('limit 50', strtolower($queries[0]['query']));
+        $this->assertStringNotContainsString('select *', strtolower($queries[0]['query']));
+        $this->assertCount(50, $rows);
+        $this->assertSame('PR/055', $rows[0]['id']);
+        $this->assertSame('PR/006', $rows[49]['id']);
+        Ppbj::where('ppbj_no', 'PR/055')->update(['spph_rfq_1' => 'SPPH/new']);
+        $this->assertSame('PR/054', $controller->getPpbjOptions($this->request([]))->getData(true)['results'][0]['id']);
+        $this->getJson(route('spph.ppbj-options', ['q' => ['bad']]))->assertUnprocessable()->assertJsonValidationErrors('q');
+        $this->actingAs(User::factory()->create(['department' => 'umum', 'role' => 'viewer']))->getJson(route('spph.ppbj-options'))->assertOk();
+        $this->actingAs(User::factory()->create(['department' => 'operasional', 'role' => 'user']))->getJson(route('spph.ppbj-options'))->assertForbidden();
+        auth()->logout();
+        $this->getJson(route('spph.ppbj-options'))->assertUnauthorized();
     }
 
     public function test_selected_old_date_is_preserved_in_suggestions_and_normalization(): void
