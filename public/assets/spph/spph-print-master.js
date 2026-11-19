@@ -41,7 +41,7 @@
     }
     function validRow(row, type) {
         return Number.isSafeInteger(row?.id) && row.id > 0 && row.type === type && typeof row.nama === 'string' && row.nama.trim() !== ''
-            && [...row.nama].length <= 255 && typeof row.is_active === 'boolean' && /^[a-f0-9]{64}$/.test(row.version);
+            && [...row.nama].length <= 255 && typeof row.is_active === 'boolean' && typeof row.version === 'string' && /^[a-f0-9]{64}$/.test(row.version);
     }
     async function request(url, options = {}, signal) {
         const controller = new AbortController(), cancel = () => controller.abort();
@@ -59,9 +59,28 @@
         const controller = new AbortController(), cancel = () => controller.abort();
         signal?.addEventListener('abort', cancel, {once: true}); if (signal?.aborted) cancel();
         try {
-            const result = await Promise.all([['penandatangan_sci', signerId], ['jabatan_sci', titleId], ...(withFields ? [['bidang_pr', fieldId]] : [])]
-                .map(([type, id]) => list(type, {active_only: 1, per_page: 50, ...(id ? {include_id: id} : {})}, controller)));
-            return {names: result[0].options, titles: result[1].options, ...(withFields ? {fields: result[2].options} : {})};
+            const requested = [['penandatangan_sci', signerId], ['jabatan_sci', titleId], ...(withFields ? [['bidang_pr', fieldId]] : [])];
+            const params = new URLSearchParams();
+            for (const [type, id] of requested) {
+                params.append('types[]', type);
+                if (id === null || id === undefined || id === '') continue;
+                if (!['string', 'number'].includes(typeof id) || !/^[1-9]\d*$/.test(String(id)) || !Number.isSafeInteger(Number(id))) throw new Error('Pilihan master tersimpan belum valid. Buka ulang konfirmasi cetak.');
+                params.set(`include_ids[${type}]`, String(id));
+            }
+            const data = await json('/spph/print-masters?' + params, {}, controller);
+            const expected = requested.map(([type]) => type);
+            const complete = value => value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length === expected.length && expected.every(type => Object.hasOwn(value, type));
+            if (data.limit !== 50 || !complete(data.choices) || !complete(data.truncated)) throw new Error('Daftar master belum lengkap. Buka ulang konfirmasi cetak.');
+            const seen = new Set();
+            for (const type of expected) {
+                const rows = data.choices[type];
+                if (!Array.isArray(rows) || rows.length > 50 || typeof data.truncated[type] !== 'boolean' || data.truncated[type] && rows.length !== 50) throw new Error('Daftar master belum lengkap. Buka ulang konfirmasi cetak.');
+                for (const row of rows) {
+                    if (!validRow(row, type) || !row.is_active || seen.has(row.id)) throw new Error('Daftar master belum lengkap. Buka ulang konfirmasi cetak.');
+                    seen.add(row.id);
+                }
+            }
+            return {names: data.choices.penandatangan_sci, titles: data.choices.jabatan_sci, ...(withFields ? {fields: data.choices.bidang_pr} : {})};
         } finally {signal?.removeEventListener('abort', cancel); controller.abort();}
     }
     async function run(canManage, initialType, withFields, owner) {

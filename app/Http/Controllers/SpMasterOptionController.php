@@ -20,6 +20,10 @@ class SpMasterOptionController extends Controller
 {
     public function printOptions(Request $request)
     {
+        if ($request->query->has('types')) {
+            return $this->printChoices($request);
+        }
+
         $data = $request->validate(['type' => ['bail', 'required', 'string', Rule::in(['penandatangan_sci', 'jabatan_sci', 'bidang_pr'])],
             'q' => ['nullable', 'string', 'max:100'], 'active_only' => ['nullable', 'boolean'],
             'include_id' => ['nullable', 'integer', 'min:1'],
@@ -33,6 +37,57 @@ class SpMasterOptionController extends Controller
 
         return response()->json(['options' => $options->getCollection()->map(fn ($row) => $this->printOption($row)),
             'page' => $options->currentPage(), 'last_page' => $options->lastPage(), 'total' => $options->total()])
+            ->header('Cache-Control', 'private, no-store');
+    }
+
+    private function printChoices(Request $request)
+    {
+        $allowed = ['penandatangan_sci', 'jabatan_sci', 'bidang_pr'];
+        $data = $request->validate([
+            'types' => ['bail', 'required', 'array', 'list', 'min:1', 'max:3'],
+            'types.*' => ['bail', 'required', 'string', Rule::in($allowed), 'distinct:strict'],
+            'include_ids' => ['sometimes', 'array:penandatangan_sci,jabatan_sci,bidang_pr'],
+            'include_ids.*' => ['bail', 'required', 'integer', 'min:1', 'max:9007199254740991'],
+            'type' => ['prohibited'], 'q' => ['prohibited'], 'page' => ['prohibited'],
+            'per_page' => ['prohibited'], 'active_only' => ['prohibited'], 'include_id' => ['prohibited'],
+        ]);
+        foreach (array_keys($data['include_ids'] ?? []) as $type) {
+            if (! in_array($type, $data['types'], true)) {
+                throw ValidationException::withMessages(['include_ids' => 'Pilihan tersimpan harus sesuai jenis master yang diminta.']);
+            }
+        }
+
+        $columns = ['id', 'type', 'nama', 'is_active', 'updated_at'];
+        $query = null;
+        $priority = [];
+        $bindings = [];
+        foreach ($data['types'] as $index => $type) {
+            $id = $data['include_ids'][$type] ?? null;
+            // Each source has its own hard limit, including one row to detect truncation.
+            $source = SpMasterOption::active()->where('type', $type)->select($columns)
+                ->when($id !== null, fn ($builder) => $builder->orderByRaw('CASE WHEN id = ? THEN 0 ELSE 1 END', [$id]))
+                ->orderBy('nama')->orderBy('id')->limit(51);
+            $part = DB::query()->fromSub($source, 'print_choice_'.$index)->select($columns);
+            $query = $query === null ? $part : $query->unionAll($part);
+            if ($id !== null) {
+                $priority[] = '(type = ? AND id = ?)';
+                array_push($bindings, $type, $id);
+            }
+        }
+        $rows = DB::query()->fromSub($query, 'print_choices')->select($columns);
+        if ($priority) {
+            $rows->orderByRaw('CASE WHEN '.implode(' OR ', $priority).' THEN 0 ELSE 1 END', $bindings);
+        }
+        $grouped = SpMasterOption::hydrate($rows->orderBy('type')->orderBy('nama')->orderBy('id')->get()->map(fn ($row) => (array) $row)->all())->groupBy('type');
+        $choices = [];
+        $truncated = [];
+        foreach ($data['types'] as $type) {
+            $options = $grouped->get($type, collect());
+            $choices[$type] = $options->take(50)->map(fn ($row) => $this->printOption($row))->values()->all();
+            $truncated[$type] = $options->count() > 50;
+        }
+
+        return response()->json(['choices' => $choices, 'truncated' => $truncated, 'limit' => 50])
             ->header('Cache-Control', 'private, no-store');
     }
 

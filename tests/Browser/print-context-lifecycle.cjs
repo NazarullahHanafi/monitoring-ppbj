@@ -13,10 +13,14 @@ function context(module,extra={}){
   const page=await browser.newPage({viewport:mobile?{width:390,height:844}:{width:1440,height:1000}}),errors=[];
   page.on('pageerror',e=>errors.push(e.message));page.on('dialog',d=>{errors.push('Native dialog');d.dismiss();});
   await page.addInitScript(()=>{
-   window.net={calls:[],pending:[],timers:new Map(),serial:100000};const timeout=window.setTimeout.bind(window),clear=window.clearTimeout.bind(window);
+   window.net={calls:[],pending:[],timers:new Map(),serial:100000,choiceReads:0};const timeout=window.setTimeout.bind(window),clear=window.clearTimeout.bind(window);
    window.setTimeout=(fn,delay,...args)=>{if(delay===30000){const id=++net.serial;net.timers.set(id,fn);return id;}return timeout(fn,delay,...args);};window.clearTimeout=id=>{if(!net.timers.delete(id))clear(id);};
    window.fetch=(url,options)=>{
-    if(url.startsWith('/spph/print-masters?')){const type=new URL(url,location.origin).searchParams.get('type'),id=type==='penandatangan_sci'?1:type==='jabatan_sci'?2:5;return Promise.resolve({ok:true,status:200,headers:{get:()=> 'application/json'},json:async()=>({options:[{id,type,nama:type==='penandatangan_sci'?'Pejabat':type==='jabatan_sci'?'Kepala Bidang':'LAB',is_active:true,version:'a'.repeat(64)}],page:1,last_page:1,total:1})});}
+    if(url.startsWith('/spph/print-masters?')){
+     net.choiceReads++;const params=new URL(url,location.origin).searchParams,types=params.getAll('types[]');
+     const row=type=>({id:type==='penandatangan_sci'?1:type==='jabatan_sci'?2:5,type,nama:type==='penandatangan_sci'?'Pejabat':type==='jabatan_sci'?'Kepala Bidang':'LAB',is_active:true,version:'a'.repeat(64)});
+     return Promise.resolve({ok:true,status:200,headers:{get:()=> 'application/json'},json:async()=>types.length?{choices:Object.fromEntries(types.map(type=>[type,[row(type)]])),truncated:Object.fromEntries(types.map(type=>[type,false])),limit:50}:{options:[row(params.get('type'))],page:1,last_page:1,total:1}});
+    }
     const call={url,method:options.method||'GET',csrf:options.headers['X-CSRF-TOKEN'],aborted:false};options.signal.addEventListener('abort',()=>call.aborted=true);net.calls.push(call);return new Promise(resolve=>net.pending.push(resolve));
    };
    window.finish=(i,data,status=200,stalled=false)=>net.pending[i]({ok:status<400,status,headers:{get:()=> 'application/json'},json:()=>stalled?new Promise(()=>{}):Promise.resolve(data)});
@@ -26,6 +30,7 @@ function context(module,extra={}){
   await page.click('#'+module);await page.evaluate(p=>finish(0,p),context(module));await page.waitForFunction(()=>document.querySelector('.swal2-title')?.textContent.startsWith('Siapkan'));
   await page.waitForFunction(()=>!Swal.isLoading());
   await page.locator(module==='sp'?'[data-sp-print=manual]':'[data-sg-mode=manual]').click();const reason=module==='sp'?'#spPrintReason':'#sgReason';await page.fill(reason,'Pejabat sesuai penugasan');
+  await page.waitForFunction(()=>net.choiceReads===1);assert.equal(await page.evaluate(()=>net.choiceReads),1,'Choices are fetched in one bounded request when needed');
   await page.locator('.swal2-confirm').click();await page.waitForFunction(()=>net.calls.length===2);await page.keyboard.press('Escape');assert.equal(await page.locator('.swal2-popup').isVisible(),true);
   if(module==='sp')assert.equal(await page.evaluate(()=>net.calls[1].csrf),'synthetic-csrf');
   await page.evaluate(()=>finish(1,{errors:{penandatangan:['<img src=x onerror=bad()> Pilihan tidak aktif']}},422));await page.waitForFunction(()=>!document.querySelector('.swal2-confirm').disabled);

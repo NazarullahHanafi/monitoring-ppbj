@@ -6,6 +6,7 @@ const source = fs.readFileSync('public/assets/spph/spph-print-master.js', 'utf8'
 const tick = () => new Promise(setImmediate);
 const row = {id: 10, type: 'penandatangan_sci', nama: 'Pejabat Penguji', is_active: true, version: 'a'.repeat(64)};
 const page = (rows = [row], extra = {}) => ({options: rows, page: 1, last_page: 1, total: rows.length, ...extra});
+const batch = (fields = true) => ({limit: 50, choices: {penandatangan_sci: [row], jabatan_sci: [{...row, id: 20, type: 'jabatan_sci'}], ...(fields ? {bidang_pr: [{...row, id: 30, type: 'bidang_pr'}]} : {})}, truncated: {penandatangan_sci: false, jabatan_sci: false, ...(fields ? {bidang_pr: false} : {})}});
 function runtime() {
     const requests = [], updates = [], events = {}, nodes = {}, windowEvents = {}, timers = new Map(); let dialog, timer = 0;
     const decode = v => v.replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
@@ -37,21 +38,57 @@ async function opened(manage = true) {
     const h = runtime(); h.task = h.window.SPPHPrintMasters.open(manage); h.dialog().options.didOpen(); h.respond(0, page()); await tick(); return h;
 }
 
-test('choices are lazy, bounded, typed, selected-ID prioritized and abort siblings on failure', async () => {
+test('choices lazily read all requested types in one private request with selected IDs and bounded output', async () => {
     const h = runtime(); assert.equal(h.requests.length, 0);
     const task = h.window.SPPHPrintMasters.choices(10, 20, 30, true);
-    assert.equal(h.requests.length, 3); assert.match(h.requests[0].url, /active_only=1&per_page=50&include_id=10/);
-    h.respond(0, page()); h.respond(1, page([{...row, id: 20, type: 'jabatan_sci'}])); h.respond(2, page([{...row, id: 30, type: 'bidang_pr'}]));
+    assert.equal(h.requests.length, 1);
+    const params = new URLSearchParams(h.requests[0].url.split('?')[1]);
+    assert.deepEqual(params.getAll('types[]'), ['penandatangan_sci', 'jabatan_sci', 'bidang_pr']);
+    assert.equal(params.get('include_ids[penandatangan_sci]'), '10'); assert.equal(params.get('include_ids[jabatan_sci]'), '20'); assert.equal(params.get('include_ids[bidang_pr]'), '30');
+    assert.equal(h.requests[0].options.cache, 'no-store'); assert.equal(h.requests[0].options.credentials, 'same-origin');
+    h.respond(0, batch());
     const result = await task; assert.equal(result.fields[0].id, 30); assert.equal(h.timers.size, 0);
-    const failed = h.window.SPPHPrintMasters.choices(10, 20); h.respond(3, page([{...row, type: 'wrong'}]));
-    await assert.rejects(failed, /Daftar master/); assert.equal(h.requests[4].options.signal.aborted, true);
+    const next = h.window.SPPHPrintMasters.choices(null, '', null, false); h.respond(1, batch(false));
+    assert.equal(Object.hasOwn(await next, 'fields'), false); assert.equal(h.requests.length, 2);
 });
 
 test('choices honor caller cancellation including before any fetch', async () => {
     const h = runtime(), controller = new AbortController();
     const task = h.window.SPPHPrintMasters.choices(10, 20, null, false, controller.signal); controller.abort();
     await assert.rejects(task, {name: 'AbortError'}); assert.ok(h.requests.every(r => r.options.signal.aborted)); assert.equal(h.timers.size, 0);
-    const next = h.window.SPPHPrintMasters.choices(10, 20, null, false, controller.signal); await assert.rejects(next, {name: 'AbortError'}); assert.equal(h.requests.length, 2);
+    const next = h.window.SPPHPrintMasters.choices(10, 20, null, false, controller.signal); await assert.rejects(next, {name: 'AbortError'}); assert.equal(h.requests.length, 1);
+});
+
+test('a batched choice read rejects malformed, partial, inactive, duplicate or oversized results atomically without retries', async () => {
+    const invalid = [
+        data => delete data.choices.jabatan_sci, data => data.choices.extra = [], data => data.limit = '50', data => data.truncated = [],
+        data => data.truncated.jabatan_sci = 'false', data => data.truncated.jabatan_sci = true,
+        data => data.choices.jabatan_sci[0].is_active = false, data => data.choices.jabatan_sci[0].type = 'bidang_pr',
+        data => data.choices.jabatan_sci[0].id = 10, data => data.choices.jabatan_sci.push({...data.choices.jabatan_sci[0]}),
+        data => data.choices.penandatangan_sci[0].version = 'invalid',
+        data => data.choices.penandatangan_sci[0].version = ['a'.repeat(64)],
+        data => data.choices.jabatan_sci = Array.from({length: 51}, (_, i) => ({...row, id: 100 + i, type: 'jabatan_sci'})),
+    ];
+    for (const change of invalid) {
+        const h = runtime(), task = h.window.SPPHPrintMasters.choices(10, 20, 30, true), data = structuredClone(batch()); change(data); h.respond(0, data);
+        await assert.rejects(task, /Daftar master/); assert.equal(h.requests.length, 1); assert.equal(h.timers.size, 0);
+    }
+});
+
+test('invalid selected choice identifiers never reach the network', async () => {
+    for (const id of [0, -1, '01', [], {}, '1&types[]=unknown', Number.MAX_SAFE_INTEGER + 1]) {
+        const h = runtime(); await assert.rejects(h.window.SPPHPrintMasters.choices(id, null), /Pilihan master tersimpan/); assert.equal(h.requests.length, 0); assert.equal(h.timers.size, 0);
+    }
+});
+
+test('batched choice body timeout or cancellation settles the entire read and ignores late data', async () => {
+    for (const cancel of [false, true]) {
+        const h = runtime(), controller = new AbortController(), task = h.window.SPPHPrintMasters.choices(10, 20, 30, true, controller.signal);
+        let finish; h.respond(0, null, 200, {json: () => new Promise(resolve => finish = resolve)}); await tick();
+        if (cancel) controller.abort(); else [...h.timers.values()][0]();
+        await assert.rejects(task, cancel ? {name: 'AbortError'} : /koneksi lambat/);
+        finish(batch()); await tick(); assert.equal(h.requests.length, 1); assert.equal(h.requests[0].options.signal.aborted, true); assert.equal(h.timers.size, 0);
+    }
 });
 
 test('single popup promise, one explicit initial read and read-only controls remain escaped', async () => {
