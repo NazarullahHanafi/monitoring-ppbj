@@ -4,6 +4,18 @@
     const money = value => new Intl.NumberFormat('id-ID', {style:'currency',currency:'IDR',maximumFractionDigits:2}).format(Number(value || 0));
     let serial = 0, pending, activeConfirm;
     window.addEventListener('pagehide',()=>{serial++;pending?.abort();activeConfirm?.abort();});
+    function lockFields() {
+        const fields=Array.from(Swal.getHtmlContainer()?.querySelectorAll?.('select, textarea, input')||[],node=>[node,node.disabled]);
+        fields.forEach(([node])=>{node.disabled=true;});
+        return ()=>fields.forEach(([node,disabled])=>{node.disabled=disabled;});
+    }
+    function matchesSelection(data,params) {
+        const selected=data.selection,manual=params.get('signing_mode')==='manual';
+        return data.amount_valid&&(manual||data.ready)&&selected.signing_mode===params.get('signing_mode')
+            &&selected.penandatangan===(manual?params.get('penandatangan'):data.name)&&selected.jabatan===(manual?params.get('jabatan'):data.title)
+            &&(manual?['signer_id','title_id','manual_reason'].every(key=>String(selected[key])===params.get(key))
+                :['signer_id','title_id','manual_reason'].every(key=>!Object.hasOwn(selected,key)));
+    }
     function checked(data, selection=false){
         if(!data||typeof data.number!=='string'||typeof data.fingerprint!=='string'||!data.fingerprint||data.fingerprint.length>64
             ||typeof data.ready!=='boolean'||typeof data.amount_valid!=='boolean'||typeof data.can_manage!=='boolean'
@@ -112,21 +124,24 @@
                         if(!signer||!title||state.reason.trim().length<10){Swal.showValidationMessage('Pilih nama dan jabatan aktif, lalu tulis alasan manual minimal 10 karakter.');return false;}
                         params.set('signer_id',signer.id);params.set('title_id',title.id);params.set('manual_reason',state.reason.trim());params.set('penandatangan',signer.nama);params.set('jabatan',title.nama);
                     }
+                    const unlock=lockFields();
                     try {
                         submitting=true;confirmRequest=new AbortController();activeConfirm=confirmRequest;
                         const latest=await getContext(match[1],confirmRequest.signal,params.toString());
                         if(closed||current!==serial || !Swal.isVisible()) return false;
+                        if(latest.number!==context.number)throw new Error('Pilihan cetak belum terkonfirmasi. Buka ulang konfirmasi sebelum melanjutkan.');
                         if(latest.fingerprint!==context.fingerprint) {
                             context=latest;
                             draw();
                             Swal.showValidationMessage('Data nilai/master berubah dan sudah diperbarui di atas. Periksa kembali sebelum melanjutkan.');
                             return false;
                         }
+                        if(!matchesSelection(latest,params))throw new Error('Pilihan cetak belum terkonfirmasi sesuai isian Anda. Periksa kembali sebelum melanjutkan.');
                         for(const key of ['signing_mode','signer_id','title_id','manual_reason','penandatangan','jabatan','print_basis'])url.searchParams.delete(key);
                         for(const [key,value] of Object.entries(latest.selection))url.searchParams.set(key,value);
                         return url.href;
                     } catch(error) { if(error.name!=='AbortError'&&!closed&&current===serial&&Swal.isVisible()) Swal.showValidationMessage(escape(error.message));return false; }
-                    finally{submitting=false;if(activeConfirm===confirmRequest)activeConfirm=null;}
+                    finally{unlock();submitting=false;if(activeConfirm===confirmRequest)activeConfirm=null;}
                 }});
             if(current===serial && result.isConfirmed && result.value) window.location.assign(result.value);
         } catch(error) {

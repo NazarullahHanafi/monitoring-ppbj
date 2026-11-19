@@ -11,6 +11,19 @@
     };
     let serial=0, pending, activeConfirm;
     window.addEventListener('pagehide',()=>{serial++;pending?.abort();activeConfirm?.abort();});
+    function lockFields() {
+        const fields=Array.from(Swal.getHtmlContainer()?.querySelectorAll?.('select, textarea, input')||[],node=>[node,node.disabled]);
+        fields.forEach(([node])=>{node.disabled=true;});
+        return ()=>fields.forEach(([node,disabled])=>{node.disabled=disabled;});
+    }
+    function matchesSelection(data,params) {
+        const selected=data.selection,manual=params.get('signing_mode')==='manual';
+        return data.amount_valid&&(manual||data.ready)&&selected.signing_mode===params.get('signing_mode')
+            &&String(selected.field_id)===params.get('field_id')&&(selected.field_reason??'')===params.get('field_reason').trim()
+            &&selected.penandatangan===(manual?params.get('penandatangan'):data.name)&&selected.jabatan===(manual?params.get('jabatan'):data.title)
+            &&(manual?['signer_id','title_id','manual_reason'].every(key=>String(selected[key])===params.get(key))
+                :['signer_id','title_id','manual_reason'].every(key=>!Object.hasOwn(selected,key)));
+    }
     function checked(data, selection = false) {
         if(!data||typeof data.number!=='string'||typeof data.fingerprint!=='string'||!data.fingerprint||data.fingerprint.length>64
             ||typeof data.ready!=='boolean'||typeof data.amount_valid!=='boolean'||typeof data.can_manage!=='boolean'
@@ -99,22 +112,27 @@
                 }),
                 preConfirm:async()=>{
                     if(closed||submitting)return false;
-                    capture();const params=new URLSearchParams({signing_mode:s.mode,field_id:s.fieldId||'',field_reason:s.fieldReason,payment_mode:s.paymentMode});
+                    capture();const params=new URLSearchParams({signing_mode:s.mode,field_id:s.fieldId||'',field_reason:s.fieldReason.trim(),payment_mode:s.paymentMode});
                     if(!s.fieldId){Swal.showValidationMessage('Pilih bidang pemilik PR terlebih dahulu.');return false;}
                     if(s.fieldManual&&!canLearn(data)&&s.fieldReason.trim().length<10){Swal.showValidationMessage('Tuliskan alasan pilihan bidang minimal 10 karakter.');return false;}
                     params.set('print_basis',data.fingerprint);
                     if(canLearn(data))params.set('learn_portfolio','1');
                     if(s.mode==='manual'){
-                        if(!s.signerId||!s.titleId||s.reason.trim().length<10){Swal.showValidationMessage('Pilih nama, jabatan, dan alasan manual minimal 10 karakter.');return false;}
-                        params.set('signer_id',s.signerId);params.set('title_id',s.titleId);params.set('manual_reason',s.reason.trim());
+                        const signer=s.names.find(row=>Number(row.id)===Number(s.signerId)),title=s.titles.find(row=>Number(row.id)===Number(s.titleId));
+                        if(!signer||!title||s.reason.trim().length<10){Swal.showValidationMessage('Pilih nama, jabatan, dan alasan manual minimal 10 karakter.');return false;}
+                        params.set('signer_id',signer.id);params.set('title_id',title.id);params.set('manual_reason',s.reason.trim());params.set('penandatangan',signer.nama);params.set('jabatan',title.nama);
                     }
+                    const unlock=lockFields();
                     try{
                         submitting=true;confirmRequest=new AbortController();activeConfirm=confirmRequest;
                         const latest=data.can_manage?await confirmSelection(match[1],confirmRequest.signal,params):await context(match[1],confirmRequest.signal,params.toString());
                         if(closed||current!==serial||!Swal.isVisible())return false;
-                        if(latest.fingerprint!==data.fingerprint&&!latest.mapping_saved){data=latest;Swal.update({html:render(data,s),showConfirmButton:ready()});Swal.showValidationMessage('Data berubah. Periksa rekomendasi terbaru sebelum melanjutkan.');return false;}
-                        if((latest.selection.payment_mode??'full')!==s.paymentMode){Swal.showValidationMessage('Pilihan pembayaran belum terkonfirmasi. Muat ulang halaman dan pilih kembali skema pembayaran.');return false;}
-                        latest.selection.payment_mode=s.paymentMode;
+                        if(latest.number!==data.number||(latest.mapping_saved!==undefined&&typeof latest.mapping_saved!=='boolean')
+                            ||(latest.mapping_saved===true&&params.get('learn_portfolio')!=='1'))throw new Error('Pilihan cetak belum terkonfirmasi. Buka ulang konfirmasi sebelum melanjutkan.');
+                        if(latest.fingerprint!==data.fingerprint&&latest.mapping_saved!==true){data=latest;Swal.update({html:render(data,s),showConfirmButton:ready()});Swal.showValidationMessage('Data berubah. Periksa rekomendasi terbaru sebelum melanjutkan.');return false;}
+                        if(!matchesSelection(latest,params))throw new Error('Pilihan cetak belum terkonfirmasi sesuai isian Anda. Periksa kembali sebelum melanjutkan.');
+                        if((latest.selection.payment_mode??'full')!==params.get('payment_mode')){Swal.showValidationMessage('Pilihan pembayaran belum terkonfirmasi. Muat ulang halaman dan pilih kembali skema pembayaran.');return false;}
+                        latest.selection.payment_mode=params.get('payment_mode');
                         url.search='';for(const [key,value]of Object.entries(latest.selection))url.searchParams.set(key,value);return url.href;
                     }catch(error){
                         if(error.name==='AbortError')return false;
@@ -126,7 +144,7 @@
                             }catch(refreshError){if(refreshError.name==='AbortError')return false;}
                         }
                         if(!closed&&current===serial&&Swal.isVisible())Swal.showValidationMessage(escape(error.message));return false;
-                    }finally{submitting=false;if(activeConfirm===confirmRequest)activeConfirm=null;}
+                    }finally{unlock();submitting=false;if(activeConfirm===confirmRequest)activeConfirm=null;}
                 }});
             if(current===serial&&result.isConfirmed&&result.value)window.location.assign(result.value);
         }catch(error){if(error.name!=='AbortError'&&current===serial)Swal.fire({icon:'warning',title:'Cetak belum dapat dilanjutkan',text:error.message,...theme()});}

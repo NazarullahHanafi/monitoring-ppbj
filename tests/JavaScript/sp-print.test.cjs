@@ -34,7 +34,7 @@ test('SP confirm validates context again and uses server-selected values in same
 test('unmapped or overridden owner requires an explanation before a server request',async()=>{
     const h=runtime();const task=h.window.openSpPrintPreview('/sp/12/cetak-preview');h.respond(0,data({owner_field_id:null,owner_field_name:null}));await tick();
     const d=h.dialogs[1];h.nodes.spPrintField={value:'6'};assert.equal(await d.options.preConfirm(),false);assert.equal(h.requests.length,1);
-    h.nodes.spPrintFieldReason={value:'Bidang penanggung jawab sesuai konfirmasi'};const confirm=d.options.preConfirm();h.respond(1,data({owner_field_id:null,owner_field_name:null}));await confirm;d.resolve({isDismissed:true});await task;
+    h.nodes.spPrintFieldReason={value:'Bidang penanggung jawab sesuai konfirmasi'};const confirm=d.options.preConfirm(),response=data({owner_field_id:null,owner_field_name:null});response.selection.field_id=6;response.selection.field_reason=h.nodes.spPrintFieldReason.value;h.respond(1,response);assert.equal(typeof await confirm,'string');d.resolve({isDismissed:true});await task;
 });
 test('manual SCI needs active IDs and a sufficient reason; backend rejection remains visible',async()=>{
     const h=runtime();const task=h.window.openSpPrintPreview('/sp/12/cetak-preview');h.respond(0,data());await tick();const d=h.dialogs[1];d.options.didOpen();
@@ -115,7 +115,7 @@ test('payment choices update the wording, survive signer switches, and use the c
     await h.events.click({target:{closest:()=>({dataset:{spPrint:'auto'}})}});
     assert.match(h.updates.at(-1).html,/data-sp-payment="realization" aria-pressed="true"/);assert.match(h.updates.at(-1).html,/Catatan bidang tetap tersimpan/);
     const confirm=d.options.preConfirm();assert.equal(JSON.parse(h.requests[1].options.body).payment_mode,'realization');
-    const response=data();response.selection.payment_mode='realization';h.respond(1,response);const url=await confirm;assert.equal(new URL(url).searchParams.get('payment_mode'),'realization');
+    const response=data();response.selection.payment_mode='realization';response.selection.field_reason='Catatan bidang tetap tersimpan';h.respond(1,response);const url=await confirm;assert.equal(new URL(url).searchParams.get('payment_mode'),'realization');
     d.resolve({isConfirmed:true,value:url});await task;assert.equal(h.navigations.length,1);
 });
 

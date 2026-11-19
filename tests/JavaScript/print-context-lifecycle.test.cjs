@@ -10,9 +10,9 @@ function context(module,extra={}){
     result.selection=extra.selection||{signing_mode:'auto',penandatangan:result.name,jabatan:result.title,print_basis:result.fingerprint,...(module==='sp'?{field_id:5,field_reason:''}:{})};return result;
 }
 function runtime(module){
-    const requests=[],dialogs=[],messages=[],updates=[],navigations=[],nodes={},windowEvents={},timers=new Map();let timer=0,csrf=true;
+    const requests=[],dialogs=[],messages=[],updates=[],navigations=[],nodes={},windowEvents={},events={},timers=new Map();let timer=0,csrf=true;
     const Swal={fire:options=>new Promise(resolve=>dialogs.push({options,resolve})),showLoading(){},isLoading:()=>false,isVisible:()=>true,
-        showValidationMessage:m=>messages.push(m),update:d=>updates.push(d),getHtmlContainer:()=>({addEventListener(){}}),close(){const d=dialogs.at(-1);d.options.willClose?.();d.resolve({isDismissed:true});}};
+        showValidationMessage:m=>messages.push(m),update:d=>updates.push(d),getHtmlContainer:()=>({addEventListener:(type,fn)=>events[type]=fn,querySelectorAll:()=>Object.values(nodes)}),close(){const d=dialogs.at(-1);d.options.willClose?.();d.resolve({isDismissed:true});}};
     const window={addEventListener:(type,handler)=>(windowEvents[type]??=[]).push(handler),alert(){},location:{assign:u=>navigations.push(u)}};
     const sandbox=vm.createContext({window,Swal,URL,URLSearchParams,Intl,AbortController,DOMException,
         setTimeout:fn=>{timers.set(++timer,fn);return timer;},clearTimeout:id=>timers.delete(id),location:{origin:'https://print.test'},
@@ -22,10 +22,46 @@ function runtime(module){
     window.SPPHPrintMasters.choices=async()=>({names:[{id:1,nama:'Pejabat'}],titles:[{id:2,nama:'Kepala Bidang'}],fields:[{id:5,nama:'LAB'}]});
     vm.runInContext(fs.readFileSync(`public/assets/${module}/${module}-print.js`,'utf8'),sandbox);
     return{requests,dialogs,messages,updates,navigations,nodes,timers,noCsrf:()=>csrf=false,
+        manual:async()=>{dialogs.at(-1).options.didOpen();await events.click({target:{closest:()=>({dataset:module==='sp'?{spPrint:'manual'}:{sgMode:'manual'},hasAttribute:()=>false})}});},
         open:()=>window[module==='sp'?'openSpPrintPreview':'openSpphPrint'](`/${module}/12/cetak-preview${module==='spph'?'?vendor=Vendor+A':''}`),
         close:()=>Swal.close(),pagehide:()=>windowEvents.pagehide.forEach(fn=>fn()),
         respond:(i,data,status=200,extra={})=>requests[i].resolve({ok:status<400,status,headers:{get:()=> 'application/json'},json:async()=>data,...extra})};
 }
+
+for(const module of ['sp','spph']){
+    test(`${module}: confirmation refuses another document, signing mode, or automatic official`,async()=>{
+        for(const changed of [{number:'OTHER/99'},{selection:{...context(module).selection,signing_mode:'manual'}},{selection:{...context(module).selection,penandatangan:'Other official'}},{selection:{...context(module).selection,jabatan:'Other title'}},{selection:{...context(module).selection,signer_id:99}},{amount_valid:false},{ready:false}]){
+            const h=await opened(module),d=h.dialogs[1],confirm=d.options.preConfirm();h.respond(1,context(module,changed));
+            assert.equal(await confirm,false,JSON.stringify(changed));assert.equal(h.navigations.length,0);assert.match(h.messages.at(-1),/belum terkonfirmasi/);h.close();await h.task;
+        }
+    });
+    test(`${module}: manual acknowledgment must match the selected IDs, labels and trimmed reason`,async()=>{
+        const selected={...context(module).selection,signing_mode:'manual',signer_id:1,title_id:2,manual_reason:'Pejabat sesuai penugasan'};
+        for(const changed of [{signer_id:3},{title_id:4},{manual_reason:'A different explanation'},{penandatangan:'Renamed official'},{jabatan:'Renamed title'},{signing_mode:'auto'}]){
+            const h=await opened(module);await h.manual();h.nodes[module==='sp'?'spPrintReason':'sgReason']={value:'  Pejabat sesuai penugasan  ',disabled:false};
+            const d=h.dialogs[1],confirm=d.options.preConfirm();h.respond(1,context(module,{selection:{...selected,...changed}}));assert.equal(await confirm,false,JSON.stringify(changed));
+            assert.match(h.messages.at(-1),/belum terkonfirmasi/);assert.equal(h.nodes[module==='sp'?'spPrintReason':'sgReason'].value,'  Pejabat sesuai penugasan  ');h.close();await h.task;
+        }
+        const h=await opened(module);await h.manual();h.nodes[module==='sp'?'spPrintReason':'sgReason']={value:'  Pejabat sesuai penugasan  ',disabled:false};
+        const d=h.dialogs[1],confirm=d.options.preConfirm(),params=module==='sp'?new URLSearchParams(JSON.parse(h.requests[1].options.body)):new URL(h.requests[1].url,'https://print.test').searchParams;
+        assert.equal(params.get('penandatangan'),'Pejabat');assert.equal(params.get('jabatan'),'Kepala Bidang');h.respond(1,context(module,{selection:selected}));
+        const url=await confirm;assert.equal(new URL(url).searchParams.get('manual_reason'),'Pejabat sesuai penugasan');h.close();await h.task;
+    });
+    test(`${module}: native fields are locked during confirmation and restored after rejection or deadline`,async()=>{
+        const h=await opened(module),d=h.dialogs[1];h.nodes[module==='sp'?'spPrintField':'sgSigner']={value:module==='sp'?'5':'1',disabled:false};h.nodes.unchanged={value:'',disabled:true};
+        const confirm=d.options.preConfirm();assert.equal(Object.values(h.nodes).every(node=>node.disabled),true);h.respond(1,{errors:{choice:['Periksa pilihan']}},422);assert.equal(await confirm,false);
+        assert.equal(h.nodes[module==='sp'?'spPrintField':'sgSigner'].disabled,false);assert.equal(h.nodes.unchanged.disabled,true);
+        const retry=d.options.preConfirm();assert.equal(Object.values(h.nodes).every(node=>node.disabled),true);h.respond(2,null,200,{json:()=>new Promise(()=>{})});await tick();[...h.timers.values()][0]();await retry;
+        assert.equal(h.nodes[module==='sp'?'spPrintField':'sgSigner'].disabled,false);assert.equal(h.nodes.unchanged.disabled,true);h.close();await h.task;
+    });
+}
+test('SP: field, trimmed explanation and mapping acknowledgment must match the request',async()=>{
+    for(const changed of [{selection:{...context('sp').selection,field_id:6}},{selection:{...context('sp').selection,field_reason:'Other explanation'}},{mapping_saved:'yes',fingerprint:'b'.repeat(64)},{mapping_saved:true,fingerprint:'b'.repeat(64)}]){
+        const h=await opened('sp'),d=h.dialogs[1],confirm=d.options.preConfirm();h.respond(1,context('sp',changed));assert.equal(await confirm,false,JSON.stringify(changed));assert.equal(h.navigations.length,0);h.close();await h.task;
+    }
+    const h=await opened('sp'),d=h.dialogs[1];h.nodes.spPrintFieldReason={value:'  Catatan bidang sesuai dokumen  ',disabled:false};
+    const confirm=d.options.preConfirm();h.respond(1,context('sp',{selection:{...context('sp').selection,field_reason:'Catatan bidang sesuai dokumen'}}));assert.equal(typeof await confirm,'string');h.close();await h.task;
+});
 async function opened(module,extra={}){const h=runtime(module);h.task=h.open();h.respond(0,context(module,extra));await tick();return h;}
 
 for(const module of ['sp','spph']){
