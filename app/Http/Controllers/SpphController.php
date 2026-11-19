@@ -338,7 +338,8 @@ class SpphController extends Controller
             return response()->json(['status' => 'empty'])->header('Cache-Control', 'private, no-store');
         }
 
-        $cacheKey = 'spph:check:'.md5($originalNomor.':'.$nomor.':'.$excludeId.':'.$tanggal);
+        $version = Cache::get('spph:number-check:version', '1');
+        $cacheKey = 'spph:check:'.md5($version.':'.$originalNomor.':'.$nomor.':'.$excludeId.':'.$tanggal);
 
         $result = Cache::remember($cacheKey, 30, function () use ($nomor, $originalNomor, $excludeId, $tanggal) {
             $exists = Spph::withTrashed()
@@ -547,9 +548,7 @@ class SpphController extends Controller
                     }
                 }
 
-                Cache::forget('spph:last_nomor');
-                Cache::forget('spph:suggest');
-                Cache::forget('vendor:usage-stats:spph-sp:v2');
+                $this->invalidateSpphIndexCaches();
 
                 return $this->formSuccess($request, route('spph.index'), 'Data SPPH berhasil disimpan!');
             }, 3);
@@ -667,9 +666,7 @@ class SpphController extends Controller
                     $spph->ppbjs()->sync([]);
                 }
 
-                Cache::forget('spph:last_nomor');
-                Cache::forget('spph:suggest');
-                Cache::forget('vendor:usage-stats:spph-sp:v2');
+                $this->invalidateSpphIndexCaches();
 
                 return $this->formSuccess($request, route('spph.index'), 'Data SPPH berhasil diperbarui!');
             }, 3);
@@ -775,9 +772,7 @@ class SpphController extends Controller
             $spph->archive_reason = trim((string) $request->input('archive_reason')) ?: 'Dipindahkan ke tempat sampah oleh user.';
             $spph->save();
             $spph->delete();
-            Cache::forget('spph:last_nomor');
-            Cache::forget('spph:suggest');
-            Cache::forget('vendor:usage-stats:spph-sp:v2');
+            $this->invalidateSpphIndexCaches();
         }, 3);
 
         return response()->json([
@@ -848,9 +843,7 @@ class SpphController extends Controller
                 'description' => 'SPPH dipulihkan: '.$spph->nomor_spph,
                 'changes' => ['ip' => $request->ip()],
             ]);
-            Cache::forget('spph:last_nomor');
-            Cache::forget('spph:suggest');
-            Cache::forget('vendor:usage-stats:spph-sp:v2');
+            $this->invalidateSpphIndexCaches();
         }, 3);
 
         return response()->json(['ok' => true, 'message' => 'SPPH berhasil dipulihkan beserta seluruh relasi PR-nya.']);
@@ -909,12 +902,21 @@ class SpphController extends Controller
             ]);
 
             $spph->forceDelete();
-            Cache::forget('spph:last_nomor');
-            Cache::forget('spph:suggest');
-            Cache::forget('vendor:usage-stats:spph-sp:v2');
+            $this->invalidateSpphIndexCaches();
         }, 3);
 
         return response()->json(['ok' => true, 'message' => 'SPPH telah dihapus permanen tanpa menghapus SP lanjutan.']);
+    }
+
+    private function invalidateSpphIndexCaches(): void
+    {
+        // Rotate hints after commit so another request cannot cache uncommitted state.
+        DB::afterCommit(static function (): void {
+            Cache::forget('spph:last_nomor');
+            Cache::forget('spph:suggest');
+            Cache::forget('vendor:usage-stats:spph-sp:v2');
+            Cache::forever('spph:number-check:version', (string) Str::uuid());
+        });
     }
 
     private function canRecoverSpph(?User $user, Spph $spph): bool
