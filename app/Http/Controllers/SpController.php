@@ -1743,7 +1743,8 @@ class SpController extends Controller
         $request->validate(['nilai_sp' => 'nullable|numeric|min:0', 'nilai_pr' => 'nullable|numeric|min:0']);
         $numbers = $this->selectedPpbjNumbers($request);
         $positions = array_flip($numbers);
-        $records = Ppbj::query()->whereIn('ppbj_no', $numbers)->get()
+        $records = $numbers === [] ? collect() : Ppbj::query()->whereIn('ppbj_no', $numbers)
+            ->get(['id', 'ppbj_no', 'status', 'awarding_sp', 'total_sebelum_ppn'])
             ->sortBy(fn ($row) => $positions[$row->ppbj_no])->values();
         if ($conflict = $this->spPpbjConflict($request, $numbers, $records, $sp?->nomor_sp)) {
             throw new \Illuminate\Http\Exceptions\HttpResponseException($conflict);
