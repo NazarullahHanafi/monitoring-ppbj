@@ -146,8 +146,15 @@ class PrArchiveService
         $url = $baseUrl.'/'.ltrim($path, '/');
         $token = trim((string) config('services.pr_archive.token'));
 
+        $contents = null;
         try {
+            $source = $file->getRealPath();
+            if ($source === false || ($contents = @fopen($source, 'rb')) === false) {
+                throw new \RuntimeException('Archive upload source is not readable.');
+            }
+
             $request = Http::acceptJson()
+                ->withoutRedirecting()
                 ->connectTimeout(max(1, (int) config('services.pr_archive.connect_timeout', 2)))
                 ->timeout(max(5, (int) config('services.pr_archive.timeout', 8)));
 
@@ -156,7 +163,7 @@ class PrArchiveService
             }
 
             $response = $request
-                ->attach('file', file_get_contents($file->getRealPath()), $file->getClientOriginalName())
+                ->attach('file', $contents, $file->getClientOriginalName())
                 ->post($url, $this->cleanUploadMetadata($metadata));
 
             if ($response->status() === 409) {
@@ -205,7 +212,11 @@ class PrArchiveService
                 'replaced' => (bool) ($payload['replaced'] ?? false),
             ]);
         } catch (Throwable $exception) {
-            report($exception);
+            Log::notice('Pengiriman dokumen ke sistem arsip terhenti.', ['exception_class' => $exception::class]);
+        } finally {
+            if (is_resource($contents)) {
+                fclose($contents);
+            }
         }
 
         return $this->result('unavailable', 'Sistem arsip sedang tidak dapat menerima upload dokumen.');

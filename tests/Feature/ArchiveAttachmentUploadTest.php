@@ -64,20 +64,16 @@ class ArchiveAttachmentUploadTest extends TestCase
             ]);
 
         Http::assertSent(function (Request $request) {
-            $body = $request->body();
+            $fields = collect($request->data())->pluck('contents', 'name');
 
             return $request->method() === 'POST'
                 && $request->url() === 'https://arsip.example.test/api/documents'
                 && $request->hasHeader('Authorization', 'Bearer secret-token')
                 && $request->hasFile('file', null, 'sp.docx')
-                && str_contains($body, 'name="source_module"')
-                && str_contains($body, 'SP')
-                && str_contains($body, 'name="nomor_pr"')
-                && str_contains($body, 'PKB/PR-26/CON/0401')
-                && str_contains($body, 'name="nomor_sp"')
-                && str_contains($body, '325/PKU-VII/SP/2026')
-                && str_contains($body, 'name="jenis_dokumen"')
-                && str_contains($body, 'Dokumen SP');
+                && $fields['source_module'] === 'SP'
+                && $fields['nomor_pr'] === 'PKB/PR-26/CON/0401'
+                && $fields['nomor_sp'] === '325/PKU-VII/SP/2026'
+                && $fields['jenis_dokumen'] === 'Dokumen SP';
         });
     }
 
@@ -123,15 +119,13 @@ class ArchiveAttachmentUploadTest extends TestCase
             ->assertJson(['state' => 'uploaded']);
 
         Http::assertSent(function (Request $request) {
-            $body = $request->body();
+            $fields = collect($request->data())->pluck('contents', 'name');
 
             return $request->method() === 'POST'
                 && $request->hasFile('file', null, 'penawaran.xlsx')
-                && str_contains($body, 'name="source_module"')
-                && str_contains($body, 'SPPH')
-                && str_contains($body, 'name="nomor_spph"')
-                && str_contains($body, '570/PKU-VII/SPPH/2026')
-                && str_contains($body, 'Vendor Pembanding');
+                && $fields['source_module'] === 'SPPH'
+                && $fields['nomor_spph'] === '570/PKU-VII/SPPH/2026'
+                && str_contains($fields['nama_vendor'], 'Vendor Pembanding');
         });
     }
 
@@ -172,14 +166,12 @@ class ArchiveAttachmentUploadTest extends TestCase
             ->assertJsonPath('state', 'uploaded');
 
         Http::assertSent(function (Request $request) {
-            $body = $request->body();
+            $fields = collect($request->data())->pluck('contents', 'name');
 
             return $request->hasFile('file', null, 'ppbj.docx')
-                && str_contains($body, 'name="source_module"')
-                && str_contains($body, 'PPBJ')
-                && str_contains($body, 'name="nomor_pr"')
-                && str_contains($body, 'PKB/PR-26/CON/0777')
-                && str_contains($body, 'Dokumen PPBJ/PR');
+                && $fields['source_module'] === 'PPBJ'
+                && $fields['nomor_pr'] === 'PKB/PR-26/CON/0777'
+                && $fields['jenis_dokumen'] === 'Dokumen PPBJ/PR';
         });
     }
 
@@ -292,8 +284,7 @@ class ArchiveAttachmentUploadTest extends TestCase
             ->assertJsonPath('state', 'uploaded');
 
         Http::assertSent(function (Request $request) {
-            return str_contains($request->body(), 'name="replace_existing"')
-                && str_contains($request->body(), '1');
+            return collect($request->data())->pluck('contents', 'name')['replace_existing'] === '1';
         });
     }
 
