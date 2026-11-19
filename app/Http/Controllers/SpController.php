@@ -211,7 +211,7 @@ class SpController extends Controller
             ->first());
 
         $sps = (clone $baseQuery)
-            ->with(['ppbjs:id,ppbj_no,total_sebelum_ppn'])
+            ->with(['ppbjs:id,ppbj_no,total_sebelum_ppn,spph_rfq_1'])
             ->select([
                 'id', 'nomor_sp', 'sequence_number', 'numbering_mode',
                 'created_by_user_id', 'tanggal_sp', 'nilai_sp', 'nomor_pr',
@@ -643,7 +643,7 @@ class SpController extends Controller
         $nomorPrs = collect($sps)
             ->pluck('nomor_pr')
             ->map(fn ($nomor) => trim((string) $nomor))
-            ->filter()
+            ->filter(fn ($nomor) => $nomor !== '')
             ->unique()
             ->values();
 
@@ -651,16 +651,33 @@ class SpController extends Controller
             return [];
         }
 
-        $ppbjByNo = DB::table('ppbj')
-            ->select(['ppbj_no', 'spph_rfq_1'])
-            ->whereIn('ppbj_no', $nomorPrs)
-            ->get()
-            ->keyBy('ppbj_no');
+        $ppbjByNo = collect();
+        foreach ($sps as $sp) {
+            if (! $sp->relationLoaded('ppbjs')) {
+                continue;
+            }
+            foreach ($sp->getRelation('ppbjs') as $ppbj) {
+                if (array_key_exists('spph_rfq_1', $ppbj->getAttributes())) {
+                    $ppbjByNo->put((string) $ppbj->ppbj_no, $ppbj);
+                }
+            }
+        }
+        // Legacy scalar references or partial relation projections still need
+        // a bounded fallback; never lazy-load PRs once per displayed SP.
+        $missing = $nomorPrs->diff($ppbjByNo->keys());
+        if ($missing->isNotEmpty()) {
+            foreach (DB::table('ppbj')->select(['ppbj_no', 'spph_rfq_1'])->whereIn('ppbj_no', $missing)->get() as $ppbj) {
+                $ppbjByNo->put((string) $ppbj->ppbj_no, $ppbj);
+            }
+        }
+
+        // Keep only primary references, even when a grouped SP loaded other PRs.
+        $ppbjByNo = $ppbjByNo->only($nomorPrs->all());
 
         $spphNos = $ppbjByNo
             ->pluck('spph_rfq_1')
             ->map(fn ($nomor) => trim((string) $nomor))
-            ->filter()
+            ->filter(fn ($nomor) => $nomor !== '')
             ->unique()
             ->values();
 
