@@ -160,8 +160,9 @@ test('invalid HTML, redirects, malformed JSON, invalid rows and server traces ar
 });
 
 test('live page shrink clamps at most once', async () => {
-    const h = await opened(); const refresh = h.click('refresh'); h.respond(1, page([], {page: 3, last_page: 1})); await tick();
-    assert.equal(new URL(h.requests[2].url, 'https://test').searchParams.get('page'), '1'); h.respond(2, page()); await refresh; assert.equal(h.requests.length, 3); h.close(); await h.task;
+    const h = await opened(); const refresh = h.click('refresh'); h.respond(1, page(Array.from({length: 12}, (_, i) => ({...row, id: i + 1})), {total: 13, last_page: 2})); await refresh;
+    const next = h.click('next'); assert.equal(new URL(h.requests[2].url, 'https://test').searchParams.get('page'), '2'); h.respond(2, page([], {page: 2, total: 1, last_page: 1})); await tick();
+    assert.equal(new URL(h.requests[3].url, 'https://test').searchParams.get('page'), '1'); h.respond(3, page()); await next; assert.equal(h.requests.length, 4); h.close(); await h.task;
 });
 
 test('close and pagehide abort requests and ignore late results, with interrupted-write warning on next open', async () => {
@@ -176,6 +177,93 @@ test('confirmed save with an empty message still refreshes, while incomplete wri
     h.respond(1, {message: '', option: {...row, id: 11, nama: 'New official'}}); await tick(); assert.equal(h.requests.length, 3);
     h.respond(2, page()); await save; assert.match(h.text(), /Master berhasil disimpan/);
     h.nodes.sgMasterName.value = 'Another official'; const incomplete = h.submit(); h.respond(3, {message: 'OK'}); await incomplete;
-    assert.equal(h.nodes.sgMasterName.value, 'Another official'); assert.match(h.text(), /Hasil penyimpanan belum lengkap/);
+    assert.equal(h.nodes.sgMasterName.value, 'Another official'); assert.match(h.text(), /Hasil penyimpanan belum cocok/);
     await h.submit(); assert.equal(h.requests.length, 4); h.close(); await h.task;
+});
+
+test('save acknowledgment must match the submitted name and active flag before clearing a draft', async () => {
+    for (const patch of [{nama: 'Different official'}, {is_active: false}, {type: 'jabatan_sci'}]) {
+        const h = await opened(); h.nodes.sgMasterName.value = 'Actual draft'; const save = h.submit();
+        try {
+            h.respond(1, {option: {...row, id: 11, nama: 'Actual draft', ...patch}}); await tick();
+            assert.equal(h.nodes.sgMasterName.value, 'Actual draft'); assert.equal(h.requests.length, 2);
+            assert.match(h.text(), /belum cocok|belum lengkap/);
+            await h.submit(); assert.equal(h.requests.length, 2);
+        } finally {h.close(); await h.task; await save;}
+    }
+});
+
+test('an obsolete edit version cannot be resubmitted after a 409 until a fresh explicit Edit', async () => {
+    const h = await opened(); await h.click('edit'); h.nodes.sgMasterName.value = 'Retained correction'; const save = h.submit();
+    try {
+        h.respond(1, {message: 'Master berubah.'}, 409); await save;
+        assert.equal(h.nodes.sgMasterName.value, 'Retained correction');
+        const retry = h.submit(); assert.equal(h.requests.length, 2); await retry;
+        const refresh = h.click('refresh'); const latest = {...row, nama: 'New current row', version: 'b'.repeat(64)}; h.respond(2, page([latest])); await refresh;
+        assert.equal(h.nodes.sgMasterName.value, 'Retained correction'); await h.submit(); assert.equal(h.requests.length, 3);
+        await h.click('edit'); assert.equal(h.nodes.sgMasterName.value, 'New current row'); h.nodes.sgMasterName.value = 'Explicit fresh correction';
+        const next = h.submit(); assert.equal(JSON.parse(h.requests[3].options.body).version, latest.version); h.respond(3, {option: {...latest, nama: 'Explicit fresh correction'}}); await tick(); h.respond(4, page()); await next;
+    } finally {h.close(); await h.task;}
+});
+
+test('duplicate rows or inconsistent pagination cannot replace an unavailable list with usable actions', async () => {
+    for (const data of [page([row, row]), page([row], {last_page: 2}), page([row], {page: 2}), page([row], {total: 2}), page([], {page: 100001})]) {
+        const h = await opened(); h.nodes.sgMasterName.value = 'Unchanged draft'; const refresh = h.click('refresh'); h.respond(1, data); await refresh;
+        assert.match(h.text(), /Daftar master belum lengkap/); assert.doesNotMatch(h.text(), /data-sgm="use"|Tidak ada master yang cocok/);
+        assert.equal(h.nodes.sgMasterName.value, 'Unchanged draft'); h.close(); await h.task;
+    }
+});
+
+test('an uncertain write is unlocked only by a valid read of its own master type', async () => {
+    const h = await opened(); h.nodes.sgMasterName.value = 'Unverified signer'; const save = h.submit(); h.respond(1, {message: 'private trace'}, 500); await save;
+    const title = h.change('jabatan_sci'); h.respond(2, page([{...row, id: 20, type: 'jabatan_sci'}])); await title;
+    const back = h.change('penandatangan_sci'); await h.submit(); assert.equal(h.requests.length, 4);
+    h.respond(3, page([row], {total: 2})); await back; await h.submit(); assert.equal(h.requests.length, 4);
+    const failed = h.click('refresh'); h.respond(4, {message: 'private trace'}, 503); await failed; await h.submit(); assert.equal(h.requests.length, 5);
+    const valid = h.click('refresh'); h.respond(5, page()); await valid;
+    assert.equal(h.nodes.sgMasterName.value, 'Unverified signer'); assert.match(h.text(), /Daftar terbaru/); assert.doesNotMatch(h.text(), /private trace/);
+    const retry = h.submit(); assert.equal(h.requests.length, 7); assert.equal(JSON.parse(h.requests[6].options.body).type, 'penandatangan_sci');
+    h.respond(6, {errors: {nama: ['Nama perlu diperiksa.']}}, 422); await retry; h.close(); await h.task;
+});
+
+test('fresh reads detect changed edit versions and preserve that guard and drafts across type changes', async () => {
+    const h = await opened(); await h.click('edit'); h.nodes.sgMasterName.value = 'My correction';
+    const latest = {...row, nama: 'Someone else changed this', version: 'b'.repeat(64)};
+    const refresh = h.click('refresh'); h.respond(1, page([latest])); await refresh; await h.submit(); assert.equal(h.requests.length, 2);
+    const other = h.change('jabatan_sci'); h.respond(2, page([{...row, type: 'jabatan_sci'}])); await other;
+    const back = h.change('penandatangan_sci'); h.respond(3, page([latest])); await back;
+    assert.equal(h.nodes.sgMasterName.value, 'My correction'); assert.match(h.text(), /Versi edit sudah berubah/); await h.submit(); assert.equal(h.requests.length, 4);
+    await h.click('cancel-edit'); assert.equal(h.nodes.sgMasterName.value, ''); h.nodes.sgMasterName.value = 'New independent official';
+    const create = h.submit(); assert.equal(h.requests[4].options.method, 'POST'); h.respond(4, {option: {...row, id: 11, nama: 'New independent official'}}); await tick(); h.respond(5, page()); await create;
+    h.close(); await h.task;
+});
+
+test('failed initial reads are shown as unavailable and only a verified empty list claims no matches', async () => {
+    const h = runtime(), task = h.window.SPPHPrintMasters.open(false); h.dialog().options.didOpen(); h.respond(0, {message: 'private trace'}, 500); await tick();
+    assert.match(h.text(), /Daftar master belum dapat dipastikan/); assert.doesNotMatch(h.text(), /Tidak ada master yang cocok|private trace/);
+    const refresh = h.click('refresh'); h.respond(1, page([])); await refresh; assert.match(h.text(), /Tidak ada master yang cocok/);
+    h.close(); await task;
+});
+
+test('departure after a confirmed save does not mark it uncertain, while closing an uncertain result carries the guard', async () => {
+    for (const confirmed of [true, false]) {
+        const h = await opened(); h.nodes.sgMasterName.value = 'Departure official'; const save = h.submit();
+        h.respond(1, confirmed ? {option: {...row, id: 11, nama: 'Departure official'}} : {message: 'private failure'}, confirmed ? 200 : 500);
+        await tick();
+        if (confirmed) h.windowEvents.pagehide(); else h.close();
+        await h.task; await save;
+        const next = h.window.SPPHPrintMasters.open(true); h.dialog().options.didOpen();
+        if (confirmed) assert.doesNotMatch(h.text(), /Penyimpanan belum terverifikasi/); else assert.match(h.text(), /Penyimpanan belum terverifikasi/);
+        const index = confirmed ? 3 : 2; h.respond(index, page()); await tick();
+        if (confirmed) assert.doesNotMatch(h.text(), /Daftar terbaru/); else assert.match(h.text(), /Daftar terbaru/);
+        h.close(); await next;
+    }
+});
+
+test('toggling the record being edited preserves its draft and requires a fresh Edit before saving that old draft', async () => {
+    const h = await opened(); await h.click('edit'); h.nodes.sgMasterName.value = 'Keep my separate correction'; await h.click('toggle');
+    const toggle = h.click('toggle'), latest = {...row, is_active: false, version: 'b'.repeat(64)};
+    assert.equal(JSON.parse(h.requests[1].options.body).nama, row.nama); h.respond(1, {option: latest}); await tick(); h.respond(2, page([latest])); await toggle;
+    assert.equal(h.nodes.sgMasterName.value, 'Keep my separate correction'); assert.match(h.text(), /Versi edit sudah berubah/);
+    await h.submit(); assert.equal(h.requests.length, 3); h.close(); await h.task;
 });

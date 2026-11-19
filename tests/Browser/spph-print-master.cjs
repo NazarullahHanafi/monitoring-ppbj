@@ -11,6 +11,12 @@ const fixture = `<meta name="viewport" content="width=device-width,initial-scale
         for (const mobile of [false, true]) {
             const page = await browser.newPage({viewport: mobile ? {width: 390, height: 844} : {width: 1440, height: 1000}, isMobile: mobile, hasTouch: mobile});
             const errors = []; page.on('pageerror', e => errors.push(e.message)); page.on('dialog', d => {errors.push('Native dialog'); d.dismiss();});
+            const checkViewport = async stage => {
+                const popup = await page.locator('.swal2-popup').boundingBox(), title = await page.locator('.swal2-title').boundingBox();
+                assert.ok(popup.y >= 0 && popup.y + popup.height <= (mobile ? 844 : 1000) && title.y >= 0, `${stage}: ${JSON.stringify({popup, title})}`);
+                const content = await page.locator('.swal2-html-container').boundingBox();
+                assert.ok(title.height > 0 && content.y >= title.y + title.height, `${stage}: heading overlapped ${JSON.stringify({title, content})}`);
+            };
             await page.addInitScript(() => {
                 window.net = {calls: [], pending: [], timers: new Map(), serial: 100000}; const timeout = window.setTimeout.bind(window), clear = window.clearTimeout.bind(window);
                 window.setTimeout = (fn, delay, ...args) => {if (delay === 30000) {const id = ++net.serial; net.timers.set(id, fn); return id;} return timeout(fn, delay, ...args);};
@@ -21,7 +27,7 @@ const fixture = `<meta name="viewport" content="width=device-width,initial-scale
                 };
                 window.finish = (i, status, payload, stalled = false) => net.pending[i]({ok: status < 400, status, headers: {get: () => 'application/json'}, json: () => stalled ? new Promise(() => {}) : Promise.resolve(payload)});
             });
-            await page.route('**/*', route => {const url = new URL(route.request().url()); return url.pathname.startsWith('/assets/') || url.pathname.startsWith('/build/') ? route.fulfill({path: 'public' + url.pathname}) : route.fulfill({contentType: 'text/html', body: fixture});});
+            await page.route('**/*', route => {const url = new URL(route.request().url()); if (url.pathname === '/assets/spph/spph-print-master.js' && process.env.PRINT_MASTER_SCRIPT_FILE) return route.fulfill({path: process.env.PRINT_MASTER_SCRIPT_FILE}); return url.pathname.startsWith('/assets/') || url.pathname.startsWith('/build/') ? route.fulfill({path: 'public' + url.pathname}) : route.fulfill({contentType: 'text/html', body: fixture});});
             await page.goto('https://print-fixture.test/sp'); if (mobile) await page.evaluate(() => document.documentElement.classList.add('dark'));
             await page.click('#open'); await page.waitForFunction(() => net.calls.length === 1); await page.evaluate(p => finish(0, 200, p), list()); await page.waitForSelector('.sg-master-row');
             await page.locator('[data-sgm=edit]').click(); await page.fill('#sgMasterName', 'Draft <name>'); await page.uncheck('#sgMasterActive');
@@ -37,19 +43,37 @@ const fixture = `<meta name="viewport" content="width=device-width,initial-scale
             const sent = await page.evaluate(() => net.calls[5]); assert.equal(sent.method, 'PUT'); assert.equal(sent.body.version, row.version); assert.equal(sent.csrf, 'synthetic-csrf'); assert.equal(sent.body.is_active, false);
             await page.evaluate(() => finish(5, 409, {message: '<img src=x onerror=bad()> Master berubah'})); await page.waitForFunction(() => !document.querySelector('.swal2-confirm').disabled);
             assert.equal(await page.inputValue('#sgMasterName'), 'Draft <name>'); assert.equal(await page.locator('img:not(.swal2-image)').count(), 0);
-            await page.locator('#sgMasterForm button[type=submit]').click(); await page.evaluate(() => finish(6, 200, null, true)); await page.evaluate(() => [...net.timers.values()][0]());
-            await page.waitForFunction(() => document.querySelector('.sg-status').textContent.includes('koneksi lambat')); assert.equal(await page.locator('#sgMasterForm button[type=submit]').isDisabled(), true);
-            await page.locator('[data-sgm=refresh]').click(); await page.evaluate(p => finish(7, 200, p), list()); await page.waitForFunction(() => !document.querySelector('#sgMasterForm button[type=submit]').disabled);
+            assert.equal(await page.locator('#sgMasterForm button[type=submit]').isDisabled(), true); await page.evaluate(() => document.querySelector('#sgMasterForm').requestSubmit()); assert.equal(await page.evaluate(() => net.calls.length), 6);
+            await page.screenshot({path: `tmp/print-master-stale-${mobile ? 'mobile' : 'desktop'}.png`, animations: 'disabled'});
+            await checkViewport('stale edit');
+            const current = {...row, version: 'b'.repeat(64)};
+            await page.locator('[data-sgm=refresh]').click(); await page.evaluate(p => finish(6, 200, p), list([current])); await page.waitForSelector('.sg-master-row');
+            assert.equal(await page.locator('#sgMasterForm button[type=submit]').isDisabled(), true); assert.equal(await page.inputValue('#sgMasterName'), 'Draft <name>');
+            await page.locator('[data-sgm=edit]').click(); await page.fill('#sgMasterName', 'Draft <name>'); await page.uncheck('#sgMasterActive');
+            await page.locator('#sgMasterForm button[type=submit]').click(); assert.equal(await page.evaluate(() => net.calls[7].body.version), current.version);
+            await page.evaluate(() => finish(7, 200, null, true)); await page.evaluate(() => [...net.timers.values()][0]());
+            await page.waitForFunction(() => document.querySelector('.spph-signing-content').textContent.includes('koneksi lambat')); assert.equal(await page.locator('#sgMasterForm button[type=submit]').isDisabled(), true);
+            await page.screenshot({path: `tmp/print-master-unverified-${mobile ? 'mobile' : 'desktop'}.png`, animations: 'disabled'});
+            await checkViewport('unverified edit');
+            await page.selectOption('#sgMasterType', 'jabatan_sci'); await page.evaluate(p => finish(8, 200, p), list([{...row, id: 20, type: 'jabatan_sci'}])); await page.waitForSelector('.sg-master-row');
+            await page.selectOption('#sgMasterType', 'penandatangan_sci'); await page.evaluate(() => document.querySelector('#sgMasterForm').requestSubmit()); assert.equal(await page.evaluate(() => net.calls.length), 10);
+            await page.evaluate(p => finish(9, 200, {...p, total: 2}), list([current])); await page.waitForFunction(() => document.querySelector('.spph-signing-content').textContent.includes('Daftar master belum lengkap'));
+            assert.equal(await page.locator('#sgMasterForm button[type=submit]').isDisabled(), true);
+            await page.locator('[data-sgm=refresh]').click(); await page.evaluate(p => finish(10, 200, p), list([current])); await page.waitForFunction(() => !document.querySelector('#sgMasterForm button[type=submit]').disabled);
             assert.equal(await page.inputValue('#sgMasterName'), 'Draft <name>');
-            await page.locator('#sgMasterForm button[type=submit]').click(); await page.evaluate(p => finish(8, 200, p), {message: 'Master berhasil disimpan.', option: {...row, nama: 'Draft <name>', is_active: false}});
-            await page.waitForFunction(() => net.calls.length === 10); await page.evaluate(() => finish(9, 500, {message: 'private server trace'}));
+            await page.locator('#sgMasterForm button[type=submit]').click(); await page.evaluate(p => finish(11, 200, p), {option: {...current, nama: 'Different official', is_active: false}});
+            await page.waitForFunction(() => document.querySelector('.spph-signing-content').textContent.includes('Hasil penyimpanan belum cocok'));
+            assert.equal(await page.inputValue('#sgMasterName'), 'Draft <name>'); assert.equal(await page.locator('#sgMasterForm button[type=submit]').isDisabled(), true); assert.equal(await page.evaluate(() => net.calls.length), 12);
+            await page.locator('[data-sgm=refresh]').click(); await page.evaluate(p => finish(12, 200, p), list([current])); await page.waitForFunction(() => !document.querySelector('#sgMasterForm button[type=submit]').disabled);
+            await page.locator('#sgMasterForm button[type=submit]').click(); await page.evaluate(p => finish(13, 200, p), {message: 'Master berhasil disimpan.', option: {...current, nama: 'Draft <name>', is_active: false, version: 'c'.repeat(64)}});
+            await page.waitForFunction(() => net.calls.length === 15); await page.evaluate(() => finish(14, 500, {message: 'private server trace'}));
             await page.waitForFunction(() => !document.querySelector('.swal2-confirm').disabled); assert.equal(await page.inputValue('#sgMasterName'), '');
-            assert.match(await page.locator('.sg-status').textContent(), /berhasil disimpan.*Daftar belum diperbarui.*jangan ulangi/);
+            assert.match(await page.locator('.spph-signing-content').textContent(), /berhasil disimpan.*Daftar belum diperbarui.*jangan ulangi/); assert.doesNotMatch(await page.locator('.spph-signing-content').textContent(), /Tidak ada master yang cocok/);
             await page.screenshot({path: `tmp/print-master-${mobile ? 'mobile' : 'desktop'}.png`}); const box = await page.locator('.swal2-popup').boundingBox(); assert.ok(box.x >= 0 && box.width <= (mobile ? 390 : 1440)); assert.ok(box.y >= 0 && box.y + box.height <= (mobile ? 844 : 1000)); const title = await page.locator('.swal2-title').boundingBox(); assert.ok(title.y >= 0);
             await page.locator('.swal2-confirm').click(); await page.waitForSelector('.swal2-popup', {state: 'hidden'});
-            await page.evaluate(() => {window.task = SPPHPrintMasters.open(false);}); await page.waitForFunction(() => net.calls.length === 11); await page.evaluate(p => finish(10, 200, p), list()); await page.waitForSelector('.sg-master-row');
+            await page.evaluate(() => {window.task = SPPHPrintMasters.open(false);}); await page.waitForFunction(() => net.calls.length === 16); assert.doesNotMatch(await page.locator('.spph-signing-content').textContent(), /Penyimpanan belum terverifikasi/); await page.evaluate(p => finish(15, 200, p), list()); await page.waitForSelector('.sg-master-row');
             assert.equal(await page.locator('#sgMasterForm').count(), 0); await page.locator('[data-sgm=use]').click(); assert.equal(await page.evaluate(async () => (await task).id), 10);
-            assert.deepEqual(errors, []); console.log(`PRINT_MASTER_BROWSER_OK mobile=${mobile} initial_reads=1 drafts_by_type=true stale_results_ignored=true duplicates=false csrf=true timeout_body=true saved_refresh_distinguished=true`); await page.close();
+            assert.deepEqual(errors, []); console.log(`PRINT_MASTER_BROWSER_OK mobile=${mobile} initial_reads=1 drafts_by_type=true stale_version_guard=true matching_ack=true uncertain_type_guard=true duplicates=false csrf=true timeout_body=true saved_refresh_distinguished=true`); await page.close();
         }
     } finally {await browser.close();}
 })().catch(e => {console.error(e); process.exitCode = 1;});
