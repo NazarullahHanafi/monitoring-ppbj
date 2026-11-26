@@ -11,7 +11,7 @@
     }
     function matchesSelection(data,params) {
         const selected=data.selection,manual=params.get('signing_mode')==='manual';
-        return data.amount_valid&&(manual||data.ready)&&selected.signing_mode===params.get('signing_mode')
+        return (manual||(data.amount_valid&&data.ready))&&selected.signing_mode===params.get('signing_mode')
             &&selected.penandatangan===(manual?params.get('penandatangan'):data.name)&&selected.jabatan===(manual?params.get('jabatan'):data.title)
             &&(manual?['signer_id','title_id','manual_reason'].every(key=>String(selected[key])===params.get(key))
                 :['signer_id','title_id','manual_reason'].every(key=>!Object.hasOwn(selected,key)));
@@ -39,10 +39,10 @@
     function render(data,state={mode:'auto',names:[],titles:[]}) {
         return `<div class="spph-signing-content">
             <div class="spph-signing-intro"><span class="sg-eyebrow">KONFIRMASI CETAK</span>${escape(data.number)}<p>Rekomendasi otomatis mengikuti nilai PR. Pilihan manual tetap harus sesuai kewenangan penandatangan.</p></div>
-            ${data.errors.length?`<div class="spph-signing-warning" role="alert">${data.errors.map(error=>`<p>${escape(error)}</p>`).join('')}${state.mode==='manual'&&data.amount_valid?'<p>Mode manual dapat memakai nama dan jabatan lain yang masih aktif.</p>':''}</div>`:''}
+            ${data.errors.length?`<div class="spph-signing-warning" role="alert">${data.errors.map(error=>`<p>${escape(error)}</p>`).join('')}${state.mode==='manual'?'<p>Pilih nama dan jabatan dari master aktif, lalu lanjutkan ke preview. Data PR tidak diubah oleh proses cetak.</p>':''}</div>`:''}
             <div class="spph-signing-grid"><div class="spph-signing-card"><small>TOTAL ${Number(data.pr_count)} PR/PPBJ</small><strong>${data.amount_valid?money(data.amount):'Nilai belum lengkap'}</strong><p>${escape(data.basis)}</p></div>
-            <div class="spph-signing-card spph-signing-official"><small>REKOMENDASI OTOMATIS</small><strong>${data.amount_valid?escape(data.name):'Periksa nilai PR dahulu'}</strong><p>${data.amount_valid?escape(data.title):'Tidak memilih pejabat secara acak.'}</p></div></div>
-            <div class="sg-modes" role="group" aria-label="Mode penandatangan"><button type="button" data-sg-mode="auto" aria-pressed="${state.mode==='auto'}">✦ Otomatis <span>Sesuai nilai PR</span></button><button type="button" data-sg-mode="manual" aria-pressed="${state.mode==='manual'}">✎ Pilih manual <span>Dari master aktif</span></button></div>
+            <div class="spph-signing-card spph-signing-official"><small>REKOMENDASI OTOMATIS</small><strong>${data.amount_valid?escape(data.name):'Pilih penandatangan manual'}</strong><p>${data.amount_valid?escape(data.title):'Tetap bisa dicetak meskipun nilai PR belum tersedia.'}</p></div></div>
+            <div class="sg-modes" role="group" aria-label="Mode penandatangan"><button type="button" data-sg-mode="auto" aria-pressed="${state.mode==='auto'}" ${data.amount_valid?'':'disabled'}>✦ Otomatis <span>Sesuai nilai PR</span></button><button type="button" data-sg-mode="manual" aria-pressed="${state.mode==='manual'}">✎ Pilih manual <span>Dari master aktif</span></button></div>
             ${state.mode==='manual'?`<section class="sg-manual"><div class="spph-signing-grid"><label for="sgSigner">Nama penandatangan<select id="sgSigner">${optionHtml(state.names,state.signerId)}</select></label><label for="sgTitle">Jabatan pada surat<select id="sgTitle">${optionHtml(state.titles,state.titleId)}</select></label></div><label for="sgReason">Alasan pilihan manual <small>(minimal 10 karakter)</small><textarea id="sgReason" maxlength="500" rows="2" placeholder="Contoh: penandatangan pengganti sesuai penugasan yang berlaku">${escape(state.reason || '')}</textarea></label><p>Pastikan nama dan jabatan sesuai. Pilihan ini dicatat di audit, bukan pemberian kewenangan tanda tangan.</p></section>`:''}
             <button type="button" class="sg-soft-button sg-manage-button" data-sg-manage>${data.can_manage?'＋ Kelola penandatangan & jabatan':'Lihat daftar master aktif'}</button>
             <details class="spph-signing-rule"><summary>Dasar rekomendasi: ${escape(data.rule)}</summary><p>${data.rules.map(rule=>`${escape(rule.label)} ${money(data.threshold)}: ${escape(rule.name)} · ${escape(rule.title)}`).join('<br>')}</p><p>Jika satu SPPH menggabungkan beberapa PR, semua nilai PR dijumlahkan satu kali. Tidak dikalikan jumlah vendor.</p></details>
@@ -78,10 +78,11 @@
         try {
             let context=await getContext(match[1],controller.signal);
             if(controller.signal.aborted || current!==serial) return;
-            const state=retained || {mode:'auto',names:[],titles:[],signerId:context.name_id,titleId:context.title_id,reason:''};
+            const state=retained || {mode:context.amount_valid?'auto':'manual',names:[],titles:[],signerId:context.amount_valid?context.name_id:null,titleId:context.amount_valid?context.title_id:null,
+                reason:context.amount_valid?'':'PR/PPBJ belum terhubung atau nilai PR belum lengkap.'};
             let confirmRequest,choiceRequest,managing=false,submitting=false,closed=false;
             const capture=()=>{state.signerId=document.getElementById('sgSigner')?.value ?? state.signerId;state.titleId=document.getElementById('sgTitle')?.value ?? state.titleId;state.reason=document.getElementById('sgReason')?.value ?? state.reason;};
-            const ready=()=>state.mode==='manual'?context.amount_valid:context.ready;
+            const ready=()=>state.mode==='manual'||context.ready;
             const draw=()=>Swal.update({html:render(context,state),showConfirmButton:ready()});
             async function choices(){
                 if(!choiceRequest)choiceRequest=window.SPPHPrintMasters.choices(state.signerId,state.titleId,null,false,controller.signal).finally(()=>{choiceRequest=null;});

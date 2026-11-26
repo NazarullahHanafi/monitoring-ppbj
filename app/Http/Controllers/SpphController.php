@@ -66,7 +66,8 @@ class SpphController extends Controller
                 'model_id' => $spph->id, 'action' => 'manual_print_signer',
                 'description' => 'Permintaan cetak SPPH dengan pilihan penandatangan manual',
                 'changes' => ['number' => $spph->nomor_spph, 'name' => $selection['name'], 'title' => $selection['title'],
-                    'reason' => $selection['manual_reason'], 'amount' => $selection['amount'], 'rule' => $selection['rule']]]);
+                    'reason' => $selection['manual_reason'], 'amount' => $selection['amount_valid'] ? $selection['amount'] : null,
+                    'amount_valid' => $selection['amount_valid'], 'pr_count' => $selection['pr_count'], 'rule' => $selection['rule']]]);
         }
 
         return $selection;
@@ -1143,7 +1144,7 @@ class SpphController extends Controller
                 'Nomor SPPH' => $spph->nomor_spph ?: '-',
                 'Nomor PR/PPBJ' => $spph->linkedPpbjLabel(),
                 'Vendor' => $vendorName ?: '-',
-                'Dasar penandatangan' => 'Total '.$signer['pr_count'].' PR/PPBJ: Rp '.number_format((float) $signer['amount'], 2, ',', '.').' — '.$signer['rule'],
+                'Dasar penandatangan' => $signer['basis_summary'],
                 'Penandatangan' => ($signer['name'] ?? '-').' - '.($signer['title'] ?? '-'),
                 'Mode pilihan' => $signer['signing_mode'] === 'manual' ? 'Manual — '.$signer['manual_reason'] : 'Otomatis sesuai nilai PR/PPBJ',
                 'PIC' => $spph->pic ?: '-',
@@ -1192,7 +1193,7 @@ class SpphController extends Controller
                 'Nomor PR/PPBJ' => $spph->linkedPpbjLabel(),
                 'Jumlah Vendor' => $vendorCount.' vendor',
                 'Mode pilihan' => $signer['signing_mode'] === 'manual' ? 'Manual — '.$signer['manual_reason'] : 'Otomatis sesuai nilai PR/PPBJ',
-                'Dasar penandatangan' => 'Total '.$signer['pr_count'].' PR/PPBJ: Rp '.number_format((float) $signer['amount'], 2, ',', '.').' — '.$signer['rule'],
+                'Dasar penandatangan' => $signer['basis_summary'],
                 'Penandatangan' => ($signer['name'] ?? '-').' - '.($signer['title'] ?? '-'),
                 'PIC' => $spph->pic ?: '-',
                 'Link berlaku sampai' => $preview['expiresText'] ?? 'Dibuat saat download',

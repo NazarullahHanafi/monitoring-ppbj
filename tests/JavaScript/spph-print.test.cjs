@@ -65,14 +65,34 @@ test('changed amount refreshes visible recommendation and requires a second conf
     assert.equal(new URL(h.navigations[0]).searchParams.get('penandatangan'),'Bambang Harwanta');
 });
 
-test('missing values disable preview; unsafe source and helper URLs are not followed',async()=>{
+test('missing values open manual selection with preview available; unsafe source and helper URLs are not followed',async()=>{
     const h=runtime();await h.window.openSpphPrint('https://evil.example/spph/12/cetak-preview');
     assert.equal(h.requests.length,0);
     const task=h.window.openSpphPrint('/spph/12/cetak-preview');
     h.respond(0,context({ready:false,amount_valid:false,errors:['Nilai belum lengkap'],ppbj_url:'javascript:bad()',master_url:'https://evil.example'}));await tick();
-    assert.equal(h.dialogs[1].options.showConfirmButton,false);
+    assert.equal(h.dialogs[1].options.showConfirmButton,true);
+    assert.match(h.dialogs[1].options.html,/id="sgSigner"/);
+    assert.match(h.dialogs[1].options.html,/Tetap bisa dicetak/);
+    assert.doesNotMatch(h.dialogs[1].options.html,/<option value="[13]" selected/);
     assert.match(h.dialogs[1].options.html,/Nilai belum lengkap/);assert.doesNotMatch(h.dialogs[1].options.html,/href=/);
     h.dialogs[1].resolve({isDismissed:true});await task;
+});
+
+test('unlinked SPPH keeps explicit manual choice through recheck and all-vendor preview',async()=>{
+    const h=runtime(),data={ready:false,amount_valid:false,pr_count:0,prs:[],errors:['PR belum terhubung']};
+    const task=h.window.openSpphPrint('/spph/12/cetak-semua-vendor-preview');h.respond(0,context(data));await tick();
+    const d=h.dialogs[1];
+    assert.equal(d.options.showConfirmButton,true);
+    assert.equal(await d.options.preConfirm(),false);assert.match(h.messages.at(-1),/Pilih nama dan jabatan aktif/);
+    h.nodes.sgSigner={value:'3'};h.nodes.sgTitle={value:'4'};
+    const confirm=d.options.preConfirm();
+    const params=new URL(h.requests[1].url,'https://simon.example').searchParams;
+    assert.equal(params.get('signing_mode'),'manual');assert.match(params.get('manual_reason'),/PR\/PPBJ belum terhubung/);
+    const selection={signing_mode:'manual',signer_id:3,title_id:4,manual_reason:params.get('manual_reason'),penandatangan:'Pejabat Pengganti',jabatan:'Jabatan Pengganti',print_basis:'basis-1'};
+    h.respond(1,context({...data,selection}));const url=await confirm;assert.ok(url);
+    d.resolve({isConfirmed:true,value:url});await task;
+    assert.equal(new URL(h.navigations[0]).pathname,'/spph/12/cetak-semua-vendor-preview');
+    assert.equal(new URL(h.navigations[0]).searchParams.get('signer_id'),'3');
 });
 
 test('cancel during initial check aborts and a late response cannot open confirmation',async()=>{

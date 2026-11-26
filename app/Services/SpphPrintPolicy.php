@@ -25,6 +25,7 @@ class SpphPrintPolicy
             ->orderBy('ppbj.id')->limit(21)->get();
         $amount = (string) $totals->amount;
         $count = (int) $totals->pr_count;
+        $amountValid = $count > 0 && (int) $totals->invalid_count === 0;
         $threshold = (int) config('spph.signing.threshold');
         $bucket = (float) $amount >= $threshold ? 'at_or_above' : 'below';
         $pair = config('spph.signing.'.$bucket);
@@ -37,9 +38,9 @@ class SpphPrintPolicy
         $title = $find('jabatan_sci', $pair['title']);
         $errors = [];
         if ($count === 0) {
-            $errors[] = 'Belum ada PR/PPBJ terhubung yang dapat diperiksa. Hubungkan nomor PR ke data Management PPBJ terlebih dahulu.';
+            $errors[] = 'Belum ada PR/PPBJ terhubung yang dapat diperiksa. SPPH tetap dapat dicetak dengan memilih penandatangan dan jabatan secara manual dari master aktif.';
         } elseif ((int) $totals->invalid_count > 0) {
-            $errors[] = 'Ada nilai PR kosong, nol, atau negatif. Lengkapi nilai seluruh PR/PPBJ sebelum mencetak.';
+            $errors[] = 'Ada nilai PR kosong, nol, atau negatif. Rekomendasi otomatis belum tersedia; SPPH tetap dapat dicetak dengan pilihan penandatangan manual.';
         }
         if (! $name || ! $title) {
             $errors[] = 'Master aktif belum lengkap untuk '.$pair['name'].' — '.$pair['title'].'. Minta petugas berwenang memeriksa Master Kontrak SP.';
@@ -48,12 +49,16 @@ class SpphPrintPolicy
             config('spph.signing'), $spph->id, $spph->getRawOriginal('updated_at'),
             $amount, $count, (int) $totals->invalid_count, $rows->toArray(), $name, $title,
         ]));
+        $rule = $amountValid
+            ? ($bucket === 'below' ? 'Di bawah Rp'.number_format($threshold, 0, ',', '.') : 'Rp'.number_format($threshold, 0, ',', '.').' ke atas (termasuk nilai tepat batas)')
+            : 'Nilai PR/PPBJ belum lengkap; penandatangan dipilih manual.';
 
         return [
             'number' => $spph->nomor_spph, 'amount' => $amount, 'pr_count' => $count, 'threshold' => $threshold,
-            'amount_valid' => $count > 0 && (int) $totals->invalid_count === 0,
+            'amount_valid' => $amountValid,
             'basis' => 'Total nilai PR/PPBJ sebelum PPN; bukan nilai penawaran vendor atau nilai SP.',
-            'rule' => $bucket === 'below' ? 'Di bawah Rp'.number_format($threshold, 0, ',', '.') : 'Rp'.number_format($threshold, 0, ',', '.').' ke atas (termasuk nilai tepat batas)',
+            'rule' => $rule,
+            'basis_summary' => $amountValid ? 'Total '.$count.' PR/PPBJ: Rp '.number_format((float) $amount, 2, ',', '.').' — '.$rule : $rule,
             'name' => $name ?: $pair['name'], 'title' => $title ?: $pair['title'],
             'name_id' => $masters->first(fn ($row) => $row->type === 'penandatangan_sci' && $row->nama === $name)?->id,
             'title_id' => $masters->first(fn ($row) => $row->type === 'jabatan_sci' && $row->nama === $title)?->id,
@@ -75,7 +80,7 @@ class SpphPrintPolicy
         if (! in_array($mode, ['auto', 'manual'], true)) {
             throw ValidationException::withMessages(['signing_mode' => 'Mode penandatangan tidak dikenali.']);
         }
-        if (($mode === 'auto' && ! $context['ready']) || ! $context['amount_valid']) {
+        if ($mode === 'auto' && ! $context['ready']) {
             throw ValidationException::withMessages(['penandatangan' => implode(' ', $context['errors'])]);
         }
         $fingerprint = $request->query('print_basis');
